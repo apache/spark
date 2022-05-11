@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, NumericType}
 
 /**
@@ -125,16 +126,21 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     }).asInstanceOf[NamedExpression]
   }
 
-  // The references should not empty. For example, We do not support this case:
-  // SELECT a, SUM(1) FROM t1 INNER JOIN t2 ON t1.a = t2.x GROUP BY a;
+  // The expression should't complex and it's references should not empty.
+  // For example, We do not support following cases:
+  // 1. sum((ss_ext_list_price - ss_ext_wholesale_cost - ss_ext_discount_amt) + ss_ext_sales_price)
+  // 2. sum(1)
+  private def supportPushedAgg(e: Expression) = {
+    e.collectLeaves().size <= 2 && e.references.nonEmpty}
+
   private def pushableAggExp(ae: AggregateExpression): Boolean = ae match {
-    case AggregateExpression(e: Sum, Complete, false, None, _) => e.references.nonEmpty
-    case AggregateExpression(e: Min, Complete, false, None, _) => e.references.nonEmpty
-    case AggregateExpression(e: Max, Complete, false, None, _) => e.references.nonEmpty
-    case AggregateExpression(e: First, Complete, false, None, _) => e.references.nonEmpty
-    case AggregateExpression(e: Last, Complete, false, None, _) => e.references.nonEmpty
+    case AggregateExpression(e: Sum, Complete, false, None, _) => supportPushedAgg(e)
+    case AggregateExpression(e: Min, Complete, false, None, _) => supportPushedAgg(e)
+    case AggregateExpression(e: Max, Complete, false, None, _) => supportPushedAgg(e)
+    case AggregateExpression(e: First, Complete, false, None, _) => supportPushedAgg(e)
+    case AggregateExpression(e: Last, Complete, false, None, _) => supportPushedAgg(e)
     case AggregateExpression(Average(e, _), Complete, false, None, _) =>
-      e.dataType.isInstanceOf[NumericType] && e.references.nonEmpty
+      e.dataType.isInstanceOf[NumericType] && supportPushedAgg(e)
     case _ => false
   }
 
@@ -236,20 +242,9 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     val left = join.left
     val right = join.right
 
-    var newLeft = left
-    var newRight = right
-    // Only push down the partial aggregate for stream side if it can be planed as broadcast join
-    getBroadcastBuildSide(join, conf) match {
-      case Some(BuildRight) =>
-        newLeft = PartialAggregate(left.output, left.output, left)
-      case Some(BuildLeft) =>
-        newRight = PartialAggregate(right.output, right.output, right)
-      case _ =>
-        newLeft = PartialAggregate(left.output, left.output, left)
-        newRight = PartialAggregate(right.output, right.output, right)
-    }
-
-    join.copy(left = newLeft, right = newRight)
+    join.copy(left =
+      PartialAggregate(left.output, left.output, left),
+      right = PartialAggregate(right.output, right.output, right))
   }
 
   // The entry of push down partial aggregate through join.
@@ -335,12 +330,17 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
           }).asInstanceOf[NamedExpression]
         }
 
-      val newAgg = rewrittenAgg.copy(aggregateExpressions = newAggregateExps, child = newJoin)
+      val newAgg = if (conf.getConf(SQLConf.REMOVE_CURRENT_PARTIAL_AGGREGATION) &&
+        canPlanAsBroadcastHashJoin(newJoin, conf)) {
+        FinalAggregate(rewrittenAgg.groupingExpressions, newAggregateExps, newJoin)
+      } else {
+        rewrittenAgg.copy(aggregateExpressions = newAggregateExps, child = newJoin)
+      }
 
       val required = newJoin.references ++ newAgg.references
       if (!newJoin.inputSet.subsetOf(required)) {
         val newChildren = newJoin.children.map(ColumnPruning.prunedChild(_, required))
-        CollapseProject(newAgg.copy(child = newJoin.withNewChildren(newChildren)))
+        CollapseProject(newAgg.withNewChildren(Seq(newJoin.withNewChildren(newChildren))))
       } else {
         newAgg
       }
@@ -367,18 +367,32 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
       agg
 
     case agg @ PartialAggregate(_, aggregateExps, j: Join)
-        if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
+        if agg.aggregateExprs.isEmpty =>
       Project(aggregateExps, pushDownDistinctThroughJoin(j))
 
     case agg @ PartialAggregate(_, aggregateExps, Project(projectList, j: Join))
         if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
       Project(aggregateExps, Project(projectList, pushDownDistinctThroughJoin(j)))
 
-    case agg @ Aggregate(_, _, j: Join) if agg.aggregateExprs.forall(isDistinct) =>
-      agg.copy(child = pushDownDistinctThroughJoin(j))
+    case agg @ Aggregate(_, aggregateExps, j: Join)
+        if agg.aggregateExprs.forall(isDistinct) && aggregateExps.forall(_.deterministic) =>
+      val newChild = pushDownDistinctThroughJoin(j)
+      if (conf.getConf(SQLConf.REMOVE_CURRENT_PARTIAL_AGGREGATION) &&
+        canPlanAsBroadcastHashJoin(j, conf)) {
+        FinalAggregate(agg.groupingExpressions, agg.aggregateExpressions, newChild)
+      } else {
+        agg.copy(child = newChild)
+      }
 
-    case agg @ Aggregate(_, _, p @ Project(_, j: Join)) if agg.aggregateExprs.forall(isDistinct) =>
-      agg.copy(child = p.copy(child = pushDownDistinctThroughJoin(j)))
+    case agg @ Aggregate(_, aggregateExps, p @ Project(_, j: Join))
+        if agg.aggregateExprs.forall(isDistinct) && aggregateExps.forall(_.deterministic) =>
+      val newChild = p.copy(child = pushDownDistinctThroughJoin(j))
+      if (conf.getConf(SQLConf.REMOVE_CURRENT_PARTIAL_AGGREGATION) &&
+        canPlanAsBroadcastHashJoin(j, conf)) {
+        FinalAggregate(agg.groupingExpressions, agg.aggregateExpressions, newChild)
+      } else {
+        agg.copy(child = newChild)
+      }
 
     case agg @ Aggregate(groupExps, aggregateExps,
       j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _))

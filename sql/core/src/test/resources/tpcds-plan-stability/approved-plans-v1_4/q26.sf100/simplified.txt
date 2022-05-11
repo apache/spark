@@ -1,13 +1,13 @@
 TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
   WholeStageCodegen (6)
-    HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(cs_quantity),avg(UnscaledValue(cs_list_price)),avg(UnscaledValue(cs_coupon_amt)),avg(UnscaledValue(cs_sales_price)),agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
+    HashAggregate [i_item_id,_pushed_sum_cs_quantity,cnt,cnt,_pushed_sum_cs_list_price,_pushed_sum_cs_coupon_amt,_pushed_sum_cs_sales_price] [sum((_pushed_sum_cs_quantity * cast(cntL as double))),sum((cntL * cntL)),sum((_pushed_sum_cs_list_price * cast(cntL as double))),sum((_pushed_sum_cs_coupon_amt * cast(cntL as double))),sum((_pushed_sum_cs_sales_price * cast(cntL as double))),agg1,agg2,agg3,agg4,sum,sum,sum,sum,sum]
       InputAdapter
         Exchange [i_item_id] #1
           WholeStageCodegen (5)
-            HashAggregate [i_item_id,cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
-              Project [cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,i_item_id]
-                BroadcastHashJoin [cs_item_sk,i_item_sk]
-                  Project [cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt]
+            Project [_pushed_sum_cs_coupon_amt,_pushed_sum_cs_list_price,_pushed_sum_cs_quantity,_pushed_sum_cs_sales_price,cnt,cnt,i_item_id]
+              BroadcastHashJoin [cs_item_sk,i_item_sk]
+                HashAggregate [cs_item_sk,cs_coupon_amt,cs_list_price,cs_quantity,cs_sales_price] [sum(UnscaledValue(cs_coupon_amt)),sum(UnscaledValue(cs_list_price)),sum(cs_quantity),sum(UnscaledValue(cs_sales_price)),count(1),_pushed_sum_cs_coupon_amt,_pushed_sum_cs_list_price,_pushed_sum_cs_quantity,_pushed_sum_cs_sales_price,cnt,sum,sum,sum,sum,count]
+                  Project [cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_item_sk]
                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                       Project [cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_sold_date_sk]
                         BroadcastHashJoin [cs_promo_sk,p_promo_sk]
@@ -43,9 +43,10 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                                         Scan parquet spark_catalog.default.promotion [p_promo_sk,p_channel_email,p_channel_event]
                       InputAdapter
                         ReusedExchange [d_date_sk] #2
-                  InputAdapter
-                    BroadcastExchange #5
-                      WholeStageCodegen (4)
+                InputAdapter
+                  BroadcastExchange #5
+                    WholeStageCodegen (4)
+                      HashAggregate [i_item_sk,i_item_id] [count(1),cnt,count]
                         Filter [i_item_sk]
                           ColumnarToRow
                             InputAdapter

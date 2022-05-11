@@ -9,14 +9,14 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_cla
                 InputAdapter
                   Exchange [i_category,i_brand,s_store_name,s_company_name] #1
                     WholeStageCodegen (5)
-                      HashAggregate [i_category,i_class,i_brand,s_store_name,s_company_name,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,_w0,sum]
+                      HashAggregate [i_category,i_class,i_brand,s_store_name,s_company_name,d_moy,_pushed_sum_ss_sales_price,cnt] [sum((_pushed_sum_ss_sales_priceL * cntL)),sum_sales,_w0,sum]
                         InputAdapter
                           Exchange [i_category,i_class,i_brand,s_store_name,s_company_name,d_moy] #2
                             WholeStageCodegen (4)
-                              HashAggregate [i_category,i_class,i_brand,s_store_name,s_company_name,d_moy,ss_sales_price] [sum,sum]
-                                Project [i_brand,i_class,i_category,ss_sales_price,d_moy,s_store_name,s_company_name]
-                                  BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                    Project [i_brand,i_class,i_category,ss_store_sk,ss_sales_price,d_moy]
+                              Project [_pushed_sum_ss_sales_price,d_moy,i_brand,i_category,i_class,cnt,s_company_name,s_store_name]
+                                BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                  HashAggregate [ss_store_sk,i_category,i_class,i_brand,d_moy,ss_sales_price] [sum(UnscaledValue(ss_sales_price)),_pushed_sum_ss_sales_price,sum]
+                                    Project [i_brand,i_class,i_category,ss_sales_price,d_moy,ss_store_sk]
                                       BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                         Project [i_brand,i_class,i_category,ss_store_sk,ss_sales_price,ss_sold_date_sk]
                                           BroadcastHashJoin [i_item_sk,ss_item_sk]
@@ -41,9 +41,10 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_cla
                                                                         Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                         InputAdapter
                                           ReusedExchange [d_date_sk,d_moy] #4
-                                    InputAdapter
-                                      BroadcastExchange #5
-                                        WholeStageCodegen (3)
+                                  InputAdapter
+                                    BroadcastExchange #5
+                                      WholeStageCodegen (3)
+                                        HashAggregate [s_store_sk,s_store_name,s_company_name] [count(1),cnt,count]
                                           Filter [s_store_sk]
                                             ColumnarToRow
                                               InputAdapter

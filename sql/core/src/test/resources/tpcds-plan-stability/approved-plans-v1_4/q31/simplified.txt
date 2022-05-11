@@ -11,14 +11,14 @@ WholeStageCodegen (25)
                     Project [ca_county,d_year,store_sales,store_sales,store_sales]
                       BroadcastHashJoin [ca_county,ca_county]
                         BroadcastHashJoin [ca_county,ca_county]
-                          HashAggregate [ca_county,d_qoy,d_year,sum] [sum(UnscaledValue(ss_ext_sales_price)),store_sales,sum]
+                          HashAggregate [ca_county,d_qoy,d_year,_pushed_sum_ss_ext_sales_price,cnt] [sum((_pushed_sum_ss_ext_sales_priceL * cntL)),store_sales,sum]
                             InputAdapter
                               Exchange [ca_county,d_qoy,d_year] #2
                                 WholeStageCodegen (3)
-                                  HashAggregate [ca_county,d_qoy,d_year,ss_ext_sales_price] [sum,sum]
-                                    Project [ss_ext_sales_price,d_year,d_qoy,ca_county]
-                                      BroadcastHashJoin [ss_addr_sk,ca_address_sk]
-                                        Project [ss_addr_sk,ss_ext_sales_price,d_year,d_qoy]
+                                  Project [_pushed_sum_ss_ext_sales_price,d_qoy,d_year,ca_county,cnt]
+                                    BroadcastHashJoin [ss_addr_sk,ca_address_sk]
+                                      HashAggregate [ss_addr_sk,d_qoy,d_year,ss_ext_sales_price] [sum(UnscaledValue(ss_ext_sales_price)),_pushed_sum_ss_ext_sales_price,sum]
+                                        Project [ss_ext_sales_price,d_year,d_qoy,ss_addr_sk]
                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                             Filter [ss_addr_sk]
                                               ColumnarToRow
@@ -33,9 +33,10 @@ WholeStageCodegen (25)
                                                                 Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_qoy]
                                             InputAdapter
                                               ReusedExchange [d_date_sk,d_year,d_qoy] #3
-                                        InputAdapter
-                                          BroadcastExchange #4
-                                            WholeStageCodegen (2)
+                                      InputAdapter
+                                        BroadcastExchange #4
+                                          WholeStageCodegen (2)
+                                            HashAggregate [ca_address_sk,ca_county] [count(1),cnt,count]
                                               Filter [ca_address_sk,ca_county]
                                                 ColumnarToRow
                                                   InputAdapter
@@ -43,14 +44,14 @@ WholeStageCodegen (25)
                           InputAdapter
                             BroadcastExchange #5
                               WholeStageCodegen (7)
-                                HashAggregate [ca_county,d_qoy,d_year,sum] [sum(UnscaledValue(ss_ext_sales_price)),store_sales,sum]
+                                HashAggregate [ca_county,d_qoy,d_year,_pushed_sum_ss_ext_sales_price,cnt] [sum((_pushed_sum_ss_ext_sales_priceL * cntL)),store_sales,sum]
                                   InputAdapter
                                     Exchange [ca_county,d_qoy,d_year] #6
                                       WholeStageCodegen (6)
-                                        HashAggregate [ca_county,d_qoy,d_year,ss_ext_sales_price] [sum,sum]
-                                          Project [ss_ext_sales_price,d_year,d_qoy,ca_county]
-                                            BroadcastHashJoin [ss_addr_sk,ca_address_sk]
-                                              Project [ss_addr_sk,ss_ext_sales_price,d_year,d_qoy]
+                                        Project [_pushed_sum_ss_ext_sales_price,d_qoy,d_year,ca_county,cnt]
+                                          BroadcastHashJoin [ss_addr_sk,ca_address_sk]
+                                            HashAggregate [ss_addr_sk,d_qoy,d_year,ss_ext_sales_price] [sum(UnscaledValue(ss_ext_sales_price)),_pushed_sum_ss_ext_sales_price,sum]
+                                              Project [ss_ext_sales_price,d_year,d_qoy,ss_addr_sk]
                                                 BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                   Filter [ss_addr_sk]
                                                     ColumnarToRow
@@ -65,19 +66,19 @@ WholeStageCodegen (25)
                                                                       Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_qoy]
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk,d_year,d_qoy] #7
-                                              InputAdapter
-                                                ReusedExchange [ca_address_sk,ca_county] #4
+                                            InputAdapter
+                                              ReusedExchange [ca_address_sk,ca_county,cnt] #4
                         InputAdapter
                           BroadcastExchange #8
                             WholeStageCodegen (11)
-                              HashAggregate [ca_county,d_qoy,d_year,sum] [sum(UnscaledValue(ss_ext_sales_price)),store_sales,sum]
+                              HashAggregate [ca_county,d_qoy,d_year,_pushed_sum_ss_ext_sales_price,cnt] [sum((_pushed_sum_ss_ext_sales_priceL * cntL)),store_sales,sum]
                                 InputAdapter
                                   Exchange [ca_county,d_qoy,d_year] #9
                                     WholeStageCodegen (10)
-                                      HashAggregate [ca_county,d_qoy,d_year,ss_ext_sales_price] [sum,sum]
-                                        Project [ss_ext_sales_price,d_year,d_qoy,ca_county]
-                                          BroadcastHashJoin [ss_addr_sk,ca_address_sk]
-                                            Project [ss_addr_sk,ss_ext_sales_price,d_year,d_qoy]
+                                      Project [_pushed_sum_ss_ext_sales_price,d_qoy,d_year,ca_county,cnt]
+                                        BroadcastHashJoin [ss_addr_sk,ca_address_sk]
+                                          HashAggregate [ss_addr_sk,d_qoy,d_year,ss_ext_sales_price] [sum(UnscaledValue(ss_ext_sales_price)),_pushed_sum_ss_ext_sales_price,sum]
+                                            Project [ss_ext_sales_price,d_year,d_qoy,ss_addr_sk]
                                               BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                 Filter [ss_addr_sk]
                                                   ColumnarToRow
@@ -92,19 +93,19 @@ WholeStageCodegen (25)
                                                                     Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_qoy]
                                                 InputAdapter
                                                   ReusedExchange [d_date_sk,d_year,d_qoy] #10
-                                            InputAdapter
-                                              ReusedExchange [ca_address_sk,ca_county] #4
+                                          InputAdapter
+                                            ReusedExchange [ca_address_sk,ca_county,cnt] #4
                     InputAdapter
                       BroadcastExchange #11
                         WholeStageCodegen (15)
-                          HashAggregate [ca_county,d_qoy,d_year,sum] [sum(UnscaledValue(ws_ext_sales_price)),web_sales,sum]
+                          HashAggregate [ca_county,d_qoy,d_year,_pushed_sum_ws_ext_sales_price,cnt] [sum((_pushed_sum_ws_ext_sales_priceL * cntL)),web_sales,sum]
                             InputAdapter
                               Exchange [ca_county,d_qoy,d_year] #12
                                 WholeStageCodegen (14)
-                                  HashAggregate [ca_county,d_qoy,d_year,ws_ext_sales_price] [sum,sum]
-                                    Project [ws_ext_sales_price,d_year,d_qoy,ca_county]
-                                      BroadcastHashJoin [ws_bill_addr_sk,ca_address_sk]
-                                        Project [ws_bill_addr_sk,ws_ext_sales_price,d_year,d_qoy]
+                                  Project [_pushed_sum_ws_ext_sales_price,d_qoy,d_year,ca_county,cnt]
+                                    BroadcastHashJoin [ws_bill_addr_sk,ca_address_sk]
+                                      HashAggregate [ws_bill_addr_sk,d_qoy,d_year,ws_ext_sales_price] [sum(UnscaledValue(ws_ext_sales_price)),_pushed_sum_ws_ext_sales_price,sum]
+                                        Project [ws_ext_sales_price,d_year,d_qoy,ws_bill_addr_sk]
                                           BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                                             Filter [ws_bill_addr_sk]
                                               ColumnarToRow
@@ -113,19 +114,19 @@ WholeStageCodegen (25)
                                                     ReusedSubquery [d_date_sk] #1
                                             InputAdapter
                                               ReusedExchange [d_date_sk,d_year,d_qoy] #3
-                                        InputAdapter
-                                          ReusedExchange [ca_address_sk,ca_county] #4
+                                      InputAdapter
+                                        ReusedExchange [ca_address_sk,ca_county,cnt] #4
                   InputAdapter
                     BroadcastExchange #13
                       WholeStageCodegen (19)
-                        HashAggregate [ca_county,d_qoy,d_year,sum] [sum(UnscaledValue(ws_ext_sales_price)),web_sales,sum]
+                        HashAggregate [ca_county,d_qoy,d_year,_pushed_sum_ws_ext_sales_price,cnt] [sum((_pushed_sum_ws_ext_sales_priceL * cntL)),web_sales,sum]
                           InputAdapter
                             Exchange [ca_county,d_qoy,d_year] #14
                               WholeStageCodegen (18)
-                                HashAggregate [ca_county,d_qoy,d_year,ws_ext_sales_price] [sum,sum]
-                                  Project [ws_ext_sales_price,d_year,d_qoy,ca_county]
-                                    BroadcastHashJoin [ws_bill_addr_sk,ca_address_sk]
-                                      Project [ws_bill_addr_sk,ws_ext_sales_price,d_year,d_qoy]
+                                Project [_pushed_sum_ws_ext_sales_price,d_qoy,d_year,ca_county,cnt]
+                                  BroadcastHashJoin [ws_bill_addr_sk,ca_address_sk]
+                                    HashAggregate [ws_bill_addr_sk,d_qoy,d_year,ws_ext_sales_price] [sum(UnscaledValue(ws_ext_sales_price)),_pushed_sum_ws_ext_sales_price,sum]
+                                      Project [ws_ext_sales_price,d_year,d_qoy,ws_bill_addr_sk]
                                         BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                                           Filter [ws_bill_addr_sk]
                                             ColumnarToRow
@@ -134,19 +135,19 @@ WholeStageCodegen (25)
                                                   ReusedSubquery [d_date_sk] #2
                                           InputAdapter
                                             ReusedExchange [d_date_sk,d_year,d_qoy] #7
-                                      InputAdapter
-                                        ReusedExchange [ca_address_sk,ca_county] #4
+                                    InputAdapter
+                                      ReusedExchange [ca_address_sk,ca_county,cnt] #4
               InputAdapter
                 BroadcastExchange #15
                   WholeStageCodegen (23)
-                    HashAggregate [ca_county,d_qoy,d_year,sum] [sum(UnscaledValue(ws_ext_sales_price)),web_sales,sum]
+                    HashAggregate [ca_county,d_qoy,d_year,_pushed_sum_ws_ext_sales_price,cnt] [sum((_pushed_sum_ws_ext_sales_priceL * cntL)),web_sales,sum]
                       InputAdapter
                         Exchange [ca_county,d_qoy,d_year] #16
                           WholeStageCodegen (22)
-                            HashAggregate [ca_county,d_qoy,d_year,ws_ext_sales_price] [sum,sum]
-                              Project [ws_ext_sales_price,d_year,d_qoy,ca_county]
-                                BroadcastHashJoin [ws_bill_addr_sk,ca_address_sk]
-                                  Project [ws_bill_addr_sk,ws_ext_sales_price,d_year,d_qoy]
+                            Project [_pushed_sum_ws_ext_sales_price,d_qoy,d_year,ca_county,cnt]
+                              BroadcastHashJoin [ws_bill_addr_sk,ca_address_sk]
+                                HashAggregate [ws_bill_addr_sk,d_qoy,d_year,ws_ext_sales_price] [sum(UnscaledValue(ws_ext_sales_price)),_pushed_sum_ws_ext_sales_price,sum]
+                                  Project [ws_ext_sales_price,d_year,d_qoy,ws_bill_addr_sk]
                                     BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                                       Filter [ws_bill_addr_sk]
                                         ColumnarToRow
@@ -155,5 +156,5 @@ WholeStageCodegen (25)
                                               ReusedSubquery [d_date_sk] #3
                                       InputAdapter
                                         ReusedExchange [d_date_sk,d_year,d_qoy] #10
-                                  InputAdapter
-                                    ReusedExchange [ca_address_sk,ca_county] #4
+                                InputAdapter
+                                  ReusedExchange [ca_address_sk,ca_county,cnt] #4

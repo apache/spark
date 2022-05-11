@@ -9,14 +9,14 @@ TakeOrderedAndProject [i_manager_id,avg_monthly_sales,sum_sales]
                 InputAdapter
                   Exchange [i_manager_id] #1
                     WholeStageCodegen (5)
-                      HashAggregate [i_manager_id,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,_w0,sum]
+                      HashAggregate [i_manager_id,d_moy,_pushed_sum_ss_sales_price,cnt] [sum((_pushed_sum_ss_sales_priceL * cntL)),sum_sales,_w0,sum]
                         InputAdapter
                           Exchange [i_manager_id,d_moy] #2
                             WholeStageCodegen (4)
-                              HashAggregate [i_manager_id,d_moy,ss_sales_price] [sum,sum]
-                                Project [i_manager_id,ss_sales_price,d_moy]
-                                  BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                    Project [i_manager_id,ss_store_sk,ss_sales_price,d_moy]
+                              Project [_pushed_sum_ss_sales_price,d_moy,i_manager_id,cnt]
+                                BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                  HashAggregate [ss_store_sk,i_manager_id,d_moy,ss_sales_price] [sum(UnscaledValue(ss_sales_price)),_pushed_sum_ss_sales_price,sum]
+                                    Project [i_manager_id,ss_sales_price,d_moy,ss_store_sk]
                                       BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                         Project [i_manager_id,ss_store_sk,ss_sales_price,ss_sold_date_sk]
                                           BroadcastHashJoin [i_item_sk,ss_item_sk]
@@ -42,9 +42,10 @@ TakeOrderedAndProject [i_manager_id,avg_monthly_sales,sum_sales]
                                                                         Scan parquet spark_catalog.default.date_dim [d_date_sk,d_month_seq,d_moy]
                                         InputAdapter
                                           ReusedExchange [d_date_sk,d_moy] #4
-                                    InputAdapter
-                                      BroadcastExchange #5
-                                        WholeStageCodegen (3)
+                                  InputAdapter
+                                    BroadcastExchange #5
+                                      WholeStageCodegen (3)
+                                        HashAggregate [s_store_sk] [count(1),cnt,count]
                                           Filter [s_store_sk]
                                             ColumnarToRow
                                               InputAdapter

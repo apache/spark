@@ -1,19 +1,19 @@
 TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales_profit,store_returns_loss,catalog_sales_profit]
   WholeStageCodegen (18)
-    HashAggregate [i_item_id,i_item_desc,s_store_id,s_store_name,sum,sum,sum] [sum(UnscaledValue(ss_net_profit)),sum(UnscaledValue(sr_net_loss)),sum(UnscaledValue(cs_net_profit)),store_sales_profit,store_returns_loss,catalog_sales_profit,sum,sum,sum]
+    HashAggregate [i_item_id,i_item_desc,s_store_id,s_store_name,_pushed_sum_ss_net_profit,cnt,_pushed_sum_sr_net_loss,_pushed_sum_cs_net_profit,cnt] [sum((_pushed_sum_ss_net_profitL * cntL)),sum((_pushed_sum_sr_net_lossL * cntL)),sum((_pushed_sum_cs_net_profitL * cntL)),store_sales_profit,store_returns_loss,catalog_sales_profit,sum,sum,sum]
       InputAdapter
         Exchange [i_item_id,i_item_desc,s_store_id,s_store_name] #1
           WholeStageCodegen (17)
-            HashAggregate [i_item_id,i_item_desc,s_store_id,s_store_name,ss_net_profit,sr_net_loss,cs_net_profit] [sum,sum,sum,sum,sum,sum]
-              Project [ss_net_profit,sr_net_loss,cs_net_profit,s_store_id,s_store_name,i_item_id,i_item_desc]
-                SortMergeJoin [sr_customer_sk,sr_item_sk,cs_bill_customer_sk,cs_item_sk]
-                  InputAdapter
-                    WholeStageCodegen (13)
-                      Sort [sr_customer_sk,sr_item_sk]
-                        InputAdapter
-                          Exchange [sr_customer_sk,sr_item_sk] #2
-                            WholeStageCodegen (12)
-                              Project [ss_net_profit,s_store_id,s_store_name,i_item_id,i_item_desc,sr_item_sk,sr_customer_sk,sr_net_loss]
+            Project [_pushed_sum_sr_net_loss,_pushed_sum_ss_net_profit,cnt,i_item_desc,i_item_id,s_store_id,s_store_name,_pushed_sum_cs_net_profit,cnt]
+              SortMergeJoin [sr_customer_sk,sr_item_sk,cs_bill_customer_sk,cs_item_sk]
+                InputAdapter
+                  WholeStageCodegen (13)
+                    Sort [sr_customer_sk,sr_item_sk]
+                      InputAdapter
+                        Exchange [sr_customer_sk,sr_item_sk] #2
+                          WholeStageCodegen (12)
+                            HashAggregate [sr_customer_sk,sr_item_sk,i_item_id,i_item_desc,s_store_id,s_store_name,sr_net_loss,ss_net_profit] [sum(UnscaledValue(sr_net_loss)),sum(UnscaledValue(ss_net_profit)),count(1),_pushed_sum_sr_net_loss,_pushed_sum_ss_net_profit,cnt,sum,sum,count]
+                              Project [ss_net_profit,sr_net_loss,s_store_id,s_store_name,i_item_id,i_item_desc,sr_customer_sk,sr_item_sk]
                                 SortMergeJoin [ss_customer_sk,ss_item_sk,ss_ticket_number,sr_customer_sk,sr_item_sk,sr_ticket_number]
                                   InputAdapter
                                     WholeStageCodegen (8)
@@ -86,13 +86,14 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                                                                         Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk] #9
-                  InputAdapter
-                    WholeStageCodegen (16)
-                      Sort [cs_bill_customer_sk,cs_item_sk]
-                        InputAdapter
-                          Exchange [cs_bill_customer_sk,cs_item_sk] #10
-                            WholeStageCodegen (15)
-                              Project [cs_bill_customer_sk,cs_item_sk,cs_net_profit]
+                InputAdapter
+                  WholeStageCodegen (16)
+                    Sort [cs_bill_customer_sk,cs_item_sk]
+                      InputAdapter
+                        Exchange [cs_bill_customer_sk,cs_item_sk] #10
+                          WholeStageCodegen (15)
+                            HashAggregate [cs_bill_customer_sk,cs_item_sk,cs_net_profit] [sum(UnscaledValue(cs_net_profit)),count(1),_pushed_sum_cs_net_profit,cnt,sum,count]
+                              Project [cs_net_profit,cs_bill_customer_sk,cs_item_sk]
                                 BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                   Filter [cs_bill_customer_sk,cs_item_sk]
                                     ColumnarToRow
