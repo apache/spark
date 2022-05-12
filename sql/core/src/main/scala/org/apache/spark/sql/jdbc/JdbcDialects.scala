@@ -240,7 +240,30 @@ abstract class JdbcDialect extends Serializable with Logging{
         getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
       s"CAST($l AS $databaseTypeDefinition)"
     }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        s"""$funcName(${inputs.mkString(", ")})"""
+      } else {
+        throw QueryCompilationErrors.noSuchFunctionError(dialectName, funcName)
+      }
+    }
   }
+
+  /**
+   * Returns whether the database supports function.
+   * @param funcName Function name
+   * @return True if the database supports function.
+   */
+  @Since("3.4.0")
+  def isSupportedFunction(funcName: String): Boolean = false
+
+  /**
+   * Returns the name of database dialect.
+   * @return
+   */
+  @Since("3.4.0")
+  def dialectName: String = this.getClass.getCanonicalName
 
   /**
    * Converts V2 expression to String representing a SQL expression.
