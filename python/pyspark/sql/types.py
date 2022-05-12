@@ -1959,14 +1959,12 @@ class DatetimeNTZConverter:
         )
 
     def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
-        from pyspark import SparkContext
-
         seconds = calendar.timegm(obj.utctimetuple())
-        jvm = SparkContext._jvm
-        assert jvm is not None
-        return jvm.org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalDateTime(
-            int(seconds) * 1000000 + obj.microsecond
+        DateTimeUtils = JavaClass(
+            "org.apache.spark.sql.catalyst.util.DateTimeUtils",
+            gateway_client,
         )
+        return DateTimeUtils.microsToLocalDateTime(int(seconds) * 1000000 + obj.microsecond)
 
 
 class DayTimeIntervalTypeConverter:
@@ -1974,11 +1972,11 @@ class DayTimeIntervalTypeConverter:
         return isinstance(obj, datetime.timedelta)
 
     def convert(self, obj: datetime.timedelta, gateway_client: GatewayClient) -> JavaObject:
-        from pyspark import SparkContext
-
-        jvm = SparkContext._jvm
-        assert jvm is not None
-        return jvm.org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration(
+        IntervalUtils = JavaClass(
+            "org.apache.spark.sql.catalyst.util.IntervalUtils",
+            gateway_client,
+        )
+        return IntervalUtils.microsToDuration(
             (math.floor(obj.total_seconds()) * 1000000) + obj.microseconds
         )
 
