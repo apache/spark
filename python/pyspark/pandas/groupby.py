@@ -2233,7 +2233,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         10    10
         Name: b, dtype: int64
 
-        # Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+)
+        Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+):
+
         >>> df = ps.DataFrame([["g", "g0"],
         ...                   ["g", "g1"],
         ...                   ["g", "g2"],
@@ -2300,7 +2301,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         9    8
         Name: b, dtype: int64
 
-        # Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+)
+        Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+):
+
         >>> df = ps.DataFrame([["g", "g0"],
         ...                   ["g", "g1"],
         ...                   ["g", "g2"],
