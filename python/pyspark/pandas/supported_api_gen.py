@@ -217,7 +217,7 @@ def transform_missing(
     --------
     >>> transform_missing("DataFrame", "add", {"axis", "fill_value", "level"},
     ...                     "pandas.DataFrame", "pyspark.pandas.DataFrame")
-    >>> ``axis`` , ``fill_value`` , ``level``
+    '``axis`` , ``fill_value`` , ``level``'
     """
     missing_str = " , ".join(f"``{x}``" for x in sorted(missing_set)[:MAX_MISSING_PARAMS_SIZE])
     if len(missing_set) > MAX_MISSING_PARAMS_SIZE:
@@ -338,3 +338,19 @@ def write_rst(all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedSta
             if supported_status:
                 write_table(module, module_path, supported_status, w_fd)
                 w_fd.write("\n")
+
+
+def _test() -> None:
+    import doctest
+    import sys
+
+    import pyspark.pandas.supported_api_gen
+
+    globs = pyspark.pandas.supported_api_gen.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(pyspark.pandas.supported_api_gen, globs=globs)
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
