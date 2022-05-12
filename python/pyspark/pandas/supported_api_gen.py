@@ -19,6 +19,7 @@
 Generate 'Supported pandas APIs' documentation file
 """
 import os
+from distutils.version import LooseVersion
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
 from typing import Any, Callable, Dict, List, Set, TextIO, Tuple
@@ -27,7 +28,6 @@ import pyspark.pandas as ps
 import pyspark.pandas.groupby as psg
 import pyspark.pandas.window as psw
 from pyspark.find_spark_home import _find_spark_home
-from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
 import pandas as pd
 import pandas.core.groupby as pdg
@@ -96,7 +96,10 @@ def generate_supported_api() -> None:
 
     Write supported APIs documentation.
     """
-    require_minimum_pandas_version()
+    if LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
+        raise ImportError(
+            "Pandas >= 1.4.0 must be installed; however, " f"your version was {pd.__version__}."
+        )
 
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]] = {}
     for pd_module_group, ps_module_group in MODULE_GROUP_MATCH:
