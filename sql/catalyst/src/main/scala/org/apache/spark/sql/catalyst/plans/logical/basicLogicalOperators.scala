@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Expression, _}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
@@ -1123,14 +1123,15 @@ abstract class AggregateBase(
     getAllValidConstraints(nonAgg)
   }
 
+  def withGroupingExpressions(groupingExpressions: Seq[Expression]): AggregateBase
+
+  def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase
+
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
-  private[sql] def groupOnly: Boolean = {
+  private[sql] lazy val groupOnly: Boolean = {
     // aggregateExpressions can be empty through Dateset.agg,
     // so we should also check groupingExpressions is non empty
-    groupingExpressions.nonEmpty && aggregateExpressions.map {
-      case Alias(child, _) => child
-      case e => e
-    }.forall(a => a.foldable || groupingExpressions.exists(g => a.semanticEquals(g)))
+    groupingExpressions.nonEmpty && aggregateExprs.isEmpty
   }
 
   private[sql] lazy val aggregateExprs: Seq[AggregateExpression] = {
@@ -1159,6 +1160,12 @@ case class Aggregate(
     child: LogicalPlan)
   extends AggregateBase(groupingExpressions, aggregateExpressions, child) {
 
+  override def withGroupingExpressions(groupingExpressions: Seq[Expression]): AggregateBase =
+    copy(groupingExpressions = groupingExpressions)
+
+  override def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase =
+    copy(aggregateExpressions = aggregateExpressions)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
 }
@@ -1169,7 +1176,31 @@ case class PartialAggregate(
     child: LogicalPlan)
   extends AggregateBase(groupingExpressions, aggregateExpressions, child) {
 
+  override private[sql] lazy val groupOnly: Boolean = false
+
+  override def withGroupingExpressions(groupingExpressions: Seq[Expression]): AggregateBase =
+    copy(groupingExpressions = groupingExpressions)
+
+  override def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase =
+    copy(aggregateExpressions = aggregateExpressions)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): PartialAggregate =
+    copy(child = newChild)
+}
+
+case class FinalAggregate(
+    override val  groupingExpressions: Seq[Expression],
+    override val  aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan)
+  extends AggregateBase(groupingExpressions, aggregateExpressions, child) {
+
+  override def withGroupingExpressions(groupingExpressions: Seq[Expression]): AggregateBase =
+    copy(groupingExpressions = groupingExpressions)
+
+  override def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase =
+    copy(aggregateExpressions = aggregateExpressions)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): FinalAggregate =
     copy(child = newChild)
 }
 

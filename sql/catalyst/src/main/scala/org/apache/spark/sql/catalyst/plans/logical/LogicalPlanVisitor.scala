@@ -23,8 +23,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 trait LogicalPlanVisitor[T] {
 
   def visit(p: LogicalPlan): T = p match {
-    case p: Aggregate => visitAggregate(p)
-    case p: PartialAggregate => visitPartialAggregate(p)
+    case p: AggregateBase => visitAggregate(p)
     case p: Distinct => visitDistinct(p)
     case p: Except => visitExcept(p)
     case p: Expand => visitExpand(p)
@@ -52,9 +51,7 @@ trait LogicalPlanVisitor[T] {
 
   def default(p: LogicalPlan): T
 
-  def visitAggregate(p: Aggregate): T
-
-  def visitPartialAggregate(p: PartialAggregate): T
+  def visitAggregate(p: AggregateBase): T
 
   def visitDistinct(p: Distinct): T
 

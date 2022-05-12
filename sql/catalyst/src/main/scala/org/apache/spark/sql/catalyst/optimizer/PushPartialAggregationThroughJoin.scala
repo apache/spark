@@ -150,11 +150,6 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     case _ => false
   }
 
-  private def isDistinct(agg: AggregateExpression): Boolean = agg match {
-    case AggregateExpression(_, Complete, isDistinct, None, _) => isDistinct
-    case _ => false
-  }
-
   private def supportPushDownAgg(
       aggExps: Seq[AggregateExpression],
       left: LogicalPlan,
@@ -236,15 +231,6 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     val partialGroupingExps = ExpressionSet(joinKeys ++ groupExps).toSeq
     val partialAggExps = remainingExps ++ (aliasMap.values.toSeq :+ rowCnt) ++ joinKeys ++ groupExps
     PartialAggregate(partialGroupingExps, reorderAggregateExpressions(partialAggExps), plan)
-  }
-
-  private def pushDownDistinctThroughJoin(join: Join): Join = {
-    val left = join.left
-    val right = join.right
-
-    join.copy(left =
-      PartialAggregate(left.output, left.output, left),
-      right = PartialAggregate(right.output, right.output, right))
   }
 
   // The entry of push down partial aggregate through join.
@@ -366,17 +352,28 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
         if j.children.exists(_.isInstanceOf[AggregateBase]) =>
       agg
 
-    case agg @ PartialAggregate(_, aggregateExps, j: Join)
+    case agg @ PartialAggregate(_, aggregateExps,
+      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
         if agg.aggregateExprs.isEmpty =>
-      Project(aggregateExps, pushDownDistinctThroughJoin(j))
+      val newChild = j.copy(left =
+        PartialAggregate(left.output, left.output, left),
+        right = PartialAggregate(right.output, right.output, right))
+      Project(aggregateExps, newChild)
 
-    case agg @ PartialAggregate(_, aggregateExps, Project(projectList, j: Join))
+    case agg @ PartialAggregate(_, aggregateExps, Project(projectList,
+      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
         if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
-      Project(aggregateExps, Project(projectList, pushDownDistinctThroughJoin(j)))
+      val newChild = j.copy(left =
+        PartialAggregate(left.output, left.output, left),
+        right = PartialAggregate(right.output, right.output, right))
+      Project(aggregateExps, Project(projectList, newChild))
 
-    case agg @ Aggregate(_, aggregateExps, j: Join)
-        if agg.aggregateExprs.forall(isDistinct) && aggregateExps.forall(_.deterministic) =>
-      val newChild = pushDownDistinctThroughJoin(j)
+    case agg @ Aggregate(_, aggregateExps,
+      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
+        if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
+      val newChild = j.copy(left =
+        PartialAggregate(left.output, left.output, left),
+        right = PartialAggregate(right.output, right.output, right))
       if (conf.getConf(SQLConf.REMOVE_CURRENT_PARTIAL_AGGREGATION) &&
         canPlanAsBroadcastHashJoin(j, conf)) {
         FinalAggregate(agg.groupingExpressions, agg.aggregateExpressions, newChild)
@@ -384,14 +381,17 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
         agg.copy(child = newChild)
       }
 
-    case agg @ Aggregate(_, aggregateExps, p @ Project(_, j: Join))
-        if agg.aggregateExprs.forall(isDistinct) && aggregateExps.forall(_.deterministic) =>
-      val newChild = p.copy(child = pushDownDistinctThroughJoin(j))
+    case agg @ Aggregate(_, aggregateExps, p @ Project(_,
+      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
+        if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
+      val newChild = j.copy(left =
+        PartialAggregate(left.output, left.output, left),
+        right = PartialAggregate(right.output, right.output, right))
       if (conf.getConf(SQLConf.REMOVE_CURRENT_PARTIAL_AGGREGATION) &&
         canPlanAsBroadcastHashJoin(j, conf)) {
-        FinalAggregate(agg.groupingExpressions, agg.aggregateExpressions, newChild)
+        FinalAggregate(agg.groupingExpressions, agg.aggregateExpressions, p.copy(child = newChild))
       } else {
-        agg.copy(child = newChild)
+        agg.copy(child = p.copy(child = newChild))
       }
 
     case agg @ Aggregate(groupExps, aggregateExps,

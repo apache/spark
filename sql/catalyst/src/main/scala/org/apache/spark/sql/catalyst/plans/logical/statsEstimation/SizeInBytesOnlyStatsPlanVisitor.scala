@@ -57,17 +57,20 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
       Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 0L).product)
   }
 
-  override def visitAggregate(p: Aggregate): Statistics = {
-    if (p.groupingExpressions.isEmpty) {
-      Statistics(
-        sizeInBytes = EstimationUtils.getOutputSize(p.output, outputRowCount = 1),
-        rowCount = Some(1))
-    } else {
-      visitUnaryNode(p)
+  override def visitAggregate(p: AggregateBase): Statistics = {
+    p match {
+      case _: PartialAggregate =>
+        p.child.stats
+      case _ =>
+        if (p.groupingExpressions.isEmpty) {
+          Statistics(
+            sizeInBytes = EstimationUtils.getOutputSize(p.output, outputRowCount = 1),
+            rowCount = Some(1))
+        } else {
+          visitUnaryNode(p)
+        }
     }
   }
-
-  override def visitPartialAggregate(p: PartialAggregate): Statistics = p.child.stats
 
   override def visitDistinct(p: Distinct): Statistics = visitUnaryNode(p)
 

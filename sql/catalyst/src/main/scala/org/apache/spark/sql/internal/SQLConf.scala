@@ -833,12 +833,21 @@ object SQLConf {
       .createWithDefault(true)
 
   val PUSH_PARTIAL_AGGREGATION_ENABLED =
-    buildConf("spark.sql.pushPartialAggregationThroughJoin.enabled")
+    buildConf("spark.sql.optimizer.pushPartialAggregation.enabled")
     .internal()
     .doc("When true, the query optimizer will push the partial aggregation through Join.")
     .version("3.4.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
+
+  val REMOVE_CURRENT_PARTIAL_AGGREGATION =
+    buildConf("spark.sql.optimizer.pushPartialAggregation.removeCurrentPartialAggregation")
+      .internal()
+      .doc("When true, the query optimizer will remove the current partial aggregation after " +
+        "pushing the partial aggregation through Join if it can be planed as broadcast hash join.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()

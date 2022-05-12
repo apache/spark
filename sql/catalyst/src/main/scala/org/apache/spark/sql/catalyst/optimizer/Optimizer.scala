@@ -835,12 +835,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
-    case p @ Project(_, a: Aggregate) if !a.outputSet.subsetOf(p.references) =>
-      p.copy(
-        child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
-    case p @ Project(_, a: PartialAggregate) if !a.outputSet.subsetOf(p.references) =>
-      p.copy(
-        child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
+    case p @ Project(_, a: AggregateBase) if !a.outputSet.subsetOf(p.references) =>
+      val newAggregateExprs = a.aggregateExpressions.filter(p.references.contains)
+      p.copy(child = a.withAggregateExpressions(newAggregateExprs))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
@@ -860,10 +857,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
       d.copy(child = prunedChild(child, d.references))
 
     // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
-    case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
-      a.copy(child = prunedChild(child, a.references))
-    case a @ PartialAggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
-      a.copy(child = prunedChild(child, a.references))
+    case a: AggregateBase if !a.child.outputSet.subsetOf(a.references) =>
+      a.withNewChildren(Seq(prunedChild(a.child, a.references)))
     case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
@@ -986,16 +981,11 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       case p1 @ Project(_, p2: Project)
           if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline) =>
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
-      case p @ Project(_, agg: Aggregate)
-          if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
-             canCollapseAggregate(p, agg) =>
-        agg.copy(aggregateExpressions = buildCleanedProjectList(
-          p.projectList, agg.aggregateExpressions))
-      case p @ Project(_, agg: PartialAggregate)
-          if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
-            canCollapseAggregate(p, agg) =>
-        agg.copy(aggregateExpressions = buildCleanedProjectList(
-          p.projectList, agg.aggregateExpressions))
+      case p @ Project(_, agg: AggregateBase)
+        if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
+          canCollapseAggregate(p, agg) =>
+        val newAggregateExps = buildCleanedProjectList(p.projectList, agg.aggregateExpressions)
+        agg.withAggregateExpressions(newAggregateExps)
       case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
         if isRenaming(l1, l2) =>
         val newProjectList = buildCleanedProjectList(l1, l2)

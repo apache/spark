@@ -535,15 +535,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             "You hit a query analyzer bug. Please report your query to Spark user mailing list.")
         }
 
-        // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
-        // `groupingExpressions` is not extracted during logical phase.
-        val normalizedGroupingExpressions = groupingExpressions.map { e =>
-          NormalizeFloatingNumbers.normalize(e) match {
-            case n: NamedExpression => n
-            // Keep the name of the original expression.
-            case other => Alias(other, e.name)(exprId = e.exprId)
-          }
-        }
+        val normalizedGroupingExpressions = normalizeGroupingExpressions(groupingExpressions)
 
         val aggregateOperator =
           if (functionsWithDistinct.isEmpty) {
@@ -551,7 +543,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               normalizedGroupingExpressions,
               aggregateExpressions,
               resultExpressions,
-              false,
               planLater(child))
           } else {
             // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain
@@ -607,33 +598,44 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
 
       case PartialAggregate(groupingExps, aggregateExps, child) =>
-        PhysicalAggregation.unapply(logical.Aggregate(groupingExps, aggregateExps, child)) match {
-          case Some((groupingExpressions, aggExpressions, resultExpressions, child))
+        PhysicalAggregation.unapply(Aggregate(groupingExps, aggregateExps, child)) match {
+          case Some((groupingExpressions, aggExpressions, resultExpressions, _))
             if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
-            val aggregateExpressions = aggExpressions.map(expr =>
-              expr.asInstanceOf[AggregateExpression])
-
-            // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
-            // `groupingExpressions` is not extracted during logical phase.
-            val normalizedGroupingExpressions = groupingExpressions.map { e =>
-              NormalizeFloatingNumbers.normalize(e) match {
-                case n: NamedExpression => n
-                // Keep the name of the original expression.
-                case other => Alias(other, e.name)(exprId = e.exprId)
-              }
-            }
-            AggUtils.planAggregateWithoutDistinct(
-              normalizedGroupingExpressions,
-              aggregateExpressions,
+            AggUtils.planPartialAggregateWithoutDistinct(
+              normalizeGroupingExpressions(groupingExpressions),
+              aggExpressions.map(_.asInstanceOf[AggregateExpression]),
               resultExpressions,
-              true,
               planLater(child))
 
-          case _ =>
-            Nil
+          case _ => Nil
+        }
+
+      case FinalAggregate(groupingExps, aggregateExps, child) =>
+        PhysicalAggregation.unapply(Aggregate(groupingExps, aggregateExps, child)) match {
+          case Some((groupingExpressions, aggExpressions, resultExpressions, _))
+            if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
+            AggUtils.planFinalAggregateWithoutDistinct(
+              normalizeGroupingExpressions(groupingExpressions),
+              aggExpressions.map(_.asInstanceOf[AggregateExpression]),
+              resultExpressions,
+              planLater(child))
+
+          case _ => Nil
         }
 
       case _ => Nil
+    }
+
+    private def normalizeGroupingExpressions(groupingExpressions: Seq[NamedExpression]) = {
+      // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
+      // `groupingExpressions` is not extracted during logical phase.
+      groupingExpressions.map { e =>
+        NormalizeFloatingNumbers.normalize(e) match {
+          case n: NamedExpression => n
+          // Keep the name of the original expression.
+          case other => Alias(other, e.name)(exprId = e.exprId)
+        }
+      }
     }
   }
 

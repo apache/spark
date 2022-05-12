@@ -140,7 +140,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
     plan.exists {
       case Join(left, right, _, _, hint) => isProbablyShuffleJoin(left, right, hint)
-      case _: Aggregate => true
+      case _: Aggregate | _: FinalAggregate => true
       case _: Window => true
       case _ => false
     }
