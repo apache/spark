@@ -285,6 +285,38 @@ class TypesTests(ReusedSQLTestCase):
             df = self.spark.createDataFrame(data)
             self.assertEqual(Row(f1=[Row(payment=200.5, name="A")], f2=[1, 2]), df.first())
 
+    def test_infer_array_element_type_with_null(self):
+        ArrayRow = Row("f1", "f2")
+
+        data = [ArrayRow([1, None], [None, 2])]
+
+        nestedRdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(nestedRdd)
+        self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
+
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
+
+        data = [ArrayRow([1], [None])]
+        self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data))
+
+    def test_infer_array_element_type_with_struct(self):
+        NestedRow = Row("f1")
+
+        with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
+            data = [NestedRow([{"payment": 200.5}, {"name": "A"}])]
+
+            nestedRdd = self.sc.parallelize(data)
+            df = self.spark.createDataFrame(nestedRdd)
+            self.assertEqual(
+                Row(f1=[Row(payment=200.5, name=None), Row(payment=None, name="A")]), df.first()
+            )
+
+            df = self.spark.createDataFrame(data)
+            self.assertEqual(
+                Row(f1=[Row(payment=200.5, name=None), Row(payment=None, name="A")]), df.first()
+            )
+
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])
