@@ -98,7 +98,7 @@ def generate_supported_api() -> None:
     """
     if LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
         raise ImportError(
-            "Pandas >= 1.4.0 must be installed; however, " f"your version was {pd.__version__}."
+            f"Pandas >= 1.4.0 must be installed; however, your version was {pd.__version__}."
         )
 
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]] = {}
