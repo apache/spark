@@ -305,7 +305,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
-  protected def ansiEnabled: Boolean
+  def ansiEnabled: Boolean
 
   // When this cast involves TimeZone, it's only resolved if the timeZoneId is set;
   // Otherwise behave like Expression.resolved.
@@ -2158,7 +2158,7 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override protected val ansiEnabled: Boolean = true
+  override val ansiEnabled: Boolean = true
 
   override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
 
