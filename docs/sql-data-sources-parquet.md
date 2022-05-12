@@ -322,16 +322,14 @@ Dataset<Row> df2 = spark.read().parquet("/path/to/table.parquet.encrypted");
 <div data-lang="python"  markdown="1">
 {% highlight python %}
 
-sc._jsc.hadoopConfiguration().set("parquet.encryption.kms.client.class" ,
-                           "org.apache.parquet.crypto.keytools.mocks.InMemoryKMS")
-
-# Explicit master keys (base64 encoded) - required only for mock InMemoryKMS
-sc._jsc.hadoopConfiguration().set("parquet.encryption.key.list" ,
-                   "keyA:AAECAwQFBgcICQoLDA0ODw== ,  keyB:AAECAAECAAECAAECAAECAA==")
-
-# Activate Parquet encryption, driven by Hadoop properties
-sc._jsc.hadoopConfiguration().set("parquet.crypto.factory.class" ,
-                   "org.apache.parquet.crypto.keytools.PropertiesDrivenCryptoFactory")
+# Set hadoop configuration properties, e.g. using configuration properties of
+# the Spark job:
+# --conf spark.hadoop.parquet.encryption.kms.client.class=\
+#           "org.apache.parquet.crypto.keytools.mocks.InMemoryKMS"\
+# --conf spark.hadoop.parquet.encryption.key.list=\
+#           "keyA:AAECAwQFBgcICQoLDA0ODw== ,  keyB:AAECAAECAAECAAECAAECAA=="\
+# --conf spark.hadoop.parquet.crypto.factory.class=\
+#           "org.apache.parquet.crypto.keytools.PropertiesDrivenCryptoFactory"
 
 # Write encrypted dataframe files.
 # Column "square" will be protected with master key "keyA".
