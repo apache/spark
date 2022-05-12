@@ -188,7 +188,7 @@ public interface HiveSession extends HiveSessionBase {
       throws HiveSQLException;
 
   TRowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
-                       long maxRows, FetchType fetchType) throws HiveSQLException;
+      long maxRows, FetchType fetchType) throws HiveSQLException;
 
   String getDelegationToken(HiveAuthFactory authFactory, String owner,
       String renewer) throws HiveSQLException;
