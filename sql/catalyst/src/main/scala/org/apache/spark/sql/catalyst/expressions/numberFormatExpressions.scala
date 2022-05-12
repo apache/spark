@@ -209,7 +209,7 @@ case class TryToNumber(left: Expression, right: Expression)
       > SELECT _FUNC_(-12454.8, '99G999D9S');
        12,454.8-
   """,
-  since = "3.3.0",
+  since = "3.4.0",
   group = "string_funcs")
 case class ToCharacter(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -280,7 +280,7 @@ case class ToCharacter(left: Expression, right: Expression)
       > SELECT _FUNC_(-12454.8, '99G999D9S');
        12,454.8-
   """,
-  since = "3.3.0",
+  since = "3.4.0",
   group = "string_funcs")
 case class TryToCharacter(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {

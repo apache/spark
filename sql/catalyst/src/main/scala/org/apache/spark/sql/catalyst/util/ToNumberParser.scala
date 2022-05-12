@@ -752,8 +752,8 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       afterDecimalPoint = "#" * numFormatDigitsAfterDecimalPoint
     }
     val leadingSpaces = " " * (numFormatDigitsBeforeDecimalPoint - beforeDecimalPoint.length)
-    val trailingSpaces = "0" * (numFormatDigitsAfterDecimalPoint - afterDecimalPoint.length)
-    (leadingSpaces + beforeDecimalPoint, afterDecimalPoint + trailingSpaces)
+    val trailingZeros = "0" * (numFormatDigitsAfterDecimalPoint - afterDecimalPoint.length)
+    (leadingSpaces + beforeDecimalPoint, afterDecimalPoint + trailingZeros)
   }
 
   /**
@@ -787,7 +787,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
             inputBeforeDecimalPoint(formattingBeforeDecimalPointIndex) match {
               case SPACE if digits.isInstanceOf[ExactlyAsManyDigits] =>
                 // The format string started with a zero and had more digits than the provided
-                // input string, so we prepend a zero to the result.
+                // input string, so we prepend a zero to the result. Note that there is no need to
+                // check for the presence of any previous positive or minus sign in the result
+                // because we are adding zeros here and we want them to go directly after such a
+                // sign, such as "-00000123.45".
                 result.append(ZERO_DIGIT)
               case SPACE =>
                 addSpaceCheckingTrailingCharacters(result)
