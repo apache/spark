@@ -27,6 +27,7 @@ import pyspark.pandas as ps
 import pyspark.pandas.groupby as psg
 import pyspark.pandas.window as psw
 from pyspark.find_spark_home import _find_spark_home
+from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
 import pandas as pd
 import pandas.core.groupby as pdg
@@ -95,16 +96,18 @@ def generate_supported_api() -> None:
 
     Write supported APIs documentation.
     """
+    require_minimum_pandas_version()
+
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]] = {}
     for pd_module_group, ps_module_group in MODULE_GROUP_MATCH:
-        pd_modules = get_pd_modules(pd_module_group)
-        update_all_supported_status(
+        pd_modules = _get_pd_modules(pd_module_group)
+        _update_all_supported_status(
             all_supported_status, pd_modules, pd_module_group, ps_module_group
         )
-    write_rst(all_supported_status)
+    _write_rst(all_supported_status)
 
 
-def create_supported_by_module(
+def _create_supported_by_module(
     module_name: str, pd_module_group: Any, ps_module_group: Any
 ) -> Dict[str, SupportedStatus]:
     """
@@ -132,12 +135,12 @@ def create_supported_by_module(
 
     ps_funcs = dict([m for m in getmembers(ps_module, isfunction) if not m[0].startswith("_")])
 
-    return organize_by_implementation_status(
+    return _organize_by_implementation_status(
         module_name, pd_funcs, ps_funcs, pd_module_group, ps_module_group
     )
 
 
-def organize_by_implementation_status(
+def _organize_by_implementation_status(
     module_name: str,
     pd_funcs: Dict[str, Callable],
     ps_funcs: Dict[str, Callable],
@@ -173,7 +176,7 @@ def organize_by_implementation_status(
                 # partially implemented
                 pd_dict[pd_func_name] = SupportedStatus(
                     Implemented.PARTIALLY_IMPLEMENTED.value,
-                    transform_missing(
+                    _transform_missing(
                         module_name,
                         pd_func_name,
                         missing_set,
@@ -190,7 +193,7 @@ def organize_by_implementation_status(
     return pd_dict
 
 
-def transform_missing(
+def _transform_missing(
     module_name: str,
     pd_func_name: str,
     missing_set: Set[str],
@@ -215,7 +218,7 @@ def transform_missing(
 
     Examples
     --------
-    >>> transform_missing("DataFrame", "add", {"axis", "fill_value", "level"},
+    >>> _transform_missing("DataFrame", "add", {"axis", "fill_value", "level"},
     ...                     "pandas.DataFrame", "pyspark.pandas.DataFrame")
     '``axis`` , ``fill_value`` , ``level``'
     """
@@ -235,7 +238,7 @@ def transform_missing(
     return missing_str
 
 
-def get_pd_modules(pd_module_group: Any) -> List[str]:
+def _get_pd_modules(pd_module_group: Any) -> List[str]:
     """
     Returns sorted pandas memeber list from pandas module path.
 
@@ -247,7 +250,7 @@ def get_pd_modules(pd_module_group: Any) -> List[str]:
     return sorted([m[0] for m in getmembers(pd_module_group, isclass) if not m[0].startswith("_")])
 
 
-def update_all_supported_status(
+def _update_all_supported_status(
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]],
     pd_modules: List[str],
     pd_module_group: Any,
@@ -269,12 +272,14 @@ def update_all_supported_status(
     """
     pd_modules += [""]  # for General Function APIs
     for module_name in pd_modules:
-        supported_status = create_supported_by_module(module_name, pd_module_group, ps_module_group)
+        supported_status = _create_supported_by_module(
+            module_name, pd_module_group, ps_module_group
+        )
         if supported_status:
             all_supported_status[(module_name, ps_module_group.__name__)] = supported_status
 
 
-def write_table(
+def _write_table(
     module_name: str,
     module_path: str,
     supported_status: Dict[str, SupportedStatus],
@@ -305,7 +310,7 @@ def write_table(
     lines.append("      - Implemented\n")
     lines.append("      - Missing parameters\n")
     for func_str, status in supported_status.items():
-        func_str = escape_func_str(func_str)
+        func_str = _escape_func_str(func_str)
         if status.implemented == Implemented.NOT_IMPLEMENTED.value:
             lines.append(f"    * - {func_str}\n")
         else:
@@ -317,17 +322,19 @@ def write_table(
     w_fd.writelines(lines)
 
 
-def escape_func_str(func_str: str) -> str:
+def _escape_func_str(func_str: str) -> str:
     """
     Transforms which affecting rst data format.
     """
+    # TODO: Take into account that this function can create links incorrectly
+    # We can create alias links or links to parent methods
     if func_str.endswith("_"):
         return func_str[:-1] + "\_"  # noqa: W605
     else:
         return func_str
 
 
-def write_rst(all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]]) -> None:
+def _write_rst(all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]]) -> None:
     """
     Writes the documentation to the target file path.
     """
@@ -336,7 +343,7 @@ def write_rst(all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedSta
         for module_info, supported_status in all_supported_status.items():
             module, module_path = module_info
             if supported_status:
-                write_table(module, module_path, supported_status, w_fd)
+                _write_table(module, module_path, supported_status, w_fd)
                 w_fd.write("\n")
 
 
