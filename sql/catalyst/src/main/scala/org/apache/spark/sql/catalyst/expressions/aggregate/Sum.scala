@@ -46,7 +46,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, prettyName)
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(SUM)
+  override val nodePatterns: Seq[TreePattern] = Seq(SUM)
 
   protected lazy val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>

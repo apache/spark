@@ -58,7 +58,7 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(SCALA_UDF)
+  override val nodePatterns: Seq[TreePattern] = Seq(SCALA_UDF)
 
   override def toString: String = s"$name(${children.mkString(", ")})"
 

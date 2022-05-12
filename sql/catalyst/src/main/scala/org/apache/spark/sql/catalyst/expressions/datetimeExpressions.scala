@@ -106,7 +106,7 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
   override def prettyName: String = "current_timezone"
-  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+  override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -158,7 +158,7 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
   override def eval(input: InternalRow): Any = currentTimestamp()
-  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+  override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**

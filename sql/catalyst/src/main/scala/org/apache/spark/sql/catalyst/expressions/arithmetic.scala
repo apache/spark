@@ -130,7 +130,7 @@ case class UnaryPositive(child: Expression)
 
   override def dataType: DataType = child.dataType
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNARY_POSITIVE)
+  override val nodePatterns: Seq[TreePattern] = Seq(UNARY_POSITIVE)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, c => c)
@@ -215,7 +215,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
   override def dataType: DataType = left.dataType
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
+  override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 

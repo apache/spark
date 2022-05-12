@@ -47,7 +47,7 @@ abstract class AverageBase
   // Return data type.
   override def dataType: DataType = resultType
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(AVERAGE)
+  override val nodePatterns: Seq[TreePattern] = Seq(AVERAGE)
 
   protected lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>

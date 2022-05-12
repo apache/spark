@@ -49,7 +49,7 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override lazy val resolved = false
-  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_VARIABLE)
+  override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_VARIABLE)
 
   override def toString: String = s"lambda '$name"
 
@@ -114,7 +114,7 @@ case class LambdaFunction(
   override def children: Seq[Expression] = function +: arguments
   override def dataType: DataType = function.dataType
   override def nullable: Boolean = function.nullable
-  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_FUNCTION)
+  override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_FUNCTION)
 
   // Check if lambda variables bound to this lambda function are referenced in the wrong scope
   override def references: AttributeSet = if (resolved) {

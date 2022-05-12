@@ -35,7 +35,7 @@ trait Command extends LogicalPlan {
   // is created. That said, the statistics of a command is useless. Here we just return a dummy
   // statistics to avoid unnecessary statistics calculation of command's children.
   override def stats: Statistics = Statistics.DUMMY
-  final override val nodePatterns: Seq[TreePattern] = Seq(COMMAND)
+  override val nodePatterns: Seq[TreePattern] = Seq(COMMAND)
 }
 
 trait LeafCommand extends Command with LeafLike[LogicalPlan]

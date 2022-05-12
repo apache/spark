@@ -2333,7 +2333,7 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(UP_CAST)
+  override val nodePatterns: Seq[TreePattern] = Seq(UP_CAST)
 
   def dataType: DataType = target match {
     case DecimalType => DecimalType.SYSTEM_DEFAULT

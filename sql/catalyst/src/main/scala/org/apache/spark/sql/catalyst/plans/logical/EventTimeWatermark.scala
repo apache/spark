@@ -42,7 +42,7 @@ case class EventTimeWatermark(
     delay: CalendarInterval,
     child: LogicalPlan) extends UnaryNode {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(EVENT_TIME_WATERMARK)
+  override val nodePatterns: Seq[TreePattern] = Seq(EVENT_TIME_WATERMARK)
 
   // Update the metadata on the eventTime column to include the desired delay.
   override val output: Seq[Attribute] = child.output.map { a =>

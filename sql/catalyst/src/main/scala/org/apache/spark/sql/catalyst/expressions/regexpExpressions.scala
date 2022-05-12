@@ -131,7 +131,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
+  override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
   override def toString: String = escapeChar match {
     case '\\' => s"$left LIKE $right"
@@ -270,7 +270,7 @@ sealed abstract class MultiLikeBase
 
   override def nullable: Boolean = true
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
+  override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
   protected lazy val hasNull: Boolean = patterns.contains(null)
 
@@ -627,7 +627,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   @transient private var lastReplacementInUTF8: UTF8String = _
   // result buffer write by Matcher
   @transient private lazy val result: StringBuffer = new StringBuffer
-  final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_REPLACE)
+  override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_REPLACE)
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
     if (!p.equals(lastRegex)) {
@@ -752,7 +752,7 @@ abstract class RegExpExtractBase
   // last regex pattern, we cache it for performance concern
   @transient private var pattern: Pattern = _
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_EXTRACT_FAMILY)
+  override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_EXTRACT_FAMILY)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
   override def first: Expression = subject

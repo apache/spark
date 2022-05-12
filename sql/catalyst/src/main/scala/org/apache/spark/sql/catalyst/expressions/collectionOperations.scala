@@ -276,7 +276,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
       "The numbers of zipped arrays and field names should be the same")
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZIP)
+  override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZIP)
 
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && names.forall(_.resolved)
@@ -2322,7 +2322,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
+  override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {

@@ -64,7 +64,7 @@ case class PythonUDF(
 
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
+  override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)

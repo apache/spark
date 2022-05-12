@@ -845,12 +845,12 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("SPARK-39081: compatibility of combo of HigherOrderFunctions" +
     " with other Expression subclasses") {
-    //Using example given in JIRA, this is to test a compile time issue only, has no real usage
+    // Dummy example given in JIRA, this is to test a compile time issue only, has no real usage
     case class MyExploder(
                            arrays: Expression,    // Array[AnyDataType]
                            asOfDate: Expression,  // LambdaFunction[AnyDataType -> TimestampType]
-                           extractor: Expression, // TimestampType
-                         ) extends HigherOrderFunction with Generator with TimeZoneAwareExpression {
+                           extractor: Expression) // TimestampType
+      extends HigherOrderFunction with Generator with TimeZoneAwareExpression {
 
       override def children: Seq[Expression] = Seq[Expression](arrays, asOfDate)
 
@@ -868,23 +868,25 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       override def argumentTypes: Seq[AbstractDataType] =
         Seq(ArrayType, TimestampType)
 
-      override def doGenCode(ctx: CodegenContext, exp: ExprCode) = null
+      override def doGenCode(ctx: CodegenContext, exp: ExprCode): ExprCode = null
 
       override def functions: Seq[Expression] =
         Seq(extractor)
 
-      override def functionTypes =
+      override def functionTypes: Seq[TimestampType] =
         Seq(TimestampType)
 
-      override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction = null
+      override def bind(f: (Expression,
+        Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction = null
 
       override def timeZoneId: Option[String] = None
 
       override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = null
     }
 
-    //Should not get the error - value nodePatterns ... cannot override final member, or conflict in nodePatterns between two types
-    //Should not get compile error about conflicting fields with same name but were final
+    /* Should not get the error - value nodePatterns
+     ... cannot override final member, or conflict in nodePatterns between two types
+     Should not get compile error about conflicting fields with same name but were final */
     val myExploder = MyExploder(null, null, null)
   }
 }

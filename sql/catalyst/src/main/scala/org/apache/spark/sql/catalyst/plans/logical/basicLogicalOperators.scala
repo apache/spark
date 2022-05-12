@@ -71,7 +71,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(PROJECT)
+  override val nodePatterns: Seq[TreePattern] = Seq(PROJECT)
 
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
@@ -127,7 +127,7 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(GENERATE)
+  override val nodePatterns: Seq[TreePattern] = Seq(GENERATE)
 
   lazy val requiredChildOutput: Seq[Attribute] = {
     val unrequiredSet = unrequiredChildIndex.toSet
@@ -168,7 +168,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
+  override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
   override protected lazy val validConstraints: ExpressionSet = {
     val predicates = splitConjunctivePredicates(condition)
@@ -213,7 +213,7 @@ case class Intersect(
 
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(INTERSECT)
+  override val nodePatterns: Seq[TreePattern] = Seq(INTERSECT)
 
   override def output: Seq[Attribute] =
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
@@ -291,7 +291,7 @@ case class Union(
     Some(sum.toLong)
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
+  override val nodePatterns: Seq[TreePattern] = Seq(UNION)
 
   /**
    * Note the definition has assumption about how union is implemented physically.
@@ -640,7 +640,7 @@ object View {
 case class UnresolvedWith(
     child: LogicalPlan,
     cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
+  override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
 
   override def output: Seq[Attribute] = child.output
 
@@ -672,7 +672,7 @@ case class CTERelationDef(
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
     underSubquery: Boolean = false) extends UnaryNode {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
+  override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
@@ -701,7 +701,7 @@ case class CTERelationRef(
     override val output: Seq[Attribute],
     statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
+  override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
   override lazy val resolved: Boolean = _resolved
 
@@ -721,7 +721,7 @@ case class CTERelationRef(
  */
 case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends LogicalPlan {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
+  override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
   override def output: Seq[Attribute] = plan.output
 
@@ -741,7 +741,7 @@ case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
+  override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
     copy(child = newChild)
 }
@@ -759,7 +759,7 @@ case class Sort(
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
   override def outputOrdering: Seq[SortOrder] = order
-  final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
+  override val nodePatterns: Seq[TreePattern] = Seq(SORT)
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
 
@@ -1048,7 +1048,7 @@ case class Window(
 
   override def producedAttributes: AttributeSet = windowOutputSet
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW)
+  override val nodePatterns: Seq[TreePattern] = Seq(WINDOW)
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 
@@ -1222,7 +1222,7 @@ case class Pivot(
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
   override def metadataOutput: Seq[Attribute] = Nil
-  final override val nodePatterns: Seq[TreePattern] = Seq(PIVOT)
+  override val nodePatterns: Seq[TreePattern] = Seq(PIVOT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
@@ -1275,7 +1275,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderP
     }
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
+  override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
     copy(child = newChild)
@@ -1297,7 +1297,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     }
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
+  override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LocalLimit =
     copy(child = newChild)
@@ -1363,7 +1363,7 @@ case class SubqueryAlias(
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(SUBQUERY_ALIAS)
+  override val nodePatterns: Seq[TreePattern] = Seq(SUBQUERY_ALIAS)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): SubqueryAlias =
     copy(child = newChild)
@@ -1435,7 +1435,7 @@ case class Sample(
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
+  override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
 }
@@ -1448,7 +1448,7 @@ abstract class RepartitionOperation extends UnaryNode {
   def numPartitions: Int
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  final override val nodePatterns: Seq[TreePattern] = Seq(REPARTITION_OPERATION)
+  override val nodePatterns: Seq[TreePattern] = Seq(REPARTITION_OPERATION)
   def partitioning: Partitioning
 }
 
@@ -1578,7 +1578,7 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
+  override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
 }
@@ -1687,7 +1687,7 @@ case class LateralJoin(
 
   override def producedAttributes: AttributeSet = AttributeSet(right.plan.output)
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_JOIN)
+  override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_JOIN)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LateralJoin = {
     copy(left = newChild)
@@ -1733,7 +1733,7 @@ case class AsOfJoin(
       }
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(AS_OF_JOIN)
+  override val nodePatterns: Seq[TreePattern] = Seq(AS_OF_JOIN)
 
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): AsOfJoin = {
