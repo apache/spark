@@ -44,7 +44,7 @@ from typing import (
 )
 
 from py4j.protocol import register_input_converter
-from py4j.java_gateway import JavaClass, JavaGateway, JavaObject
+from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
 
 from pyspark.serializers import CloudPickleSerializer
 
@@ -1929,7 +1929,7 @@ class DateConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.date)
 
-    def convert(self, obj: datetime.date, gateway_client: JavaGateway) -> JavaObject:
+    def convert(self, obj: datetime.date, gateway_client: GatewayClient) -> JavaObject:
         Date = JavaClass("java.sql.Date", gateway_client)
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
 
@@ -1938,7 +1938,7 @@ class DatetimeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.datetime)
 
-    def convert(self, obj: datetime.datetime, gateway_client: JavaGateway) -> JavaObject:
+    def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
         seconds = (
             calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
@@ -1958,7 +1958,7 @@ class DatetimeNTZConverter:
             and is_timestamp_ntz_preferred()
         )
 
-    def convert(self, obj: datetime.datetime, gateway_client: JavaGateway) -> JavaObject:
+    def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
         from pyspark import SparkContext
 
         seconds = calendar.timegm(obj.utctimetuple())
@@ -1973,7 +1973,7 @@ class DayTimeIntervalTypeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.timedelta)
 
-    def convert(self, obj: datetime.timedelta, gateway_client: JavaGateway) -> JavaObject:
+    def convert(self, obj: datetime.timedelta, gateway_client: GatewayClient) -> JavaObject:
         from pyspark import SparkContext
 
         jvm = SparkContext._jvm
