@@ -605,6 +605,20 @@ class DataFrameSuite extends QueryTest
     )
   }
 
+  test("offset") {
+    checkAnswer(
+      testData.offset(90),
+      testData.collect().drop(90).toSeq)
+
+    checkAnswer(
+      arrayData.toDF().offset(99),
+      arrayData.collect().drop(99).map(r => Row.fromSeq(r.productIterator.toSeq)))
+
+    checkAnswer(
+      mapData.toDF().offset(99),
+      mapData.collect().drop(99).map(r => Row.fromSeq(r.productIterator.toSeq)))
+  }
+
   test("udf") {
     val foo = udf((a: Int, b: String) => a.toString + b)
 
