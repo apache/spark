@@ -345,8 +345,6 @@ private[spark] class BlockManager(
         }
       } catch {
         case ex: KryoException if ex.getCause.isInstanceOf[IOException] =>
-          // We need to have detailed log message to catch environmental problems easily.
-          // Further details: https://issues.apache.org/jira/browse/SPARK-37710
           processIORelatedException(ex, blockId, 0)
           throw ex
       } finally {
@@ -972,10 +970,11 @@ private[spark] class BlockManager(
               case e: IOException =>
                 handleRetriableException(e)
               case t: Throwable =>
+                // not a retriable exception
                 if (diskData != null) {
                   diskData.dispose()
                 }
-                // not a retriable exception
+                releaseLock(blockId, taskContext)
                 throw t
             }
             retryCount += 1
