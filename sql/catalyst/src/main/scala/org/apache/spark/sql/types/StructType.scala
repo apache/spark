@@ -517,7 +517,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * @return a sequence of either (1) NULL, if the column had no default value, or (2) an object of
    *         Any type suitable for assigning into a row using the InternalRow.update method.
    */
-  lazy val defaultValues: Seq[Any] =
+  lazy val defaultValues: Array[Any] =
     fields.map { field: StructField =>
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
