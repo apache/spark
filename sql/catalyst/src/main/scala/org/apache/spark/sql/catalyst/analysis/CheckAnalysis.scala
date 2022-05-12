@@ -752,8 +752,29 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       expressions.exists(_.exists(_.semanticEquals(expr)))
     }
 
+    def checkOuterReferenceUtil(attrs: Seq[Attribute], outer: OuterReference): Unit = {
+      var found = false
+      attrs.foreach(a => if (a.exprId == outer.exprId) found = true)
+      if (!found) {
+        failAnalysis("outer attribute not found")
+      }
+    }
+
+    def checkOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = {
+      if (hasOuterReferences(expr.plan)) {
+        expr.plan.expressions.foreach(_.foreachUp {
+          case o: OuterReference =>
+            p.children.foreach(e => checkOuterReferenceUtil(e.output, o))
+          case _ =>
+        })
+      }
+    }
+
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
+
+    // Check if there is outer attribute that cannot be found from the plan.
+    checkOuterReference(plan, expr)
 
     expr match {
       case ScalarSubquery(query, outerAttrs, _, _) =>
