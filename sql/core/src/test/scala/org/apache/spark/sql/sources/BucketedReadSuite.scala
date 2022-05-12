@@ -845,6 +845,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
       val e = intercept[SparkException] {
         aggregated.count()
       }
+      // TODO(SPARK-39163): Throw an exception w/ error class for an invalid bucket file
       assert(e.getErrorClass === "INTERNAL_ERROR")
       assert(e.getCause.toString contains "Invalid bucket file")
     }

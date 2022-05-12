@@ -860,6 +860,7 @@ class AdaptiveQueryExecSuite
         val error = intercept[SparkException] {
           aggregated.count()
         }
+        // TODO(SPARK-39163): Throw an exception w/ error class for an invalid bucket file
         assert(error.getErrorClass === "INTERNAL_ERROR")
         assert(error.getCause.toString contains "Invalid bucket file")
         assert(error.getCause.getSuppressed.size === 0)
