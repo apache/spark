@@ -227,9 +227,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toDebugString: String = {
     if (decimalVal.ne(null)) {
-      s"Decimal(expanded,$decimalVal,$precision,$scale})"
+      s"Decimal(expanded, $decimalVal, $precision, $scale)"
     } else {
-      s"Decimal(compact,$longVal,$precision,$scale})"
+      s"Decimal(compact, $longVal, $precision, $scale)"
     }
   }
 
