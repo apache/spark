@@ -431,9 +431,10 @@ case class ResolveDefaultColumns(
   private def mapStructFieldNamesToExpressions(
       schema: StructType,
       expressions: Seq[Expression]): Map[String, Expression] = {
-    val namesToFields: Map[String, StructField] = mapStructFieldNamesToFields(schema)
-    val namesAndExpressions: Seq[(String, Expression)] = namesToFields.keys.toSeq.zip(expressions)
-    namesAndExpressions.toMap
+    schema.fields.zip(expressions).map {
+      case (field: StructField, expression: Expression) =>
+        normalizeFieldName(field.name) -> expression
+    }.toMap
   }
 
   /**
