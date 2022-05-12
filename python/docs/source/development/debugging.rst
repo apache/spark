@@ -602,3 +602,13 @@ Access an object that exists on the Java side.
 
 ``Py4JNetworkError`` is raised when a problem occurs during network transfer (e.g., connection lost). In this case, we shall debug the network and rebuild the connection.
 
+Stack Traces
+------------
+
+There are Spark configurations to control stack traces:
+
+- ``spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled`` is true by default to simplify traceback from Python UDFs.
+
+- ``spark.sql.pyspark.jvmStacktrace.enabled`` is false by default to hide JVM stacktrace and to show a Python-friendly exception only.
+
+Spark configurations above are independent from log level settings. Control log levels through :meth:`pyspark.SparkContext.setLogLevel`.
