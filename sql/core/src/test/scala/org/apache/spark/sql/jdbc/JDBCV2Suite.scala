@@ -424,7 +424,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with filter push-down with ansi mode") {
-    Seq(true).foreach { ansiMode =>
+    Seq(false, true).foreach { ansiMode =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
         val df = spark.table("h2.test.people").filter($"id" + 1 > 1)
         checkFiltersRemoved(df, ansiMode)
