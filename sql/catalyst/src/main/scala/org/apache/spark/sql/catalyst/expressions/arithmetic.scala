@@ -389,11 +389,9 @@ case class Subtract(
     case _: YearMonthIntervalType =>
       MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _: IntegerType if failOnError =>
-      MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int],
-        queryContext)
+      MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
     case _: LongType if failOnError =>
-      MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long],
-        queryContext)
+      MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
     case _ => numeric.minus(input1, input2)
   }
 
@@ -428,11 +426,9 @@ case class Multiply(
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
     case _: IntegerType if failOnError =>
-      MathUtils.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int],
-        queryContext)
+      MathUtils.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
     case _: LongType if failOnError =>
-      MathUtils.multiplyExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long],
-        queryContext)
+      MathUtils.multiplyExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
     case _ => numeric.times(input1, input2)
   }
 
