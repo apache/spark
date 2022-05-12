@@ -1571,16 +1571,16 @@ class PlanResolutionSuite extends AnalysisTest {
         // This MERGE INTO command includes an ON clause with a DEFAULT column reference. This is
         // invalid and returns an error message.
         val mergeWithDefaultReferenceInMergeCondition =
-        s"""
-           |MERGE INTO testcat.tab AS target
-           |USING testcat.tab1 AS source
-           |ON target.i = DEFAULT
-           |WHEN MATCHED AND (target.s = 31) THEN DELETE
-           |WHEN MATCHED AND (target.s = 31)
-           |  THEN UPDATE SET target.s = DEFAULT
-           |WHEN NOT MATCHED AND (source.s='insert')
-           |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
-           """.stripMargin
+          s"""
+             |MERGE INTO testcat.tab AS target
+             |USING testcat.tab1 AS source
+             |ON target.i = DEFAULT
+             |WHEN MATCHED AND (target.s = 31) THEN DELETE
+             |WHEN MATCHED AND (target.s = 31)
+             |  THEN UPDATE SET target.s = DEFAULT
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+             """.stripMargin
         assert(intercept[AnalysisException] {
           parseAndResolve(mergeWithDefaultReferenceInMergeCondition)
         }.getMessage.contains(
@@ -1590,16 +1590,16 @@ class PlanResolutionSuite extends AnalysisTest {
         // This MERGE INTO command includes a WHEN MATCHED clause with a DEFAULT column reference as
         // of a complex expression (DEFAULT + 1). This is invalid and returns an error message.
         val mergeWithDefaultReferenceAsPartOfComplexExpression =
-        s"""
-           |MERGE INTO testcat.tab AS target
-           |USING testcat.tab1 AS source
-           |ON target.i = source.i
-           |WHEN MATCHED AND (target.s = 31) THEN DELETE
-           |WHEN MATCHED AND (target.s = 31)
-           |  THEN UPDATE SET target.s = DEFAULT + 1
-           |WHEN NOT MATCHED AND (source.s='insert')
-           |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
-           """.stripMargin
+          s"""
+             |MERGE INTO testcat.tab AS target
+             |USING testcat.tab1 AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s = 31) THEN DELETE
+             |WHEN MATCHED AND (target.s = 31)
+             |  THEN UPDATE SET target.s = DEFAULT + 1
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+             """.stripMargin
         assert(intercept[AnalysisException] {
           parseAndResolve(mergeWithDefaultReferenceAsPartOfComplexExpression)
         }.getMessage.contains(
