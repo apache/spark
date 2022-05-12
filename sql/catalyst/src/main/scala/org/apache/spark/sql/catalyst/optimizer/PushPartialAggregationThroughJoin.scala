@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, NumericType}
 
 /**
@@ -233,6 +232,26 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     PartialAggregate(partialGroupingExps, reorderAggregateExpressions(partialAggExps), plan)
   }
 
+  private def pushDistinctThroughJoin(join: Join): Join = {
+    val left = join.left
+    val right = join.right
+
+    var newLeft = left
+    var newRight = right
+    // Only push down the partial aggregate for stream side if it can be planed as broadcast join
+    getBroadcastBuildSide(join, conf) match {
+      case Some(BuildRight) =>
+        newLeft = PartialAggregate(left.output, left.output, left)
+      case Some(BuildLeft) =>
+        newRight = PartialAggregate(right.output, right.output, right)
+      case _ =>
+        newLeft = PartialAggregate(left.output, left.output, left)
+        newRight = PartialAggregate(right.output, right.output, right)
+    }
+
+    join.copy(left = newLeft, right = newRight)
+  }
+
   // The entry of push down partial aggregate through join.
   // Will return the current aggregate if it can't push down.
   private def pushAggThroughJoin(
@@ -316,12 +335,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
           }).asInstanceOf[NamedExpression]
         }
 
-      val newAgg = if (conf.getConf(SQLConf.REMOVE_CURRENT_PARTIAL_AGGREGATION) &&
-        canPlanAsBroadcastHashJoin(newJoin, conf)) {
-        FinalAggregate(rewrittenAgg.groupingExpressions, newAggregateExps, newJoin)
-      } else {
-        rewrittenAgg.copy(aggregateExpressions = newAggregateExps, child = newJoin)
-      }
+      val newAgg = rewrittenAgg.copy(aggregateExpressions = newAggregateExps, child = newJoin)
 
       val required = newJoin.references ++ newAgg.references
       if (!newJoin.inputSet.subsetOf(required)) {
@@ -371,28 +385,12 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     case agg @ Aggregate(_, aggregateExps,
       j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
         if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
-      val newChild = j.copy(left =
-        PartialAggregate(left.output, left.output, left),
-        right = PartialAggregate(right.output, right.output, right))
-      if (conf.getConf(SQLConf.REMOVE_CURRENT_PARTIAL_AGGREGATION) &&
-        canPlanAsBroadcastHashJoin(j, conf)) {
-        FinalAggregate(agg.groupingExpressions, agg.aggregateExpressions, newChild)
-      } else {
-        agg.copy(child = newChild)
-      }
+      agg.copy(child = pushDistinctThroughJoin(j))
 
     case agg @ Aggregate(_, aggregateExps, p @ Project(_,
       j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
         if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
-      val newChild = j.copy(left =
-        PartialAggregate(left.output, left.output, left),
-        right = PartialAggregate(right.output, right.output, right))
-      if (conf.getConf(SQLConf.REMOVE_CURRENT_PARTIAL_AGGREGATION) &&
-        canPlanAsBroadcastHashJoin(j, conf)) {
-        FinalAggregate(agg.groupingExpressions, agg.aggregateExpressions, p.copy(child = newChild))
-      } else {
-        agg.copy(child = p.copy(child = newChild))
-      }
+      agg.copy(child = p.copy(child = pushDistinctThroughJoin(j)))
 
     case agg @ Aggregate(groupExps, aggregateExps,
       j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _))

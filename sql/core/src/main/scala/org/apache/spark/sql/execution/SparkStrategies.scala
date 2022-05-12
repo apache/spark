@@ -610,19 +610,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           case _ => Nil
         }
 
-      case FinalAggregate(groupingExps, aggregateExps, child) =>
-        PhysicalAggregation.unapply(Aggregate(groupingExps, aggregateExps, child)) match {
-          case Some((groupingExpressions, aggExpressions, resultExpressions, _))
-            if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
-            AggUtils.planFinalAggregateWithoutDistinct(
-              normalizeGroupingExpressions(groupingExpressions),
-              aggExpressions.map(_.asInstanceOf[AggregateExpression]),
-              resultExpressions,
-              planLater(child))
-
-          case _ => Nil
-        }
-
       case _ => Nil
     }
 

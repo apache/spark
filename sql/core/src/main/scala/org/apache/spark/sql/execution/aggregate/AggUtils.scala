@@ -138,29 +138,6 @@ object AggUtils {
       child = child) :: Nil
   }
 
-  def planFinalAggregateWithoutDistinct(
-      groupingExpressions: Seq[NamedExpression],
-      aggregateExpressions: Seq[AggregateExpression],
-      resultExpressions: Seq[NamedExpression],
-      child: SparkPlan): Seq[SparkPlan] = {
-    val groupingAttributes = groupingExpressions.map(_.toAttribute)
-
-    val interExec: SparkPlan = mayAppendMergingSessionExec(groupingExpressions,
-      aggregateExpressions, child)
-
-    val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
-    val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
-
-    createAggregate(
-      requiredChildDistributionExpressions = Some(groupingAttributes),
-      groupingExpressions = groupingAttributes,
-      aggregateExpressions = finalAggregateExpressions,
-      aggregateAttributes = finalAggregateAttributes,
-      initialInputBufferOffset = groupingExpressions.length,
-      resultExpressions = resultExpressions,
-      child = interExec) :: Nil
-  }
-
   def planAggregateWithoutDistinct(
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
