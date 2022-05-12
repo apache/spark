@@ -1387,25 +1387,28 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       (Decimal(4.31),
         "9999999999999999.999999999999999MI") ->
-        "               4.310000000000000  ",
+        "               4.310000000000000 ",
       (Decimal(0),
         "9999999999999999.999999999999999MI") ->
-        "               0.000000000000000  ",
+        "               0.000000000000000 ",
       (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
         "9999999999999999.999999999999999MI") ->
-        "               4.310000000000000  ",
+        "               4.310000000000000 ",
       (Decimal(-454.8),
         "99G999.9MI") ->
-        "   454.8- ",
+        "   454.8-",
       (Decimal(-454.8),
         "00G000.0MI") ->
-        "00,454.8- ",
+        "00,454.8-",
       (Decimal(-454),
         "999MI") ->
-        "454- ",
+        "454-",
       (Decimal(-12454.8),
         "99G999D9MI") ->
-        "12,454.8- "
+        "12,454.8-",
+      (Decimal(-4.31),
+        "MI9999999999999999.999999999999999") ->
+        "               -4.310000000000000"
     ).foreach { case ((decimal, format), expected) =>
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)

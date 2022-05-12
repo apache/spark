@@ -623,11 +623,11 @@ SELECT '' AS to_char_5,  to_char(q2, 'MI9999999999999999')     FROM INT8_TBL
 -- !query schema
 struct<to_char_5:string,to_char(q2, MI9999999999999999):string>
 -- !query output
-	               123
-	               456
-	  4567890123456789
-	  4567890123456789
-	- 4567890123456789
+	              123
+	              456
+	 4567890123456789
+	 4567890123456789
+	-4567890123456789
 
 
 -- !query

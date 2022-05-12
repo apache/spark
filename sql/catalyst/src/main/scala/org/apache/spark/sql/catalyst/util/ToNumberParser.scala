@@ -662,11 +662,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           if (input < Decimal.ZERO) {
             stripTrailingLoneDecimalPoint(result)
             addCharacterCheckingTrailingSpaces(result, MINUS_SIGN)
-            // Add a second space to account for the "MI" sequence comprising two characters in the
-            // format string.
-            result.append(SPACE)
           } else {
-            result.append(SPACE)
             result.append(SPACE)
           }
         case OpeningAngleBracket() =>
