@@ -300,6 +300,23 @@ class TypesTests(ReusedSQLTestCase):
         data = [ArrayRow([1], [None])]
         self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data))
 
+    def test_infer_array_element_type_empty(self):
+        ArrayRow = Row("f1")
+
+        data = [ArrayRow([]), ArrayRow([None]), ArrayRow([1])]
+
+        nestedRdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(nestedRdd)
+        rows = df.collect()
+        self.assertEqual(Row(f1=[]), rows[0])
+        self.assertEqual(Row(f1=[None]), rows[1])
+        self.assertEqual(Row(f1=[1]), rows[2])
+
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(Row(f1=[]), rows[0])
+        self.assertEqual(Row(f1=[None]), rows[1])
+        self.assertEqual(Row(f1=[1]), rows[2])
+
     def test_infer_array_element_type_with_struct(self):
         NestedRow = Row("f1")
 
