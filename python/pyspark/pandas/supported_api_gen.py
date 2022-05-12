@@ -34,7 +34,11 @@ import pandas.core.groupby as pdg
 import pandas.core.window as pdw
 
 MAX_MISSING_PARAMS_SIZE = 5
-COMMON_PARAMETER_SET = {"kwargs", "args", "cls"}
+COMMON_PARAMETER_SET = {
+    "kwargs",
+    "args",
+    "cls",
+}  # These are not counted as missing parameters.
 MODULE_GROUP_MATCH = [(pd, ps), (pdw, psw), (pdg, psg)]
 
 SPARK_HOME = _find_spark_home()
