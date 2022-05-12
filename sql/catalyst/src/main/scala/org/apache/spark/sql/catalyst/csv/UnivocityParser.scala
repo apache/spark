@@ -318,26 +318,10 @@ class UnivocityParser(
         case e: SparkUpgradeException => throw e
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
-          row.setNullAt(i)
+          // Use the corresponding DEFAULT value associated with the column, if any.
+          row.update(i, parsedSchema.defaultValues(i))
       }
       i += 1
-    }
-    // If the number of tokens is less than the number of fields in the schema, check if any of the
-    // remaining fields have associated default values. If so, assign them to the output row.
-    if (badRecordException.isDefined) {
-      val remainingColumnIndexes: Seq[Int] = {
-        tokens.length until parsedSchema.fields.length
-      }
-      val remainingDefaultIndexes: Seq[Int] = remainingColumnIndexes.takeWhile { i =>
-        parsedSchema.fields(i).getExistenceDefaultValue().isDefined &&
-          parsedSchema.defaultValues(i).isDefined
-      }
-      val remainingDefaultValues: Seq[(Int, Any)] = remainingDefaultIndexes.map { i =>
-        (i, parsedSchema.defaultValues(i).get)
-      }
-      for ((index: Int, value: Any) <- remainingDefaultValues) {
-        row.update(index, value)
-      }
     }
     if (skipRow) {
       noRows

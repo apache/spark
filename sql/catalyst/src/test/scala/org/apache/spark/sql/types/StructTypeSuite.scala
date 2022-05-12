@@ -454,9 +454,9 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .build()),
       StructField("c3", BooleanType)))
     assert(source1.defaultValues.size == 3)
-    assert(source1.defaultValues(0).get == 42)
-    assert(source1.defaultValues(1).get == UTF8String.fromString("abc"))
-    assert(!source1.defaultValues(2).isDefined)
+    assert(source1.defaultValues(0) == 42)
+    assert(source1.defaultValues(1) == UTF8String.fromString("abc"))
+    assert(source1.defaultValues(2) == null)
 
     // Negative test: StructType.defaultValues fails because the existence default value parses and
     // resolves successfully, but evaluates to a non-literal expression.

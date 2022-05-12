@@ -514,10 +514,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   /**
    * Parses the text representing constant-folded default column literal values.
-   * @return a sequence of either (1) None, if the column had no default value, or (2) an object of
+   * @return a sequence of either (1) NULL, if the column had no default value, or (2) an object of
    *         Any type suitable for assigning into a row using the InternalRow.update method.
    */
-  lazy val defaultValues: Seq[Option[Any]] =
+  lazy val defaultValues: Seq[Any] =
     fields.map { field: StructField =>
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
@@ -532,8 +532,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
         }
         // The expression should be a literal value by this point, possibly wrapped in a cast
         // function. This is enforced by the execution of commands that assign default values.
-        Some(expr.eval())
-      }.getOrElse(None)
+        expr.eval()
+      }.getOrElse(null)
     }
 }
 
