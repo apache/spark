@@ -2590,7 +2590,8 @@ class SparkContext(config: SparkConf) extends Logging {
       val addedFilePaths = addedFiles.keys.toSeq
       val addedArchivePaths = addedArchives.keys.toSeq
       val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
-        schedulingMode, addedJarPaths, addedFilePaths, addedArchivePaths)
+        schedulingMode, addedJarPaths, addedFilePaths, addedArchivePaths,
+        env.metricsSystem.metricsProperties.asScala.toMap)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }

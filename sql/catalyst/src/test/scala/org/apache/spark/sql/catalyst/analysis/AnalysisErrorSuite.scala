@@ -557,17 +557,10 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
-    "OFFSET clause is outermost node",
-    testRelation.offset(Literal(10, IntegerType)),
-    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
-      " clause is found to be the outermost node." :: Nil
-  )
-
-  errorTest(
     "OFFSET clause in other node",
     testRelation2.offset(Literal(10, IntegerType)).where('b > 1),
-    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
-      " clause found in: Filter." :: Nil
+    "The OFFSET clause is allowed in the LIMIT clause or be the outermost node," +
+      " but the OFFSET clause found in: Filter." :: Nil
   )
 
   errorTest(

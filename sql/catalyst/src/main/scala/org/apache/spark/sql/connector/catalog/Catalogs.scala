@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.catalog
 
 import java.lang.reflect.InvocationTargetException
 import java.util
-import java.util.NoSuchElementException
 import java.util.regex.Pattern
 
 import org.apache.spark.SparkException
@@ -39,13 +38,19 @@ private[sql] object Catalogs {
    * @param conf a SQLConf
    * @return an initialized CatalogPlugin
    * @throws CatalogNotFoundException if the plugin class cannot be found
-   * @throws org.apache.spark.SparkException           if the plugin class cannot be instantiated
+   * @throws org.apache.spark.SparkException if the plugin class cannot be instantiated
    */
   @throws[CatalogNotFoundException]
   @throws[SparkException]
   def load(name: String, conf: SQLConf): CatalogPlugin = {
     val pluginClassName = try {
-      conf.getConfString("spark.sql.catalog." + name)
+      val _pluginClassName = conf.getConfString(s"spark.sql.catalog.$name")
+      // SPARK-39079 do configuration check first, otherwise some path-based table like
+      // `org.apache.spark.sql.json`.`/path/json_file` may fail on analyze phase
+      if (name.contains(".")) {
+        throw QueryExecutionErrors.invalidCatalogNameError(name)
+      }
+      _pluginClassName
     } catch {
       case _: NoSuchElementException =>
         throw QueryExecutionErrors.catalogPluginClassNotFoundError(name)

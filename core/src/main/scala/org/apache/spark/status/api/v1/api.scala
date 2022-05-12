@@ -459,6 +459,7 @@ class ApplicationEnvironmentInfo private[spark] (
     val sparkProperties: Seq[(String, String)],
     val hadoopProperties: Seq[(String, String)],
     val systemProperties: Seq[(String, String)],
+    val metricsProperties: Seq[(String, String)],
     val classpathEntries: Seq[(String, String)],
     val resourceProfiles: Seq[ResourceProfileInfo])
 

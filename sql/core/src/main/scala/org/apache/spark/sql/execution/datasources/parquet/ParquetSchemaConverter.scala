@@ -174,9 +174,15 @@ class ParquetToSparkSchemaConverter(
    */
   def convertField(
       field: ColumnIO,
-      sparkReadType: Option[DataType] = None): ParquetColumn = field match {
-    case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, sparkReadType)
-    case groupColumn: GroupColumnIO => convertGroupField(groupColumn, sparkReadType)
+      sparkReadType: Option[DataType] = None): ParquetColumn = {
+    val targetType = sparkReadType.map {
+      case udt: UserDefinedType[_] => udt.sqlType
+      case otherType => otherType
+    }
+    field match {
+      case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
+      case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
+    }
   }
 
   private def convertPrimitiveField(
