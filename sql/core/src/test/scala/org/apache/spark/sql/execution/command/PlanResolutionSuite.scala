@@ -1129,11 +1129,11 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed9 match {
         case UpdateTable(
         _,
-        Seq(Assignment(i: AttributeReference, Literal(null, StringType))),
+        Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
         None) =>
           assert(i.name == "i")
 
-        case _ => fail("Expect UpdateTable, but got:\n" + parsed7.treeString)
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
       }
     }
 
