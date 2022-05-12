@@ -79,6 +79,7 @@ case class ScalarSubquery(
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     if (rows.length > 1) {
+      // TODO(SPARK-39167): Throw an exception w/ an error class for multiple rows from a subquery
       throw new IllegalStateException(
         s"more than one row returned by a subquery used as an expression:\n$plan")
     }
