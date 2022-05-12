@@ -1017,7 +1017,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   private def isExtractOnly(expr: Expression, ref: Attribute): Boolean = {
     def hasRefInNonExtractValue(e: Expression): Boolean = e match {
       case a: Attribute => a.semanticEquals(ref)
-      // The fisrt child of `ExtractValue` is the complex type to be extracted.
+      // The first child of `ExtractValue` is the complex type to be extracted.
       case e: ExtractValue if e.children.head.semanticEquals(ref) => false
       case _ => e.children.exists(hasRefInNonExtractValue)
     }
