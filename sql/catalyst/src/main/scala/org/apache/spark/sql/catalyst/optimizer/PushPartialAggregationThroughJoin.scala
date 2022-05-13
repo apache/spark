@@ -31,7 +31,10 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 import org.apache.spark.sql.types.{DecimalType, NumericType}
 
 /**
- * Push down the partial aggregation through join.
+ * Push down the partial aggregation through join. It supports the following cases:
+ * 1. Push down partial sum, count, avg, min, max, first and last through join.
+ * 2. Partial deduplicate the children of join if the aggregation itself is group only.
+ * 3. Partial deduplicate the right side of left semi/anti join.
  *
  * For example:
  * CREATE TABLE t1(a int, b int, c int) using parquet;
@@ -40,9 +43,9 @@ import org.apache.spark.sql.types.{DecimalType, NumericType}
  *
  * The current optimized logical plan is:
  * Aggregate [b#2], [b#2, sum((_pushed_sum_c#13L * cnt#16L)) AS sum(c)#8L]
- * +- Project [b#2, pushed_sum_c#13L, cnt#16L]
+ * +- Project [b#2, _pushed_sum_c#13L, cnt#16L]
  *    +- Join Inner, (a#1 = x#4)
- *       :- PartialAggregate [a#1, b#2], [a#1, b#2, sum(c#3) AS pushed_sum_c#13L]
+ *       :- PartialAggregate [a#1, b#2], [a#1, b#2, sum(c#3) AS _pushed_sum_c#13L]
  *       :  +- Project [b#2, c#3, a#1]
  *       :     +- Filter isnotnull(a#1)
  *       :        +- Relation default.t1[a#1,b#2,c#3] parquet
@@ -129,8 +132,8 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
   // For example, We do not support following cases:
   // 1. sum((ss_ext_list_price - ss_ext_wholesale_cost - ss_ext_discount_amt) + ss_ext_sales_price)
   // 2. sum(1)
-  private def supportPushedAgg(e: Expression) = {
-    e.collectLeaves().size <= 2 && e.references.nonEmpty}
+  private def supportPushedAgg(e: Expression) =
+    e.collectLeaves().size <= 2 && e.references.nonEmpty
 
   private def pushableAggExp(ae: AggregateExpression): Boolean = ae match {
     case AggregateExpression(e: Sum, Complete, false, None, _) => supportPushedAgg(e)
@@ -369,26 +372,26 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     case agg @ PartialAggregate(_, aggregateExps,
       j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
         if agg.aggregateExprs.isEmpty =>
-      val newChild = j.copy(left =
-        PartialAggregate(left.output, left.output, left),
+      val newChild = j.copy(
+        left = PartialAggregate(left.output, left.output, left),
         right = PartialAggregate(right.output, right.output, right))
       Project(aggregateExps, newChild)
 
-    case agg @ PartialAggregate(_, aggregateExps, Project(projectList,
+    case agg @ PartialAggregate(_, aggregateExps, p @ Project(_,
       j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
         if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
-      val newChild = j.copy(left =
-        PartialAggregate(left.output, left.output, left),
+      val newChild = j.copy(
+        left = PartialAggregate(left.output, left.output, left),
         right = PartialAggregate(right.output, right.output, right))
-      Project(aggregateExps, Project(projectList, newChild))
+      Project(aggregateExps, p.copy(child = newChild))
 
     case agg @ Aggregate(_, aggregateExps,
-      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
+      j @ Join(_, _, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
         if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
       agg.copy(child = pushDistinctThroughJoin(j))
 
     case agg @ Aggregate(_, aggregateExps, p @ Project(_,
-      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
+      j @ Join(_, _, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
         if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
       agg.copy(child = p.copy(child = pushDistinctThroughJoin(j)))
 

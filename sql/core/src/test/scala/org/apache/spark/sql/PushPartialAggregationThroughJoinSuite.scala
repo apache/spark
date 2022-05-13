@@ -83,35 +83,37 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
   }
 
   test("sum") {
-    Seq(true, false).foreach { pushAgg =>
-      Seq(true, false).foreach { ansi =>
-        withSQLConf(
-          SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
-          SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-          val df = sql(
-            """
-              |SELECT
-              |  item.i_brand_id brand_id,
-              |  SUM(ss_ext_sales_price) sum_agg
-              |FROM store_sales, item
-              |WHERE store_sales.ss_item_sk = item.i_item_sk
-              |GROUP BY item.i_brand_id
-              |ORDER BY i_brand_id DESC
-            """.stripMargin)
+    Seq(-1, 1000000000L).foreach { broadcastThreshold =>
+      Seq(true, false).foreach { pushAgg =>
+        Seq(true, false).foreach { ansi =>
+          withSQLConf(
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+            val df = sql(
+              """
+                |SELECT
+                |  item.i_brand_id brand_id,
+                |  SUM(ss_ext_sales_price) sum_agg
+                |FROM store_sales, item
+                |WHERE store_sales.ss_item_sk = item.i_item_sk
+                |GROUP BY item.i_brand_id
+              """.stripMargin)
 
-          val optimizedPlan = df.queryExecution.optimizedPlan
-          assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-          if (ansi) {
-            val error = intercept[SparkException] {
-              df.collect()
+            val optimizedPlan = df.queryExecution.optimizedPlan
+            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
+            if (ansi) {
+              val error = intercept[SparkException] {
+                df.collect()
+              }
+              assert(error.toString contains "[ARITHMETIC_OVERFLOW] Overflow in sum of decimals")
+            } else {
+              checkAnswer(
+                df,
+                Row(10002004, BigDecimal("7999999999999999999999999999999994.2540")) ::
+                Row(10002003, BigDecimal("65516.1909")) ::
+                Row(7003002, null) :: Nil)
             }
-            assert(error.toString contains "[ARITHMETIC_OVERFLOW] Overflow in sum of decimals")
-          } else {
-            checkAnswer(
-              df,
-              Row(10002004, BigDecimal("7999999999999999999999999999999994.2540")) ::
-              Row(10002003, BigDecimal("65516.1909")) ::
-              Row(7003002, null) :: Nil)
           }
         }
       }
@@ -119,193 +121,139 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
   }
 
   test("count") {
-    Seq(true, false).foreach { pushAgg =>
-      Seq(true, false).foreach { ansi =>
-        withSQLConf(
-          SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
-          SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-          val df = sql(
-            """
-              |SELECT
-              |  item.i_brand_id brand_id,
-              |  count(ss_ext_sales_price) count_ss_ext_sales_price,
-              |  count(*)
-              |FROM store_sales, item
-              |WHERE store_sales.ss_item_sk = item.i_item_sk
-              |GROUP BY item.i_brand_id
-              |ORDER BY i_brand_id DESC
-            """.stripMargin)
+    Seq(-1, 1000000000L).foreach { broadcastThreshold =>
+      Seq(true, false).foreach { pushAgg =>
+        Seq(true, false).foreach { ansi =>
+          withSQLConf(
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+            val df = sql(
+              """
+                |SELECT
+                |  item.i_brand_id brand_id,
+                |  count(ss_ext_sales_price) count_ss_ext_sales_price,
+                |  count(*)
+                |FROM store_sales, item
+                |WHERE store_sales.ss_item_sk = item.i_item_sk
+                |GROUP BY item.i_brand_id
+              """.stripMargin)
 
-          val optimizedPlan = df.queryExecution.optimizedPlan
-          assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-          checkAnswer(
-            df,
-            Row(10002004, 8, 8) :: Row(10002003, 12, 12) :: Row(7003002, 6, 6) :: Nil)
+            val optimizedPlan = df.queryExecution.optimizedPlan
+            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
+            checkAnswer(
+              df,
+              Row(10002004, 8, 8) :: Row(10002003, 12, 12) :: Row(7003002, 6, 6) :: Nil)
+          }
         }
       }
     }
   }
 
   test("first and last") {
-    Seq(true, false).foreach { pushAgg =>
-      Seq(true, false).foreach { ansi =>
-        withSQLConf(
-          SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
-          SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-          val df = sql(
-            """
-              |SELECT
-              |  item.i_brand_id brand_id,
-              |  first(ss_ext_sales_price),
-              |  last(ss_ext_sales_price)
-              |FROM store_sales, item
-              |WHERE store_sales.ss_item_sk = item.i_item_sk
-              |GROUP BY item.i_brand_id
-              |ORDER BY i_brand_id DESC
-            """.stripMargin)
+    Seq(-1, 1000000000L).foreach { broadcastThreshold =>
+      Seq(true, false).foreach { pushAgg =>
+        Seq(true, false).foreach { ansi =>
+          withSQLConf(
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+            val df = sql(
+              """
+                |SELECT
+                |  item.i_brand_id brand_id,
+                |  first(ss_ext_sales_price),
+                |  last(ss_ext_sales_price)
+                |FROM store_sales, item
+                |WHERE store_sales.ss_item_sk = item.i_item_sk
+                |GROUP BY item.i_brand_id
+              """.stripMargin)
 
-          val optimizedPlan = df.queryExecution.optimizedPlan
-          assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-          checkAnswer(
-            df,
-            Row(10002004, BigDecimal("999999999999999999999999999999999.2812"),
-              BigDecimal("999999999999999999999999999999999.2823")) ::
-            Row(10002003, BigDecimal("6874.6012"), BigDecimal("6067.6034")) ::
-            Row(7003002, BigDecimal("9999999999999999999999999999999999.6012"),
+            val optimizedPlan = df.queryExecution.optimizedPlan
+            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
+            checkAnswer(
+              df,
+              Row(10002004, BigDecimal("999999999999999999999999999999999.2812"),
+                BigDecimal("999999999999999999999999999999999.2823")) ::
+              Row(10002003, BigDecimal("6874.6012"), BigDecimal("6067.6034")) ::
+              Row(7003002, BigDecimal("9999999999999999999999999999999999.6012"),
                 BigDecimal("9999999999999999999999999999999999.2856")) :: Nil)
+          }
         }
       }
     }
   }
 
   test("min and max") {
-    Seq(true, false).foreach { pushAgg =>
-      Seq(true, false).foreach { ansi =>
-        withSQLConf(
-          SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
-          SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-          val df = sql(
-            """
-              |SELECT
-              |  item.i_brand_id brand_id,
-              |  min(ss_ext_sales_price),
-              |  max(ss_ext_sales_price)
-              |FROM store_sales, item
-              |WHERE store_sales.ss_item_sk = item.i_item_sk
-              |GROUP BY item.i_brand_id
-              |ORDER BY i_brand_id DESC
-            """.stripMargin)
+    Seq(-1, 1000000000L).foreach { broadcastThreshold =>
+      Seq(true, false).foreach { pushAgg =>
+        Seq(true, false).foreach { ansi =>
+          withSQLConf(
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+            val df = sql(
+              """
+                |SELECT
+                |  item.i_brand_id brand_id,
+                |  min(ss_ext_sales_price),
+                |  max(ss_ext_sales_price)
+                |FROM store_sales, item
+                |WHERE store_sales.ss_item_sk = item.i_item_sk
+                |GROUP BY item.i_brand_id
+              """.stripMargin)
 
-          val optimizedPlan = df.queryExecution.optimizedPlan
-          assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-          checkAnswer(
-            df,
-            Row(10002004, BigDecimal("999999999999999999999999999999999.2812"),
-              BigDecimal("999999999999999999999999999999999.2823")) ::
-            Row(10002003, BigDecimal("2828.9223"), BigDecimal("6874.6012")) ::
-            Row(7003002, BigDecimal("9999999999999999999999999999999999.2856"),
+            val optimizedPlan = df.queryExecution.optimizedPlan
+            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
+            checkAnswer(
+              df,
+              Row(10002004, BigDecimal("999999999999999999999999999999999.2812"),
+                BigDecimal("999999999999999999999999999999999.2823")) ::
+              Row(10002003, BigDecimal("2828.9223"), BigDecimal("6874.6012")) ::
+              Row(7003002, BigDecimal("9999999999999999999999999999999999.2856"),
                 BigDecimal("9999999999999999999999999999999999.9234")) :: Nil)
+          }
         }
       }
     }
   }
 
   test("avg") {
-    Seq(true, false).foreach { pushAgg =>
-      Seq(true, false).foreach { ansi =>
-        withSQLConf(
-          SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
-          SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-          val df = sql(
-            """
-              |SELECT
-              |  item.i_brand_id brand_id,
-              |  avg(ss_ext_sales_price) avg_agg
-              |FROM store_sales, item
-              |WHERE store_sales.ss_item_sk = item.i_item_sk
-              |GROUP BY item.i_brand_id
-              |ORDER BY i_brand_id DESC
-            """.stripMargin)
+    Seq(-1, 1000000000L).foreach { broadcastThreshold =>
+      Seq(true, false).foreach { pushAgg =>
+        Seq(true, false).foreach { ansi =>
+          withSQLConf(
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+            val df = sql(
+              """
+                |SELECT
+                |  item.i_brand_id brand_id,
+                |  avg(ss_ext_sales_price) avg_agg
+                |FROM store_sales, item
+                |WHERE store_sales.ss_item_sk = item.i_item_sk
+                |GROUP BY item.i_brand_id
+              """.stripMargin)
 
-          val optimizedPlan = df.queryExecution.optimizedPlan
-          assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-          if (ansi) {
-            val error = intercept[SparkException] {
-              df.collect()
+            val optimizedPlan = df.queryExecution.optimizedPlan
+            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
+            if (ansi) {
+              val error = intercept[SparkException] {
+                df.collect()
+              }
+              assert(error.toString contains "SparkArithmeticException")
+            } else {
+              checkAnswer(
+                df,
+                Row(10002004, null) ::
+                Row(10002003, BigDecimal("5459.68257500")) ::
+                Row(7003002, null) :: Nil)
             }
-            assert(error.toString contains "[ARITHMETIC_OVERFLOW] Overflow in sum of decimals")
-          } else {
-            checkAnswer(
-              df,
-              Row(10002004, null) ::
-              Row(10002003, BigDecimal("5459.68257500")) ::
-              Row(7003002, null) :: Nil)
           }
         }
       }
     }
   }
 
-  test("count distinct") {
-    Seq(true, false).foreach { pushAgg =>
-      Seq(true, false).foreach { ansi =>
-        withSQLConf(
-          SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
-          SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-          val df = sql(
-            """
-              |SELECT
-              |  item.i_brand_id brand_id,
-              |  count(distinct ss_ext_sales_price)
-              |FROM store_sales, item
-              |WHERE store_sales.ss_item_sk = item.i_item_sk
-              |GROUP BY item.i_brand_id
-              |ORDER BY i_brand_id DESC
-            """.stripMargin)
-
-          val optimizedPlan = df.queryExecution.optimizedPlan
-          assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-          checkAnswer(
-            df,
-            Row(10002004, 2) :: Row(10002003, 3) :: Row(7003002, 3) :: Nil)
-        }
-      }
-    }
-  }
-
-  test("sum distinct") {
-    Seq(true, false).foreach { pushAgg =>
-      Seq(true, false).foreach { ansi =>
-        withSQLConf(
-          SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
-          SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-          val df = sql(
-            """
-              |SELECT
-              |  item.i_brand_id brand_id,
-              |  sum(distinct ss_ext_sales_price)
-              |FROM store_sales, item
-              |WHERE store_sales.ss_item_sk = item.i_item_sk
-              |GROUP BY item.i_brand_id
-              |ORDER BY i_brand_id DESC
-            """.stripMargin)
-
-          val optimizedPlan = df.queryExecution.optimizedPlan
-          assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-          if (ansi) {
-            val error = intercept[SparkException] {
-              df.collect()
-            }
-            assert(error.toString contains "[ARITHMETIC_OVERFLOW] Overflow in sum of decimals")
-          } else {
-            checkAnswer(
-              df,
-              Row(10002004, BigDecimal("1999999999999999999999999999999998.5635")) ::
-              Row(10002003, BigDecimal("15771.1269")) ::
-              Row(7003002, null) :: Nil)
-          }
-        }
-      }
-    }
-  }
 }
