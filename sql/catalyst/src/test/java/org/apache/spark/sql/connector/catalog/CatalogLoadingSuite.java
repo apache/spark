@@ -45,10 +45,10 @@ public class CatalogLoadingSuite {
     SQLConf conf = new SQLConf();
     conf.setConfString("spark.sql.catalog.test.name", TestCatalogPlugin.class.getCanonicalName());
 
-    SparkException exc = Assert.assertThrows(SparkException.class,
-            () -> Catalogs.load("test.name", conf));
-    Assert.assertTrue("Catalog name should not contain '.'", exc.getMessage().contains(
-            "Invalid catalog name: test.name"));
+    SparkException exc = Assertions.assertThrows(SparkException.class,
+      () -> Catalogs.load("test.name", conf));
+    Assertions.assertTrue(exc.getMessage().contains("Invalid catalog name: test.name"),
+      "Catalog name should not contain '.'");
   }
 
   @Test
