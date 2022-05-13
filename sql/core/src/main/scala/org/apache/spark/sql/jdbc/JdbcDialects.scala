@@ -255,7 +255,7 @@ abstract class JdbcDialect extends Serializable with Logging{
 
   /**
    * Returns whether the database supports function.
-   * @param funcName Function upper-cased name
+   * @param funcName upper-cased function name
    * @return True if the database supports function.
    */
   @Since("3.3.0")
