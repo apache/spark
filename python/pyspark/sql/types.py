@@ -212,15 +212,26 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
 
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
-            seconds = (
-                calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
-            )
+            seconds = 0.0
+            try:
+                seconds = (
+                    calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
+                )
+            except:
+                # On Windows, the current value is converted to a timestamp when the current value is less than 1970
+                seconds = (dt - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
+
             return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
-            # using int to avoid precision loss in float
-            return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+            try:
+                # using int to avoid precision loss in float
+                return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+            except:
+                # On Windows, resolve when the timestamp is negative
+                return datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000) + \
+                       datetime.timedelta(microseconds=ts)
 
 
 class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
@@ -1940,9 +1951,15 @@ class DatetimeConverter:
 
     def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
-        seconds = (
-            calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
-        )
+        seconds = 0.0
+        try:
+            seconds = (
+                calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
+            )
+        except:
+            # On Windows, the current value is converted to a timestamp when the current value is less than 1970
+            seconds = (obj - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
+
         t = Timestamp(int(seconds) * 1000)
         t.setNanos(obj.microsecond * 1000)
         return t
