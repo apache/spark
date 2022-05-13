@@ -19,23 +19,27 @@ package org.apache.spark.sql.errors
 
 import java.io.IOException
 import java.net.URL
-import java.util.{Locale, ServiceConfigurationError}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
+import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
+import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
-import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
+import org.apache.spark.sql.types.{DataType, DecimalType, MetadataBuilder, StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
@@ -513,6 +517,85 @@ class QueryExecutionErrorsSuite
           "from classpath or upgrade it. Error: Illegal configuration-file syntax: " +
           "META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")
     }
+  }
+
+  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type -100") {
+    Utils.classForName("org.h2.Driver")
+
+    val properties = new Properties()
+    properties.setProperty("user", "testUser")
+    properties.setProperty("password", "testPass")
+
+    val url = "jdbc:h2:mem:testdb0"
+    val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
+    val tableName = "test.table1"
+    val unrecognizedColumnType = -100
+
+    var conn: java.sql.Connection = null
+    try {
+      conn = DriverManager.getConnection(url, properties)
+      conn.prepareStatement("create schema test").executeUpdate()
+      conn.commit()
+
+      conn.prepareStatement(s"create table $tableName (a INT)").executeUpdate()
+      conn.prepareStatement(
+        s"insert into $tableName values (1)").executeUpdate()
+      conn.commit()
+    } finally {
+      if (null != conn) {
+        conn.close()
+      }
+    }
+
+    val testH2DialectUnrecognizedSQLType = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+
+      override def getCatalystType(sqlType: Int, typeName: String, size: Int,
+        md: MetadataBuilder): Option[DataType] = {
+        sqlType match {
+          case _ => None
+        }
+      }
+
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+        val driverClass: String = options.driverClass
+
+        (_: Int) => {
+          DriverRegistry.register(driverClass)
+
+          val resultSetMetaData = mock(classOf[ResultSetMetaData])
+          when(resultSetMetaData.getColumnCount).thenReturn(1)
+          when(resultSetMetaData.getColumnType(1)).thenReturn(unrecognizedColumnType)
+
+          val resultSet = mock(classOf[ResultSet])
+          when(resultSet.next()).thenReturn(true).thenReturn(false)
+          when(resultSet.getMetaData).thenReturn(resultSetMetaData)
+
+          val preparedStatement = mock(classOf[PreparedStatement])
+          when(preparedStatement.executeQuery).thenReturn(resultSet)
+
+          val connection = mock(classOf[Connection])
+          when(connection.prepareStatement(s"SELECT * FROM $tableName WHERE 1=0")).
+            thenReturn(preparedStatement)
+
+          connection
+        }
+      }
+    }
+
+    val existH2Dialect = JdbcDialects.get(urlWithUserAndPass)
+    JdbcDialects.unregisterDialect(existH2Dialect)
+
+    JdbcDialects.registerDialect(testH2DialectUnrecognizedSQLType)
+
+    checkErrorClass(
+      exception = intercept[SparkSQLException] {
+        spark.read.jdbc(urlWithUserAndPass, tableName, new Properties()).collect()
+      },
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      msg = s"Unrecognized SQL type $unrecognizedColumnType")
+
+    JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
   }
 }
 

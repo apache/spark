@@ -53,9 +53,6 @@ case class Coalesce(children: Seq[Expression])
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   override def nullable: Boolean = children.forall(_.nullable)
 
-  // Coalesce is foldable if all children are foldable.
-  override def foldable: Boolean = children.forall(_.foldable)
-
   final override val nodePatterns: Seq[TreePattern] = Seq(COALESCE)
 
   override def checkInputDataTypes(): TypeCheckResult = {

@@ -101,6 +101,19 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
+  private val defaultValues2: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(
+      new StructType()
+        .add("i", StringType)
+        .add("e", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'abc'").build()))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
   private val tableWithColumnNamedDefault: Table = {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(
@@ -147,6 +160,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "tab2" => table2
         case "charvarchar" => charVarcharTable
         case "defaultvalues" => defaultValues
+        case "defaultvalues2" => defaultValues2
         case "tablewithcolumnnameddefault" => tableWithColumnNamedDefault
         case name => throw new NoSuchTableException(name)
       }
@@ -1009,6 +1023,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val sql6 = s"UPDATE $tblName SET i=DEFAULT, s=DEFAULT"
       val sql7 = s"UPDATE defaultvalues SET i=DEFAULT, s=DEFAULT"
       val sql8 = s"UPDATE $tblName SET name='Robert', age=32 WHERE p=DEFAULT"
+      val sql9 = s"UPDATE defaultvalues2 SET i=DEFAULT"
 
       val parsed1 = parseAndResolve(sql1)
       val parsed2 = parseAndResolve(sql2)
@@ -1017,6 +1032,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed5 = parseAndResolve(sql5)
       val parsed6 = parseAndResolve(sql6)
       val parsed7 = parseAndResolve(sql7, true)
+      val parsed9 = parseAndResolve(sql9, true)
 
       parsed1 match {
         case UpdateTable(
@@ -1120,6 +1136,16 @@ class PlanResolutionSuite extends AnalysisTest {
         parseAndResolve(sql8)
       }.getMessage.contains(
         QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause().getMessage))
+
+      parsed9 match {
+        case UpdateTable(
+        _,
+        Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
+        None) =>
+          assert(i.name == "i")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
+      }
     }
 
     val sql1 = "UPDATE non_existing SET id=1"

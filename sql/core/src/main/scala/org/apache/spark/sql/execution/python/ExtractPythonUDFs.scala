@@ -285,8 +285,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
       }
       // Other cases are disallowed as they are ambiguous or would require a cartesian
       // product.
-      udfs.map(canonicalizeDeterministic).filterNot(attributeMap.contains).foreach {
-        udf => sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
+      udfs.map(canonicalizeDeterministic).filterNot(attributeMap.contains).foreach { udf =>
+        throw new IllegalStateException(
+          s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
       val rewritten = plan.withNewChildren(newChildren).transformExpressions {
