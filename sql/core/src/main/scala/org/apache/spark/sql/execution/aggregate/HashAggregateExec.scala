@@ -53,7 +53,6 @@ case class HashAggregateExec(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    isPartialAgg: Boolean = false,
     child: SparkPlan)
   extends AggregateCodegenSupport {
 
@@ -158,7 +157,8 @@ case class HashAggregateExec(
 
   // VisibleForTesting
   private[sql] lazy val isAdaptivePartialAggregationEnabled = {
-    isPartialAgg && groupingAttributes.nonEmpty && conf.adaptivePartialAggregationThreshold > 0 &&
+    requiredChildDistributionExpressions.isEmpty && groupingAttributes.nonEmpty &&
+      conf.adaptivePartialAggregationThreshold > 0 &&
       conf.adaptivePartialAggregationThreshold < (1 << conf.fastHashAggregateRowMaxCapacityBit) && {
       child
         .collectUntil(p => p.isInstanceOf[WholeStageCodegenExec] ||
