@@ -3006,7 +3006,7 @@ object Sequence {
       case TimestampNTZType => timestampNTZAddInterval
     }
 
-    private def scaleUp(value: Long, scale: Long): Long = {
+    private def toMicros(value: Long, scale: Long): Long = {
       if (scale == MICROS_PER_DAY) {
         daysToMicros(value.toInt, zoneId)
       } else {
@@ -3014,7 +3014,7 @@ object Sequence {
       }
     }
 
-    private def scaleDown(value: Long, scale: Long): Long = {
+    private def fromMicros(value: Long, scale: Long): Long = {
       if (scale == MICROS_PER_DAY) {
         microsToDays(value, zoneId).toLong
       } else {
@@ -3046,8 +3046,8 @@ object Sequence {
         val intervalStepInMicros =
           stepMicros + stepMonths * microsPerMonth + stepDays * MICROS_PER_DAY
 
-        val startMicros: Long = scaleUp(num.toLong(start), scale)
-        val stopMicros: Long = scaleUp(num.toLong(stop), scale)
+        val startMicros: Long = toMicros(num.toLong(start), scale)
+        val stopMicros: Long = toMicros(num.toLong(stop), scale)
 
         val maxEstimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, input3, intervalStepInMicros)
@@ -3059,7 +3059,7 @@ object Sequence {
         var i = 0
 
         while (t < exclusiveItem ^ stepSign < 0) {
-          val result = scaleDown(t, scale)
+          val result = fromMicros(t, scale)
           arr(i) = fromLong(result)
           i += 1
           t = addInterval(startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
@@ -3126,7 +3126,7 @@ object Sequence {
 
       val stepSplits = stepSplitCode(stepMonths, stepDays, stepMicros, step)
 
-      val scaleUpCode = if (scale == MICROS_PER_DAY) {
+      val toMicrosCode = if (scale == MICROS_PER_DAY) {
         s"""
           |  final long $startMicros = $daysToMicrosCode((int) $start, $zid);
           |  final long $stopMicros = $daysToMicrosCode((int) $stop, $zid);
@@ -3138,7 +3138,7 @@ object Sequence {
           |""".stripMargin
       }
 
-      val scaleDownCode = if (scale == MICROS_PER_DAY) {
+      val fromMicrosCode = if (scale == MICROS_PER_DAY) {
         s"($elemType) $microsToDaysCode($t, $zid)"
       } else {
         s"($elemType) ($t / ${scale}L)"
@@ -3155,7 +3155,7 @@ object Sequence {
          |} else if ($stepMonths == 0 && $stepDays == 0 && ${scale}L == 1) {
          |  ${backedSequenceImpl.genCode(ctx, start, stop, stepMicros, arr, elemType)};
          |} else {
-         |  $scaleUpCode
+         |  $toMicrosCode
          |
          |  $sequenceLengthCode
          |
@@ -3167,7 +3167,7 @@ object Sequence {
          |  int $i = 0;
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
-         |    $arr[$i] = $scaleDownCode;
+         |    $arr[$i] = $fromMicrosCode;
          |    $i += 1;
          |    $t = $addIntervalCode(
          |       $startMicros, $i * $stepMonths, $i * $stepDays, $i * $stepMicros, $zid);
