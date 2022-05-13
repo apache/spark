@@ -1546,12 +1546,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
       name: String,
       pluginClassName: String,
       e: Exception): Throwable = {
-    if (e.getMessage == pluginClassName) {
-      new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
-    } else {
-      new SparkException("Cannot find catalog plugin dependencies for catalog " +
-        s"'$name': $pluginClassName, due to ${e.getMessage} not found")
-    }
+    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName", e)
   }
 
   def catalogFailToFindPublicNoArgConstructorError(

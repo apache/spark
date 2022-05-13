@@ -101,14 +101,8 @@ public class CatalogLoadingSuite {
     SparkException exc =
         Assert.assertThrows(SparkException.class, () -> Catalogs.load("missing", conf));
 
-    Assert.assertTrue("Should complain that the dependent class is not found",
-        exc.getMessage().contains("Cannot find catalog plugin dependencies"));
-    Assert.assertTrue("Should identify the catalog by name",
-        exc.getMessage().contains("missing"));
-    Assert.assertTrue("Should identify the catalog class",
-        exc.getMessage().contains(catalogClass));
-    Assert.assertTrue("Should identify the catalog dependent class",
-        exc.getMessage().contains(catalogClass + "Dep"));
+    Assert.assertTrue(exc.getCause() instanceof ClassNotFoundException);
+    Assert.assertTrue(exc.getCause().getMessage().contains(catalogClass + "Dep"));
   }
 
   @Test
