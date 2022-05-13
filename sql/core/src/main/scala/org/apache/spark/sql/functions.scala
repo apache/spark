@@ -5499,4 +5499,13 @@ object functions {
   def call_udf(udfName: String, cols: Column*): Column = withExpr {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
+
+  /**
+   * Unwrap UDT data type column into its underlying type.
+   *
+   * @since 3.4.0
+   */
+  def unwrap_udt(column: Column): Column = withExpr {
+    UnwrapUDT(column.expr)
+  }
 }
