@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLException
+import java.sql.{SQLException, Types}
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchT
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
 
 private object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
@@ -88,6 +90,15 @@ private object H2Dialect extends JdbcDialect {
         case _ => None
       }
     )
+  }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case StringType => Option(JdbcType("CLOB", Types.CLOB))
+    case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
+    case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
+    case t: DecimalType => Some(
+      JdbcType(s"NUMERIC(${t.precision},${t.scale})", Types.NUMERIC))
+    case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {

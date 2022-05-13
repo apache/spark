@@ -608,7 +608,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         }
     }
     checkCollectedMetrics(plan)
-    checkOffsetOperator(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -849,30 +848,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       })
     }
     check(plan)
-  }
-
-  /**
-   * Validate whether the [[Offset]] is valid.
-   */
-  private def checkOffsetOperator(plan: LogicalPlan): Unit = {
-    plan.foreachUp {
-      case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
-        && o.children.exists(_.isInstanceOf[Offset]) =>
-        failAnalysis(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
-      case _ =>
-    }
-    plan match {
-      case Offset(offsetExpr, _) =>
-        checkLimitLikeClause("offset", offsetExpr)
-        failAnalysis(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause is found to be the outermost node.""".stripMargin.replace("\n", " "))
-      case _ =>
-    }
   }
 
   /**
@@ -1135,7 +1110,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
+      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _, _) =>
         val fieldName = col.name.quoted
         if (a.dataType.isDefined) {
           val field = CharVarcharUtils.getRawType(col.field.metadata)

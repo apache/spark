@@ -264,7 +264,7 @@ case class VarianceSamp(
     copy(child = newChild)
 }
 
-case class RegrSXXReplacement(child: Expression)
+case class RegrReplacement(child: Expression)
   extends CentralMomentAgg(child, !SQLConf.get.legacyStatisticalAggregate) {
 
   override protected def momentOrder = 2
@@ -273,7 +273,7 @@ case class RegrSXXReplacement(child: Expression)
     If(n === 0.0, Literal.create(null, DoubleType), m2)
   }
 
-  override protected def withNewChildInternal(newChild: Expression): RegrSXXReplacement =
+  override protected def withNewChildInternal(newChild: Expression): RegrReplacement =
     copy(child = newChild)
 }
 

@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import time
 import unittest
+import uuid
 from typing import cast
 
 from pyspark.sql import SparkSession, Row
@@ -1175,6 +1176,41 @@ class DataFrameTests(ReusedSQLTestCase):
             df.show(vertical="foo")
         with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
             df.show(truncate="foo")
+
+    def test_df_is_empty(self):
+        # SPARK-39084: Fix df.rdd.isEmpty() resulting in JVM crash.
+
+        # This particular example of DataFrame reproduces an issue in isEmpty call
+        # which could result in JVM crash.
+        data = []
+        for t in range(0, 10000):
+            id = str(uuid.uuid4())
+            if t == 0:
+                for i in range(0, 99):
+                    data.append((id,))
+            elif t < 10:
+                for i in range(0, 75):
+                    data.append((id,))
+            elif t < 100:
+                for i in range(0, 50):
+                    data.append((id,))
+            elif t < 1000:
+                for i in range(0, 25):
+                    data.append((id,))
+            else:
+                for i in range(0, 10):
+                    data.append((id,))
+
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        try:
+            df = self.spark.createDataFrame(data, ["col"])
+            df.coalesce(1).write.parquet(tmpPath)
+
+            res = self.spark.read.parquet(tmpPath).groupBy("col").count()
+            self.assertFalse(res.rdd.isEmpty())
+        finally:
+            shutil.rmtree(tmpPath)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
