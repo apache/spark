@@ -291,4 +291,16 @@ abstract class SparkFunSuite
       _loggingEvents.filterNot(_ == null)
     }
   }
+
+  /**
+   * Runs `f` with TaskContext.
+   */
+  final protected def withTaskContext[T](taskContext: TaskContext)(f: => T): T = {
+    try {
+      TaskContext.setTaskContext(taskContext)
+      f
+    } finally {
+      TaskContext.unset()
+    }
+  }
 }

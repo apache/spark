@@ -26,6 +26,9 @@
     "message" : [ "Casting <value> to <type> causes overflow. To return NULL instead, use 'try_cast'. If necessary set <config> to false to bypass this error." ],
     "sqlState" : "22005"
   },
+  "COMMIT_DENIED" : {
+    "message" : [ "Commit denied for partition <partId> (task <taskId>, attempt <attemptId>, stage <stageId>.<stageAttempt>)" ]
+  },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },

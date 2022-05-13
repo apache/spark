@@ -17,17 +17,20 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.TaskCommitDenied
+import org.apache.spark.{SparkException, TaskCommitDenied}
 
 /**
  * Exception thrown when a task attempts to commit output to HDFS but is denied by the driver.
  */
 private[spark] class CommitDeniedException(
-    msg: String,
-    jobID: Int,
-    splitID: Int,
-    attemptNumber: Int)
-  extends Exception(msg) {
+    partitionId: Int,
+    taskId: Long,
+    attemptId: Int,
+    stageId: Int,
+    stageAttempt: Int)
+  extends SparkException(errorClass = "COMMIT_DENIED",
+    messageParameters = Array(partitionId.toString, taskId.toString,
+      attemptId.toString, stageId.toString, stageAttempt.toString), cause = null) {
 
-  def toTaskCommitDeniedReason: TaskCommitDenied = TaskCommitDenied(jobID, splitID, attemptNumber)
+  def toTaskCommitDeniedReason: TaskCommitDenied = TaskCommitDenied(stageId, partitionId, attemptId)
 }

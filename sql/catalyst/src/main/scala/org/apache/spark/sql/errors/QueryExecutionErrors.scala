@@ -678,9 +678,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def commitDeniedError(
       partId: Int, taskId: Long, attemptId: Int, stageId: Int, stageAttempt: Int): Throwable = {
-    val message = s"Commit denied for partition $partId (task $taskId, attempt $attemptId, " +
-      s"stage $stageId.$stageAttempt)"
-    new CommitDeniedException(message, stageId, partId, attemptId)
+    new CommitDeniedException(partId, taskId, attemptId, stageId, stageAttempt)
   }
 
   def unsupportedTableWritesError(ident: Identifier): Throwable = {

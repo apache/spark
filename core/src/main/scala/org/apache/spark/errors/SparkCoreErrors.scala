@@ -23,6 +23,7 @@ import java.util.concurrent.TimeoutException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, TaskNotSerializableException}
+import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
@@ -324,5 +325,14 @@ object SparkCoreErrors {
   def graphiteSinkPropertyMissingError(missingProperty: String): Throwable = {
     new SparkException(errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
       messageParameters = Array(missingProperty), cause = null)
+  }
+
+  def commitDeniedError(
+      partId: Int,
+      taskId: Long,
+      attemptId: Int,
+      stageId: Int,
+      stageAttempt: Int): Throwable = {
+    new CommitDeniedException(partId, taskId, attemptId, stageId, stageAttempt)
   }
 }

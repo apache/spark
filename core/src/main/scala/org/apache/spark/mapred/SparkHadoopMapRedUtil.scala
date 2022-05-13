@@ -23,7 +23,7 @@ import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptCo
 import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.executor.CommitDeniedException
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -82,7 +82,8 @@ object SparkHadoopMapRedUtil extends Logging {
           logInfo(message)
           // We need to abort the task so that the driver can reschedule new attempts, if necessary
           committer.abortTask(mrTaskContext)
-          throw new CommitDeniedException(message, ctx.stageId(), splitId, ctx.attemptNumber())
+          throw SparkCoreErrors.commitDeniedError(splitId, ctx.taskAttemptId(), ctx.attemptNumber(),
+            ctx.stageId(), ctx.stageAttemptNumber())
         }
       } else {
         // Speculation is disabled or a user has chosen to manually bypass the commit coordination
