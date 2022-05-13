@@ -40,6 +40,108 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 
 object Cast {
+  /**
+   * As per section 6.13 "cast specification" in "Information technology — Database languages " +
+   * "- SQL — Part 2: Foundation (SQL/Foundation)":
+   * If the <cast operand> is a <value expression>, then the valid combinations of TD and SD
+   * in a <cast specification> are given by the following table. “Y” indicates that the
+   * combination is syntactically valid without restriction; “M” indicates that the combination
+   * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and “N” indicates
+   * that the combination is not valid:
+   * SD                   TD
+   *     EN AN C D T TS YM DT BO UDT B RT CT RW
+   * EN  Y  Y  Y N N  N  M  M  N   M N  M  N N
+   * AN  Y  Y  Y N N  N  N  N  N   M N  M  N N
+   * C   Y  Y  Y Y Y  Y  Y  Y  Y   M N  M  N N
+   * D   N  N  Y Y N  Y  N  N  N   M N  M  N N
+   * T   N  N  Y N Y  Y  N  N  N   M N  M  N N
+   * TS  N  N  Y Y Y  Y  N  N  N   M N  M  N N
+   * YM  M  N  Y N N  N  Y  N  N   M N  M  N N
+   * DT  M  N  Y N N  N  N  Y  N   M N  M  N N
+   * BO  N  N  Y N N  N  N  N  Y   M N  M  N N
+   * UDT M  M  M M M  M  M  M  M   M M  M  M N
+   * B   N  N  N N N  N  N  N  N   M Y  M  N N
+   * RT  M  M  M M M  M  M  M  M   M M  M  N N
+   * CT  N  N  N N N  N  N  N  N   M N  N  M N
+   * RW  N  N  N N N  N  N  N  N   N N  N  N M
+   *
+   * Where:
+   *   EN  = Exact Numeric
+   *   AN  = Approximate Numeric
+   *   C   = Character (Fixed- or Variable-Length, or Character Large Object)
+   *   D   = Date
+   *   T   = Time
+   *   TS  = Timestamp
+   *   YM  = Year-Month Interval
+   *   DT  = Day-Time Interval
+   *   BO  = Boolean
+   *   UDT  = User-Defined Type
+   *   B   = Binary (Fixed- or Variable-Length or Binary Large Object)
+   *   RT  = Reference type
+   *   CT  = Collection type
+   *   RW  = Row type
+   *
+   * Spark's ANSI mode follows the syntax rules, except it specially allow the following
+   * straightforward type conversions which are disallowed as per the SQL standard:
+   *   - Numeric <=> Boolean
+   *   - String <=> Binary
+   */
+  def canAnsiCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if fromType == toType => true
+
+    case (NullType, _) => true
+
+    case (_, StringType) => true
+
+    case (StringType, _: BinaryType) => true
+
+    case (StringType, BooleanType) => true
+    case (_: NumericType, BooleanType) => true
+
+    case (StringType, TimestampType) => true
+    case (DateType, TimestampType) => true
+    case (TimestampNTZType, TimestampType) => true
+    case (_: NumericType, TimestampType) => true
+
+    case (StringType, TimestampNTZType) => true
+    case (DateType, TimestampNTZType) => true
+    case (TimestampType, TimestampNTZType) => true
+
+    case (StringType, _: CalendarIntervalType) => true
+    case (StringType, _: DayTimeIntervalType) => true
+    case (StringType, _: YearMonthIntervalType) => true
+
+    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
+
+    case (StringType, DateType) => true
+    case (TimestampType, DateType) => true
+    case (TimestampNTZType, DateType) => true
+
+    case (_: NumericType, _: NumericType) => true
+    case (StringType, _: NumericType) => true
+    case (BooleanType, _: NumericType) => true
+    case (TimestampType, _: NumericType) => true
+
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      canAnsiCast(fromType, toType) && resolvableNullability(fn, tn)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      canAnsiCast(fromKey, toKey) && canAnsiCast(fromValue, toValue) &&
+        resolvableNullability(fn, tn)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (fromField, toField) =>
+            canAnsiCast(fromField.dataType, toField.dataType) &&
+              resolvableNullability(fromField.nullable, toField.nullable)
+        }
+
+    case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+
+    case _ => false
+  }
 
   /**
    * A tag to decide if a CAST is specified by user.
@@ -113,75 +215,6 @@ object Cast {
               resolvableNullability(
                 fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
                 toField.nullable)
-        }
-
-    case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
-
-    case _ => false
-  }
-
-  /**
-   * As per section 6.13 "cast specification" in "Information technology — Database languages " +
-   * "- SQL — Part 2: Foundation (SQL/Foundation)":
-   * If the <cast operand> is a <value expression>, then the valid combinations of TD and SD
-   * in a <cast specification> are given by the following table. “Y” indicates that the
-   * combination is syntactically valid without restriction; “M” indicates that the combination
-   * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and “N” indicates
-   * that the combination is not valid:
-   * SD                   TD
-   * @param from
-   * @param to
-   * @return
-   */
-  def canAnsiCast(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (fromType, toType) if fromType == toType => true
-
-    case (NullType, _) => true
-
-    case (_, StringType) => true
-
-    case (StringType, _: BinaryType) => true
-
-    case (StringType, BooleanType) => true
-    case (_: NumericType, BooleanType) => true
-
-    case (StringType, TimestampType) => true
-    case (DateType, TimestampType) => true
-    case (TimestampNTZType, TimestampType) => true
-    case (_: NumericType, TimestampType) => true
-
-    case (StringType, TimestampNTZType) => true
-    case (DateType, TimestampNTZType) => true
-    case (TimestampType, TimestampNTZType) => true
-
-    case (StringType, _: CalendarIntervalType) => true
-    case (StringType, _: DayTimeIntervalType) => true
-    case (StringType, _: YearMonthIntervalType) => true
-
-    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
-    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
-
-    case (StringType, DateType) => true
-    case (TimestampType, DateType) => true
-    case (TimestampNTZType, DateType) => true
-
-    case (_: NumericType, _: NumericType) => true
-    case (StringType, _: NumericType) => true
-    case (BooleanType, _: NumericType) => true
-    case (TimestampType, _: NumericType) => true
-
-    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
-      canCast(fromType, toType) && resolvableNullability(fn, tn)
-
-    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
-      canCast(fromKey, toKey) && canCast(fromValue, toValue) && resolvableNullability(fn, tn)
-
-    case (StructType(fromFields), StructType(toFields)) =>
-      fromFields.length == toFields.length &&
-        fromFields.zip(toFields).forall {
-          case (fromField, toField) =>
-            canCast(fromField.dataType, toField.dataType) &&
-              resolvableNullability(fromField.nullable, toField.nullable)
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
