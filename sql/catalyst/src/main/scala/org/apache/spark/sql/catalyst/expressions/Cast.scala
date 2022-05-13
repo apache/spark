@@ -129,42 +129,9 @@ object Cast {
    * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and “N” indicates
    * that the combination is not valid:
    * SD                   TD
-   *     EN AN C D T TS YM DT BO UDT B RT CT RW
-   * EN  Y  Y  Y N N  N  M  M  N   M N  M  N N
-   * AN  Y  Y  Y N N  N  N  N  N   M N  M  N N
-   * C   Y  Y  Y Y Y  Y  Y  Y  Y   M N  M  N N
-   * D   N  N  Y Y N  Y  N  N  N   M N  M  N N
-   * T   N  N  Y N Y  Y  N  N  N   M N  M  N N
-   * TS  N  N  Y Y Y  Y  N  N  N   M N  M  N N
-   * YM  M  N  Y N N  N  Y  N  N   M N  M  N N
-   * DT  M  N  Y N N  N  N  Y  N   M N  M  N N
-   * BO  N  N  Y N N  N  N  N  Y   M N  M  N N
-   * UDT M  M  M M M  M  M  M  M   M M  M  M N
-   * B   N  N  N N N  N  N  N  N   M Y  M  N N
-   * RT  M  M  M M M  M  M  M  M   M M  M  N N
-   * CT  N  N  N N N  N  N  N  N   M N  N  M N
-   * RW  N  N  N N N  N  N  N  N   N N  N  N M
-   *
-   * Where:
-   *   EN  = Exact Numeric
-   *   AN  = Approximate Numeric
-   *   C   = Character (Fixed- or Variable-Length, or Character Large Object)
-   *   D   = Date
-   *   T   = Time
-   *   TS  = Timestamp
-   *   YM  = Year-Month Interval
-   *   DT  = Day-Time Interval
-   *   BO  = Boolean
-   *   UDT  = User-Defined Type
-   *   B   = Binary (Fixed- or Variable-Length or Binary Large Object)
-   *   RT  = Reference type
-   *   CT  = Collection type
-   *   RW  = Row type
-   *
-   * Spark's ANSI mode follows the syntax rules, except it specially allow the following
-   * straightforward type conversions which are disallowed as per the SQL standard:
-   *   - Numeric <=> Boolean
-   *   - String <=> Binary
+   * @param from
+   * @param to
+   * @return
    */
   def canAnsiCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (fromType, toType) if fromType == toType => true
