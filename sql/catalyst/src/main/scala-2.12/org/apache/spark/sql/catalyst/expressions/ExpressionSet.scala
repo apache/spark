@@ -83,7 +83,7 @@ class ExpressionSet protected(
 
   protected def remove(e: Expression): Unit = {
     if (e.deterministic) {
-      baseSet.retain(_ != e.canonicalized)
+      baseSet.remove(e.canonicalized)
       originals = originals.filter(!_.semanticEquals(e))
     }
   }
