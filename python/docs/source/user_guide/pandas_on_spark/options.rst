@@ -186,9 +186,7 @@ This is conceptually equivalent to the PySpark example as below:
 **distributed-sequence** (default): It implements a sequence that increases one by one, by group-by and
 group-map approach in a distributed manner. It still generates the sequential index globally.
 If the default index must be the sequence in a large dataset, this
-index has to be used.
-Note that if more data are added to the data source after creating this index,
-then it does not guarantee the sequential index. See the example below:
+index has to be used. See the example below:
 
 .. code-block:: python
 
