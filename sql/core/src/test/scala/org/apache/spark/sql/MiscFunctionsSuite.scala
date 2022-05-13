@@ -52,8 +52,9 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
-      val df = sql("select current_user, user")
-      checkAnswer(df, Row(user, user))
+      Seq("user", "current_user").foreach { func =>
+        checkAnswer(sql(s"select $func"), Row(user))
+      }
       Seq("user()", "current_user()").foreach { func =>
         val e = intercept[ParseException](sql(s"select $func"))
         assert(e.getMessage.contains(func))
