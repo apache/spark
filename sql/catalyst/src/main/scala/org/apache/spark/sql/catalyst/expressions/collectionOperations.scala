@@ -2261,6 +2261,12 @@ case class ElementAt(
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
+
+  override def initQueryContext(): String = if (failOnError) {
+    origin.context
+  } else {
+    ""
+  }
 }
 
 /**
