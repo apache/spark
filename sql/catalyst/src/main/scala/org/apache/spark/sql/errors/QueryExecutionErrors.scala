@@ -116,16 +116,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidInputSyntaxForNumericError(
-      e: NumberFormatException,
-      errorContext: String): NumberFormatException = {
-    new NumberFormatException(s"${e.getMessage}. To return NULL instead, use 'try_cast'. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error." + errorContext)
-  }
-
-  def invalidInputSyntaxForNumericError(
       to: DataType,
       s: UTF8String,
-      errorContext: String): NumberFormatException = {
+      errorContext: String): SparkNumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_SYNTAX_FOR_CAST",
       messageParameters = Array(toSQLType(to), toSQLValue(s, StringType),
         SQLConf.ANSI_ENABLED.key, errorContext))
