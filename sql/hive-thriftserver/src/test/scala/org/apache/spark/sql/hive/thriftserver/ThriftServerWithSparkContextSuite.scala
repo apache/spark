@@ -130,7 +130,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       userFuncs.foreach { func =>
         val opHandle1 = exec(s"select $func(), $func")
         val rowSet1 = client.fetchResults(opHandle1)
-        rowSet1.toTRowSet.getColumns.forEach { col =>
+        rowSet1.getColumns.forEach { col =>
           assert(col.getStringVal.getValues.get(0) === clientUser)
         }
       }
@@ -140,7 +140,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       userFuncs.foreach { func =>
         val opHandle2 = exec(s"select $func")
         assert(client.fetchResults(opHandle2)
-          .toTRowSet.getColumns.get(0).getStringVal.getValues.get(0) === clientUser)
+          .getColumns.get(0).getStringVal.getValues.get(0) === clientUser)
       }
 
       userFuncs.foreach { func =>
