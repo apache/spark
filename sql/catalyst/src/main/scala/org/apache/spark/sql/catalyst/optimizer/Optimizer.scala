@@ -196,7 +196,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceDeduplicateWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
-      RemoveRepetitionFromGroupExpressions) :: Nil ++
+      RemoveRepetitionFromGroupExpressions,
+      RewriteNonAggregateFirst) :: Nil ++
     operatorOptimizationBatch) :+
     Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo) :+
     // This batch rewrites plans after the operator optimization and
