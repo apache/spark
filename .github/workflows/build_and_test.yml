@@ -23,6 +23,20 @@ on:
   push:
     branches:
     - '**'
+  schedule:
+    # Note that the scheduled jobs are only for master branch.
+    # master, Hadoop 2
+    - cron: '0 1 * * *'
+    # master
+    - cron: '0 4 * * *'
+    # branch-3.2
+    - cron: '0 7 * * *'
+    # PySpark coverage for master branch
+    - cron: '0 10 * * *'
+    # Java 11
+    - cron: '0 13 * * *'
+    # Java 17
+    - cron: '0 16 * * *'
   workflow_call:
     inputs:
       ansi_enabled:
