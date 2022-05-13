@@ -255,14 +255,14 @@ abstract class JdbcDialect extends Serializable with Logging{
    * @param funcName Function name
    * @return True if the database supports function.
    */
-  @Since("3.4.0")
+  @Since("3.3.0")
   def isSupportedFunction(funcName: String): Boolean = false
 
   /**
    * Returns the name of database dialect.
    * @return
    */
-  @Since("3.4.0")
+  @Since("3.3.0")
   def dialectName: String = this.getClass.getCanonicalName
 
   /**
