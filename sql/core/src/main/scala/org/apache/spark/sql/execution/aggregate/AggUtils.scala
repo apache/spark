@@ -218,6 +218,7 @@ object AggUtils {
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        isPartialAgg = true,
         child = maySessionChild)
     }
 

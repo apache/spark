@@ -265,28 +265,6 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     }
   }
 
-  test("Push distinct for sum(distinct c) and count(distinct c)") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      Seq(Inner, LeftOuter, RightOuter, FullOuter).foreach { joinType =>
-        val originalQuery = testRelation1
-          .join(testRelation2, joinType = joinType, condition = Some('a === 'x))
-          .groupBy('b)(sumDistinct('c), countDistinct('c))
-          .analyze
-
-        val correctLeft = PartialAggregate(Seq('a, 'b, 'c), Seq('a, 'b, 'c), testRelation1).as("l")
-        val correctRight = PartialAggregate(Seq('x), Seq('x), testRelation2.select('x)).as("r")
-
-        val correctAnswer = correctLeft.join(correctRight, joinType = joinType,
-          condition = Some('a === 'x))
-          .select('b, 'c)
-          .groupBy('b)(sumDistinct('c), countDistinct('c))
-          .analyzePlan
-
-        comparePlans(Optimize.execute(originalQuery), correctAnswer)
-      }
-    }
-  }
-
   test("Push the right side of left semi/anti Join") {
     Seq(-1, 10000).foreach { threshold =>
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
@@ -616,6 +594,15 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .groupBy('b)(bitAnd('c).as("bitAnd_c"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
+  }
+
+  test("Do not push down aggregate expressions if the aggregate leaves size exceeds 2") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy('b)(sum('y + 'z + ('y * 2)).as("sum_yz"))
       .analyze
 
     comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
