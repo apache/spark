@@ -40,6 +40,17 @@ public class CatalogLoadingSuite {
   }
 
   @Test
+  public void testIllegalCatalogName() {
+    SQLConf conf = new SQLConf();
+    conf.setConfString("spark.sql.catalog.test.name", TestCatalogPlugin.class.getCanonicalName());
+
+    SparkException exc = Assert.assertThrows(SparkException.class,
+            () -> Catalogs.load("test.name", conf));
+    Assert.assertTrue("Catalog name should not contain '.'", exc.getMessage().contains(
+            "Invalid catalog name: test.name"));
+  }
+
+  @Test
   public void testInitializationOptions() throws SparkException {
     SQLConf conf = new SQLConf();
     conf.setConfString("spark.sql.catalog.test-name", TestCatalogPlugin.class.getCanonicalName());

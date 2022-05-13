@@ -829,6 +829,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
             "Hadoop Properties" -> Seq.empty,
             "JVM Information" -> Seq.empty,
             "System Properties" -> Seq.empty,
+            "Metrics Properties" -> Seq.empty,
             "Classpath Entries" -> Seq.empty
           )),
           SparkListenerApplicationEnd(System.currentTimeMillis()))
@@ -1088,6 +1089,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
           "Hadoop Properties" -> Seq.empty,
           "JVM Information" -> Seq.empty,
           "System Properties" -> Seq.empty,
+          "Metrics Properties" -> Seq.empty,
           "Classpath Entries" -> Seq.empty
         )),
         SparkListenerApplicationEnd(5L)
@@ -1573,6 +1575,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
         "Hadoop Properties" -> Seq.empty,
         "JVM Information" -> Seq.empty,
         "System Properties" -> Seq.empty,
+        "Metrics Properties" -> Seq.empty,
         "Classpath Entries" -> Seq.empty
       )),
       SparkListenerApplicationEnd(System.currentTimeMillis()))

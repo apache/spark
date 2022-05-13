@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -1058,14 +1058,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t values(false, default + 1)")
-      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
+          .getMessage))
     }
     // Explicit default values may not participate in complex expressions in the SELECT query.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t select false, default + 1")
-      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
+          .getMessage))
     }
     // Explicit default values have a reasonable error path if the table is not found.
     withTable("t") {
@@ -1437,6 +1441,74 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         sql("insert into t values(1)")
       }.getMessage.contains("expected 3 columns but found"))
+    }
+  }
+
+  test("SPARK-38838 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: positive tests") {
+    withTable("t") {
+      sql("create table t(i boolean, s string, k bigint) using parquet")
+      // The default value for the DEFAULT keyword is the NULL literal.
+      sql("insert into t values(true, default, default)")
+      // There is a complex expression in the default value.
+      sql("alter table t alter column s set default concat('abc', 'def')")
+      sql("insert into t values(true, default, default)")
+      // The default value parses correctly and the provided value type is different but coercible.
+      sql("alter table t alter column k set default 42")
+      sql("insert into t values(true, default, default)")
+      // After dropping the default, inserting more values should add NULLs.
+      sql("alter table t alter column k drop default")
+      sql("insert into t values(true, default, default)")
+      checkAnswer(spark.table("t"),
+        Seq(
+          Row(true, null, null),
+          Row(true, "abcdef", null),
+          Row(true, "abcdef", 42),
+          Row(true, "abcdef", null)
+        ))
+    }
+  }
+
+  test("SPARK-38838 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
+    object Errors {
+      val COMMON_SUBSTRING = " has a DEFAULT value"
+      val BAD_SUBQUERY =
+        "cannot evaluate expression CAST(scalarsubquery() AS BIGINT) in inline table definition"
+    }
+    val createTable = "create table t(i boolean, s bigint) using parquet"
+    val insertDefaults = "insert into t values (default, default)"
+    withTable("t") {
+      sql(createTable)
+      // The default value fails to analyze.
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column s set default badvalue")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      // The default value analyzes to a table not in the catalog.
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column s set default (select min(x) from badtable)")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
+      // list at the INSERT INTO time.
+      sql("alter table t alter column s set default (select 42 as alias)")
+      assert(intercept[AnalysisException] {
+        sql(insertDefaults)
+      }.getMessage.contains(Errors.BAD_SUBQUERY))
+      // The default value parses but the type is not coercible.
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column s set default false")
+      }.getMessage.contains("provided a value of incompatible type"))
+      // The default value is disabled per configuration.
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        assert(intercept[ParseException] {
+          sql("alter table t alter column s set default 41 + 1")
+        }.getMessage.contains("Support for DEFAULT column values is not allowed"))
+      }
+    }
+    // Attempting to set a default value for a partitioning column is not allowed.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint, q int default 42) using parquet partitioned by (i)")
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column i set default false")
+      }.getMessage.contains("Can't find column `i` given table data columns [`s`, `q`]"))
     }
   }
 

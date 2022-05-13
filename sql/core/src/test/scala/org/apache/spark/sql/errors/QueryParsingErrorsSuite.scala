@@ -582,4 +582,64 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
           |---------------------------^^^
           |""".stripMargin)
   }
+
+  test("INVALID_SQL_SYNTAX: show table partition key must set value") {
+    validateParsingError(
+      sqlText = "SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: Partition key `grade` must set value (can't be empty).(line 1, pos 47)
+          |
+          |== SQL ==
+          |SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)
+          |-----------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: expected a column reference for transform bucket") {
+    validateParsingError(
+      sqlText =
+        "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: Expected a column reference for transform `bucket`: 66(line 1, pos 67)
+          |
+          |== SQL ==
+          |CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))
+          |-------------------------------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: DESC TABLE COLUMN for a specific partition") {
+    validateParsingError(
+      sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age",
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("DESC_TABLE_COLUMN_PARTITION"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: DESC TABLE COLUMN for a specific partition""" +
+        """.(line 1, pos 0)""" +
+        """|
+           |
+           |== SQL ==
+           |DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age
+           |^^^
+           |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: PARTITION specification is incomplete") {
+    validateParsingError(
+      sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade)",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: PARTITION specification is incomplete: `grade`(line 1, pos 0)
+          |
+          |== SQL ==
+          |DESCRIBE TABLE EXTENDED customer PARTITION (grade)
+          |^^^
+          |""".stripMargin)
+  }
 }

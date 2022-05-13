@@ -37,6 +37,8 @@ object ToNumberParser {
   final val PLUS_SIGN = '+'
   final val POINT_LETTER = 'D'
   final val POINT_SIGN = '.'
+  final val POUND_SIGN = '#'
+  final val SPACE = ' '
   final val ZERO_DIGIT = '0'
 
   final val OPTIONAL_MINUS_STRING = "MI"
@@ -235,13 +237,16 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   }
 
   // Holds all digits (0-9) before the decimal point (.) while parsing each input string.
-  private lazy val beforeDecimalPoint = new StringBuilder(precision)
+  private lazy val parsedBeforeDecimalPoint = new StringBuilder(precision)
   // Holds all digits (0-9) after the decimal point (.) while parsing each input string.
-  private lazy val afterDecimalPoint = new StringBuilder(scale)
+  private lazy val parsedAfterDecimalPoint = new StringBuilder(scale)
   // Number of digits (0-9) in each group of the input string, split by thousands separators.
   private lazy val parsedDigitGroupSizes = mutable.Buffer.empty[Int]
   // Increments to count the number of digits (0-9) in the current group within the input string.
-  private var numDigitsInCurrentGroup: Int = 0
+  private var parsedNumDigitsInCurrentGroup: Int = 0
+  // These are indexes into the characters of the input string before and after the decimal point.
+  private var formattingBeforeDecimalPointIndex = 0
+  private var formattingAfterDecimalPointIndex = 0
 
   /**
    * The result type of this parsing is a Decimal value with the appropriate precision and scale.
@@ -320,7 +325,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
             false
         })
     }) {
-      return "Thousands separators (,) must have digits in between them " +
+      return "Thousands separators (, or G) must have digits in between them " +
         s"in the number format: '$numberFormat'"
     }
     // Make sure that thousands separators does not appear after the decimal point, if any.
@@ -328,7 +333,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       case DigitGroups(tokens, digits) =>
         tokens.length > digits.length
     }) {
-      return "Thousands separators (,) may not appear after the decimal point " +
+      return "Thousands separators (, or G) may not appear after the decimal point " +
         s"in the number format: '$numberFormat'"
     }
     // Make sure that the format string does not contain any prohibited duplicate tokens.
@@ -394,8 +399,9 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     val inputString = input.toString
     val inputLength = inputString.length
     // Build strings representing all digits before and after the decimal point, respectively.
-    beforeDecimalPoint.clear()
-    afterDecimalPoint.clear()
+    parsedBeforeDecimalPoint.clear()
+    parsedAfterDecimalPoint.clear()
+    // Tracks whether we've reached the decimal point yet in either parsing or formatting.
     var reachedDecimalPoint = false
     // Record whether the input specified a negative result, such as with a minus sign.
     var negateResult = false
@@ -471,7 +477,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       // in the input string, then the input string does not match the format string.
       formatMatchFailure(input, numberFormat)
     } else {
-      getDecimal(negateResult)
+      parseResultToDecimalValue(negateResult)
     }
   }
 
@@ -493,16 +499,16 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     val inputLength = inputString.length
     // Consume characters from the current input index forwards in the input string as long as
     // they are digits (0-9) or the thousands separator (,).
-    numDigitsInCurrentGroup = 0
+    parsedNumDigitsInCurrentGroup = 0
     var inputIndex = startingInputIndex
     parsedDigitGroupSizes.clear()
 
     while (inputIndex < inputLength &&
-      matchesDigitOrComma(inputString(inputIndex), reachedDecimalPoint)) {
+      parsedCharMatchesDigitOrComma(inputString(inputIndex), reachedDecimalPoint)) {
       inputIndex += 1
     }
     if (inputIndex == inputLength) {
-      parsedDigitGroupSizes.prepend(numDigitsInCurrentGroup)
+      parsedDigitGroupSizes.prepend(parsedNumDigitsInCurrentGroup)
     }
     // Compare the number of digits encountered in each group (separated by thousands
     // separators) with the expected numbers from the format string.
@@ -537,27 +543,27 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    * Returns true if the given character matches a digit (0-9) or a comma, updating fields of
    * this class related to parsing during the process.
    */
-  private def matchesDigitOrComma(char: Char, reachedDecimalPoint: Boolean): Boolean = {
+  private def parsedCharMatchesDigitOrComma(char: Char, reachedDecimalPoint: Boolean): Boolean = {
     char match {
       case _ if char.isWhitespace =>
         // Ignore whitespace and keep advancing through the input string.
         true
-      case _ if char >= ZERO_DIGIT && char <= NINE_DIGIT =>
-        numDigitsInCurrentGroup += 1
-        // Append each group of input digits to the appropriate before/afterDecimalPoint
+      case _ if char.isDigit =>
+        parsedNumDigitsInCurrentGroup += 1
+        // Append each group of input digits to the appropriate before/parsedAfterDecimalPoint
         // string for later use in constructing the result Decimal value.
         if (reachedDecimalPoint) {
-          afterDecimalPoint.append(char)
+          parsedAfterDecimalPoint.append(char)
         } else {
-          beforeDecimalPoint.append(char)
+          parsedBeforeDecimalPoint.append(char)
         }
         true
       case COMMA_SIGN =>
-        parsedDigitGroupSizes.prepend(numDigitsInCurrentGroup)
-        numDigitsInCurrentGroup = 0
+        parsedDigitGroupSizes.prepend(parsedNumDigitsInCurrentGroup)
+        parsedNumDigitsInCurrentGroup = 0
         true
       case _ =>
-        parsedDigitGroupSizes.prepend(numDigitsInCurrentGroup)
+        parsedDigitGroupSizes.prepend(parsedNumDigitsInCurrentGroup)
         false
     }
   }
@@ -568,28 +574,37 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    */
   private def formatMatchFailure(input: UTF8String, originNumberFormat: String): Decimal = {
     if (errorOnFail) {
-      throw QueryExecutionErrors.invalidNumberFormatError(input, originNumberFormat)
+      throw QueryExecutionErrors.invalidNumberFormatError(
+        "string", input.toString, originNumberFormat)
+    }
+    null
+  }
+  private def formatMatchFailure(input: Decimal, originNumberFormat: String): UTF8String = {
+    if (errorOnFail) {
+      throw QueryExecutionErrors.invalidNumberFormatError(
+        "Decimal value", input.toString, originNumberFormat)
     }
     null
   }
 
   /**
-   * Computes the final Decimal value from the beforeDecimalPoint and afterDecimalPoint fields of
-   * this class, as a result of parsing.
+   * Computes the final Decimal value from the parsedBeforeDecimalPoint and parsedAfterDecimalPoint
+   * fields of this class, as a result of parsing.
    *
    * @param negateResult whether the input string specified to negate the result
    * @return a Decimal value with the value indicated by the input string and the precision and
    *         scale indicated by the format string
    */
-  private def getDecimal(negateResult: Boolean): Decimal = {
-    // Append zeros to the afterDecimalPoint until it comprises the same number of digits as the
-    // scale. This is necessary because we must determine the scale from the format string alone but
-    // each input string may include a variable number of digits after the decimal point.
-    val extraZeros = "0" * (scale - afterDecimalPoint.length)
-    val afterDecimalPadded = afterDecimalPoint.toString + extraZeros
+  private def parseResultToDecimalValue(negateResult: Boolean): Decimal = {
+    // Append zeros to the parsedAfterDecimalPoint string until it comprises the same number of
+    // digits as the scale. This is necessary because we must determine the scale from the format
+    // string alone but each input string may include a variable number of digits after the decimal
+    // point.
+    val extraZeros = "0" * (scale - parsedAfterDecimalPoint.length)
+    val afterDecimalPadded = parsedAfterDecimalPoint.toString + extraZeros
     val prefix = if (negateResult) "-" else ""
     val suffix = if (afterDecimalPadded.nonEmpty) "." + afterDecimalPadded else ""
-    val numStr = s"$prefix$beforeDecimalPoint$suffix"
+    val numStr = s"$prefix$parsedBeforeDecimalPoint$suffix"
     val javaDecimal = new java.math.BigDecimal(numStr)
     if (precision <= Decimal.MAX_LONG_DIGITS) {
       // Constructs a `Decimal` with an unscaled `Long` value if possible.
@@ -597,6 +612,251 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     } else {
       // Otherwise, resorts to an unscaled `BigInteger` instead.
       Decimal(javaDecimal, precision, scale)
+    }
+  }
+
+  /**
+   * Converts a decimal value to a string based on the given number format.
+   *
+   * Iterates through the [[formatTokens]] obtained from processing the format string, while also
+   * inspecting the input decimal value.
+   *
+   * @param input the decimal value that needs to be converted
+   * @return the result String value obtained from string formatting
+   */
+  def format(input: Decimal): UTF8String = {
+    val result = new StringBuilder()
+    // These are string representations of the input Decimal value.
+    val (inputBeforeDecimalPoint: String,
+      inputAfterDecimalPoint: String) =
+      formatSplitInputBeforeAndAfterDecimalPoint(input)
+    // These are indexes into the characters of the input string before and after the decimal point.
+    formattingBeforeDecimalPointIndex = 0
+    formattingAfterDecimalPointIndex = 0
+    var reachedDecimalPoint = false
+
+    // Iterate through the tokens representing the provided format string, in order.
+    for (formatToken: InputToken <- formatTokens) {
+      formatToken match {
+        case groups: DigitGroups =>
+          formatDigitGroups(
+            groups, inputBeforeDecimalPoint, inputAfterDecimalPoint, reachedDecimalPoint, result)
+        case DecimalPoint() =>
+          // If the last character so far is a space, change it to a zero. This means the input
+          // decimal does not have an integer part.
+          if (result.nonEmpty && result.last == SPACE) {
+            result(result.length - 1) = ZERO_DIGIT
+          }
+          result.append(POINT_SIGN)
+          reachedDecimalPoint = true
+        case DollarSign() =>
+          result.append(DOLLAR_SIGN)
+        case _: OptionalPlusOrMinusSign =>
+          stripTrailingLoneDecimalPoint(result)
+          if (input < Decimal.ZERO) {
+            addCharacterCheckingTrailingSpaces(result, MINUS_SIGN)
+          } else {
+            addCharacterCheckingTrailingSpaces(result, PLUS_SIGN)
+          }
+        case _: OptionalMinusSign =>
+          if (input < Decimal.ZERO) {
+            stripTrailingLoneDecimalPoint(result)
+            addCharacterCheckingTrailingSpaces(result, MINUS_SIGN)
+          } else {
+            result.append(SPACE)
+          }
+        case OpeningAngleBracket() =>
+          if (input < Decimal.ZERO) {
+            result.append(ANGLE_BRACKET_OPEN)
+          }
+        case ClosingAngleBracket() =>
+          stripTrailingLoneDecimalPoint(result)
+          if (input < Decimal.ZERO) {
+            addCharacterCheckingTrailingSpaces(result, ANGLE_BRACKET_CLOSE)
+          } else {
+            result.append(SPACE)
+            result.append(SPACE)
+          }
+      }
+    }
+
+    if (formattingBeforeDecimalPointIndex < inputBeforeDecimalPoint.length ||
+      formattingAfterDecimalPointIndex < inputAfterDecimalPoint.length) {
+      // Remaining digits before or after the decimal point exist in the decimal value but not in
+      // the format string.
+      formatMatchFailure(input, numberFormat)
+    } else {
+      stripTrailingLoneDecimalPoint(result)
+      val str = result.toString
+      if (result.isEmpty || str == "+" || str == "-") {
+        UTF8String.fromString("0")
+      } else {
+        UTF8String.fromString(str)
+      }
+    }
+  }
+
+  /**
+   * Splits the provided Decimal value's string representation by the decimal point, if any.
+   * @param input the Decimal value to consume
+   * @return two strings representing the contents before and after the decimal point (if any)
+   */
+  private def formatSplitInputBeforeAndAfterDecimalPoint(input: Decimal): (String, String) = {
+    // Convert the input Decimal value to a string (without exponent notation).
+    val inputString = input.toJavaBigDecimal.toPlainString
+    // Split the digits before and after the decimal point.
+    val tokens: Array[String] = inputString.split(POINT_SIGN)
+    var beforeDecimalPoint: String = tokens(0)
+    var afterDecimalPoint: String = if (tokens.length > 1) tokens(1) else ""
+    // Strip any leading minus sign to consider the digits only.
+    // Strip leading and trailing zeros to match cases when the format string begins with a decimal
+    // point.
+    beforeDecimalPoint = beforeDecimalPoint.dropWhile(c => c == MINUS_SIGN || c == ZERO_DIGIT)
+    afterDecimalPoint = afterDecimalPoint.reverse.dropWhile(_ == ZERO_DIGIT).reverse
+
+    // If the format string specifies more digits than the 'beforeDecimalPoint', prepend leading
+    // spaces to make them the same length. Likewise, if the format string specifies more digits
+    // than the 'afterDecimalPoint', append trailing spaces to make them the same length. This step
+    // simplifies logic consuming the format tokens later.
+    var reachedDecimalPoint = false
+    var numFormatDigitsBeforeDecimalPoint = 0
+    var numFormatDigitsAfterDecimalPoint = 0
+    formatTokens.foreach {
+      case digitGroups: DigitGroups =>
+        digitGroups.digits.foreach { digits =>
+          val numDigits = digits match {
+            case ExactlyAsManyDigits(num) => num
+            case AtMostAsManyDigits(num) => num
+          }
+          for (_ <- 0 until numDigits) {
+            if (!reachedDecimalPoint) {
+              numFormatDigitsBeforeDecimalPoint += 1
+            } else {
+              numFormatDigitsAfterDecimalPoint += 1
+            }
+          }
+        }
+      case _: DecimalPoint =>
+        reachedDecimalPoint = true
+      case _ =>
+    }
+    // If there were more digits in the provided input string (before or after the decimal point)
+    // than specified in the format string, this is an overflow.
+    if (numFormatDigitsBeforeDecimalPoint < beforeDecimalPoint.length ||
+      numFormatDigitsAfterDecimalPoint < afterDecimalPoint.length) {
+      beforeDecimalPoint = "#" * numFormatDigitsBeforeDecimalPoint
+      afterDecimalPoint = "#" * numFormatDigitsAfterDecimalPoint
+    }
+    val leadingSpaces = " " * (numFormatDigitsBeforeDecimalPoint - beforeDecimalPoint.length)
+    val trailingZeros = "0" * (numFormatDigitsAfterDecimalPoint - afterDecimalPoint.length)
+    (leadingSpaces + beforeDecimalPoint, afterDecimalPoint + trailingZeros)
+  }
+
+  /**
+   * Performs format processing on the digits in [[groups]], updating [[result]].
+   *
+   * @param groups the token representing a group of digits from the format string
+   * @param inputBeforeDecimalPoint string representation of the input decimal value before the
+   *                                decimal point
+   * @param inputAfterDecimalPoint string representation of the input decimal value after the
+   *                               decimal point
+   * @param reachedDecimalPoint true if we have reached the decimal point so far during processing
+   * @param result the result of formatting is built here as a string during iteration
+   */
+  private def formatDigitGroups(
+      groups: DigitGroups,
+      inputBeforeDecimalPoint: String,
+      inputAfterDecimalPoint: String,
+      reachedDecimalPoint: Boolean,
+      result: StringBuilder): Unit = {
+    // Iterate through the tokens in the DigitGroups. Reverse the order of the tokens so we
+    // consume them in the left-to-right order that they originally appeared in the format
+    // string.
+    for (digitGroupToken <- groups.tokens.reverse) {
+      digitGroupToken match {
+        case digits: Digits if !reachedDecimalPoint =>
+          val numDigits = digits match {
+            case ExactlyAsManyDigits(num) => num
+            case AtMostAsManyDigits(num) => num
+          }
+          for (_ <- 0 until numDigits) {
+            inputBeforeDecimalPoint(formattingBeforeDecimalPointIndex) match {
+              case SPACE if digits.isInstanceOf[ExactlyAsManyDigits] =>
+                // The format string started with a zero and had more digits than the provided
+                // input string, so we prepend a zero to the result. Note that there is no need to
+                // check for the presence of any previous positive or minus sign in the result
+                // because we are adding zeros here and we want them to go directly after such a
+                // sign, such as "-00000123.45".
+                result.append(ZERO_DIGIT)
+              case SPACE =>
+                addSpaceCheckingTrailingCharacters(result)
+              case c: Char =>
+                result.append(c)
+            }
+            formattingBeforeDecimalPointIndex += 1
+          }
+        case digits: Digits if reachedDecimalPoint =>
+          val numDigits = digits match {
+            case ExactlyAsManyDigits(num) => num
+            case AtMostAsManyDigits(num) => num
+          }
+          for (_ <- 0 until numDigits) {
+            result.append(inputAfterDecimalPoint(formattingAfterDecimalPointIndex))
+            formattingAfterDecimalPointIndex += 1
+          }
+        case _: ThousandsSeparator =>
+          if (result.nonEmpty && result.last.isDigit) {
+            result.append(COMMA_SIGN)
+          } else {
+            addSpaceCheckingTrailingCharacters(result)
+          }
+      }
+    }
+  }
+
+  /**
+   * Adds a character to the end of the string builder. After doing so, if we just added the
+   * character after a space, swap the characters.
+   */
+  private def addCharacterCheckingTrailingSpaces(result: StringBuilder, char: Char): Unit = {
+    result.append(char)
+    var i = result.size - 1
+    while (i >= 1 &&
+      result(i - 1) == SPACE &&
+      result(i) == char) {
+      result(i) = SPACE
+      result(i - 1) = char
+      i -= 1
+    }
+  }
+
+  /**
+   * Adds a character to the end of the string builder. After doing so, if we just added the
+   * character after cases like unary plus or minus, swap the characters.
+   */
+  private def addSpaceCheckingTrailingCharacters(result: StringBuilder): Unit = {
+    result.append(SPACE)
+    var i = result.size - 1
+    while (i >= 1 &&
+      (result(i - 1) == PLUS_SIGN ||
+        result(i - 1) == MINUS_SIGN ||
+        result(i - 1) == ANGLE_BRACKET_OPEN) &&
+      result(i) == SPACE) {
+      result(i) = result(i - 1)
+      result(i - 1) = SPACE
+      i -= 1
+    }
+  }
+
+  /**
+   * If the result string ends with a decimal point, strip it.
+   */
+  private def stripTrailingLoneDecimalPoint(result: StringBuilder): Unit = {
+    val i = result.indexOf(POINT_SIGN)
+    if (i != -1 &&
+      (i == result.length - 1 ||
+        result(i + 1) == SPACE)) {
+      result(i) = SPACE
     }
   }
 }

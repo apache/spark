@@ -103,7 +103,8 @@ case class JDBCScanBuilder(
       "GROUP BY " + compiledGroupBys.mkString(",")
     }
 
-    val aggQuery = s"SELECT ${selectList.mkString(",")} FROM ${jdbcOptions.tableOrQuery} " +
+    val aggQuery = jdbcOptions.prepareQuery +
+      s"SELECT ${selectList.mkString(",")} FROM ${jdbcOptions.tableOrQuery} " +
       s"WHERE 1=0 $groupByClause"
     try {
       finalSchema = JDBCRDD.getQueryOutputSchema(aggQuery, jdbcOptions, dialect)

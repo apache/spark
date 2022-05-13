@@ -76,7 +76,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      messageParameters = Array(pivotCol.toString))
+      messageParameters = Array(toSQLId(pivotCol.sql)))
   }
 
   def nonLiteralPivotValError(pivotVal: Expression): Throwable = {
@@ -2369,8 +2369,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidJsonSchema(schema: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
-      messageParameters = Array(schema.toString))
+      errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
+      messageParameters = Array(toSQLType(schema)))
   }
 
   def tableIndexNotSupportedError(errorMessage: String): Throwable = {
@@ -2406,5 +2406,30 @@ object QueryCompilationErrors extends QueryErrorsBase {
 
   def noSuchFunctionError(database: String, funcInfo: String): Throwable = {
     new AnalysisException(s"$database does not support function: $funcInfo")
+  }
+
+  // Return a more descriptive error message if the user tries to nest a DEFAULT column reference
+  // inside some other expression (such as DEFAULT + 1) in an INSERT INTO command's VALUES list;
+  // this is not allowed.
+  def defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList(): Throwable = {
+    new AnalysisException(
+      "Failed to execute INSERT INTO command because the VALUES list contains a DEFAULT column " +
+        "reference as part of another expression; this is not allowed")
+  }
+
+  // Return a descriptive error message in the presence of INSERT INTO commands with explicit
+  // DEFAULT column references and explicit column lists, since this is not implemented yet.
+  def defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause(): Throwable = {
+    new AnalysisException(
+      "Failed to execute UPDATE command because the SET list contains a DEFAULT column reference " +
+        "as part of another expression; this is not allowed")
+  }
+
+  // Return a more descriptive error message if the user tries to use a DEFAULT column reference
+  // inside an UPDATE command's WHERE clause; this is not allowed.
+  def defaultReferencesNotAllowedInUpdateWhereClause(): Throwable = {
+    new AnalysisException(
+      "Failed to execute UPDATE command because the WHERE clause contains a DEFAULT column " +
+        "reference; this is not allowed")
   }
 }

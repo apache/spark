@@ -77,7 +77,11 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
-    new ParseException(s"Found an empty partition key '$key'.", ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters =
+        Array(s"Partition key ${toSQLId(key)} must set value (can't be empty)."),
+      ctx)
   }
 
   def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
@@ -243,7 +247,11 @@ object QueryParsingErrors extends QueryErrorsBase {
 
   def partitionTransformNotExpectedError(
       name: String, describe: String, ctx: ApplyTransformContext): Throwable = {
-    new ParseException(s"Expected a column reference for transform $name: $describe", ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters =
+        Array(s"Expected a column reference for transform ${toSQLId(name)}: $describe"),
+      ctx)
   }
 
   def tooManyArgumentsForTransformError(name: String, ctx: ApplyTransformContext): Throwable = {
@@ -298,12 +306,18 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def descColumnForPartitionUnsupportedError(ctx: DescribeRelationContext): Throwable = {
-    new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("DESC_TABLE_COLUMN_PARTITION"),
+      ctx)
   }
 
   def incompletePartitionSpecificationError(
       key: String, ctx: DescribeRelationContext): Throwable = {
-    new ParseException(s"PARTITION specification is incomplete: `$key`", ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(s"PARTITION specification is incomplete: ${toSQLId(key)}"),
+      ctx)
   }
 
   def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
