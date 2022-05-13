@@ -746,7 +746,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("Test YARN container decommissioning") {
-
     val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
     val rmClientSpy = spy(rmClient)
     val allocateResponse = mock(classOf[AllocateResponse])

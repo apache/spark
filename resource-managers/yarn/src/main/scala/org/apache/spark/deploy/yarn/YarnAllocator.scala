@@ -460,7 +460,7 @@ private[yarn] class YarnAllocator(
           decommissioningNodesCache.put(host, true)
         }
     } catch {
-      case e: Exception => logError("Sending Message to Driver to Decommission Executors" +
+      case e: Exception => logError("Sending Message to Driver to Decommission Executors " +
         "on Decommissioning Nodes failed", e)
     }
   }
