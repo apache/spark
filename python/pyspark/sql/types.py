@@ -1255,14 +1255,15 @@ def _infer_type(
                     )
             return MapType(NullType(), NullType(), True)
     elif isinstance(obj, list):
-        return ArrayType(
-            reduce(
-                _merge_type,
-                (_infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz) for v in obj),
-                NullType(),
-            ),
-            True,
-        )
+        if len(obj) > 0:
+            return ArrayType(
+                reduce(
+                    _merge_type,
+                    (_infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz) for v in obj),
+                ),
+                True,
+            )
+        return ArrayType(NullType(), True)
     elif isinstance(obj, array):
         if obj.typecode in _array_type_mappings:
             return ArrayType(_array_type_mappings[obj.typecode](), False)
