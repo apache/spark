@@ -618,6 +618,7 @@ case class FileSourceScanExec(
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(new Path(f.filePath).getName)
+          // TODO(SPARK-39163): Throw an exception w/ error class for an invalid bucket file
           .getOrElse(throw new IllegalStateException(s"Invalid bucket file ${f.filePath}"))
       }
 

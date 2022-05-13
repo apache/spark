@@ -118,11 +118,13 @@ from pyspark.pandas.typedef import (
     SeriesType,
     create_type_for_series_type,
 )
+from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
 
     from pyspark.pandas.groupby import SeriesGroupBy
+    from pyspark.pandas.resample import SeriesResampler
     from pyspark.pandas.indexes import Index
     from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 
@@ -6899,6 +6901,139 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         from pyspark.pandas.groupby import SeriesGroupBy
 
         return SeriesGroupBy._build(self, by, as_index=as_index, dropna=dropna)
+
+    def resample(
+        self,
+        rule: str_type,
+        closed: Optional[str_type] = None,
+        label: Optional[str_type] = None,
+        on: Optional["Series"] = None,
+    ) -> "SeriesResampler":
+        """
+        Resample time-series data.
+
+        Convenience method for frequency conversion and resampling of time series.
+        The object must have a datetime-like index (only support `DatetimeIndex` for now),
+        or the caller must pass the label of a datetime-like
+        series/index to the ``on`` keyword parameter.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        rule : str
+            The offset string or object representing target conversion.
+            Currently, supported units are {'Y', 'A', 'M', 'D', 'H',
+            'T', 'MIN', 'S'}.
+        closed : {{'right', 'left'}}, default None
+            Which side of bin interval is closed. The default is 'left'
+            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            have a default of 'right'.
+        label : {{'right', 'left'}}, default None
+            Which bin edge label to label bucket with. The default is 'left'
+            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            have a default of 'right'.
+        on : Series, optional
+            For a DataFrame, column to use instead of index for resampling.
+            Column must be datetime-like.
+
+        Returns
+        -------
+        SeriesResampler
+
+
+        Examples
+        --------
+        Start by creating a series with 9 one minute timestamps.
+
+        >>> index = pd.date_range('1/1/2000', periods=9, freq='T')
+        >>> series = ps.Series(range(9), index=index, name='V')
+        >>> series
+        2000-01-01 00:00:00    0
+        2000-01-01 00:01:00    1
+        2000-01-01 00:02:00    2
+        2000-01-01 00:03:00    3
+        2000-01-01 00:04:00    4
+        2000-01-01 00:05:00    5
+        2000-01-01 00:06:00    6
+        2000-01-01 00:07:00    7
+        2000-01-01 00:08:00    8
+        Name: V, dtype: int64
+
+        Downsample the series into 3 minute bins and sum the values
+        of the timestamps falling into a bin.
+
+        >>> series.resample('3T').sum().sort_index()
+        2000-01-01 00:00:00     3.0
+        2000-01-01 00:03:00    12.0
+        2000-01-01 00:06:00    21.0
+        Name: V, dtype: float64
+
+        Downsample the series into 3 minute bins as above, but label each
+        bin using the right edge instead of the left. Please note that the
+        value in the bucket used as the label is not included in the bucket,
+        which it labels. For example, in the original series the
+        bucket ``2000-01-01 00:03:00`` contains the value 3, but the summed
+        value in the resampled bucket with the label ``2000-01-01 00:03:00``
+        does not include 3 (if it did, the summed value would be 6, not 3).
+        To include this value close the right side of the bin interval as
+        illustrated in the example below this one.
+
+        >>> series.resample('3T', label='right').sum().sort_index()
+        2000-01-01 00:03:00     3.0
+        2000-01-01 00:06:00    12.0
+        2000-01-01 00:09:00    21.0
+        Name: V, dtype: float64
+
+        Downsample the series into 3 minute bins as above, but close the right
+        side of the bin interval.
+
+        >>> series.resample('3T', label='right', closed='right').sum().sort_index()
+        2000-01-01 00:00:00     0.0
+        2000-01-01 00:03:00     6.0
+        2000-01-01 00:06:00    15.0
+        2000-01-01 00:09:00    15.0
+        Name: V, dtype: float64
+
+        Upsample the series into 30 second bins.
+
+        >>> series.resample('30S').sum().sort_index()[0:5]   # Select first 5 rows
+        2000-01-01 00:00:00    0.0
+        2000-01-01 00:00:30    0.0
+        2000-01-01 00:01:00    1.0
+        2000-01-01 00:01:30    0.0
+        2000-01-01 00:02:00    2.0
+        Name: V, dtype: float64
+
+        See Also
+        --------
+        DataFrame.resample : Resample a DataFrame.
+        groupby : Group by mapping, function, label, or list of labels.
+        """
+        from pyspark.pandas.indexes import DatetimeIndex
+        from pyspark.pandas.resample import SeriesResampler
+
+        if on is None and not isinstance(self.index, DatetimeIndex):
+            raise NotImplementedError("resample currently works only for DatetimeIndex")
+        if on is not None and not isinstance(as_spark_type(on.dtype), TimestampType):
+            raise NotImplementedError("resample currently works only for TimestampType")
+
+        agg_columns: List[ps.Series] = []
+        column_label = self._internal.column_labels[0]
+        if isinstance(self._internal.spark_type_for(column_label), (NumericType, BooleanType)):
+            agg_columns.append(self)
+
+        if len(agg_columns) == 0:
+            raise ValueError("No available aggregation columns!")
+
+        return SeriesResampler(
+            psdf=self._psdf,
+            resamplekey=on,
+            rule=rule,
+            closed=closed,
+            label=label,
+            agg_columns=agg_columns,
+        )
 
     def __getitem__(self, key: Any) -> Any:
         try:

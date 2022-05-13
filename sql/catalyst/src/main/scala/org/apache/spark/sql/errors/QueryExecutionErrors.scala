@@ -1532,6 +1532,10 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new UnsupportedOperationException(s"Invalid output mode: $outputMode")
   }
 
+  def invalidCatalogNameError(name: String): Throwable = {
+    new SparkException(s"Invalid catalog name: $name")
+  }
+
   def catalogPluginClassNotFoundError(name: String): Throwable = {
     new CatalogNotFoundException(
       s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")

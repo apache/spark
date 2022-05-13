@@ -272,4 +272,14 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
     assert(result.toSet === Set(FooWithDate(year, "FooFoo", 3), FooWithDate(year, "Foo", 1)))
   }
+
+  test("Test unwrap_udt function") {
+    val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features")))
+      .rdd.map { (row: Row) => row.getAs[Seq[Double]](0).toArray }
+    val unwrappedFeaturesArrays: Array[Array[Double]] = unwrappedFeatures.collect()
+    assert(unwrappedFeaturesArrays.size === 2)
+
+    java.util.Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0))
+    java.util.Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0))
+  }
 }
