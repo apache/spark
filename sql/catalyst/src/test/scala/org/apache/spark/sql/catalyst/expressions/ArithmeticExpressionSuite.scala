@@ -359,19 +359,18 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("Remainder/Pmod: exception should contain SQL text context") {
-    Seq(
-      Remainder(Literal(1L, LongType), Literal(0L, LongType), failOnError = true),
-      Pmod(Literal(1L, LongType), Literal(0L, LongType), failOnError = true)).foreach { expr =>
-        val query = s"1L ${expr.symbol} 0L"
-        val o = Origin(
-          line = Some(1),
-          startPosition = Some(7),
-          startIndex = Some(7),
-          stopIndex = Some(7 + query.length -1),
-          sqlText = Some(s"select $query"))
-        withOrigin(o) {
-          checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
-        }
+    Seq(("%", Remainder), ("pmod", Pmod)).foreach { case (symbol, exprBuilder) =>
+      val query = s"1L $symbol 0L"
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(7),
+        startIndex = Some(7),
+        stopIndex = Some(7 + query.length -1),
+        sqlText = Some(s"select $query"))
+      withOrigin(o) {
+        val expression = exprBuilder(Literal(1L, LongType), Literal(0L, LongType), true)
+        checkExceptionInExpression[ArithmeticException](expression, EmptyRow, query)
+      }
     }
   }
 
