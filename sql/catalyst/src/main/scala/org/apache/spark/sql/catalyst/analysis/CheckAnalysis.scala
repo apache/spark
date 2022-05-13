@@ -433,13 +433,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case Offset(offsetExpr, _) => checkLimitLikeClause("offset", offsetExpr)
 
-          case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
-            && o.children.exists(_.isInstanceOf[Offset]) =>
-            failAnalysis(
-              s"""
-                 |The OFFSET clause is allowed in the LIMIT clause or be the outermost node,
-                 |but the OFFSET clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
-
           case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
