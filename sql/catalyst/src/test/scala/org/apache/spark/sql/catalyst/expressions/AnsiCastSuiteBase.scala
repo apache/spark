@@ -641,8 +641,8 @@ class AnsiCastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     v match {
-      case lit: Expression => AnsiCast(lit, targetType, timeZoneId)
-      case _ => AnsiCast(Literal(v), targetType, timeZoneId)
+      case lit: Expression => Cast.ansiCast(lit, targetType, timeZoneId)
+      case _ => Cast.ansiCast(Literal(v), targetType, timeZoneId)
     }
   }
 
@@ -667,8 +667,8 @@ class AnsiCastSuiteWithAnsiModeOff extends AnsiCastSuiteBase {
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     v match {
-      case lit: Expression => AnsiCast(lit, targetType, timeZoneId)
-      case _ => AnsiCast(Literal(v), targetType, timeZoneId)
+      case lit: Expression => Cast.ansiCast(lit, targetType, timeZoneId)
+      case _ => Cast.ansiCast(Literal(v), targetType, timeZoneId)
     }
   }
 

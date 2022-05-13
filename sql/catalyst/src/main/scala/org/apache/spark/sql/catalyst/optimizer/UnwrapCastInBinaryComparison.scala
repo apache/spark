@@ -113,7 +113,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // Not a canonical form. In this case we first canonicalize the expression by swapping the
     // literal and cast side, then process the result and swap the literal and cast again to
     // restore the original order.
-    case BinaryComparison(Literal(_, literalType), Cast(fromExp, toType, _, _))
+    case BinaryComparison(Literal(_, literalType), Cast(fromExp, toType, _, _, _, _))
         if canImplicitlyCast(fromExp, toType, literalType) =>
       def swap(e: Expression): Expression = e match {
         case GreaterThan(left, right) => LessThan(right, left)
@@ -130,7 +130,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // In case both sides have numeric type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
-      Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
+      Cast(fromExp, toType: NumericType, _, _, _, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) =>
       simplifyNumericComparison(be, fromExp, toType, value)
 
@@ -142,7 +142,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
     // type.
     // 3. this rule doesn't optimize In when `in.list` contains an expression that is not literal.
-    case in @ In(Cast(fromExp, toType: NumericType, _, _), list @ Seq(firstLit, _*))
+    case in @ In(Cast(fromExp, toType: NumericType, _, _, _, _), list @ Seq(firstLit, _*))
       if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
 
       // There are 3 kinds of literals in the list:
@@ -185,7 +185,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // The same with `In` expression, the analyzer makes sure that the hset of InSet is already of
     // the same data type, so simply check `fromExp.dataType` can implicitly cast to `toType` and
     // both `fromExp.dataType` and `toType` is numeric type or not.
-    case inSet @ InSet(Cast(fromExp, toType: NumericType, _, _), hset)
+    case inSet @ InSet(Cast(fromExp, toType: NumericType, _, _, _, _), hset)
       if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
 
       // The same with `In`, there are 3 kinds of literals in the hset:
