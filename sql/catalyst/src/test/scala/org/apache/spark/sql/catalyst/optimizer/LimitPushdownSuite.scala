@@ -270,4 +270,10 @@ class LimitPushdownSuite extends PlanTest {
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze),
       x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze)
   }
+
+  test("Push down limit 1 through Offset") {
+    comparePlans(
+      Optimize.execute(testRelation.offset(2).limit(1).analyze),
+      GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
+  }
 }
