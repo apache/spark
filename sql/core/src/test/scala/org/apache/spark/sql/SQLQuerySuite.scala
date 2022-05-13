@@ -4357,6 +4357,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-39177: Query context of getting map value should be serialized to executors" +
+    " when WSCG is off") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("create table t(m map<string, string>) using parquet")
+        sql("insert into t values map('a', 'b')")
+        Seq(
+          "select m['foo'] from t",
+          "select element_at(m, 'foo') from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
+      }
+    }
+  }
+
   test("SPARK-38589: try_avg should return null if overflow happens before merging") {
     val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
       .map(Period.ofMonths)
