@@ -285,7 +285,7 @@ class TypesTests(ReusedSQLTestCase):
             df = self.spark.createDataFrame(data)
             self.assertEqual(Row(f1=[Row(payment=200.5, name="A")], f2=[1, 2]), df.first())
 
-    def test_infer_array_element_type_with_null(self):
+    def test_infer_array_merge_element_types(self):
         ArrayRow = Row("f1", "f2")
 
         data = [ArrayRow([1, None], [None, 2])]
@@ -297,8 +297,17 @@ class TypesTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data)
         self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
 
+        # an array with only null values should raise an error
         data = [ArrayRow([1], [None])]
         self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data))
+
+        # an array with no values should raise an error
+        data = [ArrayRow([1], [])]
+        self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data))
+
+        # an array with conflicting types should raise an error
+        data = [ArrayRow([1, "1"], [None])]
+        self.assertRaises(TypeError, lambda: self.spark.createDataFrame(data))
 
     def test_infer_array_element_type_empty(self):
         ArrayRow = Row("f1")
