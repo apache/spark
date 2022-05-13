@@ -478,17 +478,6 @@ case class ResolveDefaultColumns(
   }
 
   /**
-   * Normalizes a schema field name suitable for use in map lookups.
-   */
-  private def normalizeFieldName(str: String): String = {
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      str
-    } else {
-      str.toLowerCase()
-    }
-  }
-
-  /**
    * Returns a map of the names of fields in a schema to the fields themselves.
    */
   private def mapStructFieldNamesToFields(schema: StructType): Map[String, StructField] = {

@@ -101,6 +101,16 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
+  private val tableWithColumnNamedDefault: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(
+      new StructType()
+        .add("s", StringType)
+        .add("default", StringType))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
   private val v1Table: V1Table = {
     val t = mock(classOf[CatalogTable])
     when(t.schema).thenReturn(new StructType()
@@ -137,6 +147,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "tab2" => table2
         case "charvarchar" => charVarcharTable
         case "defaultvalues" => defaultValues
+        case "tablewithcolumnnameddefault" => tableWithColumnNamedDefault
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -1605,6 +1616,37 @@ class PlanResolutionSuite extends AnalysisTest {
         }.getMessage.contains(
           QueryCompilationErrors
             .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates().getMessage))
+
+        // Ambiguous DEFAULT column reference when the table itself contains a column named
+        // "DEFAULT".
+        val mergeIntoTableWithColumnNamedDefault =
+        s"""
+           |MERGE INTO testcat.tablewithcolumnnameddefault AS target
+           |USING testcat.tab1 AS source
+           |ON default = source.i
+           |WHEN MATCHED AND (target.s = 32) THEN DELETE
+           |WHEN MATCHED AND (target.s = 32)
+           |  THEN UPDATE SET target.s = DEFAULT
+           |WHEN NOT MATCHED AND (source.s='insert')
+           |  THEN INSERT (target.s) values (DEFAULT)
+             """.stripMargin
+        parseAndResolve(mergeIntoTableWithColumnNamedDefault, withDefault = true) match {
+          case m: MergeIntoTable =>
+            val target = m.targetTable
+            val d = target.output.find(_.name == "default").get.asInstanceOf[AttributeReference]
+            m.mergeCondition match {
+              case EqualTo(Cast(l: AttributeReference, _, _, _), _: AttributeReference) =>
+                assert(l.sameRef(d))
+              case Literal(_, BooleanType) => // this is acceptable as a merge condition
+              case other =>
+                fail("unexpected merge condition " + other)
+            }
+            assert(m.matchedActions.length == 2)
+            assert(m.notMatchedActions.length == 1)
+
+          case other =>
+            fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
     }
 
     // DEFAULT columns (explicit):

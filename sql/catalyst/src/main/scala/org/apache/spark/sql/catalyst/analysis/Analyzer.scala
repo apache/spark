@@ -1554,7 +1554,13 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def resolveMergeExprOrFail(e: Expression, p: LogicalPlan): Expression = {
       val resolved = resolveExpressionByPlanChildren(e, p)
       resolved.references.filter { attribute: Attribute =>
-        !attribute.resolved && attribute.name != CURRENT_DEFAULT_COLUMN_NAME }.foreach { a =>
+        !attribute.resolved &&
+          // We exclude attribute references named "DEFAULT" from consideration since they are
+          // handled exclusively by the ResolveDefaultColumns analysis rule. That rule checks the
+          // MERGE command for such references and either replaces each one with a corresponding
+          // value, or returns a custom error message.
+          normalizeFieldName(attribute.name) != normalizeFieldName(CURRENT_DEFAULT_COLUMN_NAME)
+      }.foreach { a =>
         // Note: This will throw error only on unresolved attribute issues,
         // not other resolution errors like mismatched data types.
         val cols = p.inputSet.toSeq.map(_.sql).mkString(", ")
