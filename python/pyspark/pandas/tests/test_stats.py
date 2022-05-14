@@ -181,6 +181,7 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(psdf.sum(axis=1), pdf.sum(axis=1))
             self.assert_eq(psdf.product(axis=1), pdf.product(axis=1))
             self.assert_eq(psdf.kurtosis(axis=1), pdf.kurtosis(axis=1))
+            self.assert_eq(psdf.skew(axis=0), pdf.skew(axis=0), almost=True)
             self.assert_eq(psdf.skew(axis=1), pdf.skew(axis=1))
             self.assert_eq(psdf.mean(axis=1), pdf.mean(axis=1))
             self.assert_eq(psdf.sem(axis=1), pdf.sem(axis=1))
@@ -217,6 +218,11 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
             )
             self.assert_eq(
                 psdf.kurtosis(axis=1, numeric_only=True), pdf.kurtosis(axis=1, numeric_only=True)
+            )
+            self.assert_eq(
+                psdf.skew(axis=0, numeric_only=True),
+                pdf.skew(axis=0, numeric_only=True),
+                almost=True,
             )
             self.assert_eq(
                 psdf.skew(axis=1, numeric_only=True), pdf.skew(axis=1, numeric_only=True)
