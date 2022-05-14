@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
-import org.apache.spark.sql.catalyst.expressions.{Expression, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
@@ -1092,6 +1092,9 @@ case class Range(
   }
 }
 
+/**
+ * A base interface for [[Aggregate]] and [[PartialAggregate]]
+ */
 abstract class AggregateBase(
     val groupingExpressions: Seq[Expression],
     val aggregateExpressions: Seq[NamedExpression],
@@ -1128,10 +1131,13 @@ abstract class AggregateBase(
   def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
-  private[sql] lazy val groupOnly: Boolean = {
+  private[sql] def groupOnly: Boolean = {
     // aggregateExpressions can be empty through Dateset.agg,
     // so we should also check groupingExpressions is non empty
-    groupingExpressions.nonEmpty && aggregateExprs.isEmpty
+    groupingExpressions.nonEmpty && aggregateExpressions.map {
+      case Alias(child, _) => child
+      case e => e
+    }.forall(a => a.foldable || groupingExpressions.exists(g => a.semanticEquals(g)))
   }
 
   private[sql] lazy val aggregateExprs: Seq[AggregateExpression] = {
@@ -1170,6 +1176,9 @@ case class Aggregate(
     copy(child = newChild)
 }
 
+/**
+ * Similar to [[Aggregate]], but only aggregates on the map side, and does not introduce shuffles.
+ */
 case class PartialAggregate(
     override val groupingExpressions: Seq[Expression],
     override val aggregateExpressions: Seq[NamedExpression],

@@ -3865,10 +3865,8 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       Project(cleanedProjectList, child)
 
     case a: AggregateBase =>
-      val cleanedGroupings = a.groupingExpressions.map(trimAliases)
-      val cleanedAggs = a.aggregateExpressions.map(trimNonTopLevelAliases)
-      a.withGroupingExpressions(cleanedGroupings)
-        .withAggregateExpressions(cleanedAggs)
+      a.withGroupingExpressions(a.groupingExpressions.map(trimAliases))
+        .withAggregateExpressions(a.aggregateExpressions.map(trimNonTopLevelAliases))
         .withNewChildren(Seq(a.child))
 
     case Window(windowExprs, partitionSpec, orderSpec, child) =>

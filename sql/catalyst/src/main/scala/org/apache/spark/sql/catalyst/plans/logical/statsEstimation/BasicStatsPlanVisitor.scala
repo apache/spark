@@ -41,7 +41,8 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitAggregate(p: AggregateBase): Statistics = {
     p match {
-      case _: PartialAggregate => p.child.stats
+      case _: PartialAggregate =>
+        p.child.stats
       case _ =>
         AggregateEstimation.estimate(p).getOrElse(fallback(p))
     }
