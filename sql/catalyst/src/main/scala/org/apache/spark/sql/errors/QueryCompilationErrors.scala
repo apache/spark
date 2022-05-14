@@ -2404,10 +2404,6 @@ object QueryCompilationErrors extends QueryErrorsBase {
       "Sinks cannot request distribution and ordering in continuous execution mode")
   }
 
-  def noSuchFunctionError(database: String, funcInfo: String): Throwable = {
-    new AnalysisException(s"$database does not support function: $funcInfo")
-  }
-
   // Return a more descriptive error message if the user tries to nest a DEFAULT column reference
   // inside some other expression (such as DEFAULT + 1) in an INSERT INTO command's VALUES list;
   // this is not allowed.
