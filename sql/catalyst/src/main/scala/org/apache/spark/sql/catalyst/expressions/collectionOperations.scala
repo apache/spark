@@ -3073,15 +3073,15 @@ object Sequence {
     protected def stepSplitCode(
          stepMonths: String, stepDays: String, stepMicros: String, step: String): String
 
+    private val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+
     private val addIntervalCode = outerDataType match {
-      case TimestampType | DateType =>
-        "org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval"
-      case TimestampNTZType =>
-        "org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampNTZAddInterval"
+      case TimestampType | DateType => s"$dtu.timestampAddInterval"
+      case TimestampNTZType => s"$dtu.timestampNTZAddInterval"
     }
 
-    private val daysToMicrosCode = "org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros"
-    private val microsToDaysCode = "org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays"
+    private val daysToMicrosCode = s"$dtu.daysToMicros"
+    private val microsToDaysCode = s"$dtu.microsToDays"
 
     override def genCode(
         ctx: CodegenContext,

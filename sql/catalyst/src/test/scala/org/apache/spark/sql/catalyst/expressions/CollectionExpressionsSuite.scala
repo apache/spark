@@ -980,13 +980,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       }
     }
 
-    // however, time zone should still affect sequences generated using hours interval, especially
-    // if the sequence's start-stop includes a "spring forward".
-    // take, for example, the following Spark date arithmetic:
+    // However, time zone should still affect sequences generated using hours interval,
+    // especially if the sequence's start-stop includes a "spring forward".
+    // Take, for example, the following Spark date arithmetic:
     //   select cast(date'2022-03-09' + interval '4' days '23' hour as date) as x;
-    // in the America/Los_Angeles time zone, it returns 2022-03-14.
-    // in the UTC time zone, it instead returns 2022-03-13.
-    // the sequence function should be consistent with the date arithmetic
+    // In the America/Los_Angeles time zone, it returns 2022-03-14.
+    // In the UTC time zone, it instead returns 2022-03-13.
+    // The sequence function should be consistent with the date arithmetic.
     DateTimeTestUtils.withDefaultTimeZone(LA) {
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2022-03-09")),
