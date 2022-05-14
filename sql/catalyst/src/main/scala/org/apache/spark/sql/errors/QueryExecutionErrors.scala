@@ -115,13 +115,34 @@ object QueryExecutionErrors extends QueryErrorsBase {
         context))
   }
 
-  def invalidInputSyntaxForNumericError(
+  def invalidInputInCastToDatetimeError(
+      value: Any,
+      from: DataType,
+      to: DataType,
+      errorContext: String): Throwable = {
+    val valueString = toSQLValue(value, from)
+    new SparkDateTimeException(
+      errorClass = "CAST_INVALID_INPUT",
+      messageParameters = Array(
+        toSQLType(from),
+        toSQLValue(value, from),
+        toSQLType(to),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        errorContext))
+  }
+
+  def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
       errorContext: String): SparkNumberFormatException = {
-    new SparkNumberFormatException(errorClass = "INVALID_SYNTAX_FOR_CAST",
-      messageParameters = Array(toSQLType(to), toSQLValue(s, StringType),
-        SQLConf.ANSI_ENABLED.key, errorContext))
+    new SparkNumberFormatException(
+      errorClass = "CAST_INVALID_INPUT",
+      messageParameters = Array(
+        toSQLType(StringType),
+        toSQLValue(s, StringType),
+        toSQLType(to),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        errorContext))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -1011,13 +1032,6 @@ object QueryExecutionErrors extends QueryErrorsBase {
       " DateTimeFormatter. You can form a valid datetime pattern" +
       " with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
       e)
-  }
-
-  def cannotCastToDateTimeError(
-      value: Any, from: DataType, to: DataType, errorContext: String): Throwable = {
-    val valueString = toSQLValue(value, from)
-    new SparkDateTimeException("INVALID_SYNTAX_FOR_CAST",
-      Array(toSQLType(to), valueString, SQLConf.ANSI_ENABLED.key, errorContext))
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
