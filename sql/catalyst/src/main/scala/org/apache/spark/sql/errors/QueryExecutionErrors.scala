@@ -95,9 +95,13 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def castingCauseOverflowError(t: Any, from: DataType, to: DataType): ArithmeticException = {
-    new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
+    new SparkArithmeticException(
+      errorClass = "CAST_CAUSES_OVERFLOW",
       messageParameters = Array(
-        toSQLValue(t, from), toSQLType(to), toSQLConf(SQLConf.ANSI_ENABLED.key)))
+        toSQLType(from),
+        toSQLValue(t, from),
+        toSQLType(to),
+        toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def cannotChangeDecimalPrecisionError(
