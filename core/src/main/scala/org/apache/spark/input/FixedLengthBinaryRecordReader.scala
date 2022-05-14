@@ -17,13 +17,13 @@
 
 package org.apache.spark.input
 
-import java.io.IOException
-
 import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{BytesWritable, LongWritable}
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
+
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * FixedLengthBinaryRecordReader is returned by FixedLengthBinaryInputFormat.
@@ -86,7 +86,7 @@ private[spark] class FixedLengthBinaryRecordReader
     // check compression
     val codec = new CompressionCodecFactory(conf).getCodec(file)
     if (codec != null) {
-      throw new IOException("FixedLengthRecordReader does not support reading compressed files")
+      throw SparkCoreErrors.unsupportedReadCompressedFileError("FixedLengthRecordReader")
     }
     // get the record length
     recordLength = FixedLengthBinaryInputFormat.getRecordLength(context)

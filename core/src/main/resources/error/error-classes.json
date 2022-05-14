@@ -266,6 +266,9 @@
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
   },
+  "UNSUPPORTED_READ_COMPRESSED_FILE" : {
+    "message" : [ "<component> does not support reading compressed files." ]
+  },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [ "The save mode <saveMode> is not supported for: " ],
     "subClass" : {
