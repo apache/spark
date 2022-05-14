@@ -1524,8 +1524,7 @@ class Frame(object, metaclass=ABCMeta):
                 count_scol > 2,
                 F.skewness(spark_column)
                 * F.sqrt(1 - 1 / count_scol)
-                * count_scol
-                / (count_scol - 2),
+                * (count_scol / (count_scol - 2)),
             ).otherwise(None)
 
         return self._reduce_for_stat_function(
