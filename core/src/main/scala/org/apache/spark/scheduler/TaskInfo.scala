@@ -83,6 +83,27 @@ class TaskInfo(
     _accumulables = newAccumulables
   }
 
+  private[spark] var successRecords = 0L
+  private[spark] var successRunTime = 0L
+
+  private[spark] def setRecords(records: Long): Unit = {
+    successRecords = records
+  }
+
+  private[spark] def setRunTime(runTime: Long): Unit = {
+    successRunTime = runTime
+  }
+
+  private[spark] var taskProgressRate = 0.0D
+
+  private[spark] def getTaskProgressRate(): Double = taskProgressRate
+
+  private[spark] def setRunTaskProgressRate(taskProgressRate: Double): Unit = {
+    if (!finished) {
+      this.taskProgressRate = taskProgressRate
+    }
+  }
+
   /**
    * The time when the task has completed successfully (including the time to remotely fetch
    * results, if necessary).

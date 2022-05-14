@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.util.Arrays
 
-import org.apache.spark.status.{AppStatusListener, AppStatusStore}
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.StageStatus
 import org.apache.spark.util.Utils
 
@@ -119,9 +119,5 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
         exec.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0L),
         exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L))
     }.toArray
-  }
-
-  def getAppStatusListener: Option[AppStatusListener] = {
-    store.listener
   }
 }

@@ -33,7 +33,6 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
-import org.apache.spark.status.AppStatusListener
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
@@ -117,11 +116,12 @@ private[spark] class TaskSetManager(
   private val executorDecommissionKillInterval =
     conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(TimeUnit.SECONDS.toMillis)
 
-  private[scheduler] val inefficientTaskCalculator = if (conf.get(SPECULATION_INEFFICIENT_ENABLE)) {
-    new InefficientTaskCalculator()
-  } else {
-    null
-  }
+  private[scheduler] val inefficientTaskCalculator =
+    if (conf.get(SPECULATION_ENABLED) && conf.get(SPECULATION_INEFFICIENT_ENABLE)) {
+      new InefficientTaskCalculator()
+    } else {
+      null
+    }
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -141,7 +141,6 @@ private[spark] class TaskSetManager(
   val minShare = 0
   var priority = taskSet.priority
   val stageId = taskSet.stageId
-  val stageAttemptId = taskSet.stageAttemptId
   val name = "TaskSet_" + taskSet.id
   var parent: Pool = null
   private var totalResultSize = 0L
@@ -1276,25 +1275,23 @@ private[spark] class TaskSetManager(
     var taskProgressThreshold = 0.0
     var updateSealed = false
     private var lastComputeMs = -1L
-    private var appStatusListener: AppStatusListener = null
-
-    private def hasSetAppStatusListener(): Boolean = {
-      if (appStatusListener != null) {
-        true
-      } else {
-        val statusTracker = sched.sc.statusTracker
-        if (statusTracker != null) {
-          appStatusListener = statusTracker.getAppStatusListener.get
-        }
-        appStatusListener != null
-      }
-    }
 
     def maybeRecompute(nowMs: Long): Unit = {
-      if (hasSetAppStatusListener && !updateSealed &&
-        (lastComputeMs <= 0 || nowMs > lastComputeMs + speculationTaskStatsCacheInterval)) {
-        val (progressRate, numSuccessTasks): (Double, Int) =
-          appStatusListener.getStageSuccessTaskProgress(stageId, stageAttemptId)
+      if (!updateSealed && (lastComputeMs <= 0 ||
+        nowMs > lastComputeMs + speculationTaskStatsCacheInterval)) {
+        var successRecords = 0L
+        var successRunTime = 0L
+        var numSuccessTasks = 0L
+        taskInfos.values.filter(_.status == "SUCCESS").foreach { taskInfo =>
+          successRecords += taskInfo.successRecords
+          successRunTime += taskInfo.successRunTime
+          numSuccessTasks += 1
+        }
+        val progressRate = if (successRunTime > 0) {
+          successRecords / (successRunTime / 1000.0)
+        } else {
+          0.0
+        }
         if (progressRate > 0.0) {
           taskProgressThreshold = progressRate * speculationTaskProgressMultiplier
           if (numSuccessTasks >= minFinishedForSpeculation) {
@@ -1313,7 +1310,7 @@ private[spark] class TaskSetManager(
       if (taskProgressThreshold <= 0.0) {
         true
       } else {
-        val currentTaskProgressRate = appStatusListener.getRunTaskProgressRate(tid)
+        val currentTaskProgressRate = taskInfo.getTaskProgressRate()
         val isInefficientTask = currentTaskProgressRate < taskProgressThreshold
         if (isInefficientTask) {
           logInfo(s"Marking task ${taskInfo.index} in stage ${taskSet.id} " +

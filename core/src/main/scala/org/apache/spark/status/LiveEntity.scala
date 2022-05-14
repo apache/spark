@@ -130,26 +130,12 @@ private class LiveTask(
 
   var errorMessage: Option[String] = None
 
-  @volatile var taskProgressRate = 0.0
-
-  private def updateTaskProgressRate(metrics: TaskMetrics): Unit = {
-    if (metrics.executorRunTime > 0) {
-      val records = metrics.inputMetrics.recordsRead + metrics.shuffleReadMetrics.recordsRead
-      taskProgressRate = records / (metrics.executorRunTime / 1000.0)
-    }
-  }
-
   /**
    * Update the metrics for the task and return the difference between the previous and new
    * values.
    */
-  def updateMetrics(
-      metrics: TaskMetrics,
-      calculateTaskProgressRate: Boolean = false): v1.TaskMetrics = {
+  def updateMetrics(metrics: TaskMetrics): v1.TaskMetrics = {
     if (metrics != null) {
-      if (calculateTaskProgressRate) {
-        updateTaskProgressRate(metrics)
-      }
       val old = this.metrics
       val newMetrics = createMetrics(
         metrics.executorDeserializeTime,

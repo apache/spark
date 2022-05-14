@@ -24,8 +24,9 @@ import scala.language.existentials
 import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{LongAccumulator, ThreadUtils, Utils}
 
@@ -36,6 +37,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   extends Logging {
 
   private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
+  private val calculateTaskProgressRate = sparkEnv.conf.get(config.SPECULATION_ENABLED) &&
+    sparkEnv.conf.get(config.SPECULATION_INEFFICIENT_ENABLE)
 
   // Exposed for testing.
   protected val getTaskResultExecutor: ExecutorService =
@@ -102,6 +105,13 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               (deserializedResult, size)
           }
 
+          val info = taskSetManager.taskInfos(tid)
+          // fast return
+          if (info.finished) {
+            return
+          }
+          var records = 0L
+          var runTime = 0L
           // Set the task result size in the accumulator updates received from the executors.
           // We need to do this here on the driver because if we did this on the executors then
           // we would have to serialize the result again after updating the size.
@@ -112,8 +122,22 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               acc.setValue(size.toLong)
               acc
             } else {
+              if (calculateTaskProgressRate) {
+                if (a.name == Some(shuffleRead.RECORDS_READ) ||
+                  a.name == Some(input.RECORDS_READ)) {
+                  val acc = a.asInstanceOf[LongAccumulator]
+                  records += acc.value
+                } else if (a.name == Some(InternalAccumulator.EXECUTOR_RUN_TIME)) {
+                  val acc = a.asInstanceOf[LongAccumulator]
+                  runTime = acc.value
+                }
+              }
               a
             }
+          }
+          if (calculateTaskProgressRate) {
+            info.setRecords(records)
+            info.setRunTime(runTime)
           }
 
           scheduler.handleSuccessfulTask(taskSetManager, tid, result)

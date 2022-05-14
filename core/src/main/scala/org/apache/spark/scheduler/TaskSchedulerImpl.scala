@@ -27,6 +27,7 @@ import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark._
+import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
@@ -102,6 +103,9 @@ private[spark] class TaskSchedulerImpl(
   // at least this amount of time. This is to avoid the overhead of launching speculative copies
   // of tasks that are very short.
   val MIN_TIME_TO_SPECULATION = conf.get(SPECULATION_MIN_THRESHOLD)
+
+  private val calculateTaskProgressRate = conf.get(SPECULATION_ENABLED) &&
+    conf.get(SPECULATION_INEFFICIENT_ENABLE)
 
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
@@ -853,8 +857,11 @@ private[spark] class TaskSchedulerImpl(
     // (taskId, stageId, stageAttemptId, accumUpdates)
     val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = {
       accumUpdates.flatMap { case (id, updates) =>
-        val accInfos = updates.map(acc => acc.toInfo(Some(acc.value), None))
         Option(taskIdToTaskSetManager.get(id)).map { taskSetMgr =>
+          val (accInfos, taskProgressRate) = getTaskAccumulableInfosAndProgressRate(updates)
+          if (calculateTaskProgressRate && taskProgressRate > 0.0) {
+            taskSetMgr.taskInfos.get(id).foreach(_.setRunTaskProgressRate(taskProgressRate))
+          }
           (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
         }
       }
@@ -862,6 +869,29 @@ private[spark] class TaskSchedulerImpl(
     dagScheduler.executorHeartbeatReceived(execId, accumUpdatesWithTaskIds, blockManagerId,
       executorUpdates)
   }
+
+ private def getTaskAccumulableInfosAndProgressRate(
+      updates: Seq[AccumulatorV2[_, _]]): (Seq[AccumulableInfo], Double) = {
+   var records = 0L
+   var runTime = 0L
+   val accInfos = updates.map { acc =>
+     if (calculateTaskProgressRate && acc.name.isDefined) {
+       val name = acc.name.get
+       if (name == shuffleRead.RECORDS_READ || name == input.RECORDS_READ) {
+         records += acc.value.asInstanceOf[Long]
+       } else if (name == InternalAccumulator.EXECUTOR_RUN_TIME) {
+         runTime = acc.value.asInstanceOf[Long]
+       }
+     }
+     acc.toInfo(Some(acc.value), None)
+   }
+   val taskProgressRate = if (calculateTaskProgressRate && runTime > 0) {
+     records / (runTime / 1000.0)
+   } else {
+     0.0D
+   }
+   (accInfos, taskProgressRate)
+ }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {
     taskSetManager.handleTaskGettingResult(tid)
