@@ -96,7 +96,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def castingCauseOverflowError(t: Any, from: DataType, to: DataType): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "CAST_CAUSES_OVERFLOW",
+      errorClass = "CAST_OVERFLOW",
       messageParameters = Array(
         toSQLType(from),
         toSQLValue(t, from),
@@ -124,7 +124,6 @@ object QueryExecutionErrors extends QueryErrorsBase {
       from: DataType,
       to: DataType,
       errorContext: String): Throwable = {
-    val valueString = toSQLValue(value, from)
     new SparkDateTimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
