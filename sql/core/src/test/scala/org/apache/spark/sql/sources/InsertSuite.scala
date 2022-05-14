@@ -1513,47 +1513,68 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("INSERT rows, ALTER TABLE ADD COLUMNS with DEFAULTs, then SELECT them: Positive tests") {
-    val createTableIntCol = "create table t(i int) using csv"
-    // Adding a column with a valid default value into a table containing existing data works
-    // successfully. Querying data from the altered table returns the new value.
-    withTable("t") {
-      sql(createTableIntCol)
-      sql("insert into t values(42)")
-      sql("alter table t add column (s string default concat('abc', 'def'))")
-      checkAnswer(spark.table("t"), Row(42, "abcdef"))
-    }
-    // Same as above, but a following command alters the column to change the default value. This
-    // returns the previous value, not the new value, since the behavior semantics are the same as
-    // if the first command had performed a backfill of the new default value in the existing rows.
-    withTable("t") {
-      sql(createTableIntCol)
-      sql("insert into t values(42)")
-      sql("alter table t add column (s string default concat('abc', 'def'))")
-      sql("alter table t alter column s set default concat('ghi', 'jkl')")
-      checkAnswer(spark.table("t"), Row(42, "abcdef"))
-    }
-    // Adding a column with a default value and then inserting explicit NULL values works. Querying
-    // data back from the table differentiates between the explicit NULL values and default values.
-    withTable("t") {
-      sql(createTableIntCol)
-      sql("insert into t values(42)")
-      sql("alter table t add column (s string default concat('abc', 'def'))")
-      sql("insert into t values(null, null)")
-      sql("alter table t add column (x boolean default true)")
-      checkAnswer(spark.table("t"),
-        Seq(
-          Row(42, "abcdef", true),
-          Row(null, null, true)))
-    }
-    // Adding two columns where only the first has a valid default value works successfully.
-    // Querying data from the altered table returns the default value as well as NULL for the second
-    // column.
-    withTable("t") {
-      sql(createTableIntCol)
-      sql("insert into t values(42)")
-      sql("alter table t add column (s string default concat('abc', 'def'))")
-      sql("alter table t add column (x string)")
-      checkAnswer(spark.table("t"), Row(42, "abcdef", null))
+    // This represents one test configuration comprising a data source and sequence of options.
+    case class Config(
+        dataSource: String,
+        options: Seq[(String, String)] = Seq.empty[(String, String)])
+    Seq(
+      Config(dataSource = "csv")
+    ).foreach { config: Config =>
+      config.options.foreach { case kv: (String, String) =>
+        withSQLConf(kv) {
+          val createTableIntCol = s"create table t(a string, i int) using ${config.dataSource}"
+          // Adding a column with a valid default value into a table containing existing data works
+          // successfully. Querying data from the altered table returns the new value.
+          withTable("t") {
+            sql(createTableIntCol)
+            sql("insert into t values('xyz', 42)")
+            sql("alter table t add column (s string default concat('abc', 'def'))")
+            checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef"))
+            checkAnswer(sql("select i, s from t"), Row(42, "abcdef"))
+          }
+          // Same as above, but a following command alters the column to change the default value.
+          // This returns the previous value, not the new value, since the behavior semantics are
+          // the same as if the first command had performed a backfill of the new default value in
+          // the existing rows.
+          withTable("t") {
+            sql(createTableIntCol)
+            sql("insert into t values('xyz', 42)")
+            sql("alter table t add column (s string default concat('abc', 'def'))")
+            sql("alter table t alter column s set default concat('ghi', 'jkl')")
+            checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef"))
+            checkAnswer(sql("select i, s from t"), Row(42, "abcdef"))
+          }
+          // Adding a column with a default value and then inserting explicit NULL values works.
+          // Querying data back from the table differentiates between the explicit NULL values and
+          // default values.
+          withTable("t") {
+            sql(createTableIntCol)
+            sql("insert into t values('xyz', 42)")
+            sql("alter table t add column (s string default concat('abc', 'def'))")
+            sql("insert into t values(null, null, null)")
+            sql("alter table t add column (x boolean default true)")
+            checkAnswer(spark.table("t"),
+              Seq(
+                Row("xyz", 42, "abcdef", true),
+                Row(null, null, null, true)))
+            checkAnswer(sql("select i, s, x from t"),
+              Seq(
+                Row(42, "abcdef", true),
+                Row(null, null, true)))
+          }
+          // Adding two columns where only the first has a valid default value works successfully.
+          // Querying data from the altered table returns the default value as well as NULL for the
+          // second column.
+          withTable("t") {
+            sql(createTableIntCol)
+            sql("insert into t values('xyz', 42)")
+            sql("alter table t add column (s string default concat('abc', 'def'))")
+            sql("alter table t add column (x string)")
+            checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef", null))
+            checkAnswer(sql("select i, s, x from t"), Row(42, "abcdef", null))
+          }
+        }
+      }
     }
   }
 

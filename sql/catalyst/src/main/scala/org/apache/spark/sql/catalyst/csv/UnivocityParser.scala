@@ -319,7 +319,7 @@ class UnivocityParser(
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
           // Use the corresponding DEFAULT value associated with the column, if any.
-          row.update(i, parsedSchema.defaultValues(i))
+          row.update(i, requiredSchema.defaultValues(i))
       }
       i += 1
     }
