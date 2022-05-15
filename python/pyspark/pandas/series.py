@@ -2176,14 +2176,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> "Series":
-        return self._interpolate(method=method, limit=limit, limit_direction=limit_direction)
+        return self._interpolate(
+            method=method, limit=limit, limit_direction=limit_direction, limit_area=limit_area
+        )
 
     def _interpolate(
         self,
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> "Series":
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
@@ -2193,6 +2197,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             limit_direction not in ["forward", "backward", "both"]
         ):
             raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
+        if (limit_area is not None) and (limit_area not in ["inside", "outside"]):
+            raise ValueError("invalid limit_area: '{}'".format(limit_area))
 
         if not self.spark.nullable and not isinstance(
             self.spark.data_type, (FloatType, DoubleType)
@@ -2259,6 +2265,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
                 pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
                 pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
+
+        if limit_area == "inside":
+            pad_head_cond = SF.lit(False)
+            pad_tail_cond = SF.lit(False)
+        elif limit_area == "outside":
+            fill_cond = SF.lit(False)
 
         cond = self.isnull().spark.column
         scol = (
