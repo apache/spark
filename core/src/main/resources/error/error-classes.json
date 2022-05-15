@@ -22,6 +22,10 @@
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [ "Cannot up cast <value> from <sourceType> to <targetType>.\n<details>" ]
   },
+  "CAST_INVALID_INPUT" : {
+    "message" : [ "The <sourceType> <value> cannot be cast to <targetType> because it is malformed. To return NULL instead, use `try_cast`. If necessary set <config> to false to bypass this error.<details>" ],
+    "sqlState" : "42000"
+  },
   "CAST_OVERFLOW" : {
     "message" : [ "The <sourceType> <value> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <config> to false to bypass this error." ],
     "sqlState" : "22005"
@@ -131,10 +135,6 @@
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [ "Invalid SQL syntax: <inputString>" ],
-    "sqlState" : "42000"
-  },
-  "CAST_INVALID_INPUT" : {
-    "message" : [ "The <sourceType> <value> cannot be cast to <targetType> because it is malformed. To return NULL instead, use `try_cast`. If necessary set <config> to false to bypass this error.<details>" ],
     "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
