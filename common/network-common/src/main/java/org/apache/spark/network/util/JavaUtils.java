@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -365,15 +366,57 @@ public class JavaUtils {
   }
 
   /**
-   * Create a temporary directory inside `java.io.tmpdir`. The directory will be
-   * automatically deleted when the VM shuts down.
+   * Create a temporary directory inside `java.io.tmpdir` with default namePrefix "spark".
+   * The directory will be automatically deleted when the VM shuts down.
    */
   public static File createTempDir() throws IOException {
-    Path baseDir = new File(System.getProperty("java.io.tmpdir")).toPath();
-    String namePrefix = "spark";
-    File dir = Files.createTempDirectory(baseDir, namePrefix).toFile();
+    return createTempDir(System.getProperty("java.io.tmpdir"), "spark");
+  }
+
+  /**
+   * Create a temporary directory inside the given parent directory. The directory will be
+   * automatically deleted when the VM shuts down.
+   */
+  public static File createTempDir(String root, String namePrefix) throws IOException {
+    if (root == null) root = System.getProperty("java.io.tmpdir");
+    if (namePrefix == null) namePrefix = "spark";
+    File dir = createDirectory(root, namePrefix);
     dir.deleteOnExit();
     return dir;
+  }
+
+  /**
+   * Create a directory inside the given parent directory with default namePrefix "spark".
+   * The directory is guaranteed to be newly created, and is not marked for automatic deletion.
+   */
+  public static File createDirectory(String root) throws IOException {
+    return createDirectory(root, "spark");
+  }
+
+  /**
+   * Create a directory inside the given parent directory. The directory is guaranteed to be
+   * newly created, and is not marked for automatic deletion.
+   */
+  public static File createDirectory(String root, String namePrefix) throws IOException {
+    if (namePrefix == null) namePrefix = "spark";
+    int attempts = 0;
+    int maxAttempts = 10;
+    File dir = null;
+    while (dir == null) {
+      attempts += 1;
+      if (attempts > maxAttempts) {
+        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
+          maxAttempts + " attempts!");
+      }
+      try {
+        dir = new File(root, namePrefix + "-" + UUID.randomUUID());
+        Files.createDirectories(dir.toPath());
+      } catch (IOException | SecurityException e) {
+        logger.error("Failed to create directory " + dir, e);
+        dir = null;
+      }
+    }
+    return dir.getCanonicalFile();
   }
 
   /**
