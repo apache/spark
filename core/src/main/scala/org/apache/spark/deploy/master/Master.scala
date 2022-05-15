@@ -533,7 +533,7 @@ private[deploy] class Master(
               && oldState != ExecutorState.DECOMMISSIONED
               && appInfo.incrementRetryCount() >= maxExecutorRetries
               && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
-              val execs = appInfo.executorsPerResourceProfileId.values.flatMap(_.values)
+              val execs = appInfo.executors().values
               if (!execs.exists(_.state == ExecutorState.RUNNING)) {
                 logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
                   s"${appInfo.retryCount} times; removing it")
@@ -736,9 +736,9 @@ private[deploy] class Master(
     // resource profiles also with a simple FIFO scheduler, resource profile with smaller id
     // first.
     for (app <- waitingApps) {
-      // TODO: refactor the code here, prepare schedule information inside [[ApplicationInfo]]
-      logInfo(s"Start scheduling for app ${app.id} with rpIds: ${app.allResourceProfileIds()}")
-      for (rpId <- app.allResourceProfileIds()) {
+      val rpIds = app.rpIdToResourceProfile.keys
+      logInfo(s"Start scheduling for app ${app.id} with rpIds: $rpIds")
+      for (rpId <- rpIds) {
         val resourceProfile = app.getResourceProfileById(rpId)
         val coresPerExecutor = resourceProfile.getExecutorCores.getOrElse(1)
         logInfo(s"Scheduling for rp: $rpId => $resourceProfile")
@@ -750,12 +750,10 @@ private[deploy] class Master(
             .filter(canLaunchExecutor(_, resourceProfile))
             .sortBy(_.coresFree).reverse
           val appMayHang = waitingApps.length == 1 &&
-            waitingApps.head.executorsPerResourceProfileId.values.forall(_.isEmpty) &&
-            usableWorkers.isEmpty
+            waitingApps.head.executors().isEmpty && usableWorkers.isEmpty
           if (appMayHang) {
             logWarning(s"App ${app.id} requires more resource than any of Workers could have.")
           }
-          // TODO: schedule base on resource profile.
           val assignedCores =
             scheduleExecutorsOnWorkers(app, resourceProfile, usableWorkers, spreadOutApps)
 
@@ -1052,7 +1050,7 @@ private[deploy] class Master(
       completedApps += app // Remember it in our history
       waitingApps -= app
 
-      for (exec <- app.executorsPerResourceProfileId.values.flatMap(_.values)) {
+      for (exec <- app.executors().values) {
         killExecutor(exec)
       }
       app.markFinished(state)
@@ -1083,11 +1081,13 @@ private[deploy] class Master(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Boolean = {
     idToApp.get(appId) match {
       case Some(appInfo) =>
-        appInfo.handleRequestExecutors(resourceProfileToTotalExecs)
+        logInfo(s"Application $appId requested executors: ${resourceProfileToTotalExecs}.")
+        appInfo.requestExecutors(resourceProfileToTotalExecs)
         schedule()
         true
       case None =>
-        // logWarning(s"Unknown application $appId requested $requestedTotal total executors.")
+        logWarning(s"Unknown application $appId requested executors:" +
+          s" ${resourceProfileToTotalExecs}.")
         false
     }
   }
@@ -1105,9 +1105,9 @@ private[deploy] class Master(
     idToApp.get(appId) match {
       case Some(appInfo) =>
         logInfo(s"Application $appId requests to kill executors: " + executorIds.mkString(", "))
-        val (known, unknown) = executorIds.partition(appInfo.allExecutors().contains)
+        val (known, unknown) = executorIds.partition(appInfo.executors().contains)
         known.foreach { executorId =>
-          val desc = appInfo.allExecutors()(executorId)
+          val desc = appInfo.executors()(executorId)
           appInfo.removeExecutor(desc)
           killExecutor(desc)
         }

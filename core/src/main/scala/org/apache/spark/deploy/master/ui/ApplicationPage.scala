@@ -76,7 +76,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
                     data-placement="top">
                 <strong>Executor Limit: </strong>
                 {
-                  if (app.executorLimit == Int.MaxValue) "Unlimited" else app.executorLimit
+                  if (app.getExecutorLimit == Int.MaxValue) "Unlimited" else app.getExecutorLimit
                 }
                 ({app.executors.size} granted)
               </span>

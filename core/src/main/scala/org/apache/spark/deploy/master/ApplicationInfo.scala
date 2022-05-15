@@ -18,10 +18,9 @@
 package org.apache.spark.deploy.master
 
 import java.util.Date
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
@@ -39,25 +38,15 @@ private[spark] class ApplicationInfo(
   extends Serializable {
 
   @transient var state: ApplicationState.Value = _
-  @transient var executors: mutable.HashMap[Int, ExecutorDesc] = _
   @transient var removedExecutors: ArrayBuffer[ExecutorDesc] = _
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
 
-  @transient val executorsPerResourceProfileId =
-    new HashMap[Int, mutable.HashMap[Int, ExecutorDesc]]()
-
-  @GuardedBy("this")
-  private[deploy] val targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]
-
-  @GuardedBy("this")
-  private[deploy] val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
-
-  // A cap on the number of executors this application can have at any given time.
-  // By default, this is infinite. Only after the first allocation request is issued by the
-  // application will this be set to a finite value. This is used for dynamic allocation.
-  @transient private[master] var executorLimit: Int = _
+  @transient var executorsPerResourceProfileId:
+    mutable.HashMap[Int, mutable.HashMap[Int, ExecutorDesc]] = _
+  @transient var targetNumExecutorsPerResourceProfileId: mutable.HashMap[Int, Int] = _
+  @transient var rpIdToResourceProfile: mutable.HashMap[Int, ResourceProfile] = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -70,28 +59,26 @@ private[spark] class ApplicationInfo(
 
   private def init(): Unit = {
     state = ApplicationState.WAITING
-    executors = new mutable.HashMap[Int, ExecutorDesc]
     coresGranted = 0
     endTime = -1L
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
-    executorLimit = desc.initialExecutorLimit.getOrElse(Integer.MAX_VALUE)
+    val initialExecutorLimit = desc.initialExecutorLimit.getOrElse(Integer.MAX_VALUE)
+
+    rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]()
     rpIdToResourceProfile(DEFAULT_RESOURCE_PROFILE_ID) = desc.defaultProfile
-    targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = executorLimit
-    executorsPerResourceProfileId.put(
-      DEFAULT_RESOURCE_PROFILE_ID, mutable.HashMap[Int, ExecutorDesc]())
+
+    targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]()
+    targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = initialExecutorLimit
+
+    executorsPerResourceProfileId = new mutable.HashMap[Int, mutable.HashMap[Int, ExecutorDesc]]()
+    executorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) =
+      new mutable.HashMap[Int, ExecutorDesc]()
   }
 
-  private[deploy] def handleRequestExecutors(
+  private[deploy] def requestExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
-    // TODO: handle the multi-resource profiles.
-    val requestedTotal = resourceProfileToTotalExecs.find { case (profile, _) => profile.id == 0 }
-      .map { case (_, num) => num }
-      .getOrElse(0)
-
-    executorLimit = requestedTotal
-
     resourceProfileToTotalExecs.foreach { case (rp, num) =>
       if (!rpIdToResourceProfile.contains(rp.id)) {
         rpIdToResourceProfile(rp.id) = rp
@@ -102,17 +89,19 @@ private[spark] class ApplicationInfo(
       }
 
       if (!executorsPerResourceProfileId.contains(rp.id)) {
-        executorsPerResourceProfileId.put(rp.id, new mutable.HashMap[Int, ExecutorDesc]())
+        executorsPerResourceProfileId(rp.id) = new mutable.HashMap[Int, ExecutorDesc]()
       }
     }
   }
 
-  private[deploy] def allExecutors(): mutable.HashMap[Int, ExecutorDesc] = {
-    executorsPerResourceProfileId.values.reduce((x, y) => x ++ y)
+  // Request executors with default resource profile.
+  // For testing.
+  private[deploy] def requestExecutors(totalNum: Int): Unit = {
+    targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = totalNum
   }
 
-  private[deploy] def allResourceProfileIds(): Seq[Int] = {
-    targetNumExecutorsPerResourceProfileId.keySet.toSeq.sorted
+  private[deploy] def executors(): mutable.HashMap[Int, ExecutorDesc] = {
+    executorsPerResourceProfileId.values.reduce((x, y) => x ++ y)
   }
 
   private[deploy] def getResourceProfileById(rpId: Int): ResourceProfile = {
@@ -179,10 +168,13 @@ private[spark] class ApplicationInfo(
   }
 
   /**
-   * Return the limit on the number of executors this application can have.
+   * Return the limit on the number of executors with default resource profile
+   * this application can have.
    * For testing only.
    */
-  private[deploy] def getExecutorLimit: Int = executorLimit
+  private[deploy] def getExecutorLimit: Int = {
+    targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID)
+  }
 
   def duration: Long = {
     if (endTime != -1) {

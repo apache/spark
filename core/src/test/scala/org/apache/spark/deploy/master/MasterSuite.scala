@@ -598,11 +598,11 @@ class MasterSuite extends SparkFunSuite
   private def schedulingWithExecutorLimit(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(256)
-    appInfo.executorLimit = 0
+    appInfo.requestExecutors(0)
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 2
+    appInfo.requestExecutors(2)
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 5
+    appInfo.requestExecutors(5)
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     assert(scheduledCores2 === Array(10, 10, 0))
@@ -612,11 +612,11 @@ class MasterSuite extends SparkFunSuite
   private def schedulingWithExecutorLimitAndMaxCores(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(256, maxCores = Some(16))
-    appInfo.executorLimit = 0
+    appInfo.requestExecutors(0)
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 2
+    appInfo.requestExecutors(2)
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 5
+    appInfo.requestExecutors(5)
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     if (spreadOut) {
@@ -631,11 +631,11 @@ class MasterSuite extends SparkFunSuite
   private def schedulingWithExecutorLimitAndCoresPerExecutor(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(256, coresPerExecutor = Some(4))
-    appInfo.executorLimit = 0
+    appInfo.requestExecutors(0)
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 2
+    appInfo.requestExecutors(2)
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 5
+    appInfo.requestExecutors(5)
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     if (spreadOut) {
@@ -650,11 +650,11 @@ class MasterSuite extends SparkFunSuite
   private def schedulingWithEverything(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(256, coresPerExecutor = Some(4), maxCores = Some(18))
-    appInfo.executorLimit = 0
+    appInfo.requestExecutors(0)
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 2
+    appInfo.requestExecutors(2)
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 5
+    appInfo.requestExecutors(5)
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     if (spreadOut) {
