@@ -644,9 +644,9 @@ select cast('\t\n xyz \t\r' as boolean)
 -- !query schema
 struct<>
 -- !query output
-java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: 	
- xyz 	. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkRuntimeException
+[CAST_INVALID_INPUT] The value '	
+ xyz 	' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('\t\n xyz \t\r' as boolean)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
