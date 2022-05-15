@@ -134,6 +134,19 @@ object QueryExecutionErrors extends QueryErrorsBase {
         errorContext))
   }
 
+  def invalidInputSyntaxForBooleanError(
+      s: UTF8String,
+      errorContext: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "CAST_INVALID_INPUT",
+      messageParameters = Array(
+        toSQLValue(s, StringType),
+        toSQLType(StringType),
+        toSQLType(BooleanType),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        errorContext))
+  }
+
   def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
@@ -1167,14 +1180,6 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def userDefinedTypeNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
     new SparkException(s"${udt.userClass.getName} is not annotated with " +
       "SQLUserDefinedType nor registered with UDTRegistration.}")
-  }
-
-  def invalidInputSyntaxForBooleanError(
-      s: UTF8String,
-      errorContext: String): UnsupportedOperationException = {
-    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s. " +
-      s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
-      "to false to bypass this error." + errorContext)
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
