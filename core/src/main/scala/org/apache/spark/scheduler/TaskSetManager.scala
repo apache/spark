@@ -27,6 +27,8 @@ import scala.math.max
 import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.InternalAccumulator
+import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
@@ -784,6 +786,25 @@ private[spark] class TaskSetManager(
     }
   }
 
+  def setTaskRecordsAndRunTime(
+      info: TaskInfo,
+      result: DirectTaskResult[_]): Unit = {
+    var records = 0L
+    var runTime = 0L
+    result.accumUpdates.foreach { a =>
+      if (a.name == Some(shuffleRead.RECORDS_READ) ||
+        a.name == Some(input.RECORDS_READ)) {
+        val acc = a.asInstanceOf[LongAccumulator]
+        records += acc.value
+      } else if (a.name == Some(InternalAccumulator.EXECUTOR_RUN_TIME)) {
+        val acc = a.asInstanceOf[LongAccumulator]
+        runTime = acc.value
+      }
+    }
+    info.setRecords(records)
+    info.setRunTime(runTime)
+  }
+
   /**
    * Marks a task as successful and notifies the DAGScheduler that the task has ended.
    */
@@ -812,6 +833,9 @@ private[spark] class TaskSetManager(
       return
     }
 
+    if (inefficientTaskCalculator != null) {
+      setTaskRecordsAndRunTime(info, result)
+    }
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
     if (speculationEnabled) {
       successfulTaskDurations.insert(info.duration)
