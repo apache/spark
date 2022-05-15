@@ -116,16 +116,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidInputSyntaxForNumericError(
-      e: NumberFormatException,
-      errorContext: String): NumberFormatException = {
-    new NumberFormatException(s"${e.getMessage}. To return NULL instead, use 'try_cast'. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error." + errorContext)
-  }
-
-  def invalidInputSyntaxForNumericError(
       to: DataType,
       s: UTF8String,
-      errorContext: String): NumberFormatException = {
+      errorContext: String): SparkNumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_SYNTAX_FOR_CAST",
       messageParameters = Array(toSQLType(to), toSQLValue(s, StringType),
         SQLConf.ANSI_ENABLED.key, errorContext))
@@ -1532,6 +1525,10 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new UnsupportedOperationException(s"Invalid output mode: $outputMode")
   }
 
+  def invalidCatalogNameError(name: String): Throwable = {
+    new SparkException(s"Invalid catalog name: $name")
+  }
+
   def catalogPluginClassNotFoundError(name: String): Throwable = {
     new CatalogNotFoundException(
       s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
@@ -1544,8 +1541,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def catalogPluginClassNotFoundForCatalogError(
       name: String,
-      pluginClassName: String): Throwable = {
-    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName", e)
   }
 
   def catalogFailToFindPublicNoArgConstructorError(
@@ -1955,9 +1953,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
         s" to at least $numWrittenParts.")
   }
 
-  def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
+  def invalidNumberFormatError(valueType: String, input: String, format: String): Throwable = {
     new IllegalArgumentException(
-      s"The input string '$input' does not match the given number format: '$format'")
+      s"The input $valueType '$input' does not match the given number format: '$format'")
   }
 
   def multipleBucketTransformsError(): Throwable = {
