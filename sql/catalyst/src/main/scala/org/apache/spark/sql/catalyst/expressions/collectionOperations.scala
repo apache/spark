@@ -3012,6 +3012,22 @@ object Sequence {
       case TimestampNTZType => timestampNTZAddInterval
     }
 
+    private def toMicros(value: Long, scale: Long): Long = {
+      if (scale == MICROS_PER_DAY) {
+        daysToMicros(value.toInt, zoneId)
+      } else {
+        value * scale
+      }
+    }
+
+    private def fromMicros(value: Long, scale: Long): Long = {
+      if (scale == MICROS_PER_DAY) {
+        microsToDays(value, zoneId).toLong
+      } else {
+        value / scale
+      }
+    }
+
     override def eval(input1: Any, input2: Any, input3: Any): Array[T] = {
       val start = input1.asInstanceOf[T]
       val stop = input2.asInstanceOf[T]
@@ -3035,8 +3051,9 @@ object Sequence {
         // about a month length in days and a day length in microseconds
         val intervalStepInMicros =
           stepMicros + stepMonths * microsPerMonth + stepDays * MICROS_PER_DAY
-        val startMicros: Long = num.toLong(start) * scale
-        val stopMicros: Long = num.toLong(stop) * scale
+
+        val startMicros: Long = toMicros(num.toLong(start), scale)
+        val stopMicros: Long = toMicros(num.toLong(stop), scale)
 
         val maxEstimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, input3, intervalStepInMicros)
@@ -3048,7 +3065,8 @@ object Sequence {
         var i = 0
 
         while (t < exclusiveItem ^ stepSign < 0) {
-          arr(i) = fromLong(t / scale)
+          val result = fromMicros(t, scale)
+          arr(i) = fromLong(result)
           i += 1
           t = addInterval(startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
         }
@@ -3061,12 +3079,15 @@ object Sequence {
     protected def stepSplitCode(
          stepMonths: String, stepDays: String, stepMicros: String, step: String): String
 
+    private val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+
     private val addIntervalCode = outerDataType match {
-      case TimestampType | DateType =>
-        "org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval"
-      case TimestampNTZType =>
-        "org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampNTZAddInterval"
+      case TimestampType | DateType => s"$dtu.timestampAddInterval"
+      case TimestampNTZType => s"$dtu.timestampNTZAddInterval"
     }
+
+    private val daysToMicrosCode = s"$dtu.daysToMicros"
+    private val microsToDaysCode = s"$dtu.microsToDays"
 
     override def genCode(
         ctx: CodegenContext,
@@ -3111,6 +3132,24 @@ object Sequence {
 
       val stepSplits = stepSplitCode(stepMonths, stepDays, stepMicros, step)
 
+      val toMicrosCode = if (scale == MICROS_PER_DAY) {
+        s"""
+          |  final long $startMicros = $daysToMicrosCode((int) $start, $zid);
+          |  final long $stopMicros = $daysToMicrosCode((int) $stop, $zid);
+          |""".stripMargin
+      } else {
+        s"""
+          |  final long $startMicros = $start * ${scale}L;
+          |  final long $stopMicros = $stop * ${scale}L;
+          |""".stripMargin
+      }
+
+      val fromMicrosCode = if (scale == MICROS_PER_DAY) {
+        s"($elemType) $microsToDaysCode($t, $zid)"
+      } else {
+        s"($elemType) ($t / ${scale}L)"
+      }
+
       s"""
          |$stepSplits
          |
@@ -3122,8 +3161,7 @@ object Sequence {
          |} else if ($stepMonths == 0 && $stepDays == 0 && ${scale}L == 1) {
          |  ${backedSequenceImpl.genCode(ctx, start, stop, stepMicros, arr, elemType)};
          |} else {
-         |  final long $startMicros = $start * ${scale}L;
-         |  final long $stopMicros = $stop * ${scale}L;
+         |  $toMicrosCode
          |
          |  $sequenceLengthCode
          |
@@ -3135,7 +3173,7 @@ object Sequence {
          |  int $i = 0;
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
-         |    $arr[$i] = ($elemType) ($t / ${scale}L);
+         |    $arr[$i] = $fromMicrosCode;
          |    $i += 1;
          |    $t = $addIntervalCode(
          |       $startMicros, $i * $stepMonths, $i * $stepDays, $i * $stepMicros, $zid);
