@@ -257,7 +257,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase with QueryErrorsBase {
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[SparkRuntimeException](
-      cast(l, to), castErrMsg(l, BooleanType))
+      cast(l, to), """cannot be cast to "BOOLEAN"""")
   }
 
   test("ANSI mode: cast string to boolean with parse error") {
@@ -336,8 +336,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase with QueryErrorsBase {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
-        checkExceptionInExpression[UnsupportedOperationException](
-          ret, "invalid input syntax for type boolean")
+        checkExceptionInExpression[SparkRuntimeException](
+          ret, """cannot be cast to "BOOLEAN"""")
       }
     }
   }
@@ -484,7 +484,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase with QueryErrorsBase {
         StructField("c", BooleanType, nullable = false))))
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
-        checkExceptionInExpression[UnsupportedOperationException](
+        checkExceptionInExpression[SparkRuntimeException](
           ret,
           castErrMsg("blya", BooleanType))
       }

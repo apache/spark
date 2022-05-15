@@ -453,7 +453,8 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       val errMsg = intercept[DateTimeException] {
         formatter.parse("x123")
       }.getMessage
-      assert(errMsg.contains("""Invalid input syntax for type "TIMESTAMP": 'x123'"""))
+      assert(errMsg.contains(
+        """The value 'x123' of the type "STRING" cannot be cast to "TIMESTAMP""""))
     }
   }
 }
