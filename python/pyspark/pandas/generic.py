@@ -1516,7 +1516,16 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.skewness(spark_column)
+
+            count_scol = F.count(F.when(~spark_column.isNull(), 1).otherwise(None))
+            # refer to the Pandas implementation 'nanskew'
+            # https://github.com/pandas-dev/pandas/blob/main/pandas/core/nanops.py#L1152
+            return F.when(
+                count_scol > 2,
+                F.skewness(spark_column)
+                * F.sqrt(1 - 1 / count_scol)
+                * (count_scol / (count_scol - 2)),
+            ).otherwise(None)
 
         return self._reduce_for_stat_function(
             skew,
