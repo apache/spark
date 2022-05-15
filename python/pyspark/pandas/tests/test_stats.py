@@ -236,6 +236,20 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 pdf.sem(axis=1, ddof=0, numeric_only=True),
             )
 
+    def test_skew_numerical_stability(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 1, 1, 1, 1],
+                "B": [1.0, np.nan, 4, 2, 5],
+                "C": [-6.0, -7, np.nan, np.nan, 10],
+                "D": [1.2, np.nan, np.nan, 9.8, np.nan],
+                "E": [1, np.nan, np.nan, np.nan, np.nan],
+                "F": [np.nan, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.skew(), pdf.skew(), almost=True)
+
     def test_corr(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):

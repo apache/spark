@@ -31,6 +31,7 @@ import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.PandasSkewness
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -121,6 +122,10 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def timestampDiff(unit: String, start: Column, end: Column): Column = {
     Column(TimestampDiff(unit, start.expr, end.expr))
+  }
+
+  def pandasSkew(e: Column): Column = {
+    Column(PandasSkewness(e.expr).toAggregateExpression(false))
   }
 }
 

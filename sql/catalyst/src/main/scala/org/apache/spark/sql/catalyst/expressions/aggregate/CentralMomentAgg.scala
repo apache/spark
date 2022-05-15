@@ -338,3 +338,33 @@ case class Kurtosis(
   override protected def withNewChildInternal(newChild: Expression): Kurtosis =
     copy(child = newChild)
 }
+
+/**
+ * Skewness in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
+ * Refer to pandas.core.nanops.nanskew.
+ */
+case class PandasSkewness(child: Expression)
+  extends CentralMomentAgg(child, true) {
+
+  override def prettyName: String = "pandas_skewness"
+
+  override protected def momentOrder = 3
+
+  override val evaluateExpression: Expression = {
+    // floating point error
+    //
+    // Pandas #18044 in _libs/windows.pyx calc_skew follow this behavior
+    // to fix the fperr to treat m2 <1e-14 as zero
+    //
+    // see https://github.com/pandas-dev/pandas/issues/18044 for details
+    val checkedM2 = If(abs(m2) < 1e-14, Literal(0.0), m2)
+    val checkedM3 = If(abs(m3) < 1e-14, Literal(0.0), m3)
+
+    If(n < 3, Literal.create(null, DoubleType),
+      If(checkedM2 === 0.0, Literal(0.0),
+        sqrt(n - 1) * (n / (n - 2)) * checkedM3 / sqrt(checkedM2 * checkedM2 * checkedM2)))
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): PandasSkewness =
+    copy(child = newChild)
+}
