@@ -148,16 +148,16 @@ object QueryCompilationErrors extends QueryErrorsBase {
     val quantifier = if (desiredType.equals("array")) "an" else "a"
     new AnalysisException(
       errorClass = "UNSUPPORTED_DESERIALIZER",
-      messageParameters = Array("DATA_TYPE_MISMATCH", quantifier, desiredType,
-        dataType.catalogString))
+      messageParameters =
+        Array("DATA_TYPE_MISMATCH", quantifier, desiredType, toSQLType(dataType)))
   }
 
   def fieldNumberMismatchForDeserializerError(
       schema: StructType, maxOrdinal: Int): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_DESERIALIZER",
-      messageParameters = Array("FIELD_NUMBER_MISMATCH", schema.catalogString,
-        (maxOrdinal + 1).toString))
+      messageParameters =
+        Array("FIELD_NUMBER_MISMATCH", toSQLType(schema), (maxOrdinal + 1).toString))
   }
 
   def upCastFailureError(

@@ -119,7 +119,7 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = Seq($"arr".int)
     assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
       """[UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH] """ +
-      """The deserializer is not supported: need an array field but got int.""")
+      """The deserializer is not supported: need an array field but got "INT".""")
   }
 
   test("the real type is not compatible with encoder schema: array element type") {
@@ -136,7 +136,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"nestedArr".array(new StructType().add("arr", "int")))
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
         """[UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH] """ +
-        """The deserializer is not supported: need an array field but got int.""")
+        """The deserializer is not supported: need an array field but got "INT".""")
     }
 
     withClue("nested array element type is not compatible") {
@@ -170,16 +170,16 @@ class EncoderResolutionSuite extends PlanTest {
     {
       val attrs = Seq($"a".string, $"b".long, $"c".int)
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
-        """[UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH] """ +
-        """The deserializer is not supported: try to map struct<a:string,b:bigint,c:int> """ +
-        """to Tuple2, but failed as the number of fields does not line up.""")
+        """[UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH] The deserializer is not supported: """ +
+        """try to map "STRUCT<a: STRING, b: BIGINT, c: INT>" to Tuple2, """ +
+        """but failed as the number of fields does not line up.""")
     }
 
     {
       val attrs = Seq($"a".string)
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
         """[UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH] """ +
-        """The deserializer is not supported: try to map struct<a:string> to Tuple2, """ +
+        """The deserializer is not supported: try to map "STRUCT<a: STRING>" to Tuple2, """ +
         """but failed as the number of fields does not line up.""")
     }
   }
@@ -190,16 +190,16 @@ class EncoderResolutionSuite extends PlanTest {
     {
       val attrs = Seq($"a".string, $"b".struct($"x".long, $"y".string, $"z".int))
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
-        """[UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH] """ +
-        """The deserializer is not supported: try to map struct<x:bigint,y:string,z:int> """ +
-        """to Tuple2, but failed as the number of fields does not line up.""")
+        """[UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH] The deserializer is not supported: """ +
+        """try to map "STRUCT<x: BIGINT, y: STRING, z: INT>" to Tuple2, """ +
+        """but failed as the number of fields does not line up.""")
     }
 
     {
       val attrs = Seq($"a".string, $"b".struct($"x".long))
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
-        """[UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH] """ +
-        """The deserializer is not supported: try to map struct<x:bigint> to Tuple2, """ +
+        """[UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH] The deserializer is not supported: """ +
+        """try to map "STRUCT<x: BIGINT>" to Tuple2, """ +
         """but failed as the number of fields does not line up.""")
     }
   }

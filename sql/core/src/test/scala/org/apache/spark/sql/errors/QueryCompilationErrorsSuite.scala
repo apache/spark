@@ -556,7 +556,7 @@ class QueryCompilationErrorsSuite
       exception = e,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("DATA_TYPE_MISMATCH"),
-      msg = "The deserializer is not supported: need an array field but got int.")
+      msg = "The deserializer is not supported: need an array field but got \"INT\".")
   }
 
   test("UNSUPPORTED_DESERIALIZER: " +
@@ -570,8 +570,8 @@ class QueryCompilationErrorsSuite
       exception = e1,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
-      msg = "The deserializer is not supported: try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.")
+      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+        "to Tuple3, but failed as the number of fields does not line up.")
 
     val e2 = intercept[AnalysisException] {
       ds.as[Tuple1[String]]
@@ -580,8 +580,8 @@ class QueryCompilationErrorsSuite
       exception = e2,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
-      msg = "The deserializer is not supported: try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.")
+      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+        "to Tuple1, but failed as the number of fields does not line up.")
   }
 }
 
