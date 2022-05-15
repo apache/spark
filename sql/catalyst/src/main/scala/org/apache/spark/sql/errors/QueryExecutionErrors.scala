@@ -98,8 +98,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkArithmeticException(
       errorClass = "CAST_OVERFLOW",
       messageParameters = Array(
-        toSQLType(from),
         toSQLValue(t, from),
+        toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
@@ -127,8 +127,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkDateTimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
-        toSQLType(from),
         toSQLValue(value, from),
+        toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key),
         errorContext))
@@ -141,8 +141,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkNumberFormatException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
-        toSQLType(StringType),
         toSQLValue(s, StringType),
+        toSQLType(StringType),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key),
         errorContext))
