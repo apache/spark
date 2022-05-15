@@ -357,12 +357,11 @@ case class PandasSkewness(child: Expression)
     // to fix the fperr to treat m2 <1e-14 as zero
     //
     // see https://github.com/pandas-dev/pandas/issues/18044 for details
-    val checkedM2 = If(abs(m2) < 1e-14, Literal(0.0), m2)
-    val checkedM3 = If(abs(m3) < 1e-14, Literal(0.0), m3)
+    val _m2 = If(abs(m2) < 1e-14, Literal(0.0), m2)
+    val _m3 = If(abs(m3) < 1e-14, Literal(0.0), m3)
 
     If(n < 3, Literal.create(null, DoubleType),
-      If(checkedM2 === 0.0, Literal(0.0),
-        sqrt(n - 1) * (n / (n - 2)) * checkedM3 / sqrt(checkedM2 * checkedM2 * checkedM2)))
+      If(_m2 === 0.0, Literal(0.0), sqrt(n - 1) * (n / (n - 2)) * _m3 / sqrt(_m2 * _m2 * _m2)))
   }
 
   override protected def withNewChildInternal(newChild: Expression): PandasSkewness =

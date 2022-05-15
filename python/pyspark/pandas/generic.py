@@ -1519,7 +1519,7 @@ class Frame(object, metaclass=ABCMeta):
                 )
 
             sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-            return Column(sql_utils.pandasSkew(spark_column._jc))
+            return Column(sql_utils.pandasSkewness(spark_column._jc))
 
         return self._reduce_for_stat_function(
             skew,
