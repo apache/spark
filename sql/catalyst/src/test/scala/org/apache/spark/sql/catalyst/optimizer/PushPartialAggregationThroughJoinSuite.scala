@@ -74,6 +74,16 @@ object customAnalyze { // scalastyle:ignore
 
 class PushPartialAggregationThroughJoinSuite extends PlanTest {
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SQLConf.get.setConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.unsetConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED)
+  }
+
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
@@ -86,6 +96,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
         PushPredicateThroughJoin,
         ColumnPruning,
         PushPartialAggregationThroughJoin,
+        ResolveTimeZone,
         SimplifyCasts,
         CollapseProject) :: Nil
   }
@@ -259,29 +270,6 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
             }
 
             comparePlans(Optimize.execute(originalQuery), correctAnswer)
-          }
-        }
-      }
-    }
-  }
-
-  test("Push the right side of left semi/anti Join") {
-    Seq(-1, 10000).foreach { threshold =>
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
-        Seq(LeftSemi, LeftAnti).foreach { joinType =>
-          val originalQuery = testRelation1
-            .join(testRelation2, joinType = joinType, condition = Some('a === 'x))
-            .analyze
-
-          val correctRight = PartialAggregate(Seq('x), Seq('x), testRelation2.select('x)).as("r")
-          val correctAnswer = testRelation1.join(correctRight, joinType = joinType,
-            condition = Some('a === 'x))
-            .analyzePlan
-
-          if (threshold < 0) {
-            comparePlans(Optimize.execute(originalQuery), correctAnswer)
-          } else {
-            comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
           }
         }
       }

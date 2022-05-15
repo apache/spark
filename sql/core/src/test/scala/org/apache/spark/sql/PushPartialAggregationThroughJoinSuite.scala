@@ -88,7 +88,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
         Seq(true, false).foreach { ansi =>
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """
@@ -126,7 +126,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
         Seq(true, false).foreach { ansi =>
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """
@@ -156,7 +156,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
         Seq(true, false).foreach { ansi =>
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """
@@ -190,7 +190,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
         Seq(true, false).foreach { ansi =>
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """
@@ -224,7 +224,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
         Seq(true, false).foreach { ansi =>
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PUSH_PARTIAL_AGGREGATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """

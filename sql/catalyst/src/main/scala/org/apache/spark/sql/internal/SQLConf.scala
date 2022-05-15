@@ -832,10 +832,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val PUSH_PARTIAL_AGGREGATION_ENABLED =
-    buildConf("spark.sql.optimizer.pushPartialAggregation.enabled")
+  val PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED =
+    buildConf("spark.sql.optimizer.partialAggregationOptimization.enabled")
     .internal()
-    .doc("When true, the query optimizer will push the partial aggregation through Join.")
+    .doc("When true, the query optimizer will introduce partial aggregations to optimize query. " +
+      "This optimization applies to: " +
+      "1. Push down partial sum, count, avg, min, max, first and last through inner join " +
+      "2. Partial deduplicate the children of join if the aggregation itself is group only " +
+      "3. Partial deduplicate the right side of left semi/anti join.")
     .version("3.4.0")
     .booleanConf
     .createWithDefault(false)
@@ -4246,6 +4250,9 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def partialAggregationOptimizationEnabled: Boolean =
+    getConf(PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 

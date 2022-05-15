@@ -27,14 +27,13 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, JOIN}
 import org.apache.spark.sql.types.{DecimalType, NumericType}
 
 /**
  * Push down the partial aggregation through join. It supports the following cases:
- * 1. Push down partial sum, count, avg, min, max, first and last through join.
+ * 1. Push down partial sum, count, avg, min, max, first and last through inner join.
  * 2. Partial deduplicate the children of join if the aggregation itself is group only.
- * 3. Partial deduplicate the right side of left semi/anti join.
  *
  * For example:
  * CREATE TABLE t1(a int, b int, c int) using parquet;
@@ -105,8 +104,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     expr.mapChildren(_.transformUp {
       case e @ Sum(_, useAnsiAdd, dt) if aliasMap.contains(e.canonicalized) =>
         val value = aliasMap(e.canonicalized).toAttribute
-        val multiply = Multiply(value,
-          cnt.toAttribute.cast(value.dataType, Some(conf.sessionLocalTimeZone)))
+        val multiply = Multiply(value, cnt.toAttribute.cast(value.dataType))
         e.dataType match {
           case decType: DecimalType =>
             // Do not use DecimalPrecision because it may be change the precision and scale
@@ -190,14 +188,10 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
                   DecimalPrecision.decimalAndDecimal()(
                     Divide(
                       CheckOverflowInSum(sum, avg.sumDataType.asInstanceOf[DecimalType],
-                        !useAnsiAdd),
-                      count.cast(DecimalType.LongDecimal, Some(conf.sessionLocalTimeZone)),
-                      failOnError = false)).cast(avg.dataType, Some(conf.sessionLocalTimeZone))
+                        !useAnsiAdd), count.cast(DecimalType.LongDecimal),
+                      failOnError = false)).cast(avg.dataType)
                 case _ =>
-                  Divide(
-                    sum.cast(avg.dataType, Some(conf.sessionLocalTimeZone)),
-                    count.cast(avg.dataType, Some(conf.sessionLocalTimeZone)),
-                    failOnError = false)
+                  Divide(sum.cast(avg.dataType), count.cast(avg.dataType), failOnError = false)
               }
             case _ => ae
           }
@@ -353,66 +347,65 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(JOIN), ruleId) {
-    case agg @ Aggregate(_, _, j: Join)
-        if j.children.exists(_.isInstanceOf[AggregateBase]) =>
-      agg
-    case agg @ Aggregate(_, _, Project(_, j: Join))
-        if j.children.exists(_.isInstanceOf[AggregateBase]) =>
-      agg
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.partialAggregationOptimizationEnabled) {
+      plan
+    } else {
+      plan.transformWithPruning(_.containsAllPatterns(AGGREGATE, JOIN), ruleId) {
+        case agg @ Aggregate(_, _, j: Join)
+          if j.children.exists(_.isInstanceOf[AggregateBase]) =>
+          agg
+        case agg @ Aggregate(_, _, Project(_, j: Join))
+          if j.children.exists(_.isInstanceOf[AggregateBase]) =>
+          agg
 
-    case agg @ PartialAggregate(_, _, j: Join)
-        if j.children.exists(_.isInstanceOf[AggregateBase]) =>
-      agg
-    case agg @ PartialAggregate(_, _, Project(_, j: Join))
-        if j.children.exists(_.isInstanceOf[AggregateBase]) =>
-      agg
+        case agg @ PartialAggregate(_, _, j: Join)
+          if j.children.exists(_.isInstanceOf[AggregateBase]) =>
+          agg
+        case agg @ PartialAggregate(_, _, Project(_, j: Join))
+          if j.children.exists(_.isInstanceOf[AggregateBase]) =>
+          agg
 
-    case agg @ PartialAggregate(_, aggregateExps,
-      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
-        if agg.aggregateExprs.isEmpty =>
-      val newChild = j.copy(
-        left = PartialAggregate(left.output, left.output, left),
-        right = PartialAggregate(right.output, right.output, right))
-      Project(aggregateExps, newChild)
+        case agg @ PartialAggregate(_, aggregateExps,
+          j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
+            if agg.aggregateExprs.isEmpty =>
+          val newChild = j.copy(
+            left = PartialAggregate(left.output, left.output, left),
+            right = PartialAggregate(right.output, right.output, right))
+          Project(aggregateExps, newChild)
 
-    case agg @ PartialAggregate(_, aggregateExps, p @ Project(_,
-      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
-        if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
-      val newChild = j.copy(
-        left = PartialAggregate(left.output, left.output, left),
-        right = PartialAggregate(right.output, right.output, right))
-      Project(aggregateExps, p.copy(child = newChild))
+        case agg @ PartialAggregate(_, aggregateExps, p @ Project(_,
+          j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
+            if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
+          val newChild = j.copy(
+            left = PartialAggregate(left.output, left.output, left),
+            right = PartialAggregate(right.output, right.output, right))
+          Project(aggregateExps, p.copy(child = newChild))
 
-    case agg @ Aggregate(_, aggregateExps,
-      j @ Join(_, _, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
-        if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
-      agg.copy(child = pushDistinctThroughJoin(j))
+        case agg @ Aggregate(_, aggregateExps,
+          j @ Join(_, _, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
+            if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
+          agg.copy(child = pushDistinctThroughJoin(j))
 
-    case agg @ Aggregate(_, aggregateExps, p @ Project(_,
-      j @ Join(_, _, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
-        if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
-      agg.copy(child = p.copy(child = pushDistinctThroughJoin(j)))
+        case agg @ Aggregate(_, aggregateExps, p @ Project(_,
+          j @ Join(_, _, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
+            if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
+          agg.copy(child = p.copy(child = pushDistinctThroughJoin(j)))
 
-    case agg @ Aggregate(groupExps, aggregateExps,
-      j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _))
-        if groupExps.forall(_.isInstanceOf[Attribute]) && aggregateExps.forall(_.deterministic) &&
-          leftKeys.nonEmpty && supportPushDownAgg(agg.aggregateExprs, left, right) =>
-      pushAggThroughJoin(agg, j.output, leftKeys, rightKeys, j)
+        case agg @ Aggregate(groupExps, aggregateExps,
+          j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _))
+            if groupExps.forall(_.isInstanceOf[Attribute]) && leftKeys.nonEmpty &&
+              aggregateExps.forall(_.deterministic) &&
+              supportPushDownAgg(agg.aggregateExprs, left, right) =>
+          pushAggThroughJoin(agg, j.output, leftKeys, rightKeys, j)
 
-    case agg @ Aggregate(groupExps, aggregateExps, Project(projectList,
-      j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _)))
-        if groupExps.forall(_.isInstanceOf[Attribute]) && aggregateExps.forall(_.deterministic) &&
-          projectList.forall(_.deterministic) && leftKeys.nonEmpty &&
-          supportPushDownAgg(agg.aggregateExprs, left, right) =>
-      pushAggThroughJoin(agg, projectList, leftKeys, rightKeys, j)
-
-    case j @ Join(_, _: AggregateBase, _, _, _) =>
-      j
-    case j @ Join(_, Project(_, _: AggregateBase), _, _, _) =>
-      j
-    case j @ Join(_, right, LeftSemiOrAnti(_), _, _) if !canPlanAsBroadcastHashJoin(j, conf) =>
-      j.copy(right = PartialAggregate(right.output, right.output, right))
+        case agg @ Aggregate(groupExps, aggregateExps, Project(projectList,
+          j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _)))
+            if groupExps.forall(_.isInstanceOf[Attribute]) && leftKeys.nonEmpty &&
+              aggregateExps.forall(_.deterministic) && projectList.forall(_.deterministic) &&
+              supportPushDownAgg(agg.aggregateExprs, left, right) =>
+          pushAggThroughJoin(agg, projectList, leftKeys, rightKeys, j)
+      }
     }
+  }
 }
