@@ -3409,8 +3409,8 @@ class Frame(object, metaclass=ABCMeta):
             If limit is specified, consecutive NaNs will be filled with this restriction. One of:
 
             * None: No fill restriction.
-            * ‘inside’: Only fill NaNs surrounded by valid values (interpolate).
-            * ‘outside’: Only fill NaNs outside valid values (extrapolate).
+            * 'inside': Only fill NaNs surrounded by valid values (interpolate).
+            * 'outside': Only fill NaNs outside valid values (extrapolate).
 
         Returns
         -------
