@@ -119,7 +119,7 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = Seq($"arr".int)
     assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
       """[UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH] """ +
-      """The deserializer is not supported: need an array field but got "INT".""")
+      """The deserializer is not supported: need an "ARRAY" field but got "INT".""")
   }
 
   test("the real type is not compatible with encoder schema: array element type") {
@@ -136,7 +136,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"nestedArr".array(new StructType().add("arr", "int")))
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
         """[UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH] """ +
-        """The deserializer is not supported: need an array field but got "INT".""")
+        """The deserializer is not supported: need an "ARRAY" field but got "INT".""")
     }
 
     withClue("nested array element type is not compatible") {

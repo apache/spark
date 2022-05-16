@@ -556,7 +556,7 @@ class QueryCompilationErrorsSuite
       exception = e,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("DATA_TYPE_MISMATCH"),
-      msg = "The deserializer is not supported: need an array field but got \"INT\".")
+      msg = """The deserializer is not supported: need an "ARRAY" field but got "INT".""")
   }
 
   test("UNSUPPORTED_DESERIALIZER: " +

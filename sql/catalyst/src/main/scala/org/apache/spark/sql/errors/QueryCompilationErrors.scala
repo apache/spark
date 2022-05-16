@@ -149,7 +149,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_DESERIALIZER",
       messageParameters =
-        Array("DATA_TYPE_MISMATCH", quantifier, desiredType, toSQLType(dataType)))
+        Array("DATA_TYPE_MISMATCH", quantifier, toSQLType(desiredType), toSQLType(dataType)))
   }
 
   def fieldNumberMismatchForDeserializerError(
