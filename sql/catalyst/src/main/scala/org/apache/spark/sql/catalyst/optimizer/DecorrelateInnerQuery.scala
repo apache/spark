@@ -104,7 +104,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
     def isSupported(e: Expression): Boolean = e match {
       case _: Attribute => true
       // Allow Cast expressions that guarantee 1:1 mapping.
-      case Cast(a: Attribute, dataType, _, _, _, _) => Cast.canUpCast(a.dataType, dataType)
+      case Cast(a: Attribute, dataType, _, _) => Cast.canUpCast(a.dataType, dataType)
       case _ => false
     }
 

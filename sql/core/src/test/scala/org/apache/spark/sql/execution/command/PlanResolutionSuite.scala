@@ -1115,10 +1115,8 @@ class PlanResolutionSuite extends AnalysisTest {
             // Note that when resolving DEFAULT column references, the analyzer will insert literal
             // NULL values if the corresponding table does not define an explicit default value for
             // that column. This is intended.
-            Assignment(i: AttributeReference, Cast(Literal(null, _), IntegerType, _, true,
-              SQLConf.STORE_ASSIGNMENT_POLICY.key, _)),
-            Assignment(s: AttributeReference, Cast(Literal(null, _), StringType, _, true,
-              SQLConf.STORE_ASSIGNMENT_POLICY.key, _))),
+            Assignment(i: AttributeReference, Cast(Literal(null, _), IntegerType, _, true)),
+            Assignment(s: AttributeReference, Cast(Literal(null, _), StringType, _, true))),
           None) =>
           assert(i.name == "i")
           assert(s.name == "s")
@@ -1147,8 +1145,7 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed9 match {
         case UpdateTable(
         _,
-        Seq(Assignment(i: AttributeReference, Cast(Literal(null, _), StringType, _, true,
-          SQLConf.STORE_ASSIGNMENT_POLICY.key, _))),
+        Seq(Assignment(i: AttributeReference, Cast(Literal(null, _), StringType, _, true))),
         None) =>
           assert(i.name == "i")
 

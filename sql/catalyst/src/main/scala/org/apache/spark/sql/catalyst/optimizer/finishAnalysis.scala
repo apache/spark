@@ -129,7 +129,7 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
     TimestampNTZType -> convertSpecialTimestampNTZ)
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressionsWithPruning(_.containsPattern(CAST)) {
-      case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _, _, _)
+      case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
         if e.foldable && e.dataType == StringType =>
         Option(e.eval())
           .flatMap(s => conv(dt)(s.toString, cast.zoneId))

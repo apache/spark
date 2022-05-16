@@ -93,7 +93,7 @@ class V2ExpressionBuilder(
       } else {
         None
       }
-    case Cast(child, dataType, _, true, _, _) =>
+    case Cast(child, dataType, _, true) =>
       generateExpression(child).map(v => new V2Cast(v, dataType))
     case Abs(child, true) => generateExpression(child)
       .map(v => new GeneralScalarExpression("ABS", Array[V2Expression](v)))
