@@ -38,7 +38,9 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * This current provides the following extension points:
  *
  * <ul>
+ * <li>Pre Analyzer Rules.</li>
  * <li>Analyzer Rules.</li>
+ * <li>Post-hoc Analyzer Rules.</li>
  * <li>Check Analysis Rules.</li>
  * <li>Optimizer Rules.</li>
  * <li>Pre CBO Rules.</li>
@@ -47,7 +49,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>(External) Catalog listeners.</li>
  * <li>Columnar Rules.</li>
  * <li>Adaptive Query Stage Preparation Rules.</li>
- * <li>Adaptive Query Execution Runtime Rules.</li>
+ * <li>Adaptive Query Execution Runtime Optimizer Rules.</li>
  * </ul>
  *
  * The extensions can be used by calling `withExtensions` on the [[SparkSession.Builder]], for
