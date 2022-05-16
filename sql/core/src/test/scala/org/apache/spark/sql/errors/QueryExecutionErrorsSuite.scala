@@ -25,8 +25,6 @@ import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructType, TimestampType}
-import org.apache.spark.sql.util.ArrowUtils
 
 class QueryExecutionErrorsSuite extends QueryTest
   with ParquetTest with OrcTest with SharedSparkSession {
@@ -226,18 +224,6 @@ class QueryExecutionErrorsSuite extends QueryTest
             |""".stripMargin)
       }
     }
-  }
-
-  test("UNSUPPORTED_OPERATION: timeZoneId not specified while converting TimestampType to Arrow") {
-    val schema = new StructType().add("value", TimestampType)
-    val e = intercept[SparkUnsupportedOperationException] {
-      ArrowUtils.toArrowSchema(schema, null)
-    }
-
-    assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
-    assert(e.getMessage === "The operation is not supported: " +
-      "\"TIMESTAMP\" must supply timeZoneId parameter " +
-      "while converting to the arrow timestamp type.")
   }
 
   test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
