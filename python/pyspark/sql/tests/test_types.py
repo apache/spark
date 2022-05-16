@@ -303,7 +303,6 @@ class TypesTests(ReusedSQLTestCase):
             {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
         ):
             # Legacy: f2 schema inferred as an array of nulls, should raise error
-            self.assertRaises(ValueError, lambda: self.spark.createDataFrame(nestedRdd))
             self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data))
 
         # an array with only null values should raise an error
@@ -358,9 +357,6 @@ class TypesTests(ReusedSQLTestCase):
             with self.sql_conf(
                 {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
             ):
-                df = self.spark.createDataFrame(nestedRdd)
-                self.assertEqual(Row(f1=[Row(payment=200.5), Row(payment=None)]), df.first())
-
                 df = self.spark.createDataFrame(data)
                 self.assertEqual(Row(f1=[Row(payment=200.5), Row(payment=None)]), df.first())
 
