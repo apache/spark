@@ -69,11 +69,7 @@ public class ColumnVectorUtils {
       } else if (t == DataTypes.DoubleType) {
         col.putDoubles(0, capacity, row.getDouble(fieldIdx));
       } else if (t == DataTypes.StringType) {
-        UTF8String v = row.getUTF8String(fieldIdx);
-        byte[] bytes = v.getBytes();
-        for (int i = 0; i < capacity; i++) {
-          col.putByteArray(i, bytes);
-        }
+        col.putByteArrays(0, capacity, row.getUTF8String(fieldIdx).getBytes());
       } else if (t instanceof DecimalType) {
         DecimalType dt = (DecimalType)t;
         Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());

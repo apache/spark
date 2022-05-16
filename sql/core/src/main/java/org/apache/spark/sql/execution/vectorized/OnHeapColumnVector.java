@@ -529,6 +529,19 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     return result;
   }
 
+  @Override
+  public int putByteArrays(int rowId, int count, byte[] value, int offset, int length) {
+    reserve(elementsAppended + length * count);
+    int result = 0;
+    for (int i = 0; i < count; i++) {
+      int ret = arrayData().appendBytesWithoutReserveCheck(length, value, offset);
+      arrayOffsets[rowId + i] = ret;
+      arrayLengths[rowId + i] = length;
+      result += ret;
+    }
+    return result;
+  }
+
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {

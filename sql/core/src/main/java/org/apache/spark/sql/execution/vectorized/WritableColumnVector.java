@@ -387,6 +387,12 @@ public abstract class WritableColumnVector extends ColumnVector {
     return putByteArray(rowId, value, 0, value.length);
   }
 
+  public abstract int putByteArrays(int rowId, int count, byte[] value, int offset, int length);
+
+  public final int putByteArrays(int rowId, int count, byte[] value) {
+    return putByteArrays(rowId, count, value, 0, value.length);
+  }
+
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
     if (isNullAt(rowId)) return null;
@@ -533,6 +539,13 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   public final int appendBytes(int length, byte[] src, int offset) {
     reserve(elementsAppended + length);
+    int result = elementsAppended;
+    putBytes(elementsAppended, length, src, offset);
+    elementsAppended += length;
+    return result;
+  }
+
+  protected final int appendBytesWithoutReserveCheck(int length, byte[] src, int offset) {
     int result = elementsAppended;
     putBytes(elementsAppended, length, src, offset);
     elementsAppended += length;
