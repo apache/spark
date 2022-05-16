@@ -152,18 +152,6 @@ private[spark] class SparkFileAlreadyExistsException(
 }
 
 /**
- * Illegal state exception thrown from Spark with an error class.
- */
-private[spark] class SparkIllegalStateException(
-    errorClass: String,
-    messageParameters: Array[String])
-  extends IllegalStateException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
-
-  override def getErrorClass: String = errorClass
-}
-
-/**
  * File not found exception thrown from Spark with an error class.
  */
 private[spark] class SparkFileNotFoundException(

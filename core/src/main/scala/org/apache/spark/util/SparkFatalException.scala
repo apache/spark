@@ -24,4 +24,5 @@ package org.apache.spark.util
  * which is run by using ThreadUtils.awaitResult. ThreadUtils.awaitResult will catch
  * it and re-throw the original exception/error.
  */
-private[spark] final class SparkFatalException(val throwable: Throwable) extends Exception
+private[spark] final class SparkFatalException(val throwable: Throwable)
+  extends Exception(throwable)
