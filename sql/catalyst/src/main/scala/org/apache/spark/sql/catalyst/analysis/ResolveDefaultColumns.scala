@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCapability, TableCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -522,6 +523,21 @@ case class ResolveDefaultColumns(
       case _ => return None
     }
     val lookup: LogicalPlan = try {
+      // Check if the target table has "ACCEPT_ANY_SCHEMA" capabilities and if so,
+      // don't do anything.
+      analyzer.currentCatalog match {
+        case tableCatalog: TableCatalog =>
+          val id = Identifier.of(Array.empty[String], tableName.identifier)
+          val capabilities = tableCatalog.loadTable(id).capabilities
+          var it = capabilities.iterator()
+          while (it.hasNext) {
+            if (it() == TableCapability.ACCEPT_ANY_SCHEMA)) {
+              return None
+            }
+            it = it.next()
+          }
+        case _ =>
+      }
       catalog.lookupRelation(tableName)
     } catch {
       case _: AnalysisException => return None
