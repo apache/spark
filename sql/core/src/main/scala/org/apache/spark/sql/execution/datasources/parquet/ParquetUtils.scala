@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.AggregatePushDownUtils
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType, UserDefinedType}
 
 object ParquetUtils {
   def inferSchema(
@@ -208,6 +208,8 @@ object ParquetUtils {
     case st: StructType =>
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
         st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
+    case udt: UserDefinedType[_] =>
+      isBatchReadSupported(sqlConf, udt.sqlType)
     case _ =>
       false
   }

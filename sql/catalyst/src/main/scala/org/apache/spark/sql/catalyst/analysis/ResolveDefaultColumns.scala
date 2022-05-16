@@ -181,7 +181,7 @@ case class ResolveDefaultColumns(
     val schema: StructType = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
     // Return a more descriptive error message if the user tries to use a DEFAULT column reference
     // inside an UPDATE command's WHERE clause; this is not allowed.
-    m.mergeCondition.map { c: Expression =>
+    m.mergeCondition.foreach { c: Expression =>
       if (c.find(isExplicitDefaultColumn).isDefined) {
         throw QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition()
       }
@@ -193,16 +193,22 @@ case class ResolveDefaultColumns(
     }
     val columnNamesToExpressions: Map[String, Expression] =
       mapStructFieldNamesToExpressions(schema, defaultExpressions)
-    val newMatchedActions: Seq[Option[MergeAction]] = m.matchedActions.map {
-      replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
+    var replaced = false
+    val newMatchedActions: Seq[MergeAction] = m.matchedActions.map { action: MergeAction =>
+      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+        replaced = true
+        r
+      }.getOrElse(action)
     }
-    val newNotMatchedActions: Seq[Option[MergeAction]] = m.notMatchedActions.map {
-      replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
+    val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map { action: MergeAction =>
+      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+        replaced = true
+        r
+      }.getOrElse(action)
     }
-    if (newMatchedActions.forall(_.isDefined) &&
-      newNotMatchedActions.forall(_.isDefined)) {
-      m.copy(matchedActions = newMatchedActions.map(_.get),
-        notMatchedActions = newNotMatchedActions.map(_.get))
+    if (replaced) {
+      m.copy(matchedActions = newMatchedActions,
+        notMatchedActions = newNotMatchedActions)
     } else {
       m
     }
@@ -435,6 +441,9 @@ case class ResolveDefaultColumns(
           case CommandType.Update =>
             throw QueryCompilationErrors
               .defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause()
+          case CommandType.Merge =>
+            throw QueryCompilationErrors
+              .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates()
         }
       case _ =>
         None
@@ -469,17 +478,6 @@ case class ResolveDefaultColumns(
   }
 
   /**
-   * Normalizes a schema field name suitable for use in map lookups.
-   */
-  private def normalizeFieldName(str: String): String = {
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      str
-    } else {
-      str.toLowerCase()
-    }
-  }
-
-  /**
    * Returns a map of the names of fields in a schema to the fields themselves.
    */
   private def mapStructFieldNamesToFields(schema: StructType): Map[String, StructField] = {
@@ -494,9 +492,10 @@ case class ResolveDefaultColumns(
   private def mapStructFieldNamesToExpressions(
       schema: StructType,
       expressions: Seq[Expression]): Map[String, Expression] = {
-    val namesToFields: Map[String, StructField] = mapStructFieldNamesToFields(schema)
-    val namesAndExpressions: Seq[(String, Expression)] = namesToFields.keys.toSeq.zip(expressions)
-    namesAndExpressions.toMap
+    schema.fields.zip(expressions).map {
+      case (field: StructField, expression: Expression) =>
+        normalizeFieldName(field.name) -> expression
+    }.toMap
   }
 
   /**
@@ -504,8 +503,9 @@ case class ResolveDefaultColumns(
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     // Check if the target table is already resolved. If so, return the computed schema.
+    // Note that we use 'collectFirst' to descend past any SubqueryAlias nodes that may be present.
     val source: Option[LogicalPlan] = table.collectFirst {
-      case r: NamedRelation if !r.skipSchemaResolution => r
+      case r: NamedRelation => r
       case r: UnresolvedCatalogRelation => r
     }
     source.map { r =>

@@ -101,6 +101,29 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
+  private val defaultValues2: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(
+      new StructType()
+        .add("i", StringType)
+        .add("e", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'abc'").build()))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
+  private val tableWithColumnNamedDefault: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(
+      new StructType()
+        .add("s", StringType)
+        .add("default", StringType))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
   private val v1Table: V1Table = {
     val t = mock(classOf[CatalogTable])
     when(t.schema).thenReturn(new StructType()
@@ -137,6 +160,8 @@ class PlanResolutionSuite extends AnalysisTest {
         case "tab2" => table2
         case "charvarchar" => charVarcharTable
         case "defaultvalues" => defaultValues
+        case "defaultvalues2" => defaultValues2
+        case "tablewithcolumnnameddefault" => tableWithColumnNamedDefault
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -998,9 +1023,10 @@ class PlanResolutionSuite extends AnalysisTest {
       val sql6 = s"UPDATE $tblName SET i=DEFAULT, s=DEFAULT"
       val sql7 = s"UPDATE defaultvalues SET i=DEFAULT, s=DEFAULT"
       val sql8 = s"UPDATE $tblName SET name='Robert', age=32 WHERE p=DEFAULT"
+      val sql9 = s"UPDATE defaultvalues2 SET i=DEFAULT"
       // Note: 'i' is the correct column name, but since the table has ACCEPT_ANY_SCHEMA capability,
       // DEFAULT column resolution should skip this table.
-      val sql9 = s"UPDATE v2TableWithAcceptAnySchemaCapability SET i=DEFAULT"
+      val sql10 = s"UPDATE v2TableWithAcceptAnySchemaCapability SET i=DEFAULT"
 
       val parsed1 = parseAndResolve(sql1)
       val parsed2 = parseAndResolve(sql2)
@@ -1010,6 +1036,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed6 = parseAndResolve(sql6)
       val parsed7 = parseAndResolve(sql7, true)
       val parsed8 = parseAndResolve(sql8)
+      val parsed9 = parseAndResolve(sql9, true)
 
       parsed1 match {
         case UpdateTable(
@@ -1129,6 +1156,16 @@ class PlanResolutionSuite extends AnalysisTest {
         parseAndResolve(sql9)
       }.getMessage.contains(
         QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause().getMessage))
+
+      parsed9 match {
+        case UpdateTable(
+        _,
+        Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
+        None) =>
+          assert(i.name == "i")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
+      }
     }
 
     val sql1 = "UPDATE non_existing SET id=1"
@@ -1556,7 +1593,10 @@ class PlanResolutionSuite extends AnalysisTest {
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
 
-        // default columns (implicit)
+        // DEFAULT columns (implicit):
+        // All cases of the $target table lack any explicitly-defined DEFAULT columns. Therefore any
+        // DEFAULT column references in the below MERGE INTO command should resolve to literal NULL.
+        // This test case covers that behavior.
         val sql6 =
           s"""
              |MERGE INTO $target AS target
@@ -1564,7 +1604,7 @@ class PlanResolutionSuite extends AnalysisTest {
              |ON target.i = source.i
              |WHEN MATCHED AND (target.s='delete') THEN DELETE
              |WHEN MATCHED AND (target.s='update')
-             |  THEN UPDATE SET target.s = DEFAULT
+             |THEN UPDATE SET target.s = DEFAULT, target.i = target.i
              |WHEN NOT MATCHED AND (source.s='insert')
              |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
            """.stripMargin
@@ -1589,8 +1629,9 @@ class PlanResolutionSuite extends AnalysisTest {
             val second = m.matchedActions(1)
             second match {
               case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
-                  Seq(Assignment(
-                    _: AttributeReference, AnsiCast(Literal(null, _), StringType, _)))) =>
+                Seq(
+                  Assignment(_: AttributeReference, AnsiCast(Literal(null, _), StringType, _)),
+                  Assignment(_: AttributeReference, _: AttributeReference))) =>
               case other => fail("unexpected second matched action " + other)
             }
             assert(m.notMatchedActions.length == 1)
@@ -1658,6 +1699,84 @@ class PlanResolutionSuite extends AnalysisTest {
         fail("Expect MergeIntoTable, but got:\n" + other.treeString)
     }
     val mergeDefault2 =
+=======
+
+        // DEFAULT column reference in the merge condition:
+        // This MERGE INTO command includes an ON clause with a DEFAULT column reference. This is
+        // invalid and returns an error message.
+        val mergeWithDefaultReferenceInMergeCondition =
+          s"""
+             |MERGE INTO testcat.tab AS target
+             |USING testcat.tab1 AS source
+             |ON target.i = DEFAULT
+             |WHEN MATCHED AND (target.s = 31) THEN DELETE
+             |WHEN MATCHED AND (target.s = 31)
+             |  THEN UPDATE SET target.s = DEFAULT
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+             """.stripMargin
+        assert(intercept[AnalysisException] {
+          parseAndResolve(mergeWithDefaultReferenceInMergeCondition)
+        }.getMessage.contains(
+          QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition().getMessage))
+
+        // DEFAULT column reference within a complex expression:
+        // This MERGE INTO command includes a WHEN MATCHED clause with a DEFAULT column reference as
+        // of a complex expression (DEFAULT + 1). This is invalid and returns an error message.
+        val mergeWithDefaultReferenceAsPartOfComplexExpression =
+          s"""
+             |MERGE INTO testcat.tab AS target
+             |USING testcat.tab1 AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s = 31) THEN DELETE
+             |WHEN MATCHED AND (target.s = 31)
+             |  THEN UPDATE SET target.s = DEFAULT + 1
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+             """.stripMargin
+        assert(intercept[AnalysisException] {
+          parseAndResolve(mergeWithDefaultReferenceAsPartOfComplexExpression)
+        }.getMessage.contains(
+          QueryCompilationErrors
+            .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates().getMessage))
+
+        // Ambiguous DEFAULT column reference when the table itself contains a column named
+        // "DEFAULT".
+        val mergeIntoTableWithColumnNamedDefault =
+        s"""
+           |MERGE INTO testcat.tablewithcolumnnameddefault AS target
+           |USING testcat.tab1 AS source
+           |ON default = source.i
+           |WHEN MATCHED AND (target.s = 32) THEN DELETE
+           |WHEN MATCHED AND (target.s = 32)
+           |  THEN UPDATE SET target.s = DEFAULT
+           |WHEN NOT MATCHED AND (source.s='insert')
+           |  THEN INSERT (target.s) values (DEFAULT)
+             """.stripMargin
+        parseAndResolve(mergeIntoTableWithColumnNamedDefault, withDefault = true) match {
+          case m: MergeIntoTable =>
+            val target = m.targetTable
+            val d = target.output.find(_.name == "default").get.asInstanceOf[AttributeReference]
+            m.mergeCondition match {
+              case EqualTo(Cast(l: AttributeReference, _, _, _), _: AttributeReference) =>
+                assert(l.sameRef(d))
+              case Literal(_, BooleanType) => // this is acceptable as a merge condition
+              case other =>
+                fail("unexpected merge condition " + other)
+            }
+            assert(m.matchedActions.length == 2)
+            assert(m.notMatchedActions.length == 1)
+
+          case other =>
+            fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+    }
+
+    // DEFAULT columns (explicit):
+    // The defaultvalues table includes explicitly-defined DEFAULT columns in its schema. Therefore,
+    // DEFAULT column references in the below MERGE INTO command should resolve to the corresponding
+    // values. This test case covers that behavior.
+    val mergeDefaultWithExplicitDefaultColumns =
       s"""
          |MERGE INTO defaultvalues AS target
          |USING testcat.tab1 AS source
@@ -1668,7 +1787,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN NOT MATCHED AND (source.s='insert')
          |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
            """.stripMargin
-    parseAndResolve(mergeDefault2, true) match {
+    parseAndResolve(mergeDefaultWithExplicitDefaultColumns, true) match {
       case m: MergeIntoTable =>
         val cond = m.mergeCondition
         cond match {

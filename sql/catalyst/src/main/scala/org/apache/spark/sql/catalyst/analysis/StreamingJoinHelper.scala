@@ -132,8 +132,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       leftExpr.collect { case a: AttributeReference => a } ++
       rightExpr.collect { case a: AttributeReference => a }
     )
-    if (attributesInCondition.filter { attributesToFindStateWatermarkFor.contains(_) }.size > 1 ||
-        attributesInCondition.filter { attributesWithEventWatermark.contains(_) }.size > 1) {
+    if (attributesInCondition.count(attributesToFindStateWatermarkFor.contains) > 1 ||
+        attributesInCondition.count(attributesWithEventWatermark.contains) > 1) {
       // If more than attributes present in condition from one side, then it cannot be solved
       return None
     }
