@@ -1137,7 +1137,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
 
       assert(intercept[AnalysisException] {
-        parseAndResolve(sql9)
+        parseAndResolve(sql8)
       }.getMessage.contains(
         QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause().getMessage))
 
@@ -1649,8 +1649,6 @@ class PlanResolutionSuite extends AnalysisTest {
           case other =>
             fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
-    }
-
 
         // DEFAULT column reference in the merge condition:
         // This MERGE INTO command includes an ON clause with a DEFAULT column reference. This is
