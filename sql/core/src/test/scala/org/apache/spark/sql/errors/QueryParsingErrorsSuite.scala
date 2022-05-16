@@ -642,4 +642,92 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
           |^^^
           |""".stripMargin)
   }
+
+  test("UNSUPPORTED_FEATURE: cannot clean reserved namespace property") {
+    val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("CLEAN_RESERVED_NAMESPACE_PROPERTY"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: location is a reserved namespace property, """ +
+        """please use the LOCATION clause to specify it.(line 1, pos 0)""" +
+        s"""
+          |
+          |== SQL ==
+          |$sql
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: cannot clean reserved table property") {
+    val sql = "CREATE TABLE student (id INT, name STRING, age INT) " +
+      "USING PARQUET TBLPROPERTIES ('provider'='parquet')"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("CLEAN_RESERVED_TABLE_PROPERTY"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: provider is a reserved table property, """ +
+        """please use the USING clause to specify it.(line 1, pos 66)""" +
+        s"""
+          |
+          |== SQL ==
+          |$sql
+          |------------------------------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_PROPERTY_KEY: invalid property key for set quoted configuration") {
+    val sql = "set =`value`"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "INVALID_PROPERTY_KEY",
+      sqlState = null,
+      message =
+        s"""'' is an invalid property key, please use quotes, e.g. SET ``=`value`(line 1, pos 0)
+          |
+          |== SQL ==
+          |$sql
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_PROPERTY_VALUE: invalid property value for set quoted configuration") {
+    val sql = "set `key`=1;2;;"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "INVALID_PROPERTY_VALUE",
+      sqlState = null,
+      message =
+        """'1;2;;' is an invalid property value, please use quotes, """ +
+        """e.g. SET `key`=`1;2;;`(line 1, pos 0)""" +
+        s"""
+           |
+           |== SQL ==
+           |$sql
+           |^^^
+           |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: Properties and DbProperties both specified") {
+    val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c') " +
+      "WITH DBPROPERTIES('a'='a', 'b'='b', 'c'='c')"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("PROPERTIES_AND_DBPROPERTIES_BOTH_SPECIFIED_CONFLICT"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: Either PROPERTIES or DBPROPERTIES """ +
+        """is allowed.(line 1, pos 0)""" +
+        s"""
+          |
+          |== SQL ==
+          |$sql
+          |^^^
+          |""".stripMargin)
+  }
 }
