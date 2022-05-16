@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{abs, avg, ceil, coalesce, count, count_distinct, exp, floor, lit, log => ln, not, pow, sqrt, sum, udf, when}
+import org.apache.spark.sql.functions.{abs, avg, coalesce, count, count_distinct, exp, lit, log => ln, not, pow, sqrt, sum, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -81,13 +81,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       conn.prepareStatement(
         "INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200, true)").executeUpdate()
       conn.prepareStatement(
-        "CREATE TABLE \"test\".\"dept\" (\"dept id\" INTEGER NOT NULL)").executeUpdate()
+        "CREATE TABLE \"test\".\"dept\" (\"dept_id\" INTEGER NOT NULL)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (1)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (2)").executeUpdate()
 
       // scalastyle:off
       conn.prepareStatement(
-        "CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)").executeUpdate()
+        "CREATE TABLE \"test\".\"person\" (\"name\" INTEGER NOT NULL)").executeUpdate()
       // scalastyle:on
       conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (1)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (2)").executeUpdate()
@@ -342,12 +342,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df7 = spark.table("h2.test.employee").filter(not($"is_manager") === true)
     checkFiltersRemoved(df7)
-    checkPushedInfo(df7, "PushedFilters: [IS_MANAGER IS NOT NULL, NOT (IS_MANAGER = true)], ")
+    checkPushedInfo(df7,
+      "PushedFilters: [IS_MANAGER IS NOT NULL, NOT (IS_MANAGER = true) = TRUE], ")
     checkAnswer(df7, Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "alex", 12000, 1200, false)))
 
     val df8 = spark.table("h2.test.employee").filter($"is_manager" === true)
     checkFiltersRemoved(df8)
-    checkPushedInfo(df8, "PushedFilters: [IS_MANAGER IS NOT NULL, IS_MANAGER = true], ")
+    checkPushedInfo(df8, "PushedFilters: [IS_MANAGER IS NOT NULL, IS_MANAGER = TRUE], ")
     checkAnswer(df8, Seq(Row(1, "amy", 10000, 1000, true),
       Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
 
@@ -446,8 +447,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           .filter(exp($"salary") > 2000)
           .filter(pow($"dept", 2) > 4)
           .filter(sqrt($"salary") > 100)
-          .filter(floor($"dept") > 1)
-          .filter(ceil($"dept") > 1)
         checkFiltersRemoved(df6, ansiMode)
         val expectedPlanFragment6 = if (ansiMode) {
           "PushedFilters: [DEPT IS NOT NULL, SALARY IS NOT NULL, " +
@@ -1177,19 +1176,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("column name with composite field") {
-    checkAnswer(sql("SELECT `dept id` FROM h2.test.dept"), Seq(Row(1), Row(2)))
-    val df = sql("SELECT COUNT(`dept id`) FROM h2.test.dept")
+    checkAnswer(sql("SELECT dept_id FROM h2.test.dept"), Seq(Row(1), Row(2)))
+    val df = sql("SELECT COUNT(dept_id) FROM h2.test.dept")
     checkAggregateRemoved(df)
-    checkPushedInfo(df, "PushedAggregates: [COUNT(`dept id`)]")
+    checkPushedInfo(df, "PushedAggregates: [COUNT(dept_id)]")
     checkAnswer(df, Seq(Row(2)))
   }
 
   test("column name with non-ascii") {
     // scalastyle:off
-    checkAnswer(sql("SELECT `名` FROM h2.test.person"), Seq(Row(1), Row(2)))
-    val df = sql("SELECT COUNT(`名`) FROM h2.test.person")
+    checkAnswer(sql("SELECT name FROM h2.test.person"), Seq(Row(1), Row(2)))
+    val df = sql("SELECT COUNT(name) FROM h2.test.person")
     checkAggregateRemoved(df)
-    checkPushedInfo(df, "PushedAggregates: [COUNT(`名`)]")
+    checkPushedInfo(df, "PushedAggregates: [COUNT(name)]")
     checkAnswer(df, Seq(Row(2)))
     // scalastyle:on
   }
