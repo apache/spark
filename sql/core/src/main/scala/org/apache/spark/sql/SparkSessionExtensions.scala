@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>(External) Catalog listeners.</li>
  * <li>Columnar Rules.</li>
  * <li>Adaptive Query Stage Preparation Rules.</li>
- * <li>Adaptive Query Execution Runtime Optimizer Rules.</li>
+ * <li>Adaptive Query Execution Runtime Rules.</li>
  * </ul>
  *
  * The extensions can be used by calling `withExtensions` on the [[SparkSession.Builder]], for
@@ -163,6 +163,23 @@ class SparkSessionExtensions {
    */
   def injectRuntimeOptimizerRule(builder: RuleBuilder): Unit = {
     runtimeOptimizerRules += builder
+  }
+
+  private[this] val preResolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
+
+  /**
+   * Build the analyzer resolution `Rule`s using the given [[SparkSession]].
+   */
+  private[sql] def buildPreResolutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    preResolutionRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an analyzer pre-resolution `Rule` builder into the [[SparkSession]]. These analyzer
+   * rules will be executed as part of the resolution phase of analysis.
+   */
+  def injectPreResolutionRule(builder: RuleBuilder): Unit = {
+    preResolutionRuleBuilders += builder
   }
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]

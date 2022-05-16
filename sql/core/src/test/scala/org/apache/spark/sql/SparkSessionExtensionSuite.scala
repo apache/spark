@@ -20,11 +20,12 @@ import java.util.{Locale, UUID}
 
 import scala.concurrent.Future
 
-import org.apache.spark.{MapOutputStatistics, SparkFunSuite, TaskContext}
+import org.apache.spark.{MapOutputStatistics, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Limit, LocalRelation, Logica
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
@@ -426,6 +428,22 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
         df.collect()
         assert(executedPlan(df).isInstanceOf[CollectLimitExec])
       }
+    }
+  }
+
+  test("SPARK-39194: inject pre resolution for catalog loading") {
+    val spark = SparkSession.builder()
+      .master("local[1]")
+      .withExtensions(MyExtensionsWithCatalog)
+      .getOrCreate()
+    try {
+      val e1 = intercept[SparkException](spark.sql("select * from a.b.c"))
+      assert(e1.getMessage contains "org.apache.spark.YourCatalogClass",
+        "catalog shall be pre installed")
+      val e2 = intercept[AnalysisException](spark.sql("select * from b.c"))
+      assert(e2.getMessage contains "Table or view not found: b.c")
+    } finally {
+      stop(spark)
     }
   }
 }
@@ -1051,5 +1069,22 @@ object AddLimit extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case Limit(_, _) => plan
     case _ => Limit(Literal(1), plan)
+  }
+}
+
+object MyExtensionsWithCatalog extends SparkSessionExtensionsProvider {
+  override def apply(v1: SparkSessionExtensions): Unit = {
+    v1.injectPreResolutionRule(spark => new MyInjectCatalogs(spark))
+  }
+  class MyInjectCatalogs(spark: SparkSession) extends Rule[LogicalPlan] with LookupCatalog {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case u @ UnresolvedRelation(CatalogAndIdentifier(catalog, ident), _, _)
+        if CatalogManager.SESSION_CATALOG_NAME == catalog.name() && ident.namespace().length > 1 =>
+        conf.setConfString(s"spark.sql.catalog.${ident.namespace().head}",
+          "org.apache.spark.YourCatalogClass")
+        u
+    }
+
+    override protected lazy val catalogManager: CatalogManager = spark.sessionState.catalogManager
   }
 }

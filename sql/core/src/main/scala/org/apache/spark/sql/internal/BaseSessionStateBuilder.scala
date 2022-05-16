@@ -181,6 +181,9 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` and `catalog` fields.
    */
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+
+    override val preResolutionRules: Seq[Rule[LogicalPlan]] = customPreResolutionRules
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
@@ -205,6 +208,16 @@ abstract class BaseSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         customCheckRules
+  }
+
+  /**
+   * Custom post resolution rules to add to the Analyzer. Prefer overriding this instead of
+   * creating your own Analyzer.
+   *
+   * Note that this may NOT depend on the `analyzer` function.
+   */
+  protected def customPreResolutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPreResolutionRules(session)
   }
 
   /**

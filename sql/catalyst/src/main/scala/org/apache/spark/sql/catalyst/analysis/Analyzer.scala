@@ -239,6 +239,13 @@ class Analyzer(override val catalogManager: CatalogManager)
       maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
+   * Override to provide rules to do pre-resolution. Note that these rules will be executed
+   * in an individual batch. This batch is to run right before the normal resolution batch and
+   * execute its rules in one pass.
+   */
+  val preResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Override to provide additional rules for the "Resolution" batch.
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
@@ -276,6 +283,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
       KeepLegacyOutputs),
+    Batch("PreResolution", Once,
+      preResolutionRules: _*),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions(v1SessionCatalog) ::
       ResolveNamespace(catalogManager) ::
