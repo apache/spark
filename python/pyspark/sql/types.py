@@ -216,10 +216,17 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
             seconds = 0.0
             if platform.system().lower() == 'windows':
                 # On Windows, the current value is converted to a timestamp when the current value is less than 1970
-                seconds = (dt - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
+                seconds = (
+                    dt
+                    - datetime.datetime.fromtimestamp(
+                        int(time.localtime(0).tm_sec) / 1000
+                    )
+                ).total_seconds()
             else:
                 seconds = (
-                    calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
+                    calendar.timegm(dt.utctimetuple())
+                    if dt.tzinfo
+                    else time.mktime(dt.timetuple())
                 )
 
             return int(seconds) * 1000000 + dt.microsecond
@@ -227,11 +234,14 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             if platform.system().lower() == 'windows':
-                return datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000) + \
-                       datetime.timedelta(microseconds=ts)
+                return datetime.datetime.fromtimestamp(
+                    int(time.localtime(0).tm_sec) / 1000
+                ) + datetime.timedelta(microseconds=ts)
             else:
                 # using int to avoid precision loss in float
-                return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+                return datetime.datetime.fromtimestamp(ts // 1000000).replace(
+                    microsecond=ts % 1000000
+                )
 
 
 class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
@@ -1954,12 +1964,17 @@ class DatetimeConverter:
         seconds = 0.0
         if platform.system().lower() == 'windows':
             # On Windows, the current value is converted to a timestamp when the current value is less than 1970
-            seconds = (obj - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
+            seconds = (
+                obj
+                - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)
+            ).total_seconds()
         else:
             seconds = (
-                calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
+                calendar.timegm(obj.utctimetuple())
+                if obj.tzinfo
+                else time.mktime(obj.timetuple())
             )
-            
+
         t = Timestamp(int(seconds) * 1000)
         t.setNanos(obj.microsecond * 1000)
         return t
