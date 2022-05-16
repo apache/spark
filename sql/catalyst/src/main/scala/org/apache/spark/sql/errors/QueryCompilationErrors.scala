@@ -2431,4 +2431,18 @@ object QueryCompilationErrors extends QueryErrorsBase {
       "Failed to execute UPDATE command because the WHERE clause contains a DEFAULT column " +
         "reference; this is not allowed")
   }
+
+  // Return a more descriptive error message if the user tries to use a DEFAULT column reference
+  // inside an UPDATE command's WHERE clause; this is not allowed.
+  def defaultReferencesNotAllowedInMergeCondition(): Throwable = {
+    new AnalysisException(
+      "Failed to execute MERGE command because the WHERE clause contains a DEFAULT column " +
+        "reference; this is not allowed")
+  }
+
+  def defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates(): Throwable = {
+    new AnalysisException(
+      "Failed to execute MERGE INTO command because one of its INSERT or UPDATE assignments " +
+        "contains a DEFAULT column reference as part of another expression; this is not allowed")
+  }
 }
