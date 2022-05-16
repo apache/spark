@@ -1310,7 +1310,7 @@ object OffsetAndLimit {
       case GlobalLimit(IntegerLiteral(globalLimit),
              Offset(IntegerLiteral(offset),
                LocalLimit(IntegerLiteral(localLimit), child)))
-         if globalLimit + offset == localLimit =>
+          if globalLimit + offset == localLimit =>
         Some((offset, globalLimit, child))
       case _ => None
     }
