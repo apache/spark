@@ -42,6 +42,7 @@ from typing import (
     Type,
     TypeVar,
 )
+import platform
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
@@ -213,25 +214,24 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
             seconds = 0.0
-            try:
+            if platform.system().lower() == 'windows':
+                # On Windows, the current value is converted to a timestamp when the current value is less than 1970
+                seconds = (dt - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
+            else:
                 seconds = (
                     calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
                 )
-            except:
-                # On Windows, the current value is converted to a timestamp when the current value is less than 1970
-                seconds = (dt - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
 
             return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
-            try:
-                # using int to avoid precision loss in float
-                return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
-            except:
-                # On Windows, resolve when the timestamp is negative
+            if platform.system().lower() == 'windows':
                 return datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000) + \
                        datetime.timedelta(microseconds=ts)
+            else:
+                # using int to avoid precision loss in float
+                return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
 
 
 class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
@@ -1952,13 +1952,13 @@ class DatetimeConverter:
     def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
         seconds = 0.0
-        try:
+        if platform.system().lower() == 'windows':
+            # On Windows, the current value is converted to a timestamp when the current value is less than 1970
+            seconds = (obj - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
+        else:
             seconds = (
                 calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
             )
-        except:
-            # On Windows, the current value is converted to a timestamp when the current value is less than 1970
-            seconds = (obj - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
 
         t = Timestamp(int(seconds) * 1000)
         t.setNanos(obj.microsecond * 1000)
