@@ -172,14 +172,18 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase with QueryErrorsBase {
     assert(cast(booleanLiteral, DateType).checkInputDataTypes().isFailure)
   }
 
-  private def castErrMsg(v: String, to: DataType, from: DataType = StringType): String = {
+  private def castErrMsg(v: Any, to: DataType, from: DataType = StringType): String = {
     s"The value ${toSQLValue(v, from)} of the type ${toSQLType(from)} " +
     s"cannot be cast to ${toSQLType(to)} because it is malformed."
   }
 
-  private def castErrMsg(l: Literal, to: DataType): String = {
-    s"The value ${toSQLValue(l.eval(), l.dataType)} of the type ${toSQLType(l.dataType)} " +
+  private def castErrMsg(l: Literal, to: DataType, from: DataType): String = {
+    s"The value ${toSQLValue(l.eval(), from)} of the type ${toSQLType(from)} " +
     s"cannot be cast to ${toSQLType(to)} because it is malformed."
+  }
+
+  private def castErrMsg(l: Literal, to: DataType): String = {
+    castErrMsg(l, to, l.dataType)
   }
 
   test("cast from invalid string to numeric should throw NumberFormatException") {
@@ -265,11 +269,12 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase with QueryErrorsBase {
     checkCastToBooleanError(Literal(""), BooleanType, null)
   }
 
-  protected def checkCastToTimestampError(l: Literal, to: DataType): Unit = {
-    checkExceptionInExpression[DateTimeException](cast(l, to), castErrMsg(l, to))
-  }
-
   test("cast from timestamp II") {
+    def checkCastToTimestampError(l: Literal, to: DataType): Unit = {
+      checkExceptionInExpression[DateTimeException](
+        cast(l, to),
+        """cannot be cast to "TIMESTAMP" because it is malformed""")
+    }
     checkCastToTimestampError(Literal(Double.NaN), TimestampType)
     checkCastToTimestampError(Literal(1.0 / 0.0), TimestampType)
     checkCastToTimestampError(Literal(Float.NaN), TimestampType)
@@ -385,7 +390,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase with QueryErrorsBase {
       if (!isTryCast) {
         checkExceptionInExpression[NumberFormatException](
           ret,
-          castErrMsg("----", IntegerType))
+          castErrMsg("a", IntegerType))
       }
     }
 
@@ -393,9 +398,9 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase with QueryErrorsBase {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
-        checkExceptionInExpression[UnsupportedOperationException](
+        checkExceptionInExpression[SparkRuntimeException](
           ret,
-          castErrMsg("----", BooleanType))
+          castErrMsg("123", BooleanType))
       }
     }
 
@@ -405,7 +410,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase with QueryErrorsBase {
       if (!isTryCast) {
         checkExceptionInExpression[NumberFormatException](
           ret,
-          castErrMsg("----", IntegerType))
+          castErrMsg("a", IntegerType))
       }
     }
   }
@@ -486,7 +491,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase with QueryErrorsBase {
       if (!isTryCast) {
         checkExceptionInExpression[SparkRuntimeException](
           ret,
-          castErrMsg("blya", BooleanType))
+          castErrMsg("123", BooleanType))
       }
     }
   }
