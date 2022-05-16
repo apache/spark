@@ -269,8 +269,8 @@ class OuterJoinEliminationSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("SPARK-39172: Remove left outer join if only left-side columns being selected and " +
-    "the right side join keys are unique") {
+  test("SPARK-39172: Remove left/right outer join if only left/right side columns are selected " +
+    "and the join keys on the other side are unique") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")
     comparePlans(Optimize.execute(
@@ -285,12 +285,7 @@ class OuterJoinEliminationSuite extends PlanTest {
         .select($"a", $"b", $"c").analyze),
       x.select($"a", $"b", $"c").analyze
     )
-  }
 
-  test("SPARK-39172: Remove right outer join if only right-side columns being selected and " +
-    "the left side join keys are unique") {
-    val x = testRelation.subquery("x")
-    val y = testRelation1.subquery("y")
     comparePlans(Optimize.execute(
       x.groupBy($"a")($"a").join(y, RightOuter, Some($"a" === $"d"))
         .select($"d", $"e", $"f").analyze),
@@ -303,11 +298,8 @@ class OuterJoinEliminationSuite extends PlanTest {
         .select($"d", $"e", $"f").analyze),
       y.select($"d", $"e", $"f").analyze
     )
-  }
 
-  test("SPARK-39172: Negative case, do not remove outer join") {
-    val x = testRelation.subquery("x")
-    val y = testRelation1.subquery("y")
+    // negative cases
     // not a equi-join
     val p1 = x.join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" > $"d"))
       .select($"a").analyze
