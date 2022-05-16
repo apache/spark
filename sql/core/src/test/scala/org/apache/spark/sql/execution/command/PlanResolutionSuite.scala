@@ -1633,16 +1633,22 @@ class PlanResolutionSuite extends AnalysisTest {
             second match {
               case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
                 Seq(
-                  Assignment(_: AttributeReference, AnsiCast(Literal(null, _), StringType, _)),
-                  Assignment(_: AttributeReference, _: AttributeReference))) =>
+                  Assignment(_: AttributeReference,
+                    cast @ Cast(Literal(null, _), StringType, _, true)),
+                  Assignment(_: AttributeReference, _: AttributeReference)))
+                if cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get =>
               case other => fail("unexpected second matched action " + other)
             }
             assert(m.notMatchedActions.length == 1)
             val negative = m.notMatchedActions(0)
             negative match {
               case InsertAction(Some(EqualTo(_: AttributeReference, StringLiteral("insert"))),
-              Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
-              Assignment(s: AttributeReference, AnsiCast(Literal(null, _), StringType, _)))) =>
+              Seq(Assignment(i: AttributeReference,
+                cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
+              Assignment(s: AttributeReference,
+                cast2 @ Cast(Literal(null, _), StringType, _, true))))
+                if cast1.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get &&
+                  cast2.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get =>
                 assert(i.name == "i")
                 assert(s.name == "s")
               case other => fail("unexpected not matched action " + other)
