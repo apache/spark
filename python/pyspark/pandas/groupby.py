@@ -2110,7 +2110,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_scols = [psdf._internal.spark_column_for(label) for label in groupkey_labels]
 
         sdf = psdf._internal.spark_frame
-        tmp_row_num_col = verify_temp_column_name(sdf, "__row_number__")
 
         window = Window.partitionBy(*groupkey_scols)
         # This part is handled differently depending on whether it is a tail or a head.
@@ -2121,7 +2120,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
         if n >= 0 or LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
-
+            tmp_row_num_col = verify_temp_column_name(sdf, "__row_number__")
             sdf = (
                 sdf.withColumn(tmp_row_num_col, F.row_number().over(ordered_window))
                 .filter(F.col(tmp_row_num_col) <= n)
@@ -2131,12 +2130,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # Pandas supports Groupby positional indexing since v1.4.0
             # https://pandas.pydata.org/docs/whatsnew/v1.4.0.html#groupby-positional-indexing
             #
-            # To support groupby positional indexing, we need add two columns to help we filter
-            # target rows:
-            # - Add `__row_number__` and `__group_count__` columns.
-            # - Use `F.col(tmp_row_num_col) - F.col(tmp_cnt_col) <= positional_index_number` to
-            #   filter target rows.
-            # - Then drop `__row_number__` and `__group_count__` columns.
+            # To support groupby positional indexing, we need add a `__tmp_lag__` column to help
+            # us filtering rows before the specified offset row.
             #
             # For example for the dataframe:
             # >>> df = ps.DataFrame([["g", "g0"],
@@ -2147,41 +2142,27 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # ...                   ["h", "h1"]], columns=["A", "B"])
             # >>> df.groupby("A").head(-1)
             #
-            # Below is an example to show the `__row_number__` column and `__group_count__` column
-            # for above df:
-            # >>> sdf.withColumn(tmp_row_num_col, F.row_number().over(window))
-            #        .withColumn(tmp_cnt_col, F.count("*").over(window)).show()
-            # +---------------+------------+---+---+------------+--------------+---------------+
-            # |__index_level..|__groupkey..|  A|  B|__natural_..|__row_number__|__group_count__|
-            # +---------------+------------+---+---+------------+--------------+---------------+
-            # |              0|           g|  g| g0| 17179869184|             1|              4|
-            # |              1|           g|  g| g1| 42949672960|             2|              4|
-            # |              2|           g|  g| g2| 60129542144|             3|              4|
-            # |              3|           g|  g| g3| 85899345920|             4|              4|
-            # |              4|           h|  h| h0|111669149696|             1|              2|
-            # |              5|           h|  h| h1|128849018880|             2|              2|
-            # +---------------+------------+---+---+------------+--------------+---------------+
+            # Below is a result to show the `__tmp_lag__` column for above df, the limit n is
+            # `-1`, the `__tmp_lag__` will be set to `0` in rows[:-1], and left will be set to
+            # `null`:
             #
-            # The limit n is `-1`, we need to filter rows[:-1] in each group:
+            # >>> sdf.withColumn(tmp_lag_col, F.lag(F.lit(0), -1).over(ordered_window))
+            # +-----------------+--------------+---+---+-----------------+-----------+
+            # |__index_level_0__|__groupkey_0__|  A|  B|__natural_order__|__tmp_lag__|
+            # +-----------------+--------------+---+---+-----------------+-----------+
+            # |                0|             g|  g| g0|                0|          0|
+            # |                1|             g|  g| g1|       8589934592|          0|
+            # |                2|             g|  g| g2|      17179869184|          0|
+            # |                3|             g|  g| g3|      25769803776|       null|
+            # |                4|             h|  h| h0|      34359738368|          0|
+            # |                5|             h|  h| h1|      42949672960|       null|
+            # +-----------------+--------------+---+---+-----------------+-----------+
             #
-            # >>> sdf.withColumn(tmp_row_num_col, F.row_number().over(window))
-            #        .withColumn(tmp_cnt_col, F.count("*").over(window))
-            #        .filter(F.col(tmp_row_num_col) - F.col(tmp_cnt_col) <= -1).show()
-            # +-----------------+------------+---+---+------------+--------------+---------------+
-            # |__index_level_0__|__groupkey..|  A|  B|__natural_..|__row_number__|__group_count__|
-            # +-----------------+------------+---+---+------------+--------------+---------------+
-            # |                0|           g|  g| g0| 17179869184|             1|              4|
-            # |                1|           g|  g| g1| 42949672960|             2|              4|
-            # |                2|           g|  g| g2| 60129542144|             3|              4|
-            # |                4|           h|  h| h0|111669149696|             1|              2|
-            # +-----------------+------------+---+---+------------+--------------+---------------+
-            #
-            tmp_cnt_col = verify_temp_column_name(sdf, "__group_count__")
+            tmp_lag_col = verify_temp_column_name(sdf, "__tmp_lag__")
             sdf = (
-                sdf.withColumn(tmp_row_num_col, F.row_number().over(ordered_window))
-                .withColumn(tmp_cnt_col, F.count("*").over(window))
-                .filter(F.col(tmp_row_num_col) - F.col(tmp_cnt_col) <= n)
-                .drop(tmp_row_num_col, tmp_cnt_col)
+                sdf.withColumn(tmp_lag_col, F.lag(F.lit(0), n).over(ordered_window))
+                .where(~F.isnull(F.col(tmp_lag_col)))
+                .drop(tmp_lag_col)
             )
 
         internal = psdf._internal.with_new_sdf(sdf)
