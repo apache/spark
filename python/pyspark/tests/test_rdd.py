@@ -674,6 +674,7 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertNotEqual(set(wr_s11), set(wr_s21))
 
     def test_datetime(self):
+        # SPARK-39176: Pre - 1970 time serialization test.
         rdd = self.sc.parallelize([('a', datetime(1957, 1, 9, 0, 0)),
                                    ('b', datetime(2014, 1, 27, 0, 0))])
         df = SparkSession(self.sc).createDataFrame(rdd, ["id", "date"])
