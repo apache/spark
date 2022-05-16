@@ -139,8 +139,11 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *   SELECT t1.c1, max(t1.c2) FROM t1 GROUP BY t1.c1
  * }}}
  *
- * 3. Remove outer join if all output comes from streamed side and the join keys from buffered side
- * exist unique key.
+ * 3. Remove outer join if:
+ *   - For a left outer join with only left-side columns being selected and the right side join
+ *     keys are unique.
+ *   - For a right outer join with only right-side columns being selected and the left side join
+ *     keys are unique.
  *
  * {{{
  *   SELECT t1.* FROM t1 LEFT JOIN (SELECT DISTINCT c1 as c1 FROM t)t2 ON t1.c1 = t2.c1  ==>
