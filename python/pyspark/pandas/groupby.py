@@ -2884,7 +2884,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._prepare_return(psdf)
 
-    def _prepare_return(self, psdf: DataFrame) -> DataFrame:
+    def _prepare_return(self, psdf: DataFrame) -> FrameLike:
         if self._dropna:
             psdf = DataFrame(
                 psdf._internal.with_new_sdf(
