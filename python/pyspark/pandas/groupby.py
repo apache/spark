@@ -2884,7 +2884,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._prepare_return(psdf)
 
-    def _prepare_return(self, psdf: DataFrame) -> DataType:
+    def _prepare_return(self, psdf: DataFrame) -> DataFrame:
         if self._dropna:
             psdf = DataFrame(
                 psdf._internal.with_new_sdf(
@@ -2901,8 +2901,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 psdf = psdf.reset_index(level=should_drop_index, drop=True)
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
-        psdf = self._cleanup_and_return(psdf)
-        return psdf
+        return self._cleanup_and_return(psdf)
 
     def _prepare_reduce(
         self,
