@@ -1513,12 +1513,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("INSERT rows, ALTER TABLE ADD COLUMNS with DEFAULTs, then SELECT them: Positive tests") {
-    // This represents one test configuration comprising a data source.
-    case class Config(dataSource: String)
-    Seq(
-      Config(dataSource = "csv")
-    ).foreach { config: Config =>
-      val createTableIntCol = s"create table t(a string, i int) using ${config.dataSource}"
+    def runTest(dataSource: String): Unit = {
+      val createTableIntCol = s"create table t(a string, i int) using $dataSource"
       // Adding a column with a valid default value into a table containing existing data works
       // successfully. Querying data from the altered table returns the new value.
       withTable("t") {
@@ -1568,6 +1564,23 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("alter table t add column (x string)")
         checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef", null))
         checkAnswer(sql("select i, s, x from t"), Row(42, "abcdef", null))
+      }
+    }
+
+    // This represents one test configuration over a data source.
+    case class Config(dataSource: String, sqlConf: Seq[(String, String)] = Seq())
+    Seq(
+      Config(dataSource = "csv",
+        Seq(
+          SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false"))
+    ).foreach { config: Config =>
+      // First run the test with default settings.
+      runTest(config.dataSource)
+      // Then run the test again with each pair of custom SQLConf values.
+      config.sqlConf.foreach { kv: (String, String) =>
+        withSQLConf(kv) {
+          runTest(config.dataSource)
+        }
       }
     }
   }
