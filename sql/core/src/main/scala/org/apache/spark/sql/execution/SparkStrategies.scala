@@ -532,8 +532,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           _.aggregateFunction.children.filterNot(_.foldable).toSet).distinct.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
           // column sets. Our `RewriteDistinctAggregates` should take care this case.
-          sys.error("You hit a query analyzer bug. Please report your query to " +
-              "Spark user mailing list.")
+          throw new IllegalStateException(
+            "You hit a query analyzer bug. Please report your query to Spark user mailing list.")
         }
 
         // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because

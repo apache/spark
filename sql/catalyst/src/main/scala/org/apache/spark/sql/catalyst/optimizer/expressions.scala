@@ -622,7 +622,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
   // To be conservative here: it's only a guaranteed win if all but at most only one branch
   // end up being not foldable.
   private def atMostOneUnfoldable(exprs: Seq[Expression]): Boolean = {
-    exprs.filterNot(_.foldable).size < 2
+    exprs.count(!_.foldable) < 2
   }
 
   // Not all UnaryExpression can be pushed into (if / case) branches, e.g. Alias.

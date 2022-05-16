@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
@@ -29,6 +29,8 @@ case class StringLongClass(a: String, b: Long)
 case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
+
+case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
   extends QueryTest
@@ -544,6 +546,42 @@ class QueryCompilationErrorsSuite
       errorClass = "NON_LITERAL_PIVOT_VALUES",
       msg = "Literal expressions required for pivot values, found 'earnings#\\w+'",
       matchMsg = true)
+  }
+
+  test("UNSUPPORTED_DESERIALIZER: data type mismatch") {
+    val e = intercept[AnalysisException] {
+      sql("select 1 as arr").as[ArrayClass]
+    }
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      errorSubClass = Some("DATA_TYPE_MISMATCH"),
+      msg = """The deserializer is not supported: need an "ARRAY" field but got "INT".""")
+  }
+
+  test("UNSUPPORTED_DESERIALIZER: " +
+    "the real number of fields doesn't match encoder schema") {
+    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
+
+    val e1 = intercept[AnalysisException] {
+      ds.as[(String, Int, Long)]
+    }
+    checkErrorClass(
+      exception = e1,
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+        "to Tuple3, but failed as the number of fields does not line up.")
+
+    val e2 = intercept[AnalysisException] {
+      ds.as[Tuple1[String]]
+    }
+    checkErrorClass(
+      exception = e2,
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+        "to Tuple1, but failed as the number of fields does not line up.")
   }
 }
 

@@ -98,7 +98,7 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
       }
       if (limit >= 0) {
         if (offset > 0) {
-          singlePartitionRDD.mapPartitionsInternal(_.drop(offset).take(limit))
+          singlePartitionRDD.mapPartitionsInternal(_.slice(offset, offset + limit))
         } else {
           singlePartitionRDD.mapPartitionsInternal(_.take(limit))
         }
@@ -238,7 +238,7 @@ case class GlobalLimitAndOffsetExec(
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 
   override def doExecute(): RDD[InternalRow] = if (limit >= 0) {
-    child.execute().mapPartitionsInternal(iter => iter.take(limit + offset).drop(offset))
+    child.execute().mapPartitionsInternal(iter => iter.slice(offset, limit + offset))
   } else {
     child.execute().mapPartitionsInternal(iter => iter.drop(offset))
   }
