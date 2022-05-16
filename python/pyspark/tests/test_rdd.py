@@ -26,6 +26,7 @@ from glob import glob
 from py4j.protocol import Py4JJavaError
 
 from pyspark import shuffle, RDD
+from pyspark.sql import SparkSession
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
@@ -668,6 +669,13 @@ class RDDTests(ReusedPySparkTestCase):
         wr_s11 = rdd.sample(True, 0.4, 11).collect()
         wr_s21 = rdd.sample(True, 0.4, 21).collect()
         self.assertNotEqual(set(wr_s11), set(wr_s21))
+
+    def test_datetime(self):
+        # SPARK-39176: Pre - 1970 time serialization test
+        rdd = self.sc.parallelize([('a', datetime(1957, 1, 9, 0, 0)),
+                                   ('b', datetime(2014, 1, 27, 0, 0))])
+        df = SparkSession(self.sc).createDataFrame(rdd, ["id", "date"])
+        self.assertEqual(2, len(df.collect()))
 
     def test_null_in_rdd(self):
         jrdd = self.sc._jvm.PythonUtils.generateRDDWithNull(self.sc._jsc)
