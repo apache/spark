@@ -331,7 +331,6 @@ class UnivocityParser(
       }
       i += 1
     }
-    // Use the corresponding DEFAULT value associated with the column, if any.
     if (skipRow) {
       noRows
     } else {
