@@ -20,6 +20,8 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.SparkException;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.apache.spark.util.Utils;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -99,6 +101,19 @@ public class CatalogLoadingSuite {
         exc.getMessage().contains("missing"));
     Assert.assertTrue("Should identify the missing class",
         exc.getMessage().contains("com.example.NoSuchCatalogPlugin"));
+  }
+
+  @Test
+  public void testLoadMissingDependentClasses() {
+    SQLConf conf = new SQLConf();
+    String catalogClass = ClassFoundCatalogPlugin.class.getCanonicalName();
+    conf.setConfString("spark.sql.catalog.missing", catalogClass);
+
+    SparkException exc =
+        Assert.assertThrows(SparkException.class, () -> Catalogs.load("missing", conf));
+
+    Assert.assertTrue(exc.getCause() instanceof ClassNotFoundException);
+    Assert.assertTrue(exc.getCause().getMessage().contains(catalogClass + "Dep"));
   }
 
   @Test
@@ -201,5 +216,18 @@ class AccessErrorCatalogPlugin implements CatalogPlugin { // no public construct
 
 class InvalidCatalogPlugin { // doesn't implement CatalogPlugin
   public void initialize(CaseInsensitiveStringMap options) {
+  }
+}
+
+class ClassFoundCatalogPlugin implements CatalogPlugin {
+
+  @Override
+  public void initialize(String name, CaseInsensitiveStringMap options) {
+    Utils.classForName(this.getClass().getCanonicalName() + "Dep", true, true);
+  }
+
+  @Override
+  public String name() {
+    return null;
   }
 }

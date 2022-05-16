@@ -41,6 +41,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
+from pyspark import SparkContext
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -1490,9 +1491,9 @@ class Frame(object, metaclass=ABCMeta):
 
         On a DataFrame:
 
-        >>> df.skew()  # doctest: +SKIP
-        a    0.000000e+00
-        b   -3.319678e-16
+        >>> df.skew()
+        a    0.0
+        b    0.0
         dtype: float64
 
         On a Series:
@@ -1516,7 +1517,9 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.skewness(spark_column)
+
+            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            return Column(sql_utils.pandasSkewness(spark_column._jc))
 
         return self._reduce_for_stat_function(
             skew,

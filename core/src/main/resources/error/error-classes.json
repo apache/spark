@@ -200,6 +200,17 @@
     "message" : [ "Unsupported data type <typeName>" ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_DESERIALIZER" : {
+    "message" : [ "The deserializer is not supported: " ],
+    "subClass" : {
+      "DATA_TYPE_MISMATCH" : {
+        "message" : [ "need <quantifier> <desiredType> field but got <dataType>." ]
+      },
+      "FIELD_NUMBER_MISMATCH" : {
+        "message" : [ "try to map <schema> to Tuple<ordinal>, but failed as the number of fields does not line up." ]
+      }
+    }
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [ "The feature is not supported: " ],
     "subClass" : {

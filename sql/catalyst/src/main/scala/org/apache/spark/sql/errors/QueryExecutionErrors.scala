@@ -34,7 +34,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -67,17 +67,6 @@ import org.apache.spark.util.CircularBuffer
  * grouped into [[QueryCompilationErrors]].
  */
 object QueryExecutionErrors extends QueryErrorsBase {
-
-  def internalMissingTimezoneIdError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
-      messageParameters = Array("Missing timezoneId where it is mandatory."))
-  }
-
-  def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
-      messageParameters = Array(
-        "Internal error: logical hint operator should have been removed during analysis"))
-  }
 
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
     new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
@@ -116,16 +105,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidInputSyntaxForNumericError(
-      e: NumberFormatException,
-      errorContext: String): NumberFormatException = {
-    new NumberFormatException(s"${e.getMessage}. To return NULL instead, use 'try_cast'. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error." + errorContext)
-  }
-
-  def invalidInputSyntaxForNumericError(
       to: DataType,
       s: UTF8String,
-      errorContext: String): NumberFormatException = {
+      errorContext: String): SparkNumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_SYNTAX_FOR_CAST",
       messageParameters = Array(toSQLType(to), toSQLValue(s, StringType),
         SQLConf.ANSI_ENABLED.key, errorContext))
@@ -142,7 +124,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotParseDecimalError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "CANNOT_PARSE_DECIMAL",
+    new SparkRuntimeException(
+      errorClass = "CANNOT_PARSE_DECIMAL",
       messageParameters = Array.empty)
   }
 
@@ -1548,8 +1531,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def catalogPluginClassNotFoundForCatalogError(
       name: String,
-      pluginClassName: String): Throwable = {
-    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName", e)
   }
 
   def catalogFailToFindPublicNoArgConstructorError(
@@ -1959,9 +1943,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
         s" to at least $numWrittenParts.")
   }
 
-  def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
+  def invalidNumberFormatError(valueType: String, input: String, format: String): Throwable = {
     new IllegalArgumentException(
-      s"The input string '$input' does not match the given number format: '$format'")
+      s"The input $valueType '$input' does not match the given number format: '$format'")
   }
 
   def multipleBucketTransformsError(): Throwable = {
