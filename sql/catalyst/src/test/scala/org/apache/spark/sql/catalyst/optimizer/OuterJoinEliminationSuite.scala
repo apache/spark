@@ -269,12 +269,10 @@ class OuterJoinEliminationSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("SPARK-39172: Remove outer join if all output come from streamed side and buffered side " +
-    "keys exist unique key") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation1.subquery(Symbol("y"))
-
-    // left outer
+  test("SPARK-39172: Remove left outer join if only left-side columns being selected and " +
+    "the right side join keys are unique") {
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
     comparePlans(Optimize.execute(
       x.join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" === $"d"))
         .select($"a", $"b", $"c").analyze),
@@ -287,8 +285,12 @@ class OuterJoinEliminationSuite extends PlanTest {
         .select($"a", $"b", $"c").analyze),
       x.select($"a", $"b", $"c").analyze
     )
+  }
 
-    // right outer
+  test("SPARK-39172: Remove right outer join if only right-side columns being selected and " +
+    "the left side join keys are unique") {
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
     comparePlans(Optimize.execute(
       x.groupBy($"a")($"a").join(y, RightOuter, Some($"a" === $"d"))
         .select($"d", $"e", $"f").analyze),
@@ -301,8 +303,11 @@ class OuterJoinEliminationSuite extends PlanTest {
         .select($"d", $"e", $"f").analyze),
       y.select($"d", $"e", $"f").analyze
     )
+  }
 
-    // negative case
+  test("SPARK-39172: Negative case, do not remove outer join") {
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
     // not a equi-join
     val p1 = x.join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" > $"d"))
       .select($"a").analyze
@@ -313,7 +318,7 @@ class OuterJoinEliminationSuite extends PlanTest {
       .select($"a").analyze
     comparePlans(Optimize.execute(p2), p2)
 
-    // output comes from buffered side
+    // output comes from the right side of a left outer join
     val p3 = x.join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" === $"d"))
       .select($"a", $"d").analyze
     comparePlans(Optimize.execute(p3), p3)
