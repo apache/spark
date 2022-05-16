@@ -640,10 +640,14 @@ class AnsiCastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
   }
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
-    v match {
-      case lit: Expression => Cast.ansiCast(lit, targetType, timeZoneId)
-      case _ => Cast.ansiCast(Literal(v), targetType, timeZoneId)
+    val cast = v match {
+      case lit: Expression =>
+        Cast(lit, targetType, timeZoneId)
+      case _ =>
+        Cast(Literal(v), targetType, timeZoneId)
     }
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    cast
   }
 
   override def setConfigurationHint: String =

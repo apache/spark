@@ -144,6 +144,11 @@ object Cast {
   }
 
   /**
+   * A tag to identify if a CAST added by the table insertion resolver.
+   */
+  val TABLE_INSERTION_RESOLVER = TreeNodeTag[Boolean]("tableInsertionResolver")
+
+  /**
    * A tag to decide if a CAST is specified by user.
    */
   val USER_SPECIFIED_CAST = new TreeNodeTag[Boolean]("user_specified_cast")
@@ -418,12 +423,6 @@ object Cast {
       // scalastyle:on line.size.limit
 
       case _ => s"cannot cast ${from.catalogString} to ${to.catalogString}"
-    }
-
-  def ansiCast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None): Cast =
-    new Cast(child, dataType, timeZoneId, true) {
-      override val fallbackConfKey: String = SQLConf.STORE_ASSIGNMENT_POLICY.key
-      override val fallbackConfValue: String = SQLConf.StoreAssignmentPolicy.LEGACY.toString
     }
 }
 
@@ -2293,8 +2292,12 @@ case class Cast(
     Cast.canCast(from, to)
   }
 
-  val fallbackConfKey: String = SQLConf.ANSI_ENABLED.key
-  val fallbackConfValue: String = "false"
+  private val (fallbackConfKey, fallbackConfValue) =
+    if (getTagValue(Cast.TABLE_INSERTION_RESOLVER).getOrElse(false)) {
+      (SQLConf.STORE_ASSIGNMENT_POLICY.key, SQLConf.StoreAssignmentPolicy.LEGACY.toString)
+    } else {
+      (SQLConf.ANSI_ENABLED.key, "false")
+    }
 
   override def typeCheckFailureMessage: String = if (ansiEnabled) {
     Cast.typeCheckFailureMessage(child.dataType, dataType,

@@ -1115,9 +1115,10 @@ class PlanResolutionSuite extends AnalysisTest {
             // Note that when resolving DEFAULT column references, the analyzer will insert literal
             // NULL values if the corresponding table does not define an explicit default value for
             // that column. This is intended.
-            Assignment(i: AttributeReference, Cast(Literal(null, _), IntegerType, _, true)),
-            Assignment(s: AttributeReference, Cast(Literal(null, _), StringType, _, true))),
-          None) =>
+            Assignment(i: AttributeReference, cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
+            Assignment(s: AttributeReference, cast2 @ Cast(Literal(null, _), StringType, _, true))),
+          None) if cast1.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get &&
+          cast2.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get =>
           assert(i.name == "i")
           assert(s.name == "s")
 
@@ -1145,8 +1146,8 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed9 match {
         case UpdateTable(
         _,
-        Seq(Assignment(i: AttributeReference, Cast(Literal(null, _), StringType, _, true))),
-        None) =>
+        Seq(Assignment(i: AttributeReference, cast @ Cast(Literal(null, _), StringType, _, true))),
+        None) if cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get =>
           assert(i.name == "i")
 
         case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
