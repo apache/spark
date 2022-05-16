@@ -496,15 +496,20 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def partitionTableScanBenchmark(values: Int): Unit = {
-    val benchmark = new Benchmark("Partitioned Table", values, output = output)
+  def partitionTableScanBenchmark(values: Int, partitionType: DataType): Unit = {
+    val benchmark = new Benchmark(s"Partitioned Table(Partition Column Type = $partitionType)",
+      values, output = output)
 
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
+        val columnType = partitionType.catalogString
+        prepareTable(
+          dir,
+          spark.sql(s"SELECT cast(value % 2 as $columnType) AS p, value AS id FROM t1"),
+          Some("p"))
 
         benchmark.addCase("Data column - CSV") { _ =>
           spark.sql("select sum(id) from csvTable").noop()
@@ -766,7 +771,9 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       repeatedStringScanBenchmark(1024 * 1024 * 10)
     }
     runBenchmark("Partitioned Table Scan") {
-      partitionTableScanBenchmark(1024 * 1024 * 15)
+      Seq(LongType, StringType).foreach {
+        dataType => partitionTableScanBenchmark(1024 * 1024 * 15, dataType)
+      }
     }
     runBenchmark("String with Nulls Scan") {
       for (fractionOfNulls <- List(0.0, 0.50, 0.95)) {
