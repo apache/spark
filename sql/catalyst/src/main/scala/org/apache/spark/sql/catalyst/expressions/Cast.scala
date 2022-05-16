@@ -421,8 +421,10 @@ object Cast {
     }
 
   def ansiCast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None): Cast =
-    Cast(child, dataType, timeZoneId, true,
-      SQLConf.STORE_ASSIGNMENT_POLICY.key, SQLConf.StoreAssignmentPolicy.LEGACY.toString)
+    new Cast(child, dataType, timeZoneId, true) {
+      override val fallbackConfKey: String = SQLConf.STORE_ASSIGNMENT_POLICY.key
+      override val fallbackConfValue: String = SQLConf.StoreAssignmentPolicy.LEGACY.toString
+    }
 }
 
 abstract class CastBase extends UnaryExpression
@@ -2274,9 +2276,7 @@ case class Cast(
     child: Expression,
     dataType: DataType,
     timeZoneId: Option[String] = None,
-    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled,
-    fallbackConfKey: String = SQLConf.ANSI_ENABLED.key,
-    fallbackConfValue: String = "false")
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends CastBase {
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
@@ -2292,6 +2292,9 @@ case class Cast(
   } else {
     Cast.canCast(from, to)
   }
+
+  val fallbackConfKey: String = SQLConf.ANSI_ENABLED.key
+  val fallbackConfValue: String = "false"
 
   override def typeCheckFailureMessage: String = if (ansiEnabled) {
     Cast.typeCheckFailureMessage(child.dataType, dataType,
