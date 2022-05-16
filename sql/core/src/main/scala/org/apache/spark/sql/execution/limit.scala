@@ -253,7 +253,7 @@ case class GlobalLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
            | } else {
            |   ${consume(ctx, input)}
            | }
-       """.stripMargin
+         """.stripMargin
       }
     } else {
       super.doConsume(ctx, input, row)
