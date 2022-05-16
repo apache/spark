@@ -27,6 +27,7 @@ import base64
 from array import array
 import ctypes
 import warnings
+import platform
 
 if sys.version >= "3":
     long = int
@@ -192,24 +193,24 @@ class TimestampType(AtomicType):
     def toInternal(self, dt):
         if dt is not None:
             seconds = 0.0
-            try:
-                seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
-                           else time.mktime(dt.timetuple()))
-            except:
+            if platform.system().lower() == 'windows':
                 # On Windows, the current value is converted to a timestamp when the current value is less than 1970
                 seconds = (dt - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
+            else:
+                seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
+                           else time.mktime(dt.timetuple()))
 
             return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts):
         if ts is not None:
-            try:
-                # using int to avoid precision loss in float
-                return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
-            except:
+            if platform.system().lower() == 'windows':
                 # On Windows, resolve when the timestamp is negative
                 return datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000) + \
                        datetime.timedelta(microseconds=ts)
+            else:
+                # using int to avoid precision loss in float
+                return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
 
 
 class DecimalType(FractionalType):
@@ -1647,12 +1648,13 @@ class DatetimeConverter(object):
     def convert(self, obj, gateway_client):
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
         seconds = 0.0
-        try:
-            seconds = (calendar.timegm(obj.utctimetuple()) if obj.tzinfo
-                       else time.mktime(obj.timetuple()))
-        except:
+
+        if platform.system().lower() == 'windows':
             # On Windows, the current value is converted to a timestamp when the current value is less than 1970
             seconds = (obj - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
+        else:
+            seconds = (calendar.timegm(obj.utctimetuple()) if obj.tzinfo
+                       else time.mktime(obj.timetuple()))
 
         t = Timestamp(int(seconds) * 1000)
         t.setNanos(obj.microsecond * 1000)
