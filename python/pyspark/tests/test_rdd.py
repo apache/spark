@@ -680,7 +680,7 @@ class RDDTests(ReusedPySparkTestCase):
         df = SparkSession(self.sc).createDataFrame(rdd, ["id", "date"])
         self.assertEqual(2, len(df.collect()))
 
-def test_null_in_rdd(self):
+    def test_null_in_rdd(self):
         jrdd = self.sc._jvm.PythonUtils.generateRDDWithNull(self.sc._jsc)
         rdd = RDD(jrdd, self.sc, UTF8Deserializer())
         self.assertEqual(["a", None, "b"], rdd.collect())
