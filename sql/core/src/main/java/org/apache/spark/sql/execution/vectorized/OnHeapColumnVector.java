@@ -531,12 +531,14 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public int putByteArrays(int rowId, int count, byte[] value, int offset, int length) {
-    reserve(elementsAppended + length * count);
+    WritableColumnVector child = arrayData();
+    child.reserve(elementsAppended + length * count);
     int result = 0;
     for (int i = 0; i < count; i++) {
-      int ret = arrayData().appendBytesWithoutReserveCheck(length, value, offset);
-      arrayOffsets[rowId + i] = ret;
-      arrayLengths[rowId + i] = length;
+      int ret = child.appendBytesWithoutReserveCheck(length, value, offset);
+      int currentRowId = rowId + i;
+      arrayOffsets[currentRowId] = ret;
+      arrayLengths[currentRowId] = length;
       result += ret;
     }
     return result;
