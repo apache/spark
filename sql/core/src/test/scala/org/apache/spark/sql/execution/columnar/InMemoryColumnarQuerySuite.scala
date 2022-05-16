@@ -563,4 +563,33 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-39104: InMemoryRelation#isCachedColumnBuffersLoaded should be thread-safe") {
+    val plan = spark.range(1).queryExecution.executedPlan
+    val serializer = new TestCachedBatchSerializer(useCompression = true, 5)
+    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None)
+
+    val t1 = new Thread {
+      (0 until 1000).foreach { _ =>
+        cachedRDDBuilder.clearCache()
+        cachedRDDBuilder.isCachedColumnBuffersLoaded
+        cachedRDDBuilder.cachedColumnBuffers
+      }
+    }
+
+    val t2 = new Thread {
+      (0 until 1000).foreach { _ =>
+        cachedRDDBuilder.cachedColumnBuffers
+        cachedRDDBuilder.isCachedColumnBuffersLoaded
+        cachedRDDBuilder.clearCache()
+      }
+    }
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    cachedRDDBuilder.clearCache()
+  }
 }
