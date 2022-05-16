@@ -22,7 +22,6 @@ import java.time.LocalDate
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
@@ -1189,7 +1188,7 @@ class DataSourceV2SQLSuite
     testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
 
     def assertDropFails(): Unit = {
-      val e = intercept[SparkException] {
+      val e = intercept[AnalysisException] {
         sql("DROP NAMESPACE testcat.ns1")
       }
       assert(e.getMessage.contains("Cannot drop a non-empty namespace: ns1"))
