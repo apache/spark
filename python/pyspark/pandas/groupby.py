@@ -2908,7 +2908,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_names: List,
         accepted_spark_types: Optional[Tuple[Type[DataType], ...]] = None,
         bool_to_numeric: bool = False,
-    ):
+    ) -> Tuple[InternalFrame, SparkDataFrame]:
         groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
         agg_columns = []
         for psser in self._agg_columns:
