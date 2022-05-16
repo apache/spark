@@ -265,7 +265,7 @@ case class GlobalLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
 }
 
 /**
- * Take the first `limit`` elements as defined by the sortOrder, then drop the first `offset`
+ * Take the first `limit` elements as defined by the sortOrder, then drop the first `offset`
  * elements, and do projection if needed. This is logically equivalent to having a Limit and/or
  * Offset operator after a [[SortExec]] operator, or having a [[ProjectExec]] operator between them.
  * This could have been named TopK, but Spark's top operator does the opposite in ordering
