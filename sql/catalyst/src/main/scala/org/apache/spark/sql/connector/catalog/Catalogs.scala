@@ -65,8 +65,9 @@ private[sql] object Catalogs {
       plugin.initialize(name, catalogOptions(name, conf))
       plugin
     } catch {
-      case _: ClassNotFoundException =>
-        throw QueryExecutionErrors.catalogPluginClassNotFoundForCatalogError(name, pluginClassName)
+      case e: ClassNotFoundException =>
+        throw QueryExecutionErrors.catalogPluginClassNotFoundForCatalogError(
+          name, pluginClassName, e)
       case e: NoSuchMethodException =>
         throw QueryExecutionErrors.catalogFailToFindPublicNoArgConstructorError(
           name, pluginClassName, e)

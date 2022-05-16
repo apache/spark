@@ -1776,7 +1776,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           CurrentDate()
         case SqlBaseParser.CURRENT_TIMESTAMP =>
           CurrentTimestamp()
-        case SqlBaseParser.CURRENT_USER =>
+        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER =>
           CurrentUser()
       }
     } else {

@@ -58,11 +58,6 @@ class ParquetFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
-  // Hold a reference to the (serializable) singleton instance of ParquetLogRedirector. This
-  // ensures the ParquetLogRedirector class is initialized whether an instance of ParquetFileFormat
-  // is constructed or deserialized. Do not heed the Scala compiler's warning about an unused field
-  // here.
-  private val parquetLogRedirector = ParquetLogRedirector.INSTANCE
 
   override def shortName(): String = "parquet"
 
@@ -146,11 +141,6 @@ class ParquetFileFormat
     }
 
     new OutputWriterFactory {
-      // This OutputWriterFactory instance is deserialized when writing Parquet files on the
-      // executor side without constructing or deserializing ParquetFileFormat. Therefore, we hold
-      // another reference to ParquetLogRedirector.INSTANCE here to ensure the latter class is
-      // initialized.
-      private val parquetLogRedirector = ParquetLogRedirector.INSTANCE
 
         override def newInstance(
           path: String,
