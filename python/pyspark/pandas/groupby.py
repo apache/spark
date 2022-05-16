@@ -796,9 +796,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             for label in psdf._internal.column_labels:
                 psser = psdf._psser_for(label)
                 stat_exprs.append(
-                    sfun(psser._dtype_op.nan_to_null(psser).spark.column, psser.spark.data_type).alias(
-                        psser._internal.data_spark_column_names[0]
-                    )
+                    sfun(
+                        psser._dtype_op.nan_to_null(psser).spark.column, psser.spark.data_type
+                    ).alias(psser._internal.data_spark_column_names[0])
                 )
             sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
         else:
@@ -2904,14 +2904,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         psdf = self._cleanup_and_return(psdf)
         return psdf
 
-    def _prepare_reduce(self, groupkey_names: List, accepted_spark_types: Optional[Tuple[Type[DataType], ...]] = None, bool_to_numeric: bool=False):
+    def _prepare_reduce(
+        self,
+        groupkey_names: List,
+        accepted_spark_types: Optional[Tuple[Type[DataType], ...]] = None,
+        bool_to_numeric: bool = False,
+    ):
         groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
         agg_columns = []
         for psser in self._agg_columns:
             if bool_to_numeric and isinstance(psser.spark.data_type, BooleanType):
                 agg_columns.append(psser.astype(int))
             elif (accepted_spark_types is None) or isinstance(
-                    psser.spark.data_type, accepted_spark_types
+                psser.spark.data_type, accepted_spark_types
             ):
                 agg_columns.append(psser)
         sdf = self._psdf._internal.spark_frame.select(
