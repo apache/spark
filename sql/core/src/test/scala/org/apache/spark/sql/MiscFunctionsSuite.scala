@@ -47,15 +47,18 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-21957: get current_user in normal spark apps") {
     val user = spark.sparkContext.sparkUser
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val df = sql("select current_user(), current_user")
-      checkAnswer(df, Row(user, user))
+      val df = sql("select current_user(), current_user, user, user()")
+      checkAnswer(df, Row(user, user, user, user))
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
-      val df = sql("select current_user")
-      checkAnswer(df, Row(spark.sparkContext.sparkUser))
-      val e = intercept[ParseException](sql("select current_user()"))
-      assert(e.getMessage.contains("current_user"))
+      Seq("user", "current_user").foreach { func =>
+        checkAnswer(sql(s"select $func"), Row(user))
+      }
+      Seq("user()", "current_user()").foreach { func =>
+        val e = intercept[ParseException](sql(s"select $func"))
+        assert(e.getMessage.contains(func))
+      }
     }
   }
 

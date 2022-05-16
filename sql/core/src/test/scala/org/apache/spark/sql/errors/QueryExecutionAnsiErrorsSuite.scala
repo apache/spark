@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkConf, SparkDateTimeException, SparkNoSuchElementException}
+import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkConf, SparkDateTimeException, SparkNoSuchElementException, SparkNumberFormatException}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 
@@ -123,5 +123,20 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
           |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           |""".stripMargin
     )
+  }
+
+  test("INVALID_SYNTAX_FOR_CAST: cast string to double") {
+    checkErrorClass(
+      exception = intercept[SparkNumberFormatException] {
+        sql("select CAST('111111111111xe23' AS DOUBLE)").collect()
+      },
+      errorClass = "INVALID_SYNTAX_FOR_CAST",
+      msg = """Invalid input syntax for type "DOUBLE": '111111111111xe23'. """ +
+        """To return NULL instead, use 'try_cast'. If necessary set """ +
+        """spark.sql.ansi.enabled to false to bypass this error.
+          |== SQL(line 1, position 7) ==
+          |select CAST('111111111111xe23' AS DOUBLE)
+          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          |""".stripMargin)
   }
 }

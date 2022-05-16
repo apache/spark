@@ -557,13 +557,6 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
-    "OFFSET clause in other node",
-    testRelation2.offset(Literal(10, IntegerType)).where('b > 1),
-    "The OFFSET clause is allowed in the LIMIT clause or be the outermost node," +
-      " but the OFFSET clause found in: Filter." :: Nil
-  )
-
-  errorTest(
     "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
     testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
     "The sum of the LIMIT clause and the OFFSET clause must not be greater than" +

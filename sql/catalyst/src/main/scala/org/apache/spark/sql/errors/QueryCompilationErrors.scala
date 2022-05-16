@@ -147,14 +147,17 @@ object QueryCompilationErrors extends QueryErrorsBase {
       dataType: DataType, desiredType: String): Throwable = {
     val quantifier = if (desiredType.equals("array")) "an" else "a"
     new AnalysisException(
-      s"need $quantifier $desiredType field but got " + dataType.catalogString)
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      messageParameters =
+        Array("DATA_TYPE_MISMATCH", quantifier, toSQLType(desiredType), toSQLType(dataType)))
   }
 
   def fieldNumberMismatchForDeserializerError(
       schema: StructType, maxOrdinal: Int): Throwable = {
     new AnalysisException(
-      s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}, " +
-        "but failed as the number of fields does not line up.")
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      messageParameters =
+        Array("FIELD_NUMBER_MISMATCH", toSQLType(schema), (maxOrdinal + 1).toString))
   }
 
   def upCastFailureError(
@@ -2404,10 +2407,6 @@ object QueryCompilationErrors extends QueryErrorsBase {
       "Sinks cannot request distribution and ordering in continuous execution mode")
   }
 
-  def noSuchFunctionError(database: String, funcInfo: String): Throwable = {
-    new AnalysisException(s"$database does not support function: $funcInfo")
-  }
-
   // Return a more descriptive error message if the user tries to nest a DEFAULT column reference
   // inside some other expression (such as DEFAULT + 1) in an INSERT INTO command's VALUES list;
   // this is not allowed.
@@ -2431,5 +2430,19 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       "Failed to execute UPDATE command because the WHERE clause contains a DEFAULT column " +
         "reference; this is not allowed")
+  }
+
+  // Return a more descriptive error message if the user tries to use a DEFAULT column reference
+  // inside an UPDATE command's WHERE clause; this is not allowed.
+  def defaultReferencesNotAllowedInMergeCondition(): Throwable = {
+    new AnalysisException(
+      "Failed to execute MERGE command because the WHERE clause contains a DEFAULT column " +
+        "reference; this is not allowed")
+  }
+
+  def defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates(): Throwable = {
+    new AnalysisException(
+      "Failed to execute MERGE INTO command because one of its INSERT or UPDATE assignments " +
+        "contains a DEFAULT column reference as part of another expression; this is not allowed")
   }
 }

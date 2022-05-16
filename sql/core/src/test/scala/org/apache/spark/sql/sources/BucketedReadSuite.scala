@@ -22,6 +22,7 @@ import java.net.URI
 
 import scala.util.Random
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
@@ -841,11 +842,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
       df1.write.parquet(tableDir.getAbsolutePath)
 
       val aggregated = spark.table("bucketed_table").groupBy("i").count()
-      val error = intercept[Exception] {
+      val e = intercept[SparkException] {
         aggregated.count()
       }
-
-      assert(error.toString contains "Invalid bucket file")
+      // TODO(SPARK-39163): Throw an exception w/ error class for an invalid bucket file
+      assert(e.getErrorClass === "INTERNAL_ERROR")
+      assert(e.getCause.toString contains "Invalid bucket file")
     }
   }
 
