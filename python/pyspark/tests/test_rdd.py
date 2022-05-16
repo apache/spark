@@ -678,6 +678,7 @@ class RDDTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize([('a', datetime(1957, 1, 9, 0, 0)),
                                    ('b', datetime(2014, 1, 27, 0, 0))])
         df = SparkSession(self.sc).createDataFrame(rdd, ["id", "date"])
+        
         self.assertEqual(2, len(df.collect()))
 
     def test_null_in_rdd(self):
