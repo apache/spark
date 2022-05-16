@@ -34,7 +34,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -67,17 +67,6 @@ import org.apache.spark.util.CircularBuffer
  * grouped into [[QueryCompilationErrors]].
  */
 object QueryExecutionErrors extends QueryErrorsBase {
-
-  def internalMissingTimezoneIdError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
-      messageParameters = Array("Missing timezoneId where it is mandatory."))
-  }
-
-  def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
-      messageParameters = Array(
-        "Internal error: logical hint operator should have been removed during analysis"))
-  }
 
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
     new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
@@ -135,7 +124,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotParseDecimalError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "CANNOT_PARSE_DECIMAL",
+    new SparkRuntimeException(
+      errorClass = "CANNOT_PARSE_DECIMAL",
       messageParameters = Array.empty)
   }
 
