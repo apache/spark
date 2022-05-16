@@ -230,10 +230,4 @@ case class CheckOverflowInSum(
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflowInSum =
     copy(child = newChild)
-
-  override def initQueryContext(): String = if (nullOnOverflow) {
-    ""
-  } else {
-    origin.context
-  }
 }
