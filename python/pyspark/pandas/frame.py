@@ -9410,6 +9410,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  2  c
         4  3  d
 
+        >>> df.drop_duplicates(ignore_index=True).sort_index()
+           a  b
+        0  1  a
+        1  2  a
+        2  2  c
+        3  3  d
+
         >>> df.drop_duplicates('a').sort_index()
            a  b
         0  1  a
@@ -12193,6 +12200,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  NaN  1
         2  3.0  1
         2  4.0  1
+
+        >>> df.explode('A', ignore_index=True)
+             A  B
+        0  1.0  1
+        1  2.0  1
+        2  3.0  1
+        3  NaN  1
+        4  3.0  1
+        5  4.0  1
         """
         from pyspark.pandas.series import Series
 
