@@ -25,10 +25,11 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedDBObjectName, ResolvedNam
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, ResolveDefaultColumns, V2ExpressionBuilder}
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDelete, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -105,7 +106,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
-      _, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
+      _, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -126,7 +127,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       withProjectAndFilter(project, filters, dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
-        DataSourceV2ScanRelation(_, scan: LocalScan, output)) =>
+        DataSourceV2ScanRelation(_, scan: LocalScan, output, _)) =>
       val localScanExec = LocalTableScanExec(output, scan.rows().toSeq)
       withProjectAndFilter(project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
 
@@ -138,7 +139,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _: DynamicPruning => true
         case _ => false
       }
-      val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters)
+      val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
+        relation.keyGroupedPartitioning)
       withProjectAndFilter(project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
@@ -260,9 +262,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write)) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
 
+    case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters) =>
+      DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r)) :: Nil
+
     case DeleteFromTable(relation, condition) =>
       relation match {
-        case DataSourceV2ScanRelation(r, _, output) =>
+        case DataSourceV2ScanRelation(r, _, output, _) =>
           val table = r.table
           if (SubqueryExpression.hasSubquery(condition)) {
             throw QueryCompilationErrors.unsupportedDeleteByConditionWithSubqueryError(condition)
@@ -275,14 +280,24 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
                   throw QueryCompilationErrors.cannotTranslateExpressionToSourceFilterError(f))
               }).toArray
 
-          if (!table.asDeletable.canDeleteWhere(filters)) {
-            throw QueryCompilationErrors.cannotDeleteTableWhereFiltersError(table, filters)
+          table match {
+            case t: SupportsDelete if t.canDeleteWhere(filters) =>
+              DeleteFromTableExec(t, filters, refreshCache(r)) :: Nil
+            case t: SupportsDelete =>
+              throw QueryCompilationErrors.cannotDeleteTableWhereFiltersError(t, filters)
+            case t: TruncatableTable if condition == TrueLiteral =>
+              TruncateTableExec(t, refreshCache(r)) :: Nil
+            case _ =>
+              throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }
 
-          DeleteFromTableExec(table.asDeletable, filters, refreshCache(r)) :: Nil
         case _ =>
           throw QueryCompilationErrors.deleteOnlySupportedWithV2TablesError()
       }
+
+    case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, Some(write)) =>
+      // use the original relation to refresh the cache
+      ReplaceDataExec(planLater(query), refreshCache(r), write) :: Nil
 
     case WriteToContinuousDataSource(writer, query, customMetrics) =>
       WriteToContinuousDataSourceExec(writer, planLater(query), customMetrics) :: Nil

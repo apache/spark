@@ -2116,8 +2116,6 @@ case class ElementAt(
     case MapType(_, valueType, _) => valueType
   }
 
-  override val isElementAtFunction: Boolean = true
-
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
       case (arr: ArrayType, e2: IntegralType) if (e2 != LongType) =>

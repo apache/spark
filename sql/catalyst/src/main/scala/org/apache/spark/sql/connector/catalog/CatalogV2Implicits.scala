@@ -188,4 +188,8 @@ private[sql] object CatalogV2Implicits {
   def parseColumnPath(name: String): Seq[String] = {
     CatalystSqlParser.parseMultipartIdentifier(name)
   }
+
+  def parseFunctionName(name: String): Seq[String] = {
+    CatalystSqlParser.parseMultipartIdentifier(name)
+  }
 }

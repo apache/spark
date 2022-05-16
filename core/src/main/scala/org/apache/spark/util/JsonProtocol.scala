@@ -527,7 +527,9 @@ private[spark] object JsonProtocol {
     ("Log Urls" -> mapToJson(executorInfo.logUrlMap)) ~
     ("Attributes" -> mapToJson(executorInfo.attributes)) ~
     ("Resources" -> resourcesMapToJson(executorInfo.resourcesInfo)) ~
-    ("Resource Profile Id" -> executorInfo.resourceProfileId)
+    ("Resource Profile Id" -> executorInfo.resourceProfileId) ~
+    ("Registration Time" -> executorInfo.registrationTime) ~
+    ("Request Time" -> executorInfo.requestTime)
   }
 
   def resourcesMapToJson(m: Map[String, ResourceInformation]): JValue = {
@@ -1223,8 +1225,15 @@ private[spark] object JsonProtocol {
       case Some(id) => id.extract[Int]
       case None => ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     }
+    val registrationTs = jsonOption(json \ "Registration Time") map { ts =>
+      ts.extract[Long]
+    }
+    val requestTs = jsonOption(json \ "Request Time") map { ts =>
+      ts.extract[Long]
+    }
+
     new ExecutorInfo(executorHost, totalCores, logUrls, attributes.toMap, resources.toMap,
-      resourceProfileId)
+      resourceProfileId, registrationTs, requestTs)
   }
 
   def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {

@@ -138,7 +138,7 @@ case class InsertIntoHadoopFsRelationCommand(
         case (SaveMode.Ignore, exists) =>
           !exists
         case (s, exists) =>
-          throw QueryExecutionErrors.unsupportedSaveModeError(s.toString, exists)
+          throw QueryExecutionErrors.saveModeUnsupportedError(s, exists)
       }
     }
 

@@ -20,11 +20,13 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Coalesce, IsNotNull}
+import org.apache.spark.sql.catalyst.expressions.{Coalesce, If, IsNotNull, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 
 class OuterJoinEliminationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -251,5 +253,19 @@ class OuterJoinEliminationSuite extends PlanTest {
 
       comparePlans(optimized, originalQuery.analyze)
     }
+  }
+
+  test("SPARK-38868: exception thrown from filter predicate does not propagate") {
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation1.subquery(Symbol("y"))
+
+    val message = Literal(UTF8String.fromString("Bad value"), StringType)
+    val originalQuery =
+      x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
+        .where(If("y.d".attr > 0, true, RaiseError(message)).isNull)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    comparePlans(optimized, originalQuery.analyze)
   }
 }

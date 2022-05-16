@@ -168,6 +168,25 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
+  test("RocksDBFileManager: create init dfs directory with unknown number of keys") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    try {
+      val verificationDir = Utils.createTempDir().getAbsolutePath
+      val fileManager = new RocksDBFileManager(
+        dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+      // Save a version of empty checkpoint files
+      val cpFiles = Seq()
+      generateFiles(verificationDir, cpFiles)
+      assert(!dfsRootDir.exists())
+      saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = -1)
+      // The dfs root dir is created even with unknown number of keys
+      assert(dfsRootDir.exists())
+      loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, Nil, -1)
+    } finally {
+      Utils.deleteRecursively(dfsRootDir)
+    }
+  }
+
   test("RocksDBFileManager: upload only new immutable files") {
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath

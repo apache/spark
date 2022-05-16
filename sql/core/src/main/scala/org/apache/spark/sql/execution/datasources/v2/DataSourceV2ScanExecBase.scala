@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
@@ -43,15 +44,22 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
 
   def scan: Scan
 
-  def partitions: Seq[InputPartition]
-
   def readerFactory: PartitionReaderFactory
+
+  /** Optional partitioning expressions provided by the V2 data sources, through
+   * `SupportsReportPartitioning` */
+  def keyGroupedPartitioning: Option[Seq[Expression]]
+
+  protected def inputPartitions: Seq[InputPartition]
 
   override def simpleString(maxFields: Int): String = {
     val result =
       s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)} ${scan.description()}"
     redact(result)
   }
+
+  def partitions: Seq[Seq[InputPartition]] =
+    groupedPartitions.map(_.map(_._2)).getOrElse(inputPartitions.map(Seq(_)))
 
   /**
    * Shorthand for calling redact() without specifying redacting rules
@@ -78,23 +86,64 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
        |""".stripMargin
   }
 
-  override def outputPartitioning: physical.Partitioning = scan match {
-    case _ if partitions.length == 1 =>
-      SinglePartition
+  override def outputPartitioning: physical.Partitioning = {
+    if (partitions.length == 1) SinglePartition
+    else groupedPartitions.map { partitionValues =>
+      KeyGroupedPartitioning(keyGroupedPartitioning.get,
+        partitionValues.size, Some(partitionValues.map(_._1)))
+    }.getOrElse(super.outputPartitioning)
+  }
 
-    case s: SupportsReportPartitioning =>
-      new DataSourcePartitioning(
-        s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
+  @transient lazy val groupedPartitions: Option[Seq[(InternalRow, Seq[InputPartition])]] =
+    groupPartitions(inputPartitions)
 
-    case _ => super.outputPartitioning
+  /**
+   * Group partition values for all the input partitions. This returns `Some` iff:
+   *   - [[SQLConf.V2_BUCKETING_ENABLED]] is turned on
+   *   - all input partitions implement [[HasPartitionKey]]
+   *   - `keyGroupedPartitioning` is set
+   *
+   * The result, if defined, is a list of tuples where the first element is a partition value,
+   * and the second element is a list of input partitions that share the same partition value.
+   *
+   * A non-empty result means each partition is clustered on a single key and therefore eligible
+   * for further optimizations to eliminate shuffling in some operations such as join and aggregate.
+   */
+  def groupPartitions(
+      inputPartitions: Seq[InputPartition]): Option[Seq[(InternalRow, Seq[InputPartition])]] = {
+    if (!SQLConf.get.v2BucketingEnabled) return None
+    keyGroupedPartitioning.flatMap { expressions =>
+      val results = inputPartitions.takeWhile {
+        case _: HasPartitionKey => true
+        case _ => false
+      }.map(p => (p.asInstanceOf[HasPartitionKey].partitionKey(), p))
+
+      if (results.length != inputPartitions.length || inputPartitions.isEmpty) {
+        // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip here.
+        None
+      } else {
+        val partKeyType = expressions.map(_.dataType)
+
+        val groupedPartitions = results.groupBy(_._1).toSeq.map { case (key, s) =>
+          (key, s.map(_._2))
+        }
+
+        // also sort the input partitions according to their partition key order. This ensures
+        // a canonical order from both sides of a bucketed join, for example.
+        val keyOrdering: Ordering[(InternalRow, Seq[InputPartition])] = {
+          RowOrdering.createNaturalAscendingOrdering(partKeyType).on(_._1)
+        }
+        Some(groupedPartitions.sorted(keyOrdering))
+      }
+    }
   }
 
   override def supportsColumnar: Boolean = {
-    require(partitions.forall(readerFactory.supportColumnarReads) ||
-      !partitions.exists(readerFactory.supportColumnarReads),
+    require(inputPartitions.forall(readerFactory.supportColumnarReads) ||
+      !inputPartitions.exists(readerFactory.supportColumnarReads),
       "Cannot mix row-based and columnar input partitions.")
 
-    partitions.exists(readerFactory.supportColumnarReads)
+    inputPartitions.exists(readerFactory.supportColumnarReads)
   }
 
   def inputRDD: RDD[InternalRow]

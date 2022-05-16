@@ -60,6 +60,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
   override protected val excludedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
+      "RewriteSubquery",
       "Extract Python UDFs")
 
   protected def fixedPoint =
@@ -95,6 +96,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CollapseWindow,
         CombineFilters,
         EliminateLimits,
+        RewriteOffsets,
         CombineUnions,
         // Constant folding and strength reduction
         OptimizeRepartition,
@@ -128,7 +130,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
-        CombineConcats) ++
+        CombineConcats,
+        PushdownPredicatesAndPruneColumnsForCTEDef) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
@@ -146,31 +149,19 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownPredicates) :: Nil
     }
 
-    val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
-    // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
-    // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
-    // However, because we also use the analyzer to canonicalized queries (for view definition),
-    // we do not eliminate subqueries or compute current time in the analyzer.
-    Batch("Finish Analysis", Once,
-      EliminateResolvedHint,
-      EliminateSubqueryAliases,
-      EliminateView,
-      InlineCTE,
-      ReplaceExpressions,
-      RewriteNonCorrelatedExists,
-      PullOutGroupingExpressions,
-      ComputeCurrentTime,
-      ReplaceCurrentLike(catalogManager),
-      SpecialDatetimeValues,
-      RewriteAsOfJoin) ::
+    val batches = (
+    Batch("Finish Analysis", Once, FinishAnalysis) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
+    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // - Do the first call of CombineUnions before starting the major Optimizer rules,
     //   since it can reduce the number of iteration and the other rules could add/move
     //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
+    Batch("Inline CTE", Once,
+      InlineCTE()) ::
     Batch("Union", Once,
       RemoveNoopOperators,
       CombineUnions,
@@ -207,6 +198,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
+    Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo) :+
     // This batch rewrites plans after the operator optimization and
     // before any batches that depend on stats.
     Batch("Pre CBO Rules", Once, preCBORules: _*) :+
@@ -265,14 +257,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * (defaultBatches - (excludedRules - nonExcludableRules)).
    */
   def nonExcludableRules: Seq[String] =
-    EliminateDistinct.ruleName ::
-      EliminateResolvedHint.ruleName ::
-      EliminateSubqueryAliases.ruleName ::
-      EliminateView.ruleName ::
-      ReplaceExpressions.ruleName ::
-      ComputeCurrentTime.ruleName ::
-      SpecialDatetimeValues.ruleName ::
-      ReplaceCurrentLike(catalogManager).ruleName ::
+    FinishAnalysis.ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::
@@ -286,9 +271,37 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
-      PullOutGroupingExpressions.ruleName ::
-      RewriteAsOfJoin.ruleName ::
       RewriteLateralSubquery.ruleName :: Nil
+
+  /**
+   * Apply finish-analysis rules for the entire plan including all subqueries.
+   */
+  object FinishAnalysis extends Rule[LogicalPlan] {
+    // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
+    // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
+    // However, because we also use the analyzer to canonicalized queries (for view definition),
+    // we do not eliminate subqueries or compute current time in the analyzer.
+    private val rules = Seq(
+      EliminateResolvedHint,
+      EliminateSubqueryAliases,
+      EliminateView,
+      ReplaceExpressions,
+      RewriteNonCorrelatedExists,
+      PullOutGroupingExpressions,
+      ComputeCurrentTime,
+      ReplaceCurrentLike(catalogManager),
+      SpecialDatetimeValues,
+      RewriteAsOfJoin)
+
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+        .transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+          case s: SubqueryExpression =>
+            val Subquery(newPlan, _) = apply(Subquery.fromExpression(s))
+            s.withNewPlan(newPlan)
+        }
+    }
+  }
 
   /**
    * Optimize all the subqueries inside expression.
@@ -411,14 +424,26 @@ abstract class Optimizer(catalogManager: CatalogManager)
 }
 
 /**
- * Remove useless DISTINCT for MAX and MIN.
+ * Remove useless DISTINCT:
+ *   1. For some aggregate expression, e.g.: MAX and MIN.
+ *   2. If the distinct semantics is guaranteed by child.
+ *
  * This rule should be applied before RewriteDistinctAggregates.
  */
 object EliminateDistinct extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(AGGREGATE_EXPRESSION)) {
-    case ae: AggregateExpression if ae.isDistinct && isDuplicateAgnostic(ae.aggregateFunction) =>
-      ae.copy(isDistinct = false)
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(AGGREGATE)) {
+    case agg: Aggregate =>
+      agg.transformExpressionsWithPruning(_.containsPattern(AGGREGATE_EXPRESSION)) {
+        case ae: AggregateExpression if ae.isDistinct &&
+          isDuplicateAgnostic(ae.aggregateFunction) =>
+          ae.copy(isDistinct = false)
+
+        case ae: AggregateExpression if ae.isDistinct &&
+          agg.child.distinctKeys.exists(
+            _.subsetOf(ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable)))) =>
+          ae.copy(isDistinct = false)
+      }
   }
 
   def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {
@@ -831,13 +856,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
       e.copy(child = prunedChild(child, e.references))
 
     // prune unrequired references
-    case p @ Project(_, g: Generate) if p.references != g.outputSet =>
-      val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
-      val newChild = prunedChild(g.child, requiredAttrs)
-      val unrequired = g.generator.references -- p.references
-      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
-        .map(_._2)
-      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
+    // There are 2 types of pruning here:
+    // 1. For attributes in g.child.outputSet that is not used by the generator nor the project,
+    //    we directly remove it from the output list of g.child.
+    // 2. For attributes that is not used by the project but it is used by the generator, we put
+    //    it in g.unrequiredChildIndex to save memory usage.
+    case GeneratorUnrequiredChildrenPruning(rewrittenPlan) => rewrittenPlan
 
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
@@ -897,7 +921,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
   })
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
+  def prunedChild(c: LogicalPlan, allReferences: AttributeSet): LogicalPlan =
     if (!c.outputSet.subsetOf(allReferences)) {
       Project(c.output.filter(allReferences.contains), c)
     } else {
@@ -1843,6 +1867,25 @@ object EliminateLimits extends Rule[LogicalPlan] {
       LocalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
+  }
+}
+
+/**
+ * Rewrite [[Offset]] as [[GlobalLimitAndOffset]] or [[LocalLimit]],
+ * merging the expressions into one single expression. See [[Limit]] for more information
+ * about the difference between [[LocalLimit]] and [[GlobalLimit]].
+ */
+object RewriteOffsets extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case GlobalLimit(le, Offset(oe, grandChild)) =>
+      GlobalLimitAndOffset(le, oe, grandChild)
+    case localLimit @ LocalLimit(le, Offset(oe, grandChild)) =>
+      val offset = oe.eval().asInstanceOf[Int]
+      if (offset == 0) {
+        localLimit.withNewChildren(Seq(grandChild))
+      } else {
+        Offset(oe, LocalLimit(Add(le, oe), grandChild))
+      }
   }
 }
 

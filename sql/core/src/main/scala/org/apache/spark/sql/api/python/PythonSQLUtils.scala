@@ -20,20 +20,29 @@ package org.apache.spark.sql.api.python
 import java.io.InputStream
 import java.nio.channels.Channels
 
+import net.razorvine.pickle.Pickler
+
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDDServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{CastTimestampNTZToLong, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 private[sql] object PythonSQLUtils extends Logging {
+  private lazy val internalRowPickler = {
+    EvaluatePython.registerPicklers()
+    new Pickler(true, false)
+  }
+
   def parseDataType(typeText: String): DataType = CatalystSqlParser.parseDataType(typeText)
 
   // This is needed when generating SQL documentation for built-in functions.
@@ -78,7 +87,20 @@ private[sql] object PythonSQLUtils extends Logging {
     queryExecution.explainString(ExplainMode.fromString(mode))
   }
 
+  def toPyRow(row: Row): Array[Byte] = {
+    assert(row.isInstanceOf[GenericRowWithSchema])
+    internalRowPickler.dumps(EvaluatePython.toJava(
+      CatalystTypeConverters.convertToCatalyst(row), row.schema))
+  }
+
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
+
+  def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
+    Column(EWM(e.expr, alpha, ignoreNA))
+
+  def lastNonNull(e: Column): Column = Column(LastNonNull(e.expr))
+
+  def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 }
 
 /**

@@ -19,11 +19,11 @@ import json
 import sys
 from typing import Any, Dict, List, Optional
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject, java_import
 
 from pyspark import since
 from pyspark.sql.utils import StreamingQueryException
-
+from pyspark.sql.streaming.listener import StreamingQueryListener
 
 __all__ = ["StreamingQuery", "StreamingQueryManager"]
 
@@ -293,6 +293,31 @@ class StreamingQueryManager:
         >>> spark.streams.resetTerminated()
         """
         self._jsqm.resetTerminated()
+
+    def addListener(self, listener: StreamingQueryListener) -> None:
+        """
+        Register a :class:`StreamingQueryListener` to receive up-calls for life cycle events of
+        :class:`~pyspark.sql.streaming.StreamingQuery`.
+
+        .. versionadded:: 3.4.0
+        """
+        from pyspark import SparkContext
+        from pyspark.java_gateway import ensure_callback_server_started
+
+        gw = SparkContext._gateway
+        assert gw is not None
+        java_import(gw.jvm, "org.apache.spark.sql.streaming.*")
+        ensure_callback_server_started(gw)
+
+        self._jsqm.addListener(listener._jlistener)
+
+    def removeListener(self, listener: StreamingQueryListener) -> None:
+        """
+        Deregister a :class:`StreamingQueryListener`.
+
+        .. versionadded:: 3.4.0
+        """
+        self._jsqm.removeListener(listener._jlistener)
 
 
 def _test() -> None:

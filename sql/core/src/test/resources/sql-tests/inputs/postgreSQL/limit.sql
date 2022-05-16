@@ -12,25 +12,24 @@ SELECT '' AS five, unique1, unique2, stringu1
 SELECT '' AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 60 AND unique1 < 63
 		ORDER BY unique1 LIMIT 5;
--- [SPARK-28330] ANSI SQL: Top-level <result offset clause> in <query expression>
--- SELECT '' AS three, unique1, unique2, stringu1
--- 		FROM onek WHERE unique1 > 100
--- 		ORDER BY unique1 LIMIT 3 OFFSET 20;
--- SELECT '' AS zero, unique1, unique2, stringu1
--- 		FROM onek WHERE unique1 < 50
--- 		ORDER BY unique1 DESC LIMIT 8 OFFSET 99;
--- SELECT '' AS eleven, unique1, unique2, stringu1
--- 		FROM onek WHERE unique1 < 50
--- 		ORDER BY unique1 DESC LIMIT 20 OFFSET 39;
+SELECT '' AS three, unique1, unique2, stringu1
+ 		FROM onek WHERE unique1 > 100
+ 		ORDER BY unique1 LIMIT 3 OFFSET 20;
+ SELECT '' AS zero, unique1, unique2, stringu1
+ 		FROM onek WHERE unique1 < 50
+ 		ORDER BY unique1 DESC LIMIT 8 OFFSET 99;
+ SELECT '' AS eleven, unique1, unique2, stringu1
+ 		FROM onek WHERE unique1 < 50
+  		ORDER BY unique1 DESC LIMIT 20 OFFSET 39;
 -- SELECT '' AS ten, unique1, unique2, stringu1
 -- 		FROM onek
 -- 		ORDER BY unique1 OFFSET 990;
 -- SELECT '' AS five, unique1, unique2, stringu1
 -- 		FROM onek
 -- 		ORDER BY unique1 OFFSET 990 LIMIT 5;
--- SELECT '' AS five, unique1, unique2, stringu1
--- 		FROM onek
--- 		ORDER BY unique1 LIMIT 5 OFFSET 900;
+SELECT '' AS five, unique1, unique2, stringu1
+ 		FROM onek
+ 		ORDER BY unique1 LIMIT 5 OFFSET 900;
 
 CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
   (VALUES
@@ -45,8 +44,7 @@ CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
 -- constant, so to ensure executor is exercised, do this:
 -- [SPARK-29650] Discard a NULL constant in LIMIT
 select * from int8_tbl limit (case when random() < 0.5 then bigint(null) end);
--- [SPARK-28330] ANSI SQL: Top-level <result offset clause> in <query expression>
--- select * from int8_tbl offset (case when random() < 0.5 then bigint(null) end);
+select * from int8_tbl offset (case when random() < 0.5 then bigint(null) end);
 
 -- Test assorted cases involving backwards fetch from a LIMIT plan node
 -- [SPARK-20965] Support PREPARE/EXECUTE/DECLARE/FETCH statements
@@ -90,7 +88,7 @@ DROP VIEW INT8_TBL;
 
 -- Stress test for variable LIMIT in conjunction with bounded-heap sorting
 
--- [SPARK-28330] ANSI SQL: Top-level <result offset clause> in <query expression>
+-- [SPARK-27767] Built-in function: generate_series
 -- SELECT
 --   (SELECT n
 --      FROM (VALUES (1)) AS x,

@@ -62,6 +62,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
     System.gc() // Hack to avoid SEGV on some JVM versions.
     val hadoopConf = new Configuration()
     hadoopConf.set("test", "success")
+    hadoopConf.set("hive.stats.autogather", "true")
     client = buildClient(hadoopConf)
     if (versionSpark != null) versionSpark.reset()
     versionSpark = TestHiveVersion(client)

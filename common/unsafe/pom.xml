@@ -29,7 +29,7 @@
   <artifactId>spark-unsafe_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Unsafe</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>unsafe</sbt.project.name>
   </properties>

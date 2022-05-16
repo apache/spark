@@ -164,4 +164,46 @@ class AggregateOptimizeSuite extends AnalysisTest {
         .groupBy("x.b".attr)("x.b".attr, TrueLiteral, FalseLiteral.as("newAlias"))
         .analyze)
   }
+
+  test("SPARK-38886: Remove outer join if aggregate functions are duplicate agnostic on " +
+    "streamed side") {
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
+
+    Seq((LeftOuter, "x", x), (RightOuter, "y", y)).foreach { case (joinType, t, streamed) =>
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a"))
+          .groupBy($"$t.a")($"$t.a", max($"$t.b")).analyze),
+        streamed.groupBy($"$t.a")($"$t.a", max($"$t.b")).analyze)
+
+      // with project
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a")).select($"$t.a" as "a1", $"$t.b" as "b1")
+          .groupBy($"a1")($"a1", max($"b1")).analyze),
+        streamed.select($"$t.a" as "a1", $"$t.b" as "b1")
+          .groupBy($"a1")($"a1", max($"b1")).analyze)
+
+      // global aggregate
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a"))
+          .groupBy()(max($"$t.b"), min($"$t.c")).analyze),
+        streamed.groupBy()(max($"$t.b"), min($"$t.c")).analyze)
+
+      // negative cases
+      // with non-deterministic project
+      val p1 = x.join(y, joinType, Some($"x.a" === $"y.a")).select($"$t.a" as "a1", rand(1) as "b1")
+        .groupBy($"b1")($"b1", max($"a1")).analyze
+      comparePlans(Optimize.execute(p1), p1)
+
+      // not from streamed side
+      val p2 = x.join(y, joinType, Some($"x.a" === $"y.a"))
+        .groupBy($"x.a", $"y.b")(min($"x.b"), max($"y.a")).analyze
+      comparePlans(Optimize.execute(p2), p2)
+
+      // not duplicate agnostic
+      val p3 = x.join(y, joinType, Some($"x.a" === $"y.a"))
+        .groupBy($"$t.a")(sum($"$t.a")).analyze
+      comparePlans(Optimize.execute(p3), p3)
+    }
+  }
 }

@@ -28,7 +28,7 @@
 
     with Spark-specific changes from:
 
-    http://spark.apache.org/contributing.html#code-style-guide
+    https://spark.apache.org/contributing.html#code-style-guide
 
     Checkstyle is very configurable. Be sure to read the documentation at
     http://checkstyle.sf.net (or in your downloaded distribution).

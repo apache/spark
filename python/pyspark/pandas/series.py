@@ -54,6 +54,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
+from pyspark import SparkContext
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
@@ -1704,10 +1705,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ----------
         keep : {'first', 'last', False}, default 'first'
             Method to handle marking duplicates:
-            - 'first' : Mark duplicates as ``True`` except for the first
-              occurrence.
-            - 'last' : Mark duplicates as ``True`` except for the last
-              occurrence.
+            - 'first' : Mark duplicates as ``True`` except for the first occurrence.
+            - 'last' : Mark duplicates as ``True`` except for the last occurrence.
             - ``False`` : Mark all duplicates as ``True``.
 
         Returns
@@ -2170,6 +2169,107 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         )._psser_for(self._column_label)
 
+    def interpolate(
+        self,
+        method: str = "linear",
+        limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
+    ) -> "Series":
+        return self._interpolate(method=method, limit=limit, limit_direction=limit_direction)
+
+    def _interpolate(
+        self,
+        method: str = "linear",
+        limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
+    ) -> "Series":
+        if method not in ["linear"]:
+            raise NotImplementedError("interpolate currently works only for method='linear'")
+        if (limit is not None) and (not limit > 0):
+            raise ValueError("limit must be > 0.")
+        if (limit_direction is not None) and (
+            limit_direction not in ["forward", "backward", "both"]
+        ):
+            raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
+
+        if not self.spark.nullable and not isinstance(
+            self.spark.data_type, (FloatType, DoubleType)
+        ):
+            return self._psdf.copy()._psser_for(self._column_label)
+
+        scol = self.spark.column
+        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+        last_non_null = Column(sql_utils.lastNonNull(scol._jc))
+        null_index = Column(sql_utils.nullIndex(scol._jc))
+
+        window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+        last_non_null_forward = last_non_null.over(window_forward)
+        null_index_forward = null_index.over(window_forward)
+
+        window_backward = Window.orderBy(F.desc(NATURAL_ORDER_COLUMN_NAME)).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+        last_non_null_backward = last_non_null.over(window_backward)
+        null_index_backward = null_index.over(window_backward)
+
+        fill = (last_non_null_backward - last_non_null_forward) / (
+            null_index_backward + null_index_forward
+        ) * null_index_forward + last_non_null_forward
+
+        fill_cond = ~F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+
+        pad_head = SF.lit(None)
+        pad_head_cond = SF.lit(False)
+        pad_tail = SF.lit(None)
+        pad_tail_cond = SF.lit(False)
+
+        # inputs  -> NaN, NaN, 1.0, NaN, NaN, NaN, 5.0, NaN, NaN
+        if limit_direction is None or limit_direction == "forward":
+            # outputs -> NaN, NaN, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
+            pad_tail = last_non_null_forward
+            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+            if limit is not None:
+                # outputs (limit=1) -> NaN, NaN, 1.0, 2.0, NaN, NaN, 5.0, 5.0, NaN
+                fill_cond = fill_cond & (null_index_forward <= F.lit(limit))
+                pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
+
+        elif limit_direction == "backward":
+            # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, NaN, NaN
+            pad_head = last_non_null_backward
+            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
+            if limit is not None:
+                # outputs (limit=1) -> NaN, 1.0, 1.0, NaN, NaN, 4.0, 5.0, NaN, NaN
+                fill_cond = fill_cond & (null_index_backward <= F.lit(limit))
+                pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
+
+        else:
+            # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
+            pad_head = last_non_null_backward
+            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
+            pad_tail = last_non_null_forward
+            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+            if limit is not None:
+                # outputs (limit=1) -> NaN, 1.0, 1.0, 2.0, NaN, 4.0, 5.0, 5.0, NaN
+                fill_cond = fill_cond & (
+                    (null_index_forward <= F.lit(limit)) | (null_index_backward <= F.lit(limit))
+                )
+                pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
+                pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
+
+        cond = self.isnull().spark.column
+        scol = (
+            F.when(cond & fill_cond, fill)
+            .when(cond & pad_head_cond, pad_head)
+            .when(cond & pad_tail_cond, pad_tail)
+            .otherwise(scol)
+        )
+
+        return DataFrame(
+            self._psdf._internal.with_new_spark_column(self._column_label, scol)  # TODO: dtype?
+        )._psser_for(self._column_label)
+
     def dropna(self, axis: Axis = 0, inplace: bool = False, **kwargs: Any) -> Optional["Series"]:
         """
         Return a new Series with missing values removed.
@@ -2221,7 +2321,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return first_series(psdf)
 
-    def clip(self, lower: Union[float, int] = None, upper: Union[float, int] = None) -> "Series":
+    def clip(
+        self,
+        lower: Union[float, int] = None,
+        upper: Union[float, int] = None,
+        inplace: bool = False,
+    ) -> "Series":
         """
         Trim values at input threshold(s).
 
@@ -2233,6 +2338,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Minimum threshold value. All values below this threshold will be set to it.
         upper : float or int, default None
             Maximum threshold value. All values above this threshold will be set to it.
+        inplace : bool, default False
+             if True, perform operation in-place
 
         Returns
         -------
@@ -2241,8 +2348,24 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> ps.Series([0, 2, 4]).clip(1, 3)
+        >>> psser = ps.Series([0, 2, 4])
+        >>> psser
+        0    0
+        1    2
+        2    4
+        dtype: int64
+
+        >>> psser.clip(1, 3)
         0    1
+        1    2
+        2    3
+        dtype: int64
+
+        Clip can be performed in-place.
+
+        >>> psser.clip(2, 3, inplace=True)
+        >>> psser
+        0    2
         1    2
         2    3
         dtype: int64
@@ -2268,10 +2391,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 scol = F.when(scol < lower, lower).otherwise(scol)
             if upper is not None:
                 scol = F.when(scol > upper, upper).otherwise(scol)
-            return self._with_new_scol(
-                scol.alias(self._internal.data_spark_column_names[0]),
-                field=self._internal.data_fields[0],
-            )
+            if inplace:
+                internal = self._internal.copy(
+                    data_spark_columns=[scol.alias(self._internal.data_spark_column_names[0])],
+                    data_fields=[self._internal.data_fields[0]],
+                )
+                self._psdf._update_internal_frame(internal, requires_same_anchor=False)
+                return None
+            else:
+                return self._with_new_scol(
+                    scol.alias(self._internal.data_spark_column_names[0]),
+                    field=self._internal.data_fields[0],
+                )
         else:
             return self
 
@@ -2279,7 +2410,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         labels: Optional[Union[Name, List[Name]]] = None,
         index: Optional[Union[Name, List[Name]]] = None,
+        columns: Optional[Union[Name, List[Name]]] = None,
         level: Optional[int] = None,
+        inplace: bool = False,
     ) -> "Series":
         """
         Return Series with specified index labels removed.
@@ -2291,10 +2424,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ----------
         labels : single label or list-like
             Index labels to drop.
-        index : None
+        index : single label or list-like
             Redundant for application on Series, but index can be used instead of labels.
+        columns : single label or list-like
+            No change is made to the Series; use ‘index’ or ‘labels’ instead.
+
+            .. versionadded:: 3.4.0
         level : int or level name, optional
             For MultiIndex, level for which the labels will be removed.
+        inplace: bool, default False
+            If True, do operation inplace and return None
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -2335,6 +2476,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
 
         >>> s.drop(index=['B', 'C'])
+        A    0
+        dtype: int64
+
+        With 'columns', no change is made to the Series.
+
+        >>> s.drop(columns=['A'])
+        A    0
+        B    1
+        C    2
+        dtype: int64
+
+        With 'inplace=True', do operation inplace and return None.
+
+        >>> s.drop(index=['B', 'C'], inplace=True)
+        >>> s
         A    0
         dtype: int64
 
@@ -2388,18 +2544,23 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 length      0.3
         dtype: float64
         """
-        return first_series(self._drop(labels=labels, index=index, level=level))
+        dropped = self._drop(
+            labels=labels, index=index, level=level, inplace=inplace, columns=columns
+        )
+        return None if dropped is None else first_series(dropped)
 
     def _drop(
         self,
         labels: Optional[Union[Name, List[Name]]] = None,
         index: Optional[Union[Name, List[Name]]] = None,
         level: Optional[int] = None,
-    ) -> DataFrame:
+        inplace: bool = False,
+        columns: Optional[Union[Name, List[Name]]] = None,
+    ) -> Optional[DataFrame]:
         if labels is not None:
-            if index is not None:
-                raise ValueError("Cannot specify both 'labels' and 'index'")
-            return self._drop(index=labels, level=level)
+            if columns is not None or index is not None:
+                raise ValueError("Cannot specify both 'labels' and 'index'/'columns'")
+            return self._drop(index=labels, level=level, inplace=inplace, columns=columns)
         if index is not None:
             internal = self._internal
             if level is None:
@@ -2438,10 +2599,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 drop_index_scols.append(reduce(lambda x, y: x & y, index_scols))
 
             cond = ~reduce(lambda x, y: x | y, drop_index_scols)
-
-            return DataFrame(internal.with_filter(cond))
+            dropped_internal = internal.with_filter(cond)
+            if inplace:
+                self._update_anchor(DataFrame(dropped_internal))
+                return None
+            else:
+                return DataFrame(dropped_internal)
+        elif columns is not None:
+            return self._psdf
         else:
-            raise ValueError("Need to specify at least one of 'labels' or 'index'")
+            raise ValueError("Need to specify at least one of 'labels', 'index' or 'columns'")
 
     def head(self, n: int = 5) -> "Series":
         """
@@ -2617,7 +2784,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return first_series(DataFrame(internal))
 
     def sort_values(
-        self, ascending: bool = True, inplace: bool = False, na_position: str = "last"
+        self,
+        ascending: bool = True,
+        inplace: bool = False,
+        na_position: str = "last",
+        ignore_index: bool = False,
     ) -> Optional["Series"]:
         """
         Sort by the values.
@@ -2634,6 +2805,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
              if True, perform operation in-place
         na_position : {'first', 'last'}, default 'last'
              `first` puts NaNs at the beginning, `last` puts NaNs at the end
+        ignore_index : bool, default False
+             If True, the resulting axis will be labeled 0, 1, …, n - 1.
+
+             .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -2668,6 +2843,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2     3.0
         1     1.0
         0     NaN
+        dtype: float64
+
+        Sort values descending order and ignoring index
+
+        >>> s.sort_values(ascending=False, ignore_index=True)
+        0    10.0
+        1     5.0
+        2     3.0
+        3     1.0
+        4     NaN
         dtype: float64
 
         Sort values inplace
@@ -2716,10 +2901,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
         if inplace:
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
             self._update_anchor(psdf)
             return None
         else:
-            return first_series(psdf)
+            return first_series(psdf.reset_index(drop=True)) if ignore_index else first_series(psdf)
 
     def sort_index(
         self,
@@ -2729,6 +2916,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         inplace: bool = False,
         kind: str = None,
         na_position: str = "last",
+        ignore_index: bool = False,
     ) -> Optional["Series"]:
         """
         Sort object by labels (along an axis)
@@ -2748,6 +2936,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         na_position : {‘first’, ‘last’}, default ‘last’
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
+        ignore_index : bool, default False
+            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -2755,50 +2947,58 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> df = ps.Series([2, 1, np.nan], index=['b', 'a', np.nan])
+        >>> s = ps.Series([2, 1, np.nan], index=['b', 'a', np.nan])
 
-        >>> df.sort_index()
+        >>> s.sort_index()
         a      1.0
         b      2.0
         NaN    NaN
         dtype: float64
 
-        >>> df.sort_index(ascending=False)
+        >>> s.sort_index(ignore_index=True)
+        0    1.0
+        1    2.0
+        2    NaN
+        dtype: float64
+
+        >>> s.sort_index(ascending=False)
         b      2.0
         a      1.0
         NaN    NaN
         dtype: float64
 
-        >>> df.sort_index(na_position='first')
+        >>> s.sort_index(na_position='first')
         NaN    NaN
         a      1.0
         b      2.0
         dtype: float64
 
-        >>> df.sort_index(inplace=True)
-        >>> df
+        >>> s.sort_index(inplace=True)
+        >>> s
         a      1.0
         b      2.0
         NaN    NaN
         dtype: float64
 
-        >>> df = ps.Series(range(4), index=[['b', 'b', 'a', 'a'], [1, 0, 1, 0]], name='0')
+        Multi-index series.
 
-        >>> df.sort_index()
+        >>> s = ps.Series(range(4), index=[['b', 'b', 'a', 'a'], [1, 0, 1, 0]], name='0')
+
+        >>> s.sort_index()
         a  0    3
            1    2
         b  0    1
            1    0
         Name: 0, dtype: int64
 
-        >>> df.sort_index(level=1)  # doctest: +SKIP
+        >>> s.sort_index(level=1)  # doctest: +SKIP
         a  0    3
         b  0    1
         a  1    2
         b  1    0
         Name: 0, dtype: int64
 
-        >>> df.sort_index(level=[1, 0])
+        >>> s.sort_index(level=[1, 0])
         a  0    3
         b  0    1
         a  1    2
@@ -2811,10 +3011,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
         if inplace:
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
             self._update_anchor(psdf)
             return None
         else:
-            return first_series(psdf)
+            return first_series(psdf.reset_index(drop=True)) if ignore_index else first_series(psdf)
 
     def swaplevel(
         self, i: Union[int, Name] = -2, j: Union[int, Name] = -1, copy: bool = True
@@ -3014,6 +3216,82 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(
             DataFrame(internal.with_new_sdf(sdf, index_fields=([None] * internal.index_level)))
+        )
+
+    def autocorr(self, periods: int = 1) -> float:
+        """
+        Compute the lag-N autocorrelation.
+
+        This method computes the Pearson correlation between
+        the Series and its shifted self.
+
+        .. note:: the current implementation of rank uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        periods : int, default 1
+            Number of lags to apply before performing autocorrelation.
+
+        Returns
+        -------
+        float
+            The Pearson correlation between self and self.shift(lag).
+
+        See Also
+        --------
+        Series.corr : Compute the correlation between two Series.
+        Series.shift : Shift index by desired number of periods.
+        DataFrame.corr : Compute pairwise correlation of columns.
+
+        Notes
+        -----
+        If the Pearson correlation is not well defined return 'NaN'.
+
+        Examples
+        --------
+        >>> s = ps.Series([.2, .0, .6, .2, np.nan, .5, .6])
+        >>> s.autocorr()  # doctest: +ELLIPSIS
+        -0.141219...
+        >>> s.autocorr(0)  # doctest: +ELLIPSIS
+        1.0...
+        >>> s.autocorr(2)  # doctest: +ELLIPSIS
+        0.970725...
+        >>> s.autocorr(-3)  # doctest: +ELLIPSIS
+        0.277350...
+        >>> s.autocorr(5)  # doctest: +ELLIPSIS
+        -1.000000...
+        >>> s.autocorr(6)  # doctest: +ELLIPSIS
+        nan
+
+        If the Pearson correlation is not well defined, then 'NaN' is returned.
+
+        >>> s = ps.Series([1, 0, 0, 0])
+        >>> s.autocorr()
+        nan
+        """
+        # This implementation is suboptimal because it moves all data to a single partition,
+        # global sort should be used instead of window, but it should be a start
+        if not isinstance(periods, int):
+            raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
+
+        tmp_col = "__tmp_col__"
+        tmp_lag_col = "__tmp_lag_col__"
+        scol = self.spark.column.alias(tmp_col)
+        if periods == 0:
+            lag_col = scol.alias(tmp_lag_col)
+        else:
+            window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME)
+            lag_col = F.lag(scol, periods).over(window).alias(tmp_lag_col)
+
+        return (
+            self._internal.spark_frame.select([scol, lag_col])
+            .dropna("any")
+            .corr(tmp_col, tmp_lag_col)
         )
 
     def corr(self, other: "Series", method: str = "pearson") -> float:
@@ -3246,9 +3524,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         frac: Optional[float] = None,
         replace: bool = False,
         random_state: Optional[int] = None,
+        ignore_index: bool = False,
     ) -> "Series":
         return first_series(
-            self.to_frame().sample(n=n, frac=frac, replace=replace, random_state=random_state)
+            self.to_frame().sample(
+                n=n,
+                frac=frac,
+                replace=replace,
+                random_state=random_state,
+                ignore_index=ignore_index,
+            )
         ).rename(self.name)
 
     sample.__doc__ = DataFrame.sample.__doc__
@@ -4361,6 +4646,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Always returns Series even if only one value is returned.
 
+        .. versionchanged:: 3.4.0
+           Series name is preserved to follow pandas 1.4+ behavior.
+
         Parameters
         ----------
         dropna : bool, default True
@@ -4435,8 +4723,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             F.col(SPARK_DEFAULT_INDEX_NAME).alias(SPARK_DEFAULT_SERIES_NAME)
         )
         internal = InternalFrame(spark_frame=sdf, index_spark_columns=None, column_labels=[None])
-
-        return first_series(DataFrame(internal))
+        ser_mode = first_series(DataFrame(internal))
+        ser_mode.name = self.name
+        return ser_mode
 
     def keys(self) -> "ps.Index":
         """
@@ -5275,9 +5564,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
         """
         if not same_anchor(self, other):
-            if get_option("compute.eager_check") and not self.index.sort_values().equals(
-                other.index.sort_values()
-            ):
+            if get_option("compute.eager_check") and not cast(
+                ps.Index, self.index.sort_values()
+            ).equals(cast(ps.Index, other.index.sort_values())):
                 raise ValueError("matrices are not aligned")
             elif len(self.index) != len(other.index):
                 raise ValueError("matrices are not aligned")

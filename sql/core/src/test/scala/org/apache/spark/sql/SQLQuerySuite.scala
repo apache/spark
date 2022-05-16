@@ -24,12 +24,14 @@ import java.time.{Duration, Period}
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
+
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
@@ -52,7 +54,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ResetSystemProperties
 
 @ExtendedSQLTest
@@ -593,6 +595,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |select * from q1 union all select * from q2""".stripMargin),
       Row(5, "5") :: Row(4, "4") :: Nil)
 
+    // inner CTE relation refers to outer CTE relation.
+    withSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key -> "CORRECTED") {
+      checkAnswer(
+        sql(
+          """
+            |with temp1 as (select 1 col),
+            |temp2 as (
+            |  with temp1 as (select col + 1 AS col from temp1),
+            |  temp3 as (select col + 1 from temp1)
+            |  select * from temp3
+            |)
+            |select * from temp2
+            |""".stripMargin),
+        Row(3))
+      }
   }
 
   test("Allow only a single WITH clause per query") {
@@ -1097,31 +1114,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
       Nil
     )
-  }
-
-  test("SPARK-17863: SELECT distinct does not work correctly if order by missing attribute") {
-    checkAnswer(
-      sql("""select distinct struct.a, struct.b
-          |from (
-          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
-          |  union all
-          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
-          |order by a, b
-          |""".stripMargin),
-      Row(1, 2) :: Nil)
-
-    val error = intercept[AnalysisException] {
-      sql("""select distinct struct.a, struct.b
-            |from (
-            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
-            |  union all
-            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
-            |order by struct.a, struct.b
-            |""".stripMargin)
-    }
-    assert(error.getErrorClass == "MISSING_COLUMN")
-    assert(error.messageParameters.sameElements(Array("struct.a", "a, b")))
-
   }
 
   test("cast boolean to string") {
@@ -2719,19 +2711,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-21335: support un-aliased subquery") {
-    withTempView("v") {
-      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
-      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
-
-      val e = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)"))
-      assert(e.getErrorClass == "MISSING_COLUMN")
-      assert(e.messageParameters.sameElements(Array("v.i", "__auto_generated_subquery_name.i")))
-
-      checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
-    }
-  }
-
   test("SPARK-21743: top-most limit should not cause memory leak") {
     // In unit test, Spark will fail the query if memory leak detected.
     spark.range(100).groupBy("id").count().limit(1).collect()
@@ -3057,7 +3036,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
 
     Seq("orc", "parquet").foreach { format =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
         withTempPath { dir =>
           spark.range(10).map(i => (i, i.toString)).toDF("id", "s")
             .write
@@ -3417,20 +3397,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
         testGroupingIDs(32, Seq(0, 1))
-        val ex = intercept[AnalysisException] {
-          testGroupingIDs(33)
-        }
-        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 32"))
-        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
         testGroupingIDs(64, Seq(0L, 1L))
-        val ex = intercept[AnalysisException] {
-          testGroupingIDs(65)
-        }
-        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 64"))
-        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
     }
   }
@@ -4326,6 +4296,55 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |FROM (SELECT 3 AS C1,2 AS C2,1 AS C3) T
             |""".stripMargin),
         Row(3, 2, 6) :: Nil)
+    }
+  }
+
+  test("SPARK-38548: try_sum should return null if overflow happens before merging") {
+    val longDf = Seq(Long.MaxValue, Long.MaxValue, 2).toDF("v")
+    val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
+      .map(Period.ofMonths)
+      .toDF("v")
+    val dayTimeDf = Seq(106751991L, 106751991L, 2L)
+      .map(Duration.ofDays)
+      .toDF("v")
+    Seq(longDf, yearMonthDf, dayTimeDf).foreach { df =>
+      checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_sum(v)"), Row(null))
+    }
+  }
+
+  test("SPARK-38589: try_avg should return null if overflow happens before merging") {
+    val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
+      .map(Period.ofMonths)
+      .toDF("v")
+    val dayTimeDf = Seq(106751991L, 106751991L, 2L)
+      .map(Duration.ofDays)
+      .toDF("v")
+    Seq(yearMonthDf, dayTimeDf).foreach { df =>
+      checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_avg(v)"), Row(null))
+    }
+  }
+
+  test("SPARK-39012: SparkSQL cast partition value does not support all data types") {
+    withTempDir { dir =>
+      val binary1 = Hex.hex(UTF8String.fromString("Spark").getBytes).getBytes
+      val binary2 = Hex.hex(UTF8String.fromString("SQL").getBytes).getBytes
+      val data = Seq[(Int, Boolean, Array[Byte])](
+        (1, false, binary1),
+        (2, true, binary2)
+      )
+      data.toDF("a", "b", "c")
+        .write
+        .mode("overwrite")
+        .partitionBy("b", "c")
+        .parquet(dir.getCanonicalPath)
+      val res = spark.read
+        .schema("a INT, b BOOLEAN, c BINARY")
+        .parquet(dir.getCanonicalPath)
+      checkAnswer(res,
+        Seq(
+          Row(1, false, mutable.WrappedArray.make(binary1)),
+          Row(2, true, mutable.WrappedArray.make(binary2))
+        ))
     }
   }
 }

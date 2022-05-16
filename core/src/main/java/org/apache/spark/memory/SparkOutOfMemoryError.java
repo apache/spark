@@ -44,6 +44,7 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError implements Spa
         this.messageParameters = messageParameters;
     }
 
+    @Override
     public String getErrorClass() {
         return errorClass;
     }

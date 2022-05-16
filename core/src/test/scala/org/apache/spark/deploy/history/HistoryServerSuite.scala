@@ -49,6 +49,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
 
@@ -63,8 +64,8 @@ import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
  * expectations.  However, in general this should be done with extreme caution, as the metrics
  * are considered part of Spark's public api.
  */
-class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
-  with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
+abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
+  with MockitoSugar with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
   with ResetSystemProperties {
 
   private val logDir = getTestResourcePath("spark-events")
@@ -74,6 +75,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
   private var port: Int = -1
+
+  protected def diskBackend: HybridStoreDiskBackend.Value
+
+  def getExpRoot: File = expRoot
 
   def init(extraConf: (String, String)*): Unit = {
     Utils.deleteRecursively(storeDir)
@@ -85,11 +90,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
       .set(EXECUTOR_PROCESS_TREE_METRICS_ENABLED, true)
+      .set(HYBRID_STORE_DISK_BACKEND, diskBackend.toString)
     conf.setAll(extraConf)
-    // Since LevelDB doesn't support Apple Silicon yet, fallback to in-memory provider
-    if (Utils.isMacOnAppleSilicon) {
-      conf.remove(LOCAL_STORE_DIR)
-    }
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
     val securityManager = HistoryServer.createSecurityManager(conf)
@@ -393,10 +395,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(EVENT_LOG_ENABLED, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .remove(IS_TESTING)
-    // Since LevelDB doesn't support Apple Silicon yet, fallback to in-memory provider
-    if (Utils.isMacOnAppleSilicon) {
-      myConf.remove(LOCAL_STORE_DIR)
-    }
+      .set(HYBRID_STORE_DISK_BACKEND, diskBackend.toString)
     val provider = new FsHistoryProvider(myConf)
     val securityManager = HistoryServer.createSecurityManager(myConf)
 
@@ -715,9 +714,10 @@ object HistoryServerSuite {
     // generate the "expected" results for the characterization tests.  Just blindly assume the
     // current behavior is correct, and write out the returned json to the test/resource files
 
-    val suite = new HistoryServerSuite
-    FileUtils.deleteDirectory(suite.expRoot)
-    suite.expRoot.mkdirs()
+    // SPARK-38851: Use LevelDB backend because it is the default.
+    val suite = new LevelDBBackendHistoryServerSuite
+    FileUtils.deleteDirectory(suite.getExpRoot)
+    suite.getExpRoot.mkdirs()
     try {
       suite.init()
       suite.cases.foreach { case (name, path) =>
@@ -791,4 +791,15 @@ class FakeAuthFilter extends Filter {
 
 object FakeAuthFilter {
   val FAKE_HTTP_USER = "HTTP_USER"
+}
+
+@ExtendedLevelDBTest
+class LevelDBBackendHistoryServerSuite extends HistoryServerSuite {
+  override protected def diskBackend: History.HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.LEVELDB
+}
+
+class RocksDBBackendHistoryServerSuite extends HistoryServerSuite {
+  override protected def diskBackend: History.HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.ROCKSDB
 }

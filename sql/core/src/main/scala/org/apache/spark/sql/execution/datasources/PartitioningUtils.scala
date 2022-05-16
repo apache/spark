@@ -545,6 +545,8 @@ object PartitioningUtils extends SQLConfHelper{
       }
     case it: AnsiIntervalType =>
       Cast(Literal(unescapePathName(value)), it).eval()
+    case BinaryType => value.getBytes()
+    case BooleanType => value.toBoolean
     case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
   }
 

@@ -115,6 +115,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
     CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
       new CacheLoader<String, ShuffleIndexInformation>() {
+        @Override
         public ShuffleIndexInformation load(String filePath) throws IOException {
           return new ShuffleIndexInformation(filePath);
         }

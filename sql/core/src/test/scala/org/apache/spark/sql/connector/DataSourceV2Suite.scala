@@ -22,20 +22,20 @@ import java.util.OptionalLong
 
 import test.org.apache.spark.sql.connector._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{Literal, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, Literal, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -245,34 +245,36 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
 
   test("partitioning reporting") {
     import org.apache.spark.sql.functions.{count, sum}
-    Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
-      withClue(cls.getName) {
-        val df = spark.read.format(cls.getName).load()
-        checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
+        withClue(cls.getName) {
+          val df = spark.read.format(cls.getName).load()
+          checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
 
-        val groupByColA = df.groupBy($"i").agg(sum($"j"))
-        checkAnswer(groupByColA, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
-        assert(collectFirst(groupByColA.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isEmpty)
+          val groupByColA = df.groupBy($"i").agg(sum($"j"))
+          checkAnswer(groupByColA, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
+          assert(collectFirst(groupByColA.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isEmpty)
 
-        val groupByColAB = df.groupBy($"i", $"j").agg(count("*"))
-        checkAnswer(groupByColAB, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
-        assert(collectFirst(groupByColAB.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isEmpty)
+          val groupByColAB = df.groupBy($"i", $"j").agg(count("*"))
+          checkAnswer(groupByColAB, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
+          assert(collectFirst(groupByColAB.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isEmpty)
 
-        val groupByColB = df.groupBy($"j").agg(sum($"i"))
-        checkAnswer(groupByColB, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
-        assert(collectFirst(groupByColB.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isDefined)
+          val groupByColB = df.groupBy($"j").agg(sum($"i"))
+          checkAnswer(groupByColB, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
+          assert(collectFirst(groupByColB.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isDefined)
 
-        val groupByAPlusB = df.groupBy($"i" + $"j").agg(count("*"))
-        checkAnswer(groupByAPlusB, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
-        assert(collectFirst(groupByAPlusB.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isDefined)
+          val groupByAPlusB = df.groupBy($"i" + $"j").agg(count("*"))
+          checkAnswer(groupByAPlusB, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
+          assert(collectFirst(groupByAPlusB.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isDefined)
+        }
       }
     }
   }
@@ -346,29 +348,6 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
             .option("path", path).mode("error").save()
         }
         assert(e2.getMessage.contains("please use Append or Overwrite modes instead"))
-
-        // test transaction
-        val failingUdf = org.apache.spark.sql.functions.udf {
-          var count = 0
-          (id: Long) => {
-            if (count > 5) {
-              throw new RuntimeException("testing error")
-            }
-            count += 1
-            id
-          }
-        }
-        // this input data will fail to read middle way.
-        val input = spark.range(15).select(failingUdf($"id").as(Symbol("i")))
-          .select($"i", -$"i" as Symbol("j"))
-        val e3 = intercept[SparkException] {
-          input.write.format(cls.getName).option("path", path).mode("overwrite").save()
-        }
-        assert(e3.getMessage.contains("Writing job aborted"))
-        assert(e3.getErrorClass == "WRITING_JOB_ABORTED")
-        assert(e3.getSqlState == "40000")
-        // make sure we don't have partial data.
-        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
       }
     }
   }
@@ -896,7 +875,8 @@ class PartitionAwareDataSource extends TestingV2Source {
       SpecificReaderFactory
     }
 
-    override def outputPartitioning(): Partitioning = new MyPartitioning
+    override def outputPartitioning(): Partitioning =
+      new KeyGroupedPartitioning(Array(FieldReference("i")), 2)
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
@@ -904,18 +884,13 @@ class PartitionAwareDataSource extends TestingV2Source {
       new MyScanBuilder()
     }
   }
-
-  class MyPartitioning extends Partitioning {
-    override def numPartitions(): Int = 2
-
-    override def satisfy(distribution: Distribution): Boolean = distribution match {
-      case c: ClusteredDistribution => c.clusteredColumns.contains("i")
-      case _ => false
-    }
-  }
 }
 
-case class SpecificInputPartition(i: Array[Int], j: Array[Int]) extends InputPartition
+case class SpecificInputPartition(
+    i: Array[Int],
+    j: Array[Int]) extends InputPartition with HasPartitionKey {
+  override def partitionKey(): InternalRow = InternalRow.fromSeq(Seq(i(0)))
+}
 
 object SpecificReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {

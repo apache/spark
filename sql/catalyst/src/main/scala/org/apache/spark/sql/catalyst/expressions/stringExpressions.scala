@@ -1461,15 +1461,17 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 
 trait PadExpressionBuilderBase extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val behaviorChangeEnabled = !SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)
     val numArgs = expressions.length
     if (numArgs == 2) {
-      if (expressions(0).dataType == BinaryType) {
+      if (expressions(0).dataType == BinaryType && behaviorChangeEnabled) {
         BinaryPad(funcName, expressions(0), expressions(1), Literal(Array[Byte](0)))
       } else {
         createStringPad(expressions(0), expressions(1), Literal(" "))
       }
     } else if (numArgs == 3) {
-      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType) {
+      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType
+        && behaviorChangeEnabled) {
         BinaryPad(funcName, expressions(0), expressions(1), expressions(2))
       } else {
         createStringPad(expressions(0), expressions(1), expressions(2))
@@ -1808,7 +1810,9 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  checkArgumentIndexNotZero(children(0))
+  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+    checkArgumentIndexNotZero(children(0))
+  }
 
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1894,8 +1898,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
    */
   private def checkArgumentIndexNotZero(expression: Expression): Unit = expression match {
     case StringLiteral(pattern) if pattern.contains("%0$") =>
-      throw QueryCompilationErrors.illegalSubstringError(
-        "The argument_index of string format", "position 0$")
+      throw QueryCompilationErrors.zeroArgumentIndexError()
     case _ => // do nothing
   }
 }
@@ -2638,7 +2641,10 @@ case class Encode(value: Expression, charset: Expression)
   since = "3.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class ToBinary(expr: Expression, format: Option[Expression]) extends RuntimeReplaceable
+case class ToBinary(
+    expr: Expression,
+    format: Option[Expression],
+    nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
   with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = format.map { f =>
@@ -2651,6 +2657,7 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
         case "hex" => Unhex(expr)
         case "utf-8" => Encode(expr, Literal("UTF-8"))
         case "base64" => UnBase64(expr)
+        case _ if nullOnInvalidFormat => Literal(null, BinaryType)
         case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
           "to_binary", "format", other,
           Some("The value has to be a case-insensitive string literal of " +
@@ -2659,16 +2666,18 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
     }
   }.getOrElse(Unhex(expr))
 
-  def this(expr: Expression) = this(expr, None)
+  def this(expr: Expression) = this(expr, None, false)
 
   def this(expr: Expression, format: Expression) = this(expr, Some({
-    // We perform this check in the constructor to make it eager and not go through type coercion.
-    if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
-      format
-    } else {
-      throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
-    }
-  }))
+      // We perform this check in the constructor to make it eager and not go through type coercion.
+      if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
+        format
+      } else {
+        throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
+      }
+    }),
+    false
+    )
 
   override def prettyName: String = "to_binary"
 

@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.util.control.NonFatal
 
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.Since
@@ -129,11 +130,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     try {
       pushUpToMax()
     } catch {
-      case e: FileNotFoundException =>
-        logWarning("The shuffle files got deleted when this shuffle-block-push-thread " +
-          "was reading from them which could happen when the job finishes and the driver " +
-          "instructs the executor to cleanup the shuffle. In this case, push of the blocks " +
-          "belonging to this shuffle will stop.", e)
+      case NonFatal(e) =>
+        logWarning("Failure during push so stopping the block push", e)
     }
   }
 
@@ -142,7 +140,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * VisibleForTesting
    */
   protected def submitTask(task: Runnable): Unit = {
-    if (BLOCK_PUSHER_POOL != null) {
+    if (BLOCK_PUSHER_POOL != null && !BLOCK_PUSHER_POOL.isShutdown) {
       BLOCK_PUSHER_POOL.execute(task)
     }
   }
@@ -317,7 +315,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       pushResult: PushResult): Boolean = synchronized {
     remainingBlocks -= pushResult.blockId
     bytesInFlight -= bytesPushed
-    numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+    numBlocksInFlightPerAddress(address) -= 1
     if (remainingBlocks.isEmpty) {
       reqsInFlight -= 1
     }

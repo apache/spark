@@ -455,6 +455,23 @@ trait Nondeterministic extends Expression {
 }
 
 /**
+ * An expression that contains conditional expression branches, so not all branches will be hit.
+ * All optimization should be careful with the evaluation order.
+ */
+trait ConditionalExpression extends Expression {
+  /**
+   * Return the children expressions which can always be hit at runtime.
+   */
+  def alwaysEvaluatedInputs: Seq[Expression]
+
+  /**
+   * Return groups of branches. For each group, at least one branch will be hit at runtime,
+   * so that we can eagerly evaluate the common expressions of a group.
+   */
+  def branchGroups: Seq[Seq[Expression]]
+}
+
+/**
  * An expression that contains mutable state. A stateful expression is always non-deterministic
  * because the results it produces during evaluation are not only dependent on the given input
  * but also on its internal state.

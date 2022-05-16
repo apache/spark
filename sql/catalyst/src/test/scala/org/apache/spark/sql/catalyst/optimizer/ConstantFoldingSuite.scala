@@ -21,11 +21,10 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Unresol
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, NewInstance, StaticInvoke}
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.ByteArray
 
@@ -319,14 +318,7 @@ class ConstantFoldingSuite extends PlanTest {
             Literal.create("a", StringType),
             "substring",
             StringType,
-            Seq(Literal(0), Literal(1))).as("c2"),
-          NewInstance(
-            cls = classOf[GenericArrayData],
-            arguments = Literal.fromObject(List(1, 2, 3)) :: Nil,
-            inputTypes = Nil,
-            propagateNull = false,
-            dataType = ArrayType(IntegerType),
-            outerPointer = None).as("c3"))
+            Seq(Literal(0), Literal(1))).as("c2"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -334,8 +326,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Literal("WWSpark".getBytes()).as("c1"),
-          Literal.create("a", StringType).as("c2"),
-          Literal.create(new GenericArrayData(List(1, 2, 3)), ArrayType(IntegerType)).as("c3"))
+          Literal.create("a", StringType).as("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)

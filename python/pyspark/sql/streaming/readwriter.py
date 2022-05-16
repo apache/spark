@@ -555,7 +555,7 @@ class DataStreamReader(OptionUtils):
             string, for the name of the table.
 
         Returns
-        --------
+        -------
         :class:`DataFrame`
 
         Notes

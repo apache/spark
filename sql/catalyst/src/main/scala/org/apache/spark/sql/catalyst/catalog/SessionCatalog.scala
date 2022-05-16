@@ -1754,6 +1754,23 @@ class SessionCatalog(
   }
 
   /**
+   * List all registered functions in a database with the given pattern.
+   */
+  private def listRegisteredFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
+    val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
+      .filter(_.database.forall(_ == db))
+    StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
+      // In functionRegistry, function names are stored as an unquoted format.
+      Try(parser.parseFunctionIdentifier(f)) match {
+        case Success(e) => e
+        case Failure(_) =>
+          // The names of some built-in functions are not parsable by our parser, e.g., %
+          FunctionIdentifier(f)
+      }
+    }
+  }
+
+  /**
    * List all functions in the specified database, including temporary functions. This
    * returns the function identifier and the scope in which it was defined (system or user
    * defined).
@@ -1770,18 +1787,7 @@ class SessionCatalog(
     requireDbExists(dbName)
     val dbFunctions = externalCatalog.listFunctions(dbName, pattern).map { f =>
       FunctionIdentifier(f, Some(dbName)) }
-    val loadedFunctions = StringUtils
-      .filterPattern(
-        (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-          .map(_.unquotedString), pattern).map { f =>
-        // In functionRegistry, function names are stored as an unquoted format.
-        Try(parser.parseFunctionIdentifier(f)) match {
-          case Success(e) => e
-          case Failure(_) =>
-            // The names of some built-in functions are not parsable by our parser, e.g., %
-            FunctionIdentifier(f)
-        }
-      }
+    val loadedFunctions = listRegisteredFunctions(db, pattern)
     val functions = dbFunctions ++ loadedFunctions
     // The session catalog caches some persistent functions in the FunctionRegistry
     // so there can be duplicates.

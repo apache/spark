@@ -2776,7 +2776,7 @@ object functions {
    * @since 3.3.0
    */
   def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    BinaryPad("lpad", str.expr, lit(len).expr, lit(pad).expr)
+    UnresolvedFunction("lpad", Seq(str.expr, lit(len).expr, lit(pad).expr), isDistinct = false)
   }
 
   /**
@@ -2865,7 +2865,7 @@ object functions {
    * @since 3.3.0
    */
   def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    BinaryPad("rpad", str.expr, lit(len).expr, lit(pad).expr)
+    UnresolvedFunction("rpad", Seq(str.expr, lit(len).expr, lit(pad).expr), isDistinct = false)
   }
 
   /**
