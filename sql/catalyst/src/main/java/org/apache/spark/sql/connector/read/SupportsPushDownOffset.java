@@ -21,8 +21,8 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down OFFSET. Please note that the combination of OFFSET with other operations
- * such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
+ * push down OFFSET. We can push down OFFSET with many other operators if they follow the
+ * operator order we defined in {@link ScanBuilder}'s class doc.
  *
  * @since 3.4.0
  */
