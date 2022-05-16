@@ -87,11 +87,16 @@ public abstract class WritableColumnVector extends ColumnVector {
     reserve(elementsAppended + additionalCapacity);
   }
 
+
   public void reserve(int requiredCapacity) {
+    reserve(requiredCapacity, 2L);
+  }
+
+  public void reserve(int requiredCapacity, long factor) {
     if (requiredCapacity < 0) {
       throwUnsupportedException(requiredCapacity, null);
     } else if (requiredCapacity > capacity) {
-      int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
+      int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * factor);
       if (requiredCapacity <= newCapacity) {
         try {
           reserveInternal(newCapacity);

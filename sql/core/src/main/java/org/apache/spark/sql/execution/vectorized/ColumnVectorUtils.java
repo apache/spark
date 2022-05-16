@@ -77,11 +77,7 @@ public class ColumnVectorUtils {
         } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
           col.putLongs(0, capacity, d.toUnscaledLong());
         } else {
-          final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
-          byte[] bytes = integer.toByteArray();
-          for (int i = 0; i < capacity; i++) {
-            col.putByteArray(i, bytes, 0, bytes.length);
-          }
+          col.putByteArrays(0, capacity, d.toJavaBigDecimal().unscaledValue().toByteArray());
         }
       } else if (t instanceof CalendarIntervalType) {
         CalendarInterval c = (CalendarInterval)row.get(fieldIdx, t);

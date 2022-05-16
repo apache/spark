@@ -557,7 +557,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public int putByteArrays(int rowId, int count, byte[] value, int offset, int length) {
     WritableColumnVector child = arrayData();
-    child.reserve(elementsAppended + length * count);
+    child.reserve(elementsAppended + length * count, 1L);
     int result = 0;
     for (int i = 0; i < count; i++) {
       int ret = child.appendBytesWithoutReserveCheck(length, value, offset);
