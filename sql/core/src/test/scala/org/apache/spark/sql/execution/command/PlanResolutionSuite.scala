@@ -1035,8 +1035,8 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed5 = parseAndResolve(sql5)
       val parsed6 = parseAndResolve(sql6)
       val parsed7 = parseAndResolve(sql7, true)
-      val parsed8 = parseAndResolve(sql8)
       val parsed9 = parseAndResolve(sql9, true)
+      val parsed10 = parseAndResolve(sql10)
 
       parsed1 match {
         case UpdateTable(
@@ -1136,7 +1136,22 @@ class PlanResolutionSuite extends AnalysisTest {
         case _ => fail("Expect UpdateTable, but got:\n" + parsed7.treeString)
       }
 
-      parsed8 match {
+      assert(intercept[AnalysisException] {
+        parseAndResolve(sql9)
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause().getMessage))
+
+      parsed9 match {
+        case UpdateTable(
+        _,
+        Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
+        None) =>
+          assert(i.name == "i")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
+      }
+
+      parsed10 match {
         case u: UpdateTable =>
           assert(u.assignments.size == 1)
           u.assignments(0).key match {
@@ -1152,20 +1167,6 @@ class PlanResolutionSuite extends AnalysisTest {
           fail("Expect UpdateTable, but got:\n" + parsed8.treeString)
       }
 
-      assert(intercept[AnalysisException] {
-        parseAndResolve(sql9)
-      }.getMessage.contains(
-        QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause().getMessage))
-
-      parsed9 match {
-        case UpdateTable(
-        _,
-        Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
-        None) =>
-          assert(i.name == "i")
-
-        case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
-      }
     }
 
     val sql1 = "UPDATE non_existing SET id=1"
@@ -1650,56 +1651,6 @@ class PlanResolutionSuite extends AnalysisTest {
         }
     }
 
-
-    // default columns (explicit)
-    val mergeDefault1 =
-      s"""
-         |MERGE INTO defaultvalues AS target
-         |USING v2Table1 AS source
-         |ON target.i = source.i
-         |WHEN MATCHED AND (target.s='delete') THEN DELETE
-         |WHEN MATCHED AND (target.s='update')
-         |  THEN UPDATE SET target.s = DEFAULT
-         |WHEN NOT MATCHED AND (source.s='insert')
-         |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
-           """.stripMargin
-    parseAndResolve(mergeDefault1, true) match {
-      case m: MergeIntoTable =>
-        val cond = m.mergeCondition
-        cond match {
-          case EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute) =>
-            assert(l.nameParts.last == "i")
-            assert(r.nameParts.last == "i")
-          case Literal(_, BooleanType) => // this is acceptable as a merge condition
-          case other => fail("unexpected merge condition " + other)
-        }
-        assert(m.matchedActions.length == 2)
-        val first = m.matchedActions(0)
-        first match {
-          case DeleteAction(Some(EqualTo(_: UnresolvedAttribute, StringLiteral("delete")))) =>
-          case other => fail("unexpected first matched action " + other)
-        }
-        val second = m.matchedActions(1)
-        second match {
-          case UpdateAction(Some(EqualTo(_: UnresolvedAttribute, StringLiteral("update"))),
-          Seq(Assignment(_: UnresolvedAttribute, Literal(42, IntegerType)))) =>
-          case other => fail("unexpected second matched action " + other)
-        }
-        assert(m.notMatchedActions.length == 1)
-        val negative = m.notMatchedActions(0)
-        negative match {
-          case InsertAction(Some(EqualTo(_: UnresolvedAttribute, StringLiteral("insert"))),
-          Seq(
-          Assignment(_: UnresolvedAttribute, Literal(true, BooleanType)),
-          Assignment(_: UnresolvedAttribute, Literal(42, IntegerType)))) =>
-          case other => fail("unexpected not matched action " + other)
-        }
-
-      case other =>
-        fail("Expect MergeIntoTable, but got:\n" + other.treeString)
-    }
-    val mergeDefault2 =
-=======
 
         // DEFAULT column reference in the merge condition:
         // This MERGE INTO command includes an ON clause with a DEFAULT column reference. This is
