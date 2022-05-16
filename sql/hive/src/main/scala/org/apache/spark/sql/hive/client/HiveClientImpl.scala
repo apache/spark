@@ -801,7 +801,7 @@ private[hive] class HiveClientImpl(
     val maxResults = 100000
     val results = runHive(sql, maxResults)
     // It is very confusing when you only get back some of the results...
-    if (results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
+    if (results.size == maxResults) throw new IllegalStateException("RESULTS POSSIBLY TRUNCATED")
     results
   }
 

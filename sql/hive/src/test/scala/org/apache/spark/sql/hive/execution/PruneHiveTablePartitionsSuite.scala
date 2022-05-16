@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.catalog.CatalogTablePartition
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -134,6 +135,29 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase with TestHiv
             nullCount = Some(0),
             avgLen = Some(LongType.defaultSize),
             maxLen = Some(LongType.defaultSize))))
+      }
+    }
+  }
+
+  test("SPARK-39073: Keep rowCount after PruneHiveTablePartitions " +
+    "if table only has hive statistics") {
+    withTable("SPARK_39073") {
+      withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql(s"CREATE TABLE SPARK_39073 PARTITIONED BY (p) STORED AS textfile AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(20))")
+        val newPartitions = hiveClient.getPartitions("default", "SPARK_39073", None).map(p => {
+          val map = Map[String, String](
+            "numRows" -> "4", "rawDataSize" -> "6", "totalSize" -> "10")
+          CatalogTablePartition(
+            p.spec, p.storage, p.parameters ++ map, p.createTime, p.lastAccessTime, p.stats)
+        })
+        hiveClient.alterPartitions("default", "SPARK_39073", newPartitions)
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_39073 WHERE p = '2'"),
+          64L,
+          Some(4),
+          Seq.empty)
       }
     }
   }

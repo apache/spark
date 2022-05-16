@@ -181,6 +181,7 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(psdf.sum(axis=1), pdf.sum(axis=1))
             self.assert_eq(psdf.product(axis=1), pdf.product(axis=1))
             self.assert_eq(psdf.kurtosis(axis=1), pdf.kurtosis(axis=1))
+            self.assert_eq(psdf.skew(axis=0), pdf.skew(axis=0), almost=True)
             self.assert_eq(psdf.skew(axis=1), pdf.skew(axis=1))
             self.assert_eq(psdf.mean(axis=1), pdf.mean(axis=1))
             self.assert_eq(psdf.sem(axis=1), pdf.sem(axis=1))
@@ -219,6 +220,11 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 psdf.kurtosis(axis=1, numeric_only=True), pdf.kurtosis(axis=1, numeric_only=True)
             )
             self.assert_eq(
+                psdf.skew(axis=0, numeric_only=True),
+                pdf.skew(axis=0, numeric_only=True),
+                almost=True,
+            )
+            self.assert_eq(
                 psdf.skew(axis=1, numeric_only=True), pdf.skew(axis=1, numeric_only=True)
             )
             self.assert_eq(
@@ -229,6 +235,20 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 psdf.sem(axis=1, ddof=0, numeric_only=True),
                 pdf.sem(axis=1, ddof=0, numeric_only=True),
             )
+
+    def test_skew_numerical_stability(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 1, 1, 1, 1],
+                "B": [1.0, np.nan, 4, 2, 5],
+                "C": [-6.0, -7, np.nan, np.nan, 10],
+                "D": [1.2, np.nan, np.nan, 9.8, np.nan],
+                "E": [1, np.nan, np.nan, np.nan, np.nan],
+                "F": [np.nan, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.skew(), pdf.skew(), almost=True)
 
     def test_corr(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
