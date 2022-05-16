@@ -257,7 +257,7 @@ case class CachedRDDBuilder(
           _cachedColumnBuffersAreLoaded = rddLoaded
         }
         rddLoaded
-      }
+    }
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
