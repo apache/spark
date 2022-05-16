@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.expressions.SortOrder;
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * push down top N(query with ORDER BY ... LIMIT n). We can push down top N with many other
- * operators if they follow the operator order we defined in {@link ScanBuilder}'s class doc.
+ * operations if they follow the operator order we defined in {@link ScanBuilder}'s class doc.
  *
  * @since 3.3.0
  */

@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down LIMIT. We can push down LIMIT with many other operators if they follow the
+ * push down LIMIT. We can push down LIMIT with many other operations if they follow the
  * operator order we defined in {@link ScanBuilder}'s class doc.
  *
  * @since 3.3.0

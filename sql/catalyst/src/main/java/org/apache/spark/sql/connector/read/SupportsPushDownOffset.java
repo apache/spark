@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down OFFSET. We can push down OFFSET with many other operators if they follow the
+ * push down OFFSET. We can push down OFFSET with many other operations if they follow the
  * operator order we defined in {@link ScanBuilder}'s class doc.
  *
  * @since 3.4.0
