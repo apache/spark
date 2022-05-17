@@ -4376,18 +4376,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-39190: Query context of decimal overflow error should be serialized to executors" +
-    " when WSCG is off") {
+  test("SPARK-39190, SPARK-39208: Query context of decimal overflow error should be serialized " +
+    "to executors when WSCG is off") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
       SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("t") {
         sql("create table t(d decimal(38, 0)) using parquet")
-        sql("insert into t values (2e37BD)")
-        val query = "select d / 0.1 from t"
-        val msg = intercept[SparkException] {
-          sql(query).collect()
-        }.getMessage
-        assert(msg.contains(query))
+        sql("insert into t values (6e37BD),(6e37BD)")
+        Seq(
+          "select d / 0.1 from t",
+          "select sum(d) from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
       }
     }
   }
