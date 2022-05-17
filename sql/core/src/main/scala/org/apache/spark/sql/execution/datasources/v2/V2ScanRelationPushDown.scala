@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper,
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
@@ -420,7 +420,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       }
   }
 
-  private def pushDownOffset(plan: LogicalPlan, offset: Int): (LogicalPlan, Boolean) = plan match {
+  private def pushDownOffset(
+      plan: LogicalPlan,
+      offset: Int): (LogicalPlan, Boolean) = plan match {
     case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
       val isPushed = PushDownUtils.pushOffset(sHolder.builder, offset)
       if (isPushed) {
@@ -434,7 +436,47 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
   }
 
   def pushDownOffsets(plan: LogicalPlan): LogicalPlan = plan.transform {
-    // TODO supports push down Limit append Offset or Offset append Limit
+    case offset @ LimitAndOffset(limit, offsetValue, child) =>
+      val (newChild, canRemoveLimit) = pushDownLimit(child, limit)
+      if (canRemoveLimit) {
+        val (finalChild, isPushed) = pushDownOffset(newChild, offsetValue)
+        if (isPushed) {
+          finalChild
+        } else {
+          offset.withNewChildren(Seq(finalChild))
+        }
+      } else if (child.ne(newChild)) {
+        val newLocalLimit = offset.child.asInstanceOf[GlobalLimit]
+          .child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
+        val newGlobalLimit =
+          offset.child.asInstanceOf[GlobalLimit].withNewChildren(Seq(newLocalLimit))
+        offset.withNewChildren(Seq(newGlobalLimit))
+      } else {
+        offset
+      }
+    case globalLimit @ OffsetAndLimit(offset, limitValue, child) =>
+      val (newChild, isPushed) = pushDownOffset(child, offset)
+      if (isPushed) {
+        val (finalChild, canRemoveLimit) = pushDownLimit(newChild, limitValue)
+        if (canRemoveLimit) {
+          finalChild
+        } else {
+          globalLimit.withNewChildren(Seq(finalChild))
+        }
+      } else {
+        val (finalChild, canRemoveLimit) = pushDownLimit(newChild, offset + limitValue)
+        if (canRemoveLimit) {
+          val newOffset = globalLimit.child.asInstanceOf[Offset].withNewChildren(Seq(finalChild))
+          globalLimit.withNewChildren(Seq(newOffset))
+        } else if (child.ne(finalChild)) {
+          val newLocalLimit = globalLimit.child.asInstanceOf[Offset]
+            .child.asInstanceOf[LocalLimit].withNewChildren(Seq(finalChild))
+          val newOffset = globalLimit.child.asInstanceOf[Offset].withNewChildren(Seq(newLocalLimit))
+          globalLimit.withNewChildren(Seq(newOffset))
+        } else {
+          globalLimit
+        }
+      }
     case offset @ Offset(IntegerLiteral(n), child) =>
       val (newChild, isPushed) = pushDownOffset(child, n)
       if (isPushed) {

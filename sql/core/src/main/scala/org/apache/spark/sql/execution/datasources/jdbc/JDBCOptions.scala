@@ -198,8 +198,7 @@ class JDBCOptions(
 
   // An option to allow/disallow pushing down OFFSET into V2 JDBC data source
   // This only applies to Data Source V2 JDBC
-  val pushDownOffset =
-    pushDownLimit && parameters.getOrElse(JDBC_PUSHDOWN_OFFSET, "false").toBoolean
+  val pushDownOffset = parameters.getOrElse(JDBC_PUSHDOWN_OFFSET, "false").toBoolean
 
   // An option to allow/disallow pushing down TABLESAMPLE into JDBC data source
   // This only applies to Data Source V2 JDBC
