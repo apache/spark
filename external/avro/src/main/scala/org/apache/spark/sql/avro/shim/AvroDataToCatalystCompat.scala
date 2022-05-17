@@ -27,10 +27,16 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
 
 
+/**
+ * This trait does the actual decoding logic for a given schema and should be created by a given AvroDecoderFactory
+ */
 trait AvroDecoder {
     def decode(input: Array[Byte]): Any
 }
 
+/**
+ * Implementing this trait allows the implementer to define how to decode avro records for a particular schema.
+ */
 trait AvroDecoderFactory {
     def create(schema: Schema): AvroDecoder
 }
@@ -57,6 +63,9 @@ class DirectBinaryAvroDecoderFactory extends AvroDecoderFactory {
 }
 
 
+/**
+* This is a modified version of AvroDataToCatalyst from version 2.4 which replaces the built in avro decoding functionality.
+*/
 case class AvroDataToCatalystCompat(child: Expression, jsonFormatSchema: String, options: Map[String, String], decoderFactory: AvroDecoderFactory = new DirectBinaryAvroDecoderFactory())
   extends UnaryExpression with ExpectsInputTypes {
 
