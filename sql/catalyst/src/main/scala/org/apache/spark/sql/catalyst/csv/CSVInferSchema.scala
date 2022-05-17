@@ -24,14 +24,27 @@ import scala.util.control.Exception.allCatch
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
+
+  private val timestampParser = TimestampFormatter(
+    options.timestampFormatInRead,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
 
   private val decimalParser = if (options.locale == Locale.US) {
     // Special handling the default locale for backward compatibility
@@ -165,8 +178,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     // We can only parse the value as TimestampNTZType if it does not have zone-offset or
     // time-zone component and can be parsed with the timestamp formatter.
     // Otherwise, it is likely to be a timestamp with timezone.
-    val fieldAsUTF8String = UTF8String.fromString(field)
-    if (DateTimeUtils.stringToTimestampWithoutTimeZone(fieldAsUTF8String).isDefined) {
+    if ((allCatch opt timestampNTZFormatter.parseWithoutTimeZone(field, false)).isDefined) {
       SQLConf.get.timestampType
     } else {
       tryParseTimestamp(field)
@@ -175,8 +187,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private def tryParseTimestamp(field: String): DataType = {
     // This case infers a custom `dataFormat` is set.
-    val fieldAsUTF8String = UTF8String.fromString(field)
-    if (DateTimeUtils.stringToTimestamp(fieldAsUTF8String, options.zoneId).isDefined) {
+    if ((allCatch opt timestampParser.parse(field)).isDefined) {
       TimestampType
     } else {
       tryParseBoolean(field)

@@ -34,12 +34,24 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
+
+  private val timestampFormatter = TimestampFormatter(
+    options.timestampFormatInRead,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
 
   private def handleJsonErrorsByParseMode(parseMode: ParseMode,
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
@@ -136,14 +148,13 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
           val bigDecimal = decimalParser(field)
             DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
-        lazy val fieldAsUTF8String = UTF8String.fromString(field)
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
         } else if (options.inferTimestamp &&
-            DateTimeUtils.stringToTimestampWithoutTimeZone(fieldAsUTF8String).isDefined) {
+            (allCatch opt timestampNTZFormatter.parseWithoutTimeZone(field, false)).isDefined) {
           SQLConf.get.timestampType
         } else if (options.inferTimestamp &&
-            DateTimeUtils.stringToTimestamp(fieldAsUTF8String, options.zoneId).isDefined) {
+            (allCatch opt timestampFormatter.parse(field)).isDefined) {
           TimestampType
         } else {
           StringType
