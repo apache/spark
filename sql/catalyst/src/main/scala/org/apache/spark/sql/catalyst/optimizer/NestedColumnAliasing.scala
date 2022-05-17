@@ -462,11 +462,12 @@ object GeneratorNestedColumnAliasing {
             val updatedGenerate = rewrittenG.copy(generatorOutput = updatedGeneratorOutput)
 
             // Replace nested column accessor with generator output.
-            val generateOutputAttrExprId = attrToExtractValuesOnGenerator.keys.map(_.exprId).head
-            val generateOutputAttr = updatedGenerate.output
-              .find(_.exprId == generateOutputAttrExprId).get
+            val attrExprIdsOnGenerator = attrToExtractValuesOnGenerator.keys.map(_.exprId).toSet
             val updatedProject = p.withNewChildren(Seq(updatedGenerate)).transformExpressions {
-              case f: GetStructField if nestedFieldsOnGenerator.contains(f) => generateOutputAttr
+              case f: GetStructField if nestedFieldsOnGenerator.contains(f) =>
+              updatedGenerate.output
+                .find(a => attrExprIdsOnGenerator.contains(a.exprId))
+                .getOrElse(f)
             }
             Some(updatedProject)
 
