@@ -213,20 +213,14 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
 
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
-            seconds = 0.0
             if platform.system().lower() == 'windows':
                 # On Windows, the current value is converted to a timestamp when the current value is less than 1970
-                seconds = (
-                    dt
-                    - datetime.datetime.fromtimestamp(
-                        int(time.localtime(0).tm_sec) / 1000
-                    )
-                ).total_seconds()
+                seconds = (dt - datetime.datetime.fromtimestamp(
+                    int(time.localtime(0).tm_sec) / 1000
+                )).total_seconds()
             else:
                 seconds = (
-                    calendar.timegm(dt.utctimetuple())
-                    if dt.tzinfo
-                    else time.mktime(dt.timetuple())
+                    calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
                 )
 
             return int(seconds) * 1000000 + dt.microsecond
@@ -1961,18 +1955,12 @@ class DatetimeConverter:
 
     def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
-        seconds = 0.0
         if platform.system().lower() == 'windows':
             # On Windows, the current value is converted to a timestamp when the current value is less than 1970
-            seconds = (
-                obj
-                - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)
-            ).total_seconds()
+            seconds = (obj - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)).total_seconds()
         else:
             seconds = (
-                calendar.timegm(obj.utctimetuple())
-                if obj.tzinfo
-                else time.mktime(obj.timetuple())
+                calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
             )
 
         t = Timestamp(int(seconds) * 1000)
