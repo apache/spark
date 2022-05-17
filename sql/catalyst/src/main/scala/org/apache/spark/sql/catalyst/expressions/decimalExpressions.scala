@@ -175,7 +175,8 @@ case class CheckOverflow(
 case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
-    nullOnOverflow: Boolean) extends UnaryExpression with SupportQueryContext {
+    nullOnOverflow: Boolean,
+    queryContext: String = "") extends UnaryExpression {
 
   override def nullable: Boolean = true
 
@@ -230,10 +231,4 @@ case class CheckOverflowInSum(
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflowInSum =
     copy(child = newChild)
-
-  override def initQueryContext(): String = if (nullOnOverflow) {
-    ""
-  } else {
-    origin.context
-  }
 }
