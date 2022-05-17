@@ -346,6 +346,7 @@ Below is a list of all the keywords in Spark SQL.
 |AND|reserved|non-reserved|reserved|
 |ANTI|non-reserved|strict-non-reserved|non-reserved|
 |ANY|reserved|non-reserved|reserved|
+|ANY_VALUE|non-reserved|non-reserved|non-reserved|
 |ARCHIVE|non-reserved|non-reserved|non-reserved|
 |ARRAY|non-reserved|non-reserved|reserved|
 |AS|reserved|non-reserved|reserved|
