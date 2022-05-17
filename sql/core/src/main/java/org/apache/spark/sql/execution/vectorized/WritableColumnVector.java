@@ -392,10 +392,16 @@ public abstract class WritableColumnVector extends ColumnVector {
     return putByteArray(rowId, value, 0, value.length);
   }
 
-  public abstract int putByteArrays(int rowId, int count, byte[] value, int offset, int length);
+  /**
+   * Sets total [value[offset], value[offset + length]) to [rowId, rowId + total).
+   */
+  public abstract int putByteArrays(int rowId, int total, byte[] value, int offset, int length);
 
-  public final int putByteArrays(int rowId, int count, byte[] value) {
-    return putByteArrays(rowId, count, value, 0, value.length);
+  /**
+   * Sets total value to [rowId, rowId + total).
+   */
+  public final int putByteArrays(int rowId, int total, byte[] value) {
+    return putByteArrays(rowId, total, value, 0, value.length);
   }
 
   @Override

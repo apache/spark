@@ -555,11 +555,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public int putByteArrays(int rowId, int count, byte[] value, int offset, int length) {
+  public int putByteArrays(int rowId, int total, byte[] value, int offset, int length) {
     WritableColumnVector child = arrayData();
-    child.reserve(elementsAppended + length * count, 1L);
+    child.reserve(elementsAppended + length * total, 1L);
     int result = 0;
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < total; i++) {
       int ret = child.appendBytesWithoutReserveCheck(length, value, offset);
       int currentRowId = rowId + i;
       Platform.putInt(null, lengthData + 4L * currentRowId, length);
