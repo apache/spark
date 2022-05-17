@@ -643,12 +643,12 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
           |""".stripMargin)
   }
 
-  test("UNSUPPORTED_FEATURE: cannot clean reserved namespace property") {
+  test("UNSUPPORTED_FEATURE: cannot set reserved namespace property") {
     val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
     validateParsingError(
       sqlText = sql,
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("CLEAN_RESERVED_NAMESPACE_PROPERTY"),
+      errorSubClass = Some("SET_NAMESPACE_PROPERTY"),
       sqlState = "0A000",
       message =
         """The feature is not supported: location is a reserved namespace property, """ +
@@ -661,13 +661,13 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
           |""".stripMargin)
   }
 
-  test("UNSUPPORTED_FEATURE: cannot clean reserved table property") {
+  test("UNSUPPORTED_FEATURE: cannot set reserved table property") {
     val sql = "CREATE TABLE student (id INT, name STRING, age INT) " +
       "USING PARQUET TBLPROPERTIES ('provider'='parquet')"
     validateParsingError(
       sqlText = sql,
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("CLEAN_RESERVED_TABLE_PROPERTY"),
+      errorSubClass = Some("SET_TABLE_PROPERTY"),
       sqlState = "0A000",
       message =
         """The feature is not supported: provider is a reserved table property, """ +
@@ -712,13 +712,13 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
            |""".stripMargin)
   }
 
-  test("UNSUPPORTED_FEATURE: Properties and DbProperties both specified") {
+  test("UNSUPPORTED_FEATURE: cannot set Properties and DbProperties at the same time") {
     val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c') " +
       "WITH DBPROPERTIES('a'='a', 'b'='b', 'c'='c')"
     validateParsingError(
       sqlText = sql,
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("PROPERTIES_AND_DBPROPERTIES_BOTH_SPECIFIED_CONFLICT"),
+      errorSubClass = Some("SET_PROPERTIES_AND_DBPROPERTIES"),
       sqlState = "0A000",
       message =
         """The feature is not supported: Either PROPERTIES or DBPROPERTIES """ +

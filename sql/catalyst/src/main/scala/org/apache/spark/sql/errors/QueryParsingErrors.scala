@@ -269,14 +269,14 @@ object QueryParsingErrors extends QueryErrorsBase {
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("CLEAN_RESERVED_NAMESPACE_PROPERTY", s"$property", s"$msg"),
+      messageParameters = Array("SET_NAMESPACE_PROPERTY", property, msg),
       ctx)
   }
 
   def propertiesAndDbPropertiesBothSpecifiedError(ctx: CreateNamespaceContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("PROPERTIES_AND_DBPROPERTIES_BOTH_SPECIFIED_CONFLICT"),
+      messageParameters = Array("SET_PROPERTIES_AND_DBPROPERTIES"),
       ctx
     )
   }
@@ -285,7 +285,7 @@ object QueryParsingErrors extends QueryErrorsBase {
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("CLEAN_RESERVED_TABLE_PROPERTY", s"$property", s"$msg"),
+      messageParameters = Array("SET_TABLE_PROPERTY", property, msg),
       ctx)
   }
 

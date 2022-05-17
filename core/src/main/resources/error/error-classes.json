@@ -212,12 +212,6 @@
       "AES_MODE" : {
         "message" : [ "AES-<mode> with the padding <padding> by the <functionName> function." ]
       },
-      "CLEAN_RESERVED_NAMESPACE_PROPERTY" : {
-        "message" : [ "<property> is a reserved namespace property, <msg>." ]
-      },
-      "CLEAN_RESERVED_TABLE_PROPERTY" : {
-        "message" : [ "<property> is a reserved table property, <msg>." ]
-      },
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [ "DESC TABLE COLUMN for a specific partition." ]
       },
@@ -257,14 +251,20 @@
       "PIVOT_TYPE" : {
         "message" : [ "Pivoting by the value '<value>' of the column data type <type>." ]
       },
-      "PROPERTIES_AND_DBPROPERTIES_BOTH_SPECIFIED_CONFLICT" : {
-        "message" : [ "Either PROPERTIES or DBPROPERTIES is allowed." ]
-      },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [ "Python UDF in the ON clause of a <joinType> JOIN." ]
       },
       "REPEATED_PIVOT" : {
         "message" : [ "Repeated PIVOT operation." ]
+      },
+      "SET_NAMESPACE_PROPERTY" : {
+        "message" : [ "<property> is a reserved namespace property, <msg>." ]
+      },
+      "SET_PROPERTIES_AND_DBPROPERTIES" : {
+        "message" : [ "Either PROPERTIES or DBPROPERTIES is allowed." ]
+      },
+      "SET_TABLE_PROPERTY" : {
+        "message" : [ "<property> is a reserved table property, <msg>." ]
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
         "message" : [ "UDF class with <n> type arguments." ]
