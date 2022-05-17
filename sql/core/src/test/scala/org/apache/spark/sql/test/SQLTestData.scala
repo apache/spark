@@ -69,6 +69,18 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val testData2WithNullKeys: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      TestData2WithNullKeys(1, 1) ::
+      TestData2WithNullKeys(null, 2) ::
+      TestData2WithNullKeys(2, 1) ::
+      TestData2WithNullKeys(2, 2) ::
+      TestData2WithNullKeys(null, 1) ::
+      TestData2WithNullKeys(3, 2) :: Nil, 2).toDF()
+    df.createOrReplaceTempView("testData2WithNullKeys")
+    df
+  }
+
   protected lazy val testData3: DataFrame = {
     val df = spark.sparkContext.parallelize(
       TestData3(1, None) ::
@@ -401,6 +413,7 @@ private[sql] trait SQLTestData { self =>
     emptyTestData
     testData
     testData2
+    testData2WithNullKeys
     testData3
     negativeData
     largeAndSmallInts
@@ -431,6 +444,7 @@ private[sql] trait SQLTestData { self =>
 private[sql] object SQLTestData {
   case class TestData(key: Int, value: String)
   case class TestData2(a: Int, b: Int)
+  case class TestData2WithNullKeys(a: Integer, b: Int)
   case class TestData3(a: Int, b: Option[Int])
   case class LargeAndSmallInts(a: Int, b: Int)
   case class DecimalData(a: BigDecimal, b: BigDecimal)
