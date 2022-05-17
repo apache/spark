@@ -81,11 +81,11 @@ abstract class AverageBase
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
-  protected def getEvaluateExpression = child.dataType match {
+  protected def getEvaluateExpression(queryContext: String) = child.dataType match {
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
         Divide(
-          CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd),
+          CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd, queryContext),
           count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
@@ -123,7 +123,7 @@ abstract class AverageBase
   since = "1.0.0")
 case class Average(
     child: Expression,
-    useAnsiAdd: Boolean = SQLConf.get.ansiEnabled) extends AverageBase {
+    useAnsiAdd: Boolean = SQLConf.get.ansiEnabled) extends AverageBase with SupportQueryContext {
   def this(child: Expression) = this(child, useAnsiAdd = SQLConf.get.ansiEnabled)
 
   override protected def withNewChildInternal(newChild: Expression): Average =
@@ -133,7 +133,13 @@ case class Average(
 
   override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
 
-  override lazy val evaluateExpression: Expression = getEvaluateExpression
+  override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
+
+  override def initQueryContext(): String = if (useAnsiAdd) {
+    origin.context
+  } else {
+    ""
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -192,7 +198,7 @@ case class TryAverage(child: Expression) extends AverageBase {
   }
 
   override lazy val evaluateExpression: Expression = {
-    addTryEvalIfNeeded(getEvaluateExpression)
+    addTryEvalIfNeeded(getEvaluateExpression(""))
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
