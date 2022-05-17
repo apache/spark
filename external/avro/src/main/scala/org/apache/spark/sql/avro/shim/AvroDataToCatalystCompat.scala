@@ -57,7 +57,7 @@ class DirectBinaryAvroDecoderFactory extends AvroDecoderFactory {
 }
 
 
-case class AvroDataToCatalystCompat(child: Expression, jsonFormatSchema: String, decoderFactory: AvroDecoderFactory = new DirectBinaryAvroDecoderFactory())
+case class AvroDataToCatalystCompat(child: Expression, jsonFormatSchema: String, options: Map[String, String], decoderFactory: AvroDecoderFactory = new DirectBinaryAvroDecoderFactory())
   extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)//HACK to compile in zeppelin
