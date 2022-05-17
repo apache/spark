@@ -457,7 +457,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     }
   }
 
-  test("default formatter: support returning optional parse results") {
+  test("SPARK-39193: support returning optional parse results in the default formatter") {
     val formatter = new DefaultTimestampFormatter(
       DateTimeTestUtils.LA,
       locale = DateFormatter.defaultLocale,
