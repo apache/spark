@@ -642,11 +642,11 @@ class AnsiCastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     val cast = v match {
       case lit: Expression =>
-        Cast(lit, targetType, timeZoneId)
+        Cast(lit, targetType, timeZoneId, true)
       case _ =>
-        Cast(Literal(v), targetType, timeZoneId)
+        Cast(Literal(v), targetType, timeZoneId, true)
     }
-    cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
     cast
   }
 
@@ -671,8 +671,8 @@ class AnsiCastSuiteWithAnsiModeOff extends AnsiCastSuiteBase {
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     val cast = v match {
-      case lit: Expression => Cast(lit, targetType, timeZoneId)
-      case _ => Cast(Literal(v), targetType, timeZoneId)
+      case lit: Expression => Cast(lit, targetType, timeZoneId, true)
+      case _ => Cast(Literal(v), targetType, timeZoneId, true)
     }
     cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
     cast
