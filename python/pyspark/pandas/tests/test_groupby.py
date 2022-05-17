@@ -2208,6 +2208,22 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             .sort_index(),
         )
 
+    def test_apply_infer_schema_without_shortcut(self):
+        # SPARK-39054: Ensure infer schema accuracy in GroupBy.apply
+        with option_context("compute.shortcut_limit", 0):
+            dfs = (
+                {"timestamp": [0.0], "car_id": ["A"]},
+                {"timestamp": [0.0, 0.0], "car_id": ["A", "A"]},
+            )
+            func = lambda _: pd.DataFrame({"column": [0.0]})  # noqa: E731
+            for df in dfs:
+                pdf = pd.DataFrame(df)
+                psdf = ps.from_pandas(pdf)
+                self.assert_eq(
+                    psdf.groupby("car_id").apply(func).sort_index(),
+                    pdf.groupby("car_id").apply(func).sort_index(),
+                )
+
     def test_apply_with_new_dataframe_without_shortcut(self):
         with option_context("compute.shortcut_limit", 0):
             self.test_apply_with_new_dataframe()
