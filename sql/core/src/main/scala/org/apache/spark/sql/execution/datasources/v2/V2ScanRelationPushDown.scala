@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -437,47 +437,51 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
 
   def pushDownOffsets(plan: LogicalPlan): LogicalPlan = plan.transform {
     case offset @ LimitAndOffset(limit, offsetValue, child) =>
-      val (newChild, canRemoveLimit) = pushDownLimit(child, limit)
-      if (canRemoveLimit) {
-        val (finalChild, isPushed) = pushDownOffset(newChild, offsetValue)
-        if (isPushed) {
+      val (newChild, isPushed) = pushDownOffset(child, offsetValue)
+      if (isPushed) {
+        // If we can push down offset, it indicates data source only have one partition.
+        // For `dataset.limit(m).offset(n)`, try to push down `LIMIT (m - n) OFFSET n`.
+        // For example, `dataset.limit(5).offset(3)`, we can push down `LIMIT 2 OFFSET 3`.
+        val (finalChild, canRemoveLimit) = pushDownLimit(newChild, limit - offsetValue)
+        if (canRemoveLimit) {
           finalChild
         } else {
-          offset.withNewChildren(Seq(finalChild))
+          // For `dataset.limit(m).offset(n)`, only `OFFSET n` be pushed.
+          // Spark will do `LIMIT (m - n)`.
+          offset.child.asInstanceOf[GlobalLimit]
+            .copy(limitExpr = Literal(limit - offsetValue)).withNewChildren(Seq(finalChild))
         }
-      } else if (child.ne(newChild)) {
-        val newLocalLimit = offset.child.asInstanceOf[GlobalLimit]
-          .child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
-        val newGlobalLimit =
-          offset.child.asInstanceOf[GlobalLimit].withNewChildren(Seq(newLocalLimit))
-        offset.withNewChildren(Seq(newGlobalLimit))
       } else {
+        // If we can't push down offset, let `pushDownLimits` push down limit.
         offset
       }
     case globalLimit @ OffsetAndLimit(offset, limitValue, child) =>
       val (newChild, isPushed) = pushDownOffset(child, offset)
       if (isPushed) {
+        // If we can push down offset, it indicates data source only have one partition.
+        // For `dataset.offset(n).limit(m)`, try to push down `LIMIT m OFFSET n`.
+        // For example, `dataset.offset(3).limit(5)`, we can push down `LIMIT 5 OFFSET 3`.
         val (finalChild, canRemoveLimit) = pushDownLimit(newChild, limitValue)
         if (canRemoveLimit) {
           finalChild
         } else {
+          // For `dataset.offset(n).limit(m)`, only `OFFSET n` be pushed. Spark will do `LIMIT m`.
           globalLimit.withNewChildren(Seq(finalChild))
         }
       } else {
+        // For `dataset.offset(n).limit(m)`, try to push down `LIMIT (m + n)`.
+        // For example, `dataset.offset(3).limit(5)`, we can push down `LIMIT 8`.
         val (finalChild, canRemoveLimit) = pushDownLimit(newChild, offset + limitValue)
         if (canRemoveLimit) {
           val newOffset = globalLimit.child.asInstanceOf[Offset].withNewChildren(Seq(finalChild))
           globalLimit.withNewChildren(Seq(newOffset))
-        } else if (child.ne(finalChild)) {
-          val newLocalLimit = globalLimit.child.asInstanceOf[Offset]
-            .child.asInstanceOf[LocalLimit].withNewChildren(Seq(finalChild))
-          val newOffset = globalLimit.child.asInstanceOf[Offset].withNewChildren(Seq(newLocalLimit))
-          globalLimit.withNewChildren(Seq(newOffset))
         } else {
+          // If we can't push down offset and limit, return `GlobalLimit`.
           globalLimit
         }
       }
     case offset @ Offset(IntegerLiteral(n), child) =>
+      // For `dataset.offset(n)`, try to push down `OFFSET n`.
       val (newChild, isPushed) = pushDownOffset(child, n)
       if (isPushed) {
         newChild
