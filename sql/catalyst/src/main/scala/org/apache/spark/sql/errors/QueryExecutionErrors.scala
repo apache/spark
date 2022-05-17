@@ -108,9 +108,13 @@ object QueryExecutionErrors extends QueryErrorsBase {
       to: DataType,
       s: UTF8String,
       errorContext: String): SparkNumberFormatException = {
-    new SparkNumberFormatException(errorClass = "INVALID_SYNTAX_FOR_CAST",
-      messageParameters = Array(toSQLType(to), toSQLValue(s, StringType),
-        SQLConf.ANSI_ENABLED.key, errorContext))
+    new SparkNumberFormatException(
+      errorClass = "INVALID_SYNTAX_FOR_CAST",
+      messageParameters = Array(
+        toSQLType(to),
+        toSQLValue(s, StringType),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        errorContext))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -177,8 +181,12 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def mapKeyNotExistError(key: Any, dataType: DataType, context: String): NoSuchElementException = {
-    new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(toSQLValue(key, dataType), SQLConf.ANSI_ENABLED.key, context))
+    new SparkNoSuchElementException(
+      errorClass = "MAP_KEY_DOES_NOT_EXIST",
+      messageParameters = Array(
+        toSQLValue(key, dataType),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        context))
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
@@ -1005,9 +1013,13 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotCastToDateTimeError(
       value: Any, from: DataType, to: DataType, errorContext: String): Throwable = {
-    val valueString = toSQLValue(value, from)
-    new SparkDateTimeException("INVALID_SYNTAX_FOR_CAST",
-      Array(toSQLType(to), valueString, SQLConf.ANSI_ENABLED.key, errorContext))
+    new SparkDateTimeException(
+      errorClass = "INVALID_SYNTAX_FOR_CAST",
+      messageParameters = Array(
+        toSQLType(to),
+        toSQLValue(value, from),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        errorContext))
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {

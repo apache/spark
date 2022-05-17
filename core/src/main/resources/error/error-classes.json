@@ -12,7 +12,7 @@
     "sqlState" : "22005"
   },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
-    "message" : [ "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to false to bypass this error.<details>" ],
+    "message" : [ "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error.<details>" ],
     "sqlState" : "22005"
   },
   "CANNOT_PARSE_DECIMAL" : {
@@ -23,7 +23,7 @@
     "message" : [ "Cannot up cast <value> from <sourceType> to <targetType>.\n<details>" ]
   },
   "CAST_CAUSES_OVERFLOW" : {
-    "message" : [ "Casting <value> to <type> causes overflow. To return NULL instead, use 'try_cast'. If necessary set <config> to false to bypass this error." ],
+    "message" : [ "Casting <value> to <type> causes overflow. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error." ],
     "sqlState" : "22005"
   },
   "CONCURRENT_QUERY" : {
@@ -34,7 +34,7 @@
     "sqlState" : "22008"
   },
   "DIVIDE_BY_ZERO" : {
-    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to false (except for ANSI interval type) to bypass this error.<details>" ],
+    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error.<details>" ],
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
@@ -106,17 +106,17 @@
     "message" : [ "<message>" ]
   },
   "INVALID_ARRAY_INDEX" : {
-    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to false to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to \"false\" to bypass this error." ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
-    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to false to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error." ]
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name <fieldName> is invalid: <path> is not a struct." ],
     "sqlState" : "42000"
   },
   "INVALID_FRACTION_OF_SECOND" : {
-    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to false to bypass this error. " ],
+    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to \"false\" to bypass this error. " ],
     "sqlState" : "22023"
   },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
@@ -134,11 +134,11 @@
     "sqlState" : "42000"
   },
   "INVALID_SYNTAX_FOR_CAST" : {
-    "message" : [ "Invalid input syntax for type <typeName>: <value>. To return NULL instead, use 'try_cast'. If necessary set <config> to false to bypass this error.<details>" ],
+    "message" : [ "Invalid input syntax for type <typeName>: <value>. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error.<details>" ],
     "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key <keyValue> does not exist. To return NULL instead, use 'try_element_at'. If necessary set <config> to false to bypass this error.<details>" ]
+    "message" : [ "Key <keyValue> does not exist. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error.<details>" ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "Column '<columnName>' does not exist. Did you mean one of the following? [<proposal>]" ],
