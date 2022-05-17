@@ -1661,7 +1661,7 @@ class PlanResolutionSuite extends AnalysisTest {
             val target = m.targetTable
             val d = target.output.find(_.name == "default").get.asInstanceOf[AttributeReference]
             m.mergeCondition match {
-              case EqualTo(Cast(l: AttributeReference, _, _, _), _: AttributeReference) =>
+              case EqualTo(Cast(l: AttributeReference, _, _, _), _) =>
                 assert(l.sameRef(d))
               case Literal(_, BooleanType) => // this is acceptable as a merge condition
               case other =>
@@ -1695,6 +1695,10 @@ class PlanResolutionSuite extends AnalysisTest {
         val cond = m.mergeCondition
         cond match {
           case EqualTo(Cast(l: AttributeReference, IntegerType, _, _), r: AttributeReference) =>
+            assert(l.name == "i")
+            assert(r.name == "i")
+          case EqualTo(l: AttributeReference, r: AttributeReference) =>
+            // ANSI mode on.
             assert(l.name == "i")
             assert(r.name == "i")
           case Literal(_, BooleanType) => // this is acceptable as a merge condition
