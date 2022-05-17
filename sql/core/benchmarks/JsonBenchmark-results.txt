@@ -3,118 +3,118 @@ Benchmark for performance of JSON parsing
 ================================================================================================
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 JSON schema inferring:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                        1099           1116          15          4.5         219.9       1.0X
-UTF-8 is set                                       1522           1530           8          3.3         304.4       0.7X
+No encoding                                        3363           3446          79          1.5         672.7       1.0X
+UTF-8 is set                                       4894           4976          72          1.0         978.7       0.7X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 count a short column:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                         910            928          16          5.5         182.0       1.0X
-UTF-8 is set                                       1642           1662          20          3.0         328.5       0.6X
+No encoding                                        3088           3123          32          1.6         617.6       1.0X
+UTF-8 is set                                       4854           4938          87          1.0         970.9       0.6X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 count a wide column:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                        2638           2650          11          0.4        2637.7       1.0X
-UTF-8 is set                                       3661           3692          40          0.3        3660.7       0.7X
+No encoding                                        6411           7338        1497          0.2        6411.2       1.0X
+UTF-8 is set                                      10589          10644          58          0.1       10589.1       0.6X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 select wide row:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                        6860           6892          28          0.0      137195.5       1.0X
-UTF-8 is set                                       7299           7324          23          0.0      145980.8       0.9X
+No encoding                                       12862          13165         263          0.0      257239.1       1.0X
+UTF-8 is set                                      14792          15110         371          0.0      295834.1       0.9X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Select a subset of 10 columns:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Select 10 columns                                  1047           1049           2          1.0        1046.9       1.0X
-Select 1 column                                     643            665          31          1.6         642.8       1.6X
+Select 10 columns                                  2352           2369          17          0.4        2351.8       1.0X
+Select 1 column                                    2680           2683           5          0.4        2680.0       0.9X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 creation of JSON parser per line:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Short column without encoding                       278            299          36          3.6         277.5       1.0X
-Short column with UTF-8                             379            403          36          2.6         379.0       0.7X
-Wide column without encoding                       4798           4831          29          0.2        4798.2       0.1X
-Wide column with UTF-8                             5665           5728         107          0.2        5664.5       0.0X
+Short column without encoding                       884            887           2          1.1         884.1       1.0X
+Short column with UTF-8                            1193           1202           8          0.8        1192.6       0.7X
+Wide column without encoding                      12289          12448         170          0.1       12289.3       0.1X
+Wide column with UTF-8                            16609          16663          79          0.1       16608.6       0.1X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 JSON functions:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Text read                                            64             65           2         15.6          63.9       1.0X
-from_json                                           730            733           2          1.4         730.2       0.1X
-json_tuple                                          689            691           3          1.5         689.3       0.1X
-get_json_object                                     591            592           2          1.7         590.6       0.1X
+Text read                                           147            148           0          6.8         147.2       1.0X
+from_json                                          2201           2202           1          0.5        2200.7       0.1X
+json_tuple                                         2452           2473          20          0.4        2452.5       0.1X
+get_json_object                                    2248           2263          22          0.4        2248.2       0.1X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Dataset of json strings:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Text read                                           297            308          10         16.9          59.3       1.0X
-schema inferring                                    969            971           2          5.2         193.9       0.3X
-parsing                                            1193           1195           4          4.2         238.6       0.2X
+Text read                                           647            654           7          7.7         129.4       1.0X
+schema inferring                                   2842           2862          25          1.8         568.4       0.2X
+parsing                                            3213           3239          33          1.6         642.6       0.2X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Json files in the per-line mode:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Text read                                           389            400          15         12.8          77.9       1.0X
-Schema inferring                                   1132           1159          40          4.4         226.4       0.3X
-Parsing without charset                            1343           1360          23          3.7         268.5       0.3X
-Parsing with UTF-8                                 1694           1717          21          3.0         338.7       0.2X
+Text read                                          1046           1058          12          4.8         209.3       1.0X
+Schema inferring                                   3321           3378          58          1.5         664.2       0.3X
+Parsing without charset                            3751           3791          36          1.3         750.2       0.3X
+Parsing with UTF-8                                 5361           5403          37          0.9        1072.1       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Write dates and timestamps:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Create a dataset of timestamps                      113            115           2          8.8         113.2       1.0X
-to_json(timestamp)                                  581            587           9          1.7         580.7       0.2X
-write timestamps to files                           573            591          30          1.7         573.0       0.2X
-Create a dataset of dates                            98            112          12         10.2          98.4       1.2X
-to_json(date)                                       518            531          15          1.9         518.1       0.2X
-write dates to files                                391            411          33          2.6         390.8       0.3X
+Create a dataset of timestamps                      171            173           2          5.8         171.3       1.0X
+to_json(timestamp)                                 1414           1427          12          0.7        1414.0       0.1X
+write timestamps to files                          1183           1211          40          0.8        1183.2       0.1X
+Create a dataset of dates                           191            198           7          5.2         191.5       0.9X
+to_json(date)                                       934            945          16          1.1         934.1       0.2X
+write dates to files                                727            748          22          1.4         726.9       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Read dates and timestamps:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read timestamp text from files                      101            104           6          9.9         101.1       1.0X
-read timestamps from files                         1196           1199           4          0.8        1195.9       0.1X
-infer timestamps from files                        4025           4082          51          0.2        4025.0       0.0X
-read date text from files                            86             88           3         11.6          86.3       1.2X
-read date from files                                339            349          16          3.0         338.9       0.3X
-timestamp strings                                   133            133           1          7.5         132.6       0.8X
-parse timestamps from Dataset[String]              1083           1088           4          0.9        1083.0       0.1X
-infer timestamps from Dataset[String]              3721           3736          20          0.3        3720.8       0.0X
-date strings                                        251            260          13          4.0         251.1       0.4X
-parse dates from Dataset[String]                    495            503           7          2.0         495.1       0.2X
-from_json(timestamp)                               1712           1726          13          0.6        1712.3       0.1X
-from_json(date)                                     947            959          13          1.1         946.8       0.1X
+read timestamp text from files                      263            264           1          3.8         262.8       1.0X
+read timestamps from files                         2743           2807          59          0.4        2742.9       0.1X
+infer timestamps from files                       14799          15093         383          0.1       14799.3       0.0X
+read date text from files                           245            253           8          4.1         245.5       1.1X
+read date from files                                998           1008           9          1.0         998.4       0.3X
+timestamp strings                                   383            403          17          2.6         382.8       0.7X
+parse timestamps from Dataset[String]              3165           3185          17          0.3        3165.4       0.1X
+infer timestamps from Dataset[String]             15717          15830         147          0.1       15717.2       0.0X
+date strings                                        434            450          19          2.3         433.5       0.6X
+parse dates from Dataset[String]                   1466           1472           7          0.7        1465.6       0.2X
+from_json(timestamp)                               4682           4736          50          0.2        4681.9       0.1X
+from_json(date)                                    2823           2848          22          0.4        2822.6       0.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Mac OS X 12.2.1
-Apple M1 Pro
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-w/o filters                                       11170          11300         119          0.0      111704.0       1.0X
-pushdown disabled                                 10644          10667          21          0.0      106437.2       1.0X
-w/ filters                                          352            354           2          0.3        3519.8      31.7X
+w/o filters                                       21058          21148         143          0.0      210582.1       1.0X
+pushdown disabled                                 20208          20464         226          0.0      202080.3       1.0X
+w/ filters                                          750            756           6          0.1        7499.1      28.1X
 
 
