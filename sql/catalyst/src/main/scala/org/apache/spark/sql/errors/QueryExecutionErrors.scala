@@ -528,9 +528,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
         "READ_ANCIENT_DATETIME",
         format,
         toSQLConf(config),
-        option,
+        toDSOption(option),
         toSQLConf(config),
-        option),
+        toDSOption(option)),
       cause = null
     )
   }
