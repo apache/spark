@@ -94,7 +94,6 @@ private[deploy] object DeployMessages {
   case class ExecutorStateChanged(
       appId: String,
       execId: Int,
-      rpId: Int,
       state: ExecutorState,
       message: Option[String],
       exitStatus: Option[Int])

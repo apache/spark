@@ -112,7 +112,7 @@ private[deploy] class ExecutorRunner(
       }
     }
     try {
-      worker.send(ExecutorStateChanged(appId, execId, rpId, state, message, exitCode))
+      worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
     } catch {
       case e: IllegalStateException => logWarning(e.getMessage(), e)
     }
@@ -194,13 +194,13 @@ private[deploy] class ExecutorRunner(
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf, true)
 
       state = ExecutorState.RUNNING
-      worker.send(ExecutorStateChanged(appId, execId, rpId, state, None, None))
+      worker.send(ExecutorStateChanged(appId, execId, state, None, None))
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
       // or with nonzero exit code
       val exitCode = process.waitFor()
       state = ExecutorState.EXITED
       val message = "Command exited with code " + exitCode
-      worker.send(ExecutorStateChanged(appId, execId, rpId, state, Some(message), Some(exitCode)))
+      worker.send(ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode)))
     } catch {
       case interrupted: InterruptedException =>
         logInfo("Runner thread for executor " + fullId + " interrupted")

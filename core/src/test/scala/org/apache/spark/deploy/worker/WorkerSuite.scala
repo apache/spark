@@ -41,7 +41,7 @@ import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorState
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Worker._
-import org.apache.spark.resource.{ResourceAllocation, ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs.{WORKER_FPGA_ID, WORKER_GPU_ID}
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
@@ -132,14 +132,12 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     }
     // initialize ExecutorStateChanged Message
     worker.handleExecutorStateChanged(
-      ExecutorStateChanged("app1", 0,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, ExecutorState.EXITED, None, None))
+      ExecutorStateChanged("app1", 0, ExecutorState.EXITED, None, None))
     assert(worker.finishedExecutors.size === 1)
     assert(worker.executors.size === 4)
     for (i <- 1 until 5) {
       worker.handleExecutorStateChanged(
-        ExecutorStateChanged("app1", i,
-          ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, ExecutorState.EXITED, None, None))
+        ExecutorStateChanged("app1", i, ExecutorState.EXITED, None, None))
       assert(worker.finishedExecutors.size === 2)
       if (i > 1) {
         assert(!worker.finishedExecutors.contains(s"app1/${i - 2}"))
@@ -158,8 +156,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     }
     // initialize ExecutorStateChanged Message
     worker.handleExecutorStateChanged(
-      ExecutorStateChanged("app1", 0,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, ExecutorState.EXITED, None, None))
+      ExecutorStateChanged("app1", 0, ExecutorState.EXITED, None, None))
     assert(worker.finishedExecutors.size === 1)
     assert(worker.executors.size === 49)
     for (i <- 1 until 50) {
@@ -171,8 +168,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
         }
       }
       worker.handleExecutorStateChanged(
-        ExecutorStateChanged("app1", i,
-          ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, ExecutorState.EXITED, None, None))
+        ExecutorStateChanged("app1", i, ExecutorState.EXITED, None, None))
       if (expectedValue == 28) {
         for (j <- i - 30 until i - 27) {
           assert(!worker.finishedExecutors.contains(s"app1/$j"))
@@ -338,8 +334,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
       worker.executors += s"app1/$i" -> createExecutorRunner(i)
     }
     worker.handleExecutorStateChanged(
-      ExecutorStateChanged("app1", 0,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, ExecutorState.EXITED, None, None))
+      ExecutorStateChanged("app1", 0, ExecutorState.EXITED, None, None))
     assert(cleanupCalled.get() == value)
   }
 

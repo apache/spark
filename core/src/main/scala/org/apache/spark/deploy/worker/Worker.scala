@@ -636,7 +636,7 @@ private[deploy] class Worker(
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
             }
-            syncExecutorStateWithMaster(ExecutorStateChanged(appId, execId, rpId,
+            syncExecutorStateWithMaster(ExecutorStateChanged(appId, execId,
               ExecutorState.FAILED, Some(e.toString), None))
         }
       }

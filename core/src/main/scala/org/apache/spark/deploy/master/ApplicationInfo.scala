@@ -38,15 +38,15 @@ private[spark] class ApplicationInfo(
   extends Serializable {
 
   @transient var state: ApplicationState.Value = _
+  @transient var executors: mutable.HashMap[Int, ExecutorDesc] = _
   @transient var removedExecutors: ArrayBuffer[ExecutorDesc] = _
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
 
-  @transient var executorsPerResourceProfileId:
-    mutable.HashMap[Int, mutable.HashMap[Int, ExecutorDesc]] = _
-  @transient var targetNumExecutorsPerResourceProfileId: mutable.HashMap[Int, Int] = _
-  @transient var rpIdToResourceProfile: mutable.HashMap[Int, ResourceProfile] = _
+  @transient private var executorsPerResourceProfileId: mutable.HashMap[Int, mutable.Set[Int]] = _
+  @transient private var targetNumExecutorsPerResourceProfileId: mutable.HashMap[Int, Int] = _
+  @transient private var rpIdToResourceProfile: mutable.HashMap[Int, ResourceProfile] = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -59,6 +59,7 @@ private[spark] class ApplicationInfo(
 
   private def init(): Unit = {
     state = ApplicationState.WAITING
+    executors = new mutable.HashMap[Int, ExecutorDesc]
     coresGranted = 0
     endTime = -1L
     appSource = new ApplicationSource(this)
@@ -72,9 +73,19 @@ private[spark] class ApplicationInfo(
     targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]()
     targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = initialExecutorLimit
 
-    executorsPerResourceProfileId = new mutable.HashMap[Int, mutable.HashMap[Int, ExecutorDesc]]()
-    executorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) =
-      new mutable.HashMap[Int, ExecutorDesc]()
+    executorsPerResourceProfileId = new mutable.HashMap[Int, mutable.Set[Int]]()
+  }
+
+  private[deploy] def getOrUpdateExecutorsForRPId(rpId: Int): mutable.Set[Int] = {
+    executorsPerResourceProfileId.getOrElseUpdate(rpId, mutable.HashSet[Int]())
+  }
+
+  private[deploy] def getTargetExecutorNumForRPId(rpId: Int): Int = {
+    targetNumExecutorsPerResourceProfileId.getOrElse(rpId, 0)
+  }
+
+  private[deploy] def getRequestedRPIds(): Seq[Int] = {
+    rpIdToResourceProfile.keys.toSeq.sorted
   }
 
   private[deploy] def requestExecutors(
@@ -87,10 +98,6 @@ private[spark] class ApplicationInfo(
       if (!targetNumExecutorsPerResourceProfileId.get(rp.id).contains(num)) {
         targetNumExecutorsPerResourceProfileId(rp.id) = num
       }
-
-      if (!executorsPerResourceProfileId.contains(rp.id)) {
-        executorsPerResourceProfileId(rp.id) = new mutable.HashMap[Int, ExecutorDesc]()
-      }
     }
   }
 
@@ -98,10 +105,6 @@ private[spark] class ApplicationInfo(
   // For testing.
   private[deploy] def requestExecutors(totalNum: Int): Unit = {
     targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = totalNum
-  }
-
-  private[deploy] def executors(): mutable.HashMap[Int, ExecutorDesc] = {
-    executorsPerResourceProfileId.values.reduce((x, y) => x ++ y)
   }
 
   private[deploy] def getResourceProfileById(rpId: Int): ResourceProfile = {
@@ -128,16 +131,16 @@ private[spark] class ApplicationInfo(
       useID: Option[Int] = None): ExecutorDesc = {
     val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores,
       desc.memoryPerExecutorMB, resources, rpId)
-    executorsPerResourceProfileId
-      .getOrElseUpdate(rpId, new mutable.HashMap[Int, ExecutorDesc]())
-      .put(exec.id, exec)
+    executors(exec.id) = exec
+    getOrUpdateExecutorsForRPId(rpId).add(exec.id)
     coresGranted += cores
     exec
   }
 
   private[master] def removeExecutor(exec: ExecutorDesc): Unit = {
-    if (executorsPerResourceProfileId.get(exec.rpId).exists(_.contains(exec.id))) {
-      removedExecutors += executorsPerResourceProfileId(exec.rpId)(exec.id)
+    if (executors.contains(exec.id)) {
+      removedExecutors += executors(exec.id)
+      executors -= exec.id
       executorsPerResourceProfileId(exec.rpId) -= exec.id
       coresGranted -= exec.cores
     }

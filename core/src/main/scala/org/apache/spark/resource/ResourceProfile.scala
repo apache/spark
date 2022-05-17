@@ -419,7 +419,7 @@ object ResourceProfile extends Logging {
   }
 
   private[spark] case class ExecutorResourcesOrDefaults(
-      cores: Option[Int], // Only be None for standalone cluster.
+      cores: Option[Int], // Can only be None for standalone cluster.
       executorMemoryMiB: Long,
       memoryOffHeapMiB: Long,
       pysparkMemoryMiB: Long,
@@ -428,7 +428,7 @@ object ResourceProfile extends Logging {
       customResources: Map[String, ExecutorResourceRequest])
 
   private[spark] case class DefaultProfileExecutorResources(
-      cores: Option[Int], // Only be None for standalone cluster.
+      cores: Option[Int], // Can only be None for standalone cluster.
       executorMemoryMiB: Long,
       memoryOffHeapMiB: Long,
       pysparkMemoryMiB: Option[Long],

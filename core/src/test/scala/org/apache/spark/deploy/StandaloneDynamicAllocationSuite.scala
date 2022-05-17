@@ -650,7 +650,7 @@ class StandaloneDynamicAllocationSuite
 
     private def testReceive: PartialFunction[Any, Unit] = synchronized {
       case LaunchExecutor(_, appId, execId, rpId, _, _, _, _) =>
-        self.send(ExecutorStateChanged(appId, execId, rpId,
+        self.send(ExecutorStateChanged(appId, execId,
           ExecutorState.RUNNING, None, None))
     }
 
