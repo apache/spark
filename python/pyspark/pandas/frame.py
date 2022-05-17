@@ -9449,7 +9449,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         sdf = sdf.where(~scol_for(sdf, column)).drop(column)
         internal = self._internal.with_new_sdf(sdf)
-        psdf = DataFrame(internal)
+        psdf: DataFrame = DataFrame(internal)
 
         if inplace:
             if ignore_index:
@@ -12237,7 +12237,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         data_fields[idx] = field.copy(dtype=dtype, spark_type=spark_type, nullable=True)
 
         internal = psdf._internal.with_new_sdf(sdf, data_fields=data_fields)
-        result_df = DataFrame(internal)
+        result_df: DataFrame = DataFrame(internal)
         return result_df.reset_index(drop=True) if ignore_index else result_df
 
     def mad(self, axis: Axis = 0) -> "Series":
