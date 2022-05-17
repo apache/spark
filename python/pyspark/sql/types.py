@@ -214,7 +214,10 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
             if platform.system().lower() == "windows":
-                # On Windows, the current value is converted to a timestamp when the current value is less than 1970
+                """
+                On Windows, the current value is converted to a timestamp
+                when the current value is less than 1970
+                """
                 seconds = (
                     dt - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)
                 ).total_seconds()
@@ -1956,7 +1959,10 @@ class DatetimeConverter:
     def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
         if platform.system().lower() == "windows":
-            # On Windows, the current value is converted to a timestamp when the current value is less than 1970
+            """
+            On Windows, the current value is converted to a timestamp
+            when the current value is less than 1970
+            """
             seconds = (
                 obj - datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)
             ).total_seconds()
