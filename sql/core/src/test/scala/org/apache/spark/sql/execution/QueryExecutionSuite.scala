@@ -279,4 +279,10 @@ class QueryExecutionSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-39207: Record the query text when executed with SQL API") {
+    val query = "select 1 -- test query text"
+    val df = spark.sql(query)
+    assert(df.queryExecution.sqlText.contains(query))
+  }
 }

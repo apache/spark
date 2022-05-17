@@ -93,9 +93,10 @@ private[sql] object Dataset {
   }
 
   /** A variant of ofRows that allows passing in a tracker so we can track query parsing time. */
-  def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan, tracker: QueryPlanningTracker)
-    : DataFrame = sparkSession.withActive {
-    val qe = new QueryExecution(sparkSession, logicalPlan, tracker)
+  def ofRows(
+      sparkSession: SparkSession, logicalPlan: LogicalPlan,
+      tracker: QueryPlanningTracker, sqlText: String): DataFrame = sparkSession.withActive {
+    val qe = new QueryExecution(sparkSession, logicalPlan, tracker, sqlText = Some(sqlText))
     qe.assertAnalyzed()
     new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
   }

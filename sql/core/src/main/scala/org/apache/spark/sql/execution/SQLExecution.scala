@@ -82,7 +82,7 @@ object SQLExecution {
           val redactedStr = Utils
             .redact(sparkSession.sessionState.conf.stringRedactionPattern, sqlStr)
           redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
-        }.getOrElse(callSite.shortForm)
+        }.orElse(queryExecution.sqlText).getOrElse(callSite.shortForm)
 
       val planDescriptionMode =
         ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)

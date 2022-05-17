@@ -55,7 +55,8 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL) extends Logging {
+    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+    val sqlText: Option[String] = None) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 

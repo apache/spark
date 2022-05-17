@@ -619,7 +619,7 @@ class SparkSession private(
     val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
       sessionState.sqlParser.parsePlan(sqlText)
     }
-    Dataset.ofRows(self, plan, tracker)
+    Dataset.ofRows(self, plan, tracker, sqlText)
   }
 
   /**
