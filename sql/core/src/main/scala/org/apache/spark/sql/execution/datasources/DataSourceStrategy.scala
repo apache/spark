@@ -114,7 +114,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
           case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
             val cast =
               Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone), true)
-            cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
+            cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
             Some(Alias(cast, field.name)())
           case _ =>
             val castExpression =

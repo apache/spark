@@ -1117,8 +1117,8 @@ class PlanResolutionSuite extends AnalysisTest {
             // that column. This is intended.
             Assignment(i: AttributeReference, cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
             Assignment(s: AttributeReference, cast2 @ Cast(Literal(null, _), StringType, _, true))),
-          None) if cast1.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get &&
-          cast2.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get =>
+          None) if cast1.getTagValue(Cast.BY_TABLE_INSERTION).isDefined &&
+          cast2.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
           assert(i.name == "i")
           assert(s.name == "s")
 
@@ -1147,7 +1147,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case UpdateTable(
         _,
         Seq(Assignment(i: AttributeReference, cast @ Cast(Literal(null, _), StringType, _, true))),
-        None) if cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get =>
+        None) if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
           assert(i.name == "i")
 
         case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
@@ -1195,7 +1195,7 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s.arguments.length == 2)
             assert(s.arguments.head.isInstanceOf[Cast])
             val cast = s.arguments.head.asInstanceOf[Cast]
-            assert(cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get)
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
             assert(s.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect StaticInvoke, but got: " + other)
         }
@@ -1638,7 +1638,7 @@ class PlanResolutionSuite extends AnalysisTest {
                   Assignment(_: AttributeReference,
                     cast @ Cast(Literal(null, _), StringType, _, true)),
                   Assignment(_: AttributeReference, _: AttributeReference)))
-                if cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get =>
+                if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
               case other => fail("unexpected second matched action " + other)
             }
             assert(m.notMatchedActions.length == 1)
@@ -1649,8 +1649,8 @@ class PlanResolutionSuite extends AnalysisTest {
                 cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
               Assignment(s: AttributeReference,
                 cast2 @ Cast(Literal(null, _), StringType, _, true))))
-                if cast1.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get &&
-                  cast2.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get =>
+                if cast1.getTagValue(Cast.BY_TABLE_INSERTION).isDefined &&
+                  cast2.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
                 assert(i.name == "i")
                 assert(s.name == "s")
               case other => fail("unexpected not matched action " + other)
@@ -1939,7 +1939,7 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s2.arguments.length == 2)
             assert(s2.arguments.head.isInstanceOf[Cast])
             val cast = s2.arguments.head.asInstanceOf[Cast]
-            assert(cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get)
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
             assert(s2.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect UpdateAction, but got: " + other)
         }
@@ -1952,7 +1952,7 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s2.arguments.length == 2)
             assert(s2.arguments.head.isInstanceOf[Cast])
             val cast = s2.arguments.head.asInstanceOf[Cast]
-            assert(cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get)
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
             assert(s2.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect UpdateAction, but got: " + other)
         }

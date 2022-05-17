@@ -146,7 +146,7 @@ object Cast {
   /**
    * A tag to identify if a CAST added by the table insertion resolver.
    */
-  val TABLE_INSERTION_RESOLVER = TreeNodeTag[Boolean]("tableInsertionResolver")
+  val BY_TABLE_INSERTION = TreeNodeTag[Unit]("tableInsertionResolver")
 
   /**
    * A tag to decide if a CAST is specified by user.
@@ -2293,7 +2293,7 @@ case class Cast(
   }
 
   private val (fallbackConfKey, fallbackConfValue) =
-    if (getTagValue(Cast.TABLE_INSERTION_RESOLVER).getOrElse(false)) {
+    if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
       (SQLConf.STORE_ASSIGNMENT_POLICY.key, SQLConf.StoreAssignmentPolicy.LEGACY.toString)
     } else {
       (SQLConf.ANSI_ENABLED.key, "false")

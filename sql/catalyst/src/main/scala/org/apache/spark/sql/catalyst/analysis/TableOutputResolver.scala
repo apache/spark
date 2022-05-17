@@ -236,7 +236,7 @@ object TableOutputResolver {
       val casted = storeAssignmentPolicy match {
         case StoreAssignmentPolicy.ANSI =>
           val cast = Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone), true)
-          cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
+          cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
           cast
         case StoreAssignmentPolicy.LEGACY =>
           Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone),

@@ -646,7 +646,7 @@ class AnsiCastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
       case _ =>
         Cast(Literal(v), targetType, timeZoneId, true)
     }
-    cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
+    cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
     cast
   }
 
@@ -674,7 +674,7 @@ class AnsiCastSuiteWithAnsiModeOff extends AnsiCastSuiteBase {
       case lit: Expression => Cast(lit, targetType, timeZoneId, true)
       case _ => Cast(Literal(v), targetType, timeZoneId, true)
     }
-    cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
+    cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
     cast
   }
 

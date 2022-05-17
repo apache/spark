@@ -124,7 +124,7 @@ abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     val expectedPlanWithAnsiCast = expectedPlan transformAllExpressions {
       case c: Cast =>
         val cast = Cast(c.child, c.dataType, c.timeZoneId, true)
-        cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
+        cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
         cast
       case other => other
     }

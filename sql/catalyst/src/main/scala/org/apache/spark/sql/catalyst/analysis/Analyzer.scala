@@ -1299,7 +1299,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // the reason that the parser has erased the type info of static partition values
                 // and converted them to string.
                 val cast = Cast(Literal(staticValue), col.dataType, ansiEnabled = true)
-                cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
+                cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
                 Some(Alias(cast, col.name)())
               case _ if queryColumns.hasNext =>
                 Some(queryColumns.next)
@@ -3385,7 +3385,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
           val casted = if (assignment.key.dataType != nullHandled.dataType) {
             val cast = Cast(nullHandled, assignment.key.dataType, ansiEnabled = true)
-            cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
+            cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
             cast
           } else {
             nullHandled

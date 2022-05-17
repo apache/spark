@@ -772,9 +772,7 @@ abstract class TypeCoercionBase {
       case e if !e.childrenResolved => e
       case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
         val days = try {
-          val cast = Cast(r, IntegerType, ansiEnabled = true)
-          cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
-          cast.eval().asInstanceOf[Int]
+          Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
           case e: NumberFormatException =>
             throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
@@ -782,9 +780,7 @@ abstract class TypeCoercionBase {
         DateAdd(l, Literal(days))
       case DateSub(l, r) if r.dataType == StringType && r.foldable =>
         val days = try {
-          val cast = Cast(r, IntegerType, ansiEnabled = true)
-          cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
-          cast.eval().asInstanceOf[Int]
+          Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
           case e: NumberFormatException =>
             throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_sub", e)
