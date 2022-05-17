@@ -128,7 +128,7 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
 case class CheckOverflow(
     child: Expression,
     dataType: DecimalType,
-    nullOnOverflow: Boolean) extends UnaryExpression {
+    nullOnOverflow: Boolean) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
@@ -138,11 +138,11 @@ case class CheckOverflow(
       dataType.scale,
       Decimal.ROUND_HALF_UP,
       nullOnOverflow,
-      origin.context)
+      queryContext)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = if (nullOnOverflow) {
-      ctx.addReferenceObj("errCtx", origin.context)
+      ctx.addReferenceObj("errCtx", queryContext)
     } else {
       "\"\""
     }
@@ -163,6 +163,12 @@ case class CheckOverflow(
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
+
+  override def initQueryContext(): String = if (nullOnOverflow) {
+    ""
+  } else {
+    origin.context
+  }
 }
 
 // A variant `CheckOverflow`, which treats null as overflow. This is necessary in `Sum`.
