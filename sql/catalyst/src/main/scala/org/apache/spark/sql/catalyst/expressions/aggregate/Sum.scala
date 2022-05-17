@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SUM, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -145,8 +146,10 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    */
   protected def getEvaluateExpression: Expression = resultType match {
     case d: DecimalType =>
-      If(isEmpty, Literal.create(null, resultType),
-        CheckOverflowInSum(sum, d, !useAnsiAdd))
+      val checkOverflowInSum = withOrigin(origin) {
+        CheckOverflowInSum(sum, d, !useAnsiAdd)
+      }
+      If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
     case _ if shouldTrackIsEmpty =>
       If(isEmpty, Literal.create(null, resultType), sum)
     case _ => sum
