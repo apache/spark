@@ -282,7 +282,7 @@ class ParseException(
     builder ++= "\n" ++= message
     start match {
       case Origin(Some(l), Some(p), _, _, _, _, _) =>
-        builder ++= s"(line $l, pos $p)\n"
+        builder ++= s" (line $l, pos $p)\n"
         command.foreach { cmd =>
           val (above, below) = cmd.split("\n").splitAt(l)
           builder ++= "\n== SQL ==\n"
