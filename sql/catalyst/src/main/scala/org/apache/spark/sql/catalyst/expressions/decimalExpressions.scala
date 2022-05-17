@@ -145,7 +145,6 @@ case class CheckOverflow(
       "\"\""
     } else {
       ctx.addReferenceObj("errCtx", queryContext)
-
     }
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
