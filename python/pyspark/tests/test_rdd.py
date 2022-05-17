@@ -672,11 +672,11 @@ class RDDTests(ReusedPySparkTestCase):
         wr_s11 = rdd.sample(True, 0.4, 11).collect()
         wr_s21 = rdd.sample(True, 0.4, 21).collect()
         self.assertNotEqual(set(wr_s11), set(wr_s21))
-        
+
     def test_datetime(self):
         # SPARK-39176: Pre - 1970 time serialization test.
         rdd = self.sc.parallelize(
-            [('a', datetime(1957, 1, 9, 0, 0)), ('b', datetime(2014, 1, 27, 0, 0))]
+            [("a", datetime(1957, 1, 9, 0, 0)), ("b", datetime(2014, 1, 27, 0, 0))]
         )
         df = SparkSession(self.sc).createDataFrame(rdd, ["id", "date"])
         self.assertEqual(2, len(df.collect()))
