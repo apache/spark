@@ -465,9 +465,9 @@ object GeneratorNestedColumnAliasing {
             val attrExprIdsOnGenerator = attrToExtractValuesOnGenerator.keys.map(_.exprId).toSet
             val updatedProject = p.withNewChildren(Seq(updatedGenerate)).transformExpressions {
               case f: GetStructField if nestedFieldsOnGenerator.contains(f) =>
-              updatedGenerate.output
-                .find(a => attrExprIdsOnGenerator.contains(a.exprId))
-                .getOrElse(f)
+                updatedGenerate.output
+                  .find(a => attrExprIdsOnGenerator.contains(a.exprId))
+                  .getOrElse(f)
             }
             Some(updatedProject)
 
