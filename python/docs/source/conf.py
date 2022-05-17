@@ -24,7 +24,12 @@ sys.path.insert(0, os.path.abspath('.'))
 
 # generate user_guide/pandas_on_spark/supported_pandas_api.rst
 from pyspark.pandas.supported_api_gen import generate_supported_api
-generate_supported_api()
+
+output_rst_file_path = (
+    "%s/user_guide/pandas_on_spark/supported_pandas_api.rst"
+    % os.path.dirname(os.path.abspath(__file__))
+)
+generate_supported_api(output_rst_file_path)
 
 # Remove previously generated rst files. Ignore errors just in case it stops
 # generating whole docs.
