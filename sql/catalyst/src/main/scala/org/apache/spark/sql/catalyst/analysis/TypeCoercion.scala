@@ -772,7 +772,7 @@ abstract class TypeCoercionBase {
       case e if !e.childrenResolved => e
       case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
         val days = try {
-          val cast = Cast(r, IntegerType)
+          val cast = Cast(r, IntegerType, ansiEnabled = true)
           cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
           cast.eval().asInstanceOf[Int]
         } catch {
@@ -782,7 +782,7 @@ abstract class TypeCoercionBase {
         DateAdd(l, Literal(days))
       case DateSub(l, r) if r.dataType == StringType && r.foldable =>
         val days = try {
-          val cast = Cast(r, IntegerType)
+          val cast = Cast(r, IntegerType, ansiEnabled = true)
           cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
           cast.eval().asInstanceOf[Int]
         } catch {

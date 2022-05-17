@@ -112,7 +112,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
           // the reason that the parser has erased the type info of static partition values
           // and converted them to string.
           case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
-            val cast = Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone))
+            val cast =
+              Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone), true)
             cast.setTagValue(Cast.TABLE_INSERTION_RESOLVER, true)
             Some(Alias(cast, field.name)())
           case _ =>
