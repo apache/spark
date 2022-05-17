@@ -229,14 +229,10 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
           state.authorizedCommitters(partition) =
             CommitStatus(TaskIdentifier(stageAttempt, attemptNumber), false)
           true
-        } else if (existing.status) {
+        } else {
           logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
             s"already committed by ${existing.taskIdent}")
           false
-        } else {
-          logDebug(s"Commit allowed for stage=$stage.$stageAttempt, partition=$partition: " +
-            s"Status not success when committed by ${existing.taskIdent}")
-          true
         }
       case None =>
         logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
