@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import pickle
 import uuid
 from typing import Optional, Dict, List
 from abc import ABC, abstractmethod
@@ -22,7 +21,7 @@ from abc import ABC, abstractmethod
 from py4j.java_gateway import JavaObject
 
 from pyspark.sql import Row
-
+from pyspark import cloudpickle
 
 __all__ = ["StreamingQueryListener"]
 
@@ -67,7 +66,7 @@ class StreamingQueryListener(ABC):
         -----
         This is called synchronously with :py:meth:`~pyspark.sql.streaming.DataStreamWriter.start`,
         that is, `onQueryStart` will be called on all listeners before `DataStreamWriter.start()`
-        returns the corresponding :class:`~pyspark.streaming.StreamingQuery`.
+        returns the corresponding :class:`~pyspark.sql.streaming.StreamingQuery`.
         Please don't block this method as it will block your query.
         """
         pass
@@ -79,11 +78,11 @@ class StreamingQueryListener(ABC):
 
         Notes
         -----
-        This method is asynchronous. The status in :class:`~pyspark.streaming.StreamingQuery`
+        This method is asynchronous. The status in :class:`~pyspark.sql.streaming.StreamingQuery`
         will always be latest no matter when this method is called. Therefore, the status of
-        :class:`~pyspark.streaming.StreamingQuery`.
+        :class:`~pyspark.sql.streaming.StreamingQuery`.
         may be changed before/when you process the event. E.g., you may find
-        :class:`~pyspark.streaming.StreamingQuery` is terminated when you are
+        :class:`~pyspark.sql.streaming.StreamingQuery` is terminated when you are
         processing `QueryProgressEvent`.
         """
         pass
@@ -94,6 +93,20 @@ class StreamingQueryListener(ABC):
         Called when a query is stopped, with or without error.
         """
         pass
+
+    @property
+    def _jlistener(self) -> JavaObject:
+        from pyspark import SparkContext
+
+        if hasattr(self, "_jlistenerobj"):
+            return self._jlistenerobj
+
+        self._jlistenerobj: JavaObject = (
+            SparkContext._jvm.PythonStreamingQueryListenerWrapper(  # type: ignore[union-attr]
+                JStreamingQueryListener(self)
+            )
+        )
+        return self._jlistenerobj
 
 
 class JStreamingQueryListener:
@@ -138,7 +151,7 @@ class QueryStartedEvent:
     def id(self) -> uuid.UUID:
         """
         A unique query id that persists across restarts. See
-        py:meth:`~pyspark.streaming.StreamingQuery.id`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
         return self._id
 
@@ -146,7 +159,7 @@ class QueryStartedEvent:
     def runId(self) -> uuid.UUID:
         """
         A query id that is unique for every start/restart. See
-        py:meth:`~pyspark.streaming.StreamingQuery.runId`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
         """
         return self._runId
 
@@ -208,7 +221,7 @@ class QueryTerminatedEvent:
     def id(self) -> uuid.UUID:
         """
         A unique query id that persists across restarts. See
-        py:meth:`~pyspark.streaming.StreamingQuery.id`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
         return self._id
 
@@ -216,7 +229,7 @@ class QueryTerminatedEvent:
     def runId(self) -> uuid.UUID:
         """
         A query id that is unique for every start/restart. See
-        py:meth:`~pyspark.streaming.StreamingQuery.runId`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
         """
         return self._runId
 
@@ -256,9 +269,8 @@ class StreamingQueryProgress:
         self._sources: List[SourceProgress] = [SourceProgress(js) for js in jprogress.sources()]
         self._sink: SinkProgress = SinkProgress(jprogress.sink())
 
-        # TODO(SPARK-38760): Write a test with DataFrame.observe API implementation.
         self._observedMetrics: Dict[str, Row] = {
-            k: pickle.loads(
+            k: cloudpickle.loads(
                 SparkContext._jvm.PythonSQLUtils.toPyRow(jr)  # type: ignore[union-attr]
             )
             for k, jr in dict(jprogress.observedMetrics()).items()
@@ -268,7 +280,7 @@ class StreamingQueryProgress:
     def id(self) -> uuid.UUID:
         """
         A unique query id that persists across restarts. See
-        py:meth:`~pyspark.streaming.StreamingQuery.id`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
         return self._id
 
@@ -276,7 +288,7 @@ class StreamingQueryProgress:
     def runId(self) -> uuid.UUID:
         """
         A query id that is unique for every start/restart. See
-        py:meth:`~pyspark.streaming.StreamingQuery.runId`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
         """
         return self._runId
 
@@ -354,7 +366,7 @@ class StreamingQueryProgress:
     def sink(self) -> "SinkProgress":
         """
         A unique query id that persists across restarts. See
-        py:meth:`~pyspark.streaming.StreamingQuery.id`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
         return self._sink
 

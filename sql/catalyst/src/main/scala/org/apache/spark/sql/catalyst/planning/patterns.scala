@@ -18,12 +18,15 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 
 trait OperationHelper extends AliasHelper with PredicateHelper {
@@ -386,5 +389,53 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
         None
       }
     case _ => None
+  }
+}
+
+/**
+ * An extractor for row-level commands such as DELETE, UPDATE, MERGE that were rewritten using plans
+ * that operate on groups of rows.
+ *
+ * This class extracts the following entities:
+ *  - the group-based rewrite plan;
+ *  - the condition that defines matching groups;
+ *  - the read relation that can be either [[DataSourceV2Relation]] or [[DataSourceV2ScanRelation]]
+ *  depending on whether the planning has already happened;
+ */
+object GroupBasedRowLevelOperation {
+  type ReturnType = (ReplaceData, Expression, LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _), cond, query, _, _) =>
+      val readRelation = findReadRelation(table, query)
+      readRelation.map((rd, cond, _))
+
+    case _ =>
+      None
+  }
+
+  private def findReadRelation(
+      table: Table,
+      plan: LogicalPlan): Option[LogicalPlan] = {
+
+    val readRelations = plan.collect {
+      case r: DataSourceV2Relation if r.table eq table => r
+      case r: DataSourceV2ScanRelation if r.relation.table eq table => r
+    }
+
+    // in some cases, the optimizer replaces the v2 read relation with a local relation
+    // for example, there is no reason to query the table if the condition is always false
+    // that's why it is valid not to find the corresponding v2 read relation
+
+    readRelations match {
+      case relations if relations.isEmpty =>
+        None
+
+      case Seq(relation) =>
+        Some(relation)
+
+      case relations =>
+        throw new AnalysisException(s"Expected only one row-level read relation: $relations")
+    }
   }
 }

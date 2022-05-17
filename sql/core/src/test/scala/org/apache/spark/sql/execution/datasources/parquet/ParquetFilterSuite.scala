@@ -81,7 +81,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       datetimeRebaseSpec: RebaseSpec = RebaseSpec(LegacyBehaviorPolicy.CORRECTED)
     ): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
-      conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
+      conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringPredicate,
       conf.parquetFilterPushDownInFilterThreshold,
       caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
       datetimeRebaseSpec)
@@ -207,20 +207,24 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  // This function tests that exactly go through the `canDrop` and `inverseCanDrop`.
-  private def testStringStartsWith(dataFrame: DataFrame, filter: String): Unit = {
+  // This function tests that exactly go through the `keep`, `canDrop` and `inverseCanDrop`.
+  private def testStringPredicate(dataFrame: DataFrame, filter: String,
+      shouldFilterOut: Boolean, enableDictionary: Boolean = true): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      dataFrame.write.option("parquet.block.size", 512).parquet(path)
+      dataFrame.write
+        .option("parquet.block.size", 512)
+        .option(ParquetOutputFormat.ENABLE_DICTIONARY, enableDictionary)
+        .parquet(path)
       Seq(true, false).foreach { pushDown =>
         withSQLConf(
-          SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> pushDown.toString) {
+          SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> pushDown.toString) {
           val accu = new NumRowGroupsAcc
           sparkContext.register(accu)
 
           val df = spark.read.parquet(path).filter(filter)
           df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
-          if (pushDown) {
+          if (pushDown && shouldFilterOut) {
             assert(accu.value == 0)
           } else {
             assert(accu.value > 0)
@@ -970,7 +974,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     ))
 
     val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    // Following tests are used to check one arm of AND/OR can't be pushed down,
+    // so we disable string predicate pushdown here
+    var parquetFilters: ParquetFilters = null
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
+      parquetFilters = createParquetFilters(parquetSchema)
+    }
     assertResult(Some(and(
       lt(intColumn("a"), 10: Integer),
       gt(doubleColumn("c"), 1.5: java.lang.Double)))
@@ -1114,7 +1123,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     ))
 
     val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    // Following tests are used to check one arm of AND/OR can't be pushed down,
+    // so we disable string predicate pushdown here
+    var parquetFilters: ParquetFilters = null
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
+      parquetFilters = createParquetFilters(parquetSchema)
+    }
     // Testing
     // case sources.Or(lhs, rhs) =>
     //   ...
@@ -1169,7 +1183,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     ))
 
     val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    // Following tests are used to check one arm of AND/OR can't be pushed down,
+    // so we disable string predicate pushdown here
+    var parquetFilters: ParquetFilters = null
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
+      parquetFilters = createParquetFilters(parquetSchema)
+    }
     assertResult(Seq(sources.And(sources.LessThan("a", 10), sources.GreaterThan("c", 1.5D)))) {
       parquetFilters.convertibleFilters(
         Seq(sources.And(
@@ -1423,65 +1442,123 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  test("filter pushdown - StringStartsWith") {
+  private def checkStringFilterPushdown(
+      stringPredicate: String => Expression,
+      sourceFilter: (String, String) => sources.Filter): Unit = {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
       checkFilterPredicate(
-        $"_1".startsWith("").asInstanceOf[Predicate],
+        stringPredicate("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
         Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
 
-      Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
+      Seq("2", "2str2").foreach { str =>
         checkFilterPredicate(
-          $"_1".startsWith(prefix).asInstanceOf[Predicate],
+          stringPredicate(str).asInstanceOf[Predicate],
           classOf[UserDefinedByInstance[_, _]],
           "2str2")
       }
 
-      Seq("2S", "null", "2str22").foreach { prefix =>
+      Seq("2S", "null", "2str22").foreach { str =>
         checkFilterPredicate(
-          $"_1".startsWith(prefix).asInstanceOf[Predicate],
+          stringPredicate(str).asInstanceOf[Predicate],
           classOf[UserDefinedByInstance[_, _]],
           Seq.empty[Row])
       }
 
       checkFilterPredicate(
-        !$"_1".startsWith("").asInstanceOf[Predicate],
+        !stringPredicate("").asInstanceOf[Predicate],
         classOf[Operators.Not],
         Seq().map(Row(_)))
 
-      Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
+      Seq("2", "2str2").foreach { str =>
         checkFilterPredicate(
-          !$"_1".startsWith(prefix).asInstanceOf[Predicate],
+          !stringPredicate(str).asInstanceOf[Predicate],
           classOf[Operators.Not],
           Seq("1str1", "3str3", "4str4").map(Row(_)))
       }
 
-      Seq("2S", "null", "2str22").foreach { prefix =>
+      Seq("2S", "null", "2str22").foreach { str =>
         checkFilterPredicate(
-          !$"_1".startsWith(prefix).asInstanceOf[Predicate],
+          !stringPredicate(str).asInstanceOf[Predicate],
           classOf[Operators.Not],
           Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
       }
 
       val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
       assertResult(None) {
-        createParquetFilters(schema).createFilter(sources.StringStartsWith("_1", null))
+        createParquetFilters(schema).createFilter(sourceFilter("_1", null))
       }
     }
 
     // SPARK-28371: make sure filter is null-safe.
     withParquetDataFrame(Seq(Tuple1[String](null))) { implicit df =>
       checkFilterPredicate(
-        $"_1".startsWith("blah").asInstanceOf[Predicate],
+        stringPredicate("blah").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
         Seq.empty[Row])
     }
+  }
 
+  test("filter pushdown - StringStartsWith") {
+    checkStringFilterPushdown(
+      str => $"_1".startsWith(str),
+      (attr, value) => sources.StringStartsWith(attr, value))
+  }
+
+  test("filter pushdown - StringEndsWith") {
+    checkStringFilterPushdown(
+      str => $"_1".endsWith(str),
+      (attr, value) => sources.StringEndsWith(attr, value))
+  }
+
+  test("filter pushdown - StringContains") {
+    checkStringFilterPushdown(
+      str => $"_1".contains(str),
+      (attr, value) => sources.StringContains(attr, value))
+  }
+
+  test("filter pushdown - StringPredicate") {
     import testImplicits._
-    // Test canDrop() has taken effect
-    testStringStartsWith(spark.range(1024).map(_.toString).toDF(), "value like 'a%'")
-    // Test inverseCanDrop() has taken effect
-    testStringStartsWith(spark.range(1024).map(c => "100").toDF(), "value not like '10%'")
+    // keep() should take effect on StartsWith/EndsWith/Contains
+    Seq(
+      "value like 'a%'", // StartsWith
+      "value like '%a'", // EndsWith
+      "value like '%a%'" // Contains
+    ).foreach { filter =>
+      testStringPredicate(
+        // dictionary will be generated since there are duplicated values
+        spark.range(1000).map(t => (t % 10).toString).toDF(),
+        filter,
+        true)
+    }
+
+    // canDrop() should take effect on StartsWith,
+    // and has no effect on EndsWith/Contains
+    Seq(
+      ("value like 'a%'", true),      // StartsWith
+      ("value like '%a'", false),     // EndsWith
+      ("value like '%a%'", false)     // Contains
+    ).foreach { case (filter, shouldFilterOut) =>
+      testStringPredicate(
+        spark.range(1024).map(_.toString).toDF(),
+        filter,
+        shouldFilterOut,
+        enableDictionary = false)
+    }
+
+    // inverseCanDrop() should take effect on StartsWith,
+    // and has no effect on EndsWith/Contains
+    Seq(
+      ("value not like '10%'", true),  // StartsWith
+      ("value not like '%10'", false), // EndsWith
+      ("value not like '%10%'", false) // Contains
+    ).foreach { case (filter, shouldFilterOut) =>
+      testStringPredicate(
+        spark.range(1024).map(c => "100").toDF(),
+        filter,
+        shouldFilterOut,
+        enableDictionary = false)
+    }
   }
 
   test("SPARK-17091: Convert IN predicate to Parquet filter push-down") {
@@ -1899,6 +1976,39 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
             Seq(Row(resultFun(secs(2))), Row(resultFun(secs(3))), Row(resultFun(secs(4)))))
         }
       }
+    }
+  }
+
+  test("SPARK-38825: in and notIn filters") {
+    import testImplicits._
+    withTempPath { file =>
+      Seq(1, 2, 0, -1, 99, Integer.MAX_VALUE, 1000, 3, 7, Integer.MIN_VALUE, 2)
+        .toDF("id").coalesce(1).write.mode("overwrite")
+        .parquet(file.getCanonicalPath)
+      var df = spark.read.parquet(file.getCanonicalPath)
+      var in = df.filter(col("id").isin(100, 3, 11, 12, 13, Integer.MAX_VALUE, Integer.MIN_VALUE))
+      var notIn =
+        df.filter(!col("id").isin(100, 3, 11, 12, 13, Integer.MAX_VALUE, Integer.MIN_VALUE))
+      checkAnswer(in, Seq(Row(3), Row(-2147483648), Row(2147483647)))
+      checkAnswer(notIn, Seq(Row(1), Row(2), Row(0), Row(-1), Row(99), Row(1000), Row(7), Row(2)))
+
+      Seq("mary", "martin", "lucy", "alex", null, "mary", "dan").toDF("name").coalesce(1)
+        .write.mode("overwrite").parquet(file.getCanonicalPath)
+      df = spark.read.parquet(file.getCanonicalPath)
+      in = df.filter(col("name").isin("mary", "victor", "leo", "alex"))
+      notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex"))
+      checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
+      checkAnswer(notIn, Seq(Row("martin"), Row("lucy"), Row("dan")))
+
+      in = df.filter(col("name").isin("mary", "victor", "leo", "alex", null))
+      notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex", null))
+      checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
+      checkAnswer(notIn, Seq())
+
+      in = df.filter(col("name").isin(null))
+      notIn = df.filter(!col("name").isin(null))
+      checkAnswer(in, Seq())
+      checkAnswer(notIn, Seq())
     }
   }
 }

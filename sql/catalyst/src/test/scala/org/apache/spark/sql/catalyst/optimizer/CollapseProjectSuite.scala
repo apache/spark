@@ -30,7 +30,8 @@ class CollapseProjectSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", FixedPoint(10), EliminateSubqueryAliases) ::
-      Batch("CollapseProject", Once, CollapseProject) :: Nil
+      Batch("CollapseProject", Once, CollapseProject) ::
+      Batch("SimplifyExtractValueOps", Once, SimplifyExtractValueOps) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int)
@@ -125,12 +126,23 @@ class CollapseProjectSuite extends PlanTest {
 
   test("SPARK-36718: do not collapse project if non-cheap expressions will be repeated") {
     val query = testRelation
-      .select(($"a" + 1).as(Symbol("a_plus_1")))
-      .select(($"a_plus_1" + $"a_plus_1").as(Symbol("a_2_plus_2")))
+      .select(($"a" + 1).as("a_plus_1"))
+      .select(($"a_plus_1" + $"a_plus_1").as("a_2_plus_2"))
       .analyze
 
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
+
+    // CreateStruct is an exception if it's only referenced by ExtractValue.
+    val query2 = testRelation
+      .select(namedStruct("a", $"a", "a_plus_1", $"a" + 1).as("struct"))
+      .select(($"struct".getField("a") + $"struct".getField("a_plus_1")).as("add"))
+      .analyze
+    val optimized2 = Optimize.execute(query2)
+    val expected2 = testRelation
+      .select(($"a" + ($"a" + 1)).as("add"))
+      .analyze
+    comparePlans(optimized2, expected2)
   }
 
   test("preserve top-level alias metadata while collapsing projects") {

@@ -610,7 +610,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == schema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.deleteColumn(Array("id")))
+      TableChange.deleteColumn(Array("id"), false))
 
     val expectedSchema = new StructType().add("data", StringType)
     assert(updated.schema == expectedSchema)
@@ -627,7 +627,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == tableSchema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.deleteColumn(Array("point", "y")))
+      TableChange.deleteColumn(Array("point", "y"), false))
 
     val newPointStruct = new StructType().add("x", DoubleType)
     val expectedSchema = schema.add("point", newPointStruct)
@@ -643,11 +643,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == schema)
 
     val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col")))
+      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), false))
     }
 
     assert(exc.getMessage.contains("missing_col"))
     assert(exc.getMessage.contains("Cannot find"))
+
+    // with if exists it should pass
+    catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), true))
+    assert(table.schema == schema)
   }
 
   test("alterTable: delete missing nested column fails") {
@@ -661,11 +665,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == tableSchema)
 
     val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z")))
+      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), false))
     }
 
     assert(exc.getMessage.contains("z"))
     assert(exc.getMessage.contains("Cannot find"))
+
+    // with if exists it should pass
+    catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), true))
+    assert(table.schema == tableSchema)
   }
 
   test("alterTable: table does not exist") {

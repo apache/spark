@@ -58,7 +58,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     ).toArray
 
     val resources = Map(
-      "cpu" -> new Quantity("1"),
+      "cpu" -> new Quantity("250m"),
       "memory" -> new Quantity("512M")
     ).asJava
 

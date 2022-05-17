@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkArithmeticException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, NewInstance, StaticInvoke}
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.ByteArray
 
@@ -319,14 +321,7 @@ class ConstantFoldingSuite extends PlanTest {
             Literal.create("a", StringType),
             "substring",
             StringType,
-            Seq(Literal(0), Literal(1))).as("c2"),
-          NewInstance(
-            cls = classOf[GenericArrayData],
-            arguments = Literal.fromObject(List(1, 2, 3)) :: Nil,
-            inputTypes = Nil,
-            propagateNull = false,
-            dataType = ArrayType(IntegerType),
-            outerPointer = None).as("c3"))
+            Seq(Literal(0), Literal(1))).as("c2"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -334,10 +329,44 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Literal("WWSpark".getBytes()).as("c1"),
-          Literal.create("a", StringType).as("c2"),
-          Literal.create(new GenericArrayData(List(1, 2, 3)), ArrayType(IntegerType)).as("c3"))
+          Literal.create("a", StringType).as("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-39106: Correct conditional expression constant folding") {
+    val t = LocalRelation.fromExternalRows(
+      $"c".double :: Nil,
+      Row(1d) :: Row(null) :: Row(Double.NaN) :: Nil)
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // conditional expression is foldable, throw exception during query compilation
+      Seq(
+        t.select(CaseWhen((Divide(1, 0) === 1, Add(1, 0)) :: Nil, Subtract(1, 0))),
+        t.select(If(Divide(1, 0) === 1, Add(1, 0), Add(1, 0))),
+        t.select(Coalesce(Divide(1, 0) :: Add(1, 0) :: Nil)),
+        t.select(NaNvl(Divide(1, 0), Add(1, 0)))
+      ).foreach { query =>
+        intercept[SparkArithmeticException] {
+          Optimize.execute(query.analyze)
+        }
+      }
+
+      // conditional expression is not foldable, suppress the exception during query compilation
+      Seq(
+        t.select(CaseWhen(($"c" === 1d, Divide(1, 0)) :: Nil, 1d)),
+        t.select(If($"c" === 1d, Divide(1, 0), 1d)),
+        t.select(Coalesce($"c" :: Divide(1, 0) :: Nil)),
+        t.select(NaNvl($"c", Divide(1, 0)))
+      ).foreach { query =>
+        val optimized = Optimize.execute(query.analyze)
+        val failedToEvaluated = optimized.expressions.flatMap(_.collect {
+          case e: Expression if e.getTagValue(ConstantFolding.FAILED_TO_EVALUATE).isDefined => e
+        })
+        assert(failedToEvaluated.size == 1)
+        comparePlans(query.analyze, optimized)
+      }
+    }
   }
 }

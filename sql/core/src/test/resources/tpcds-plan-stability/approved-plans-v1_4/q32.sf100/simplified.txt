@@ -26,6 +26,16 @@ CollectLimit
                                   Project [cs_item_sk,cs_ext_discount_amt]
                                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                       Filter [cs_item_sk]
+                                        Subquery #2
+                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 199, 1592, 0, 0),bloomFilter,buf]
+                                            Exchange #5
+                                              ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                WholeStageCodegen (1)
+                                                  Project [i_item_sk]
+                                                    Filter [i_manufact_id,i_item_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.item [i_item_sk,i_manufact_id]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.catalog_sales [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]

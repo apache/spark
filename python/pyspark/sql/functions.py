@@ -1716,6 +1716,8 @@ def when(condition: Column, value: Any) -> Column:
     value :
         a literal value, or a :class:`~pyspark.sql.Column` expression.
 
+    Examples
+    --------
     >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
     [Row(age=3), Row(age=4)]
 
@@ -5314,6 +5316,16 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
         else _to_java_column(numBuckets)
     )
     return _invoke_function("bucket", numBuckets, _to_java_column(col))
+
+
+def unwrap_udt(col: "ColumnOrName") -> Column:
+    """
+    Unwrap UDT data type column into its underlying type.
+
+        .. versionadded:: 3.4.0
+
+    """
+    return _invoke_function("unwrap_udt", _to_java_column(col))
 
 
 # ---------------------------- User Defined Function ----------------------------------

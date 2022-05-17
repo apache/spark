@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, FieldName, NamedRelation, PartitionSpec, ResolvedDBObjectName, UnresolvedException}
+import org.apache.spark.sql.{sources, AnalysisException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedDBObjectName, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.Write
+import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable, Write}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
 /**
@@ -176,6 +178,80 @@ object OverwritePartitionsDynamic {
   }
 }
 
+trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
+  def operation: RowLevelOperation
+  def condition: Expression
+  def originalTable: NamedRelation
+}
+
+/**
+ * Replace groups of data in an existing table during a row-level operation.
+ *
+ * This node is constructed in rules that rewrite DELETE, UPDATE, MERGE operations for data sources
+ * that can replace groups of data (e.g. files, partitions).
+ *
+ * @param table a plan that references a row-level operation table
+ * @param condition a condition that defines matching groups
+ * @param query a query with records that should replace the records that were read
+ * @param originalTable a plan for the original table for which the row-level command was triggered
+ * @param write a logical write, if already constructed
+ */
+case class ReplaceData(
+    table: NamedRelation,
+    condition: Expression,
+    query: LogicalPlan,
+    originalTable: NamedRelation,
+    write: Option[Write] = None) extends RowLevelWrite {
+
+  override val isByName: Boolean = false
+  override val stringArgs: Iterator[Any] = Iterator(table, query, write)
+
+  override lazy val references: AttributeSet = query.outputSet
+
+  lazy val operation: RowLevelOperation = {
+    EliminateSubqueryAliases(table) match {
+      case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
+        operation
+      case _ =>
+        throw new AnalysisException(s"Cannot retrieve row-level operation from $table")
+    }
+  }
+
+  // the incoming query may include metadata columns
+  lazy val dataInput: Seq[Attribute] = {
+    query.output.filter {
+      case MetadataAttribute(_) => false
+      case _ => true
+    }
+  }
+
+  override def outputResolved: Boolean = {
+    assert(table.resolved && query.resolved,
+      "`outputResolved` can only be called when `table` and `query` are both resolved.")
+
+    // take into account only incoming data columns and ignore metadata columns in the query
+    // they will be discarded after the logical write is built in the optimizer
+    // metadata columns may be needed to request a correct distribution or ordering
+    // but are not passed back to the data source during writes
+
+    table.skipSchemaResolution || (dataInput.size == table.output.size &&
+      dataInput.zip(table.output).forall { case (inAttr, outAttr) =>
+        val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
+        // names and types must match, nullability must be compatible
+        inAttr.name == outAttr.name &&
+          DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outType) &&
+          (outAttr.nullable || !inAttr.nullable)
+      })
+  }
+
+  override def withNewQuery(newQuery: LogicalPlan): ReplaceData = copy(query = newQuery)
+
+  override def withNewTable(newTable: NamedRelation): ReplaceData = copy(table = newTable)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): ReplaceData = {
+    copy(query = newChild)
+  }
+}
 
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {
@@ -456,6 +532,16 @@ case class DeleteFromTable(
   override protected def withNewChildInternal(newChild: LogicalPlan): DeleteFromTable =
     copy(table = newChild)
 }
+
+/**
+ * The logical plan of the DELETE FROM command that can be executed using data source filters.
+ *
+ * As opposed to [[DeleteFromTable]], this node represents a DELETE operation where the condition
+ * was converted into filters and the data source reported that it can handle all of them.
+ */
+case class DeleteFromTableWithFilters(
+    table: LogicalPlan,
+    condition: Seq[sources.Filter]) extends LeafCommand
 
 /**
  * The logical plan of the UPDATE TABLE command.

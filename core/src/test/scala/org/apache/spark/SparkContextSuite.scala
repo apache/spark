@@ -1343,6 +1343,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(env.blockManager.blockStoreClient.getAppAttemptId.equals("1"))
   }
 
+  test("SPARK-34659: check invalid UI_REVERSE_PROXY_URL") {
+    val reverseProxyUrl = "http://proxyhost:8080/path/proxy/spark"
+    val conf = new SparkConf().setAppName("testAppAttemptId")
+      .setMaster("pushbasedshuffleclustermanager")
+    conf.set(UI_REVERSE_PROXY, true)
+    conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
+    val msg = intercept[java.lang.IllegalArgumentException] {
+      new SparkContext(conf)
+    }.getMessage
+    assert(msg.contains("Cannot use the keyword 'proxy' or 'history' in reverse proxy URL"))
+  }
 }
 
 object SparkContextSuite {

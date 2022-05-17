@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import time
 import unittest
+import uuid
 from typing import cast
 
 from pyspark.sql import SparkSession, Row
@@ -537,7 +538,7 @@ class DataFrameTests(ReusedSQLTestCase):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
         from pyspark.sql import Observation
 
-        df = SparkSession(self.sc).createDataFrame(
+        df = self.spark.createDataFrame(
             [
                 (1, 1.0, "one"),
                 (2, 2.0, "two"),
@@ -581,14 +582,49 @@ class DataFrameTests(ReusedSQLTestCase):
             Observation("")
 
         # dataframe.observe requires at least one expr
-        with self.assertRaisesRegex(AssertionError, "exprs should not be empty"):
+        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
             df.observe(Observation())
 
         # dataframe.observe requires non-None Columns
         for args in [(None,), ("id",), (lit(1), None), (lit(1), "id")]:
             with self.subTest(args=args):
-                with self.assertRaisesRegex(AssertionError, "all exprs should be Column"):
+                with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
                     df.observe(Observation(), *args)
+
+    def test_observe_str(self):
+        # SPARK-38760: tests the DataFrame.observe(str, *Column) method
+        from pyspark.sql.streaming import StreamingQueryListener
+
+        observed_metrics = None
+
+        class TestListener(StreamingQueryListener):
+            def onQueryStarted(self, event):
+                pass
+
+            def onQueryProgress(self, event):
+                nonlocal observed_metrics
+                observed_metrics = event.progress.observedMetrics
+
+            def onQueryTerminated(self, event):
+                pass
+
+        self.spark.streams.addListener(TestListener())
+
+        df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        df = df.observe("metric", count(lit(1)).alias("cnt"), sum(col("value")).alias("sum"))
+        q = df.writeStream.format("noop").queryName("test").start()
+        self.assertTrue(q.isActive)
+        time.sleep(10)
+        q.stop()
+
+        self.assertTrue(isinstance(observed_metrics, dict))
+        self.assertTrue("metric" in observed_metrics)
+        row = observed_metrics["metric"]
+        self.assertTrue(isinstance(row, Row))
+        self.assertTrue(hasattr(row, "cnt"))
+        self.assertTrue(hasattr(row, "sum"))
+        self.assertGreaterEqual(row.cnt, 0)
+        self.assertGreaterEqual(row.sum, 0)
 
     def test_sample(self):
         self.assertRaisesRegex(
@@ -1140,6 +1176,41 @@ class DataFrameTests(ReusedSQLTestCase):
             df.show(vertical="foo")
         with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
             df.show(truncate="foo")
+
+    def test_df_is_empty(self):
+        # SPARK-39084: Fix df.rdd.isEmpty() resulting in JVM crash.
+
+        # This particular example of DataFrame reproduces an issue in isEmpty call
+        # which could result in JVM crash.
+        data = []
+        for t in range(0, 10000):
+            id = str(uuid.uuid4())
+            if t == 0:
+                for i in range(0, 99):
+                    data.append((id,))
+            elif t < 10:
+                for i in range(0, 75):
+                    data.append((id,))
+            elif t < 100:
+                for i in range(0, 50):
+                    data.append((id,))
+            elif t < 1000:
+                for i in range(0, 25):
+                    data.append((id,))
+            else:
+                for i in range(0, 10):
+                    data.append((id,))
+
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        try:
+            df = self.spark.createDataFrame(data, ["col"])
+            df.coalesce(1).write.parquet(tmpPath)
+
+            res = self.spark.read.parquet(tmpPath).groupBy("col").count()
+            self.assertFalse(res.rdd.isEmpty())
+        finally:
+            shutil.rmtree(tmpPath)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,

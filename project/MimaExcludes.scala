@@ -37,7 +37,10 @@ object MimaExcludes {
   // Exclude rules for 3.4.x
   lazy val v34excludes = v33excludes ++ Seq(
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALS.checkedCast"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALSModel.checkedCast")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALSModel.checkedCast"),
+
+    // [SPARK-39110] Show metrics properties in HistoryServer environment tab
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.this")
   )
 
   // Exclude rules for 3.3.x from 3.2.0
@@ -70,7 +73,11 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.read.partitioning.Distribution"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.connector.read.partitioning.Partitioning.*"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.connector.read.partitioning.Partitioning.*")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.connector.read.partitioning.Partitioning.*"),
+
+    // [SPARK-38908][SQL] Provide query context in runtime error of Casting from String to
+    // Number/Date/Timestamp/Boolean
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
   )
 
   // Exclude rules for 3.2.x from 3.1.1

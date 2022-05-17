@@ -60,10 +60,10 @@ find $COVERAGE_DIR/coverage_data -size 0 -print0 | xargs -0 rm -fr
 echo "Combining collected coverage data under $COVERAGE_DIR/coverage_data"
 $COV_EXEC combine
 echo "Creating XML report file at python/coverage.xml"
-$COV_EXEC xml --ignore-errors --include "pyspark/*"
+$COV_EXEC xml --ignore-errors --include "pyspark/*" --omit "pyspark/cloudpickle/*"
 echo "Reporting the coverage data at $COVERAGE_DIR/coverage_data/coverage"
-$COV_EXEC report --include "pyspark/*"
+$COV_EXEC report --include "pyspark/*" --omit "pyspark/cloudpickle/*"
 echo "Generating HTML files for PySpark coverage under $COVERAGE_DIR/htmlcov"
-$COV_EXEC html --ignore-errors --include "pyspark/*" --directory "$COVERAGE_DIR/htmlcov"
+$COV_EXEC html --ignore-errors --include "pyspark/*" --directory "$COVERAGE_DIR/htmlcov" --omit "pyspark/cloudpickle/*"
 
 popd

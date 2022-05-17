@@ -453,7 +453,9 @@ object FunctionRegistry {
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
+    expression[TryAverage]("try_avg"),
     expression[TrySum]("try_sum"),
+    expression[TryToBinary]("try_to_binary"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -499,6 +501,9 @@ object FunctionRegistry {
     expression[RegrAvgX]("regr_avgx"),
     expression[RegrAvgY]("regr_avgy"),
     expression[RegrR2]("regr_r2"),
+    expression[RegrSXX]("regr_sxx"),
+    expression[RegrSXY]("regr_sxy"),
+    expression[RegrSYY]("regr_syy"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -519,6 +524,9 @@ object FunctionRegistry {
     expression[FormatNumber]("format_number"),
     expression[FormatString]("format_string"),
     expression[ToNumber]("to_number"),
+    expression[TryToNumber]("try_to_number"),
+    expression[ToCharacter]("to_char"),
+    expression[TryToCharacter]("try_to_char"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
@@ -706,6 +714,7 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CurrentCatalog]("current_catalog"),
     expression[CurrentUser]("current_user"),
+    expression[CurrentUser]("user", setAlias = true),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),

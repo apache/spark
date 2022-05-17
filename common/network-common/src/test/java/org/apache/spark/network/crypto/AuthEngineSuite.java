@@ -77,7 +77,7 @@ public class AuthEngineSuite {
     }
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testCorruptChallengeAppId() throws Exception {
 
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
@@ -85,33 +85,33 @@ public class AuthEngineSuite {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage corruptChallenge =
               new AuthMessage("junk", clientChallenge.salt, clientChallenge.ciphertext);
-      AuthMessage serverResponse = server.response(corruptChallenge);
+      assertThrows(IllegalArgumentException.class, () -> server.response(corruptChallenge));
     }
   }
 
-  @Test(expected = GeneralSecurityException.class)
+  @Test
   public void testCorruptChallengeSalt() throws Exception {
 
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
       clientChallenge.salt[0] ^= 1;
-      AuthMessage serverResponse = server.response(clientChallenge);
+      assertThrows(GeneralSecurityException.class, () -> server.response(clientChallenge));
     }
   }
 
-  @Test(expected = GeneralSecurityException.class)
+  @Test
   public void testCorruptChallengeCiphertext() throws Exception {
 
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
       clientChallenge.ciphertext[0] ^= 1;
-      AuthMessage serverResponse = server.response(clientChallenge);
+      assertThrows(GeneralSecurityException.class, () -> server.response(clientChallenge));
     }
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testCorruptResponseAppId() throws Exception {
 
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
@@ -120,11 +120,12 @@ public class AuthEngineSuite {
       AuthMessage serverResponse = server.response(clientChallenge);
       AuthMessage corruptResponse =
               new AuthMessage("junk", serverResponse.salt, serverResponse.ciphertext);
-      client.deriveSessionCipher(clientChallenge, corruptResponse);
+      assertThrows(IllegalArgumentException.class,
+        () -> client.deriveSessionCipher(clientChallenge, corruptResponse));
     }
   }
 
-  @Test(expected = GeneralSecurityException.class)
+  @Test
   public void testCorruptResponseSalt() throws Exception {
 
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
@@ -132,11 +133,12 @@ public class AuthEngineSuite {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage serverResponse = server.response(clientChallenge);
       serverResponse.salt[0] ^= 1;
-      client.deriveSessionCipher(clientChallenge, serverResponse);
+      assertThrows(GeneralSecurityException.class,
+        () -> client.deriveSessionCipher(clientChallenge, serverResponse));
     }
   }
 
-  @Test(expected = GeneralSecurityException.class)
+  @Test
   public void testCorruptServerCiphertext() throws Exception {
 
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
@@ -144,7 +146,8 @@ public class AuthEngineSuite {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage serverResponse = server.response(clientChallenge);
       serverResponse.ciphertext[0] ^= 1;
-      client.deriveSessionCipher(clientChallenge, serverResponse);
+      assertThrows(GeneralSecurityException.class,
+        () -> client.deriveSessionCipher(clientChallenge, serverResponse));
     }
   }
 
@@ -155,7 +158,7 @@ public class AuthEngineSuite {
               AuthMessage.decodeMessage(ByteBuffer.wrap(Hex.decode(clientChallengeHex)));
       // This tests that the server will accept an old challenge as expected. However,
       // it will generate a fresh ephemeral keypair, so we can't replay an old session.
-      AuthMessage freshServerResponse = server.response(clientChallenge);
+      server.response(clientChallenge);
     }
   }
 
@@ -177,12 +180,12 @@ public class AuthEngineSuite {
     }
   }
 
-  @Test(expected = GeneralSecurityException.class)
+  @Test
   public void testMismatchedSecret() throws Exception {
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "different_secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
-      server.response(clientChallenge);
+      assertThrows(GeneralSecurityException.class, () -> server.response(clientChallenge));
     }
   }
 

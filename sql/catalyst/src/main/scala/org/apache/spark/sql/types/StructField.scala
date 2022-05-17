@@ -22,6 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -82,6 +83,39 @@ case class StructField(
    */
   def getComment(): Option[String] = {
     if (metadata.contains("comment")) Option(metadata.getString("comment")) else None
+  }
+
+  /**
+   * Updates the StructField with a new current default value.
+   */
+  def withCurrentDefaultValue(value: String): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Clears the StructField of its current default value, if any.
+   */
+  def clearCurrentDefaultValue(): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Return the current default value of this StructField.
+   */
+  def getCurrentDefaultValue(): Option[String] = {
+    if (metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+      Option(metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY))
+    } else {
+      None
+    }
   }
 
   private def getDDLComment = getComment()

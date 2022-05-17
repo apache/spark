@@ -2116,8 +2116,6 @@ case class ElementAt(
     case MapType(_, valueType, _) => valueType
   }
 
-  override val isElementAtFunction: Boolean = true
-
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
       case (arr: ArrayType, e2: IntegralType) if (e2 != LongType) =>
@@ -2263,6 +2261,12 @@ case class ElementAt(
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
+
+  override def initQueryContext(): String = if (failOnError) {
+    origin.context
+  } else {
+    ""
+  }
 }
 
 /**

@@ -90,10 +90,6 @@ class AppStatusStoreSuite extends SparkFunSuite {
     if (live) {
       return AppStatusStore.createLiveStore(conf)
     }
-    // LevelDB doesn't support Apple Silicon yet
-    if (Utils.isMacOnAppleSilicon && disk) {
-      return null
-    }
 
     val store: KVStore = if (disk) {
       conf.set(HYBRID_STORE_DISK_BACKEND, diskStoreType.toString)
@@ -106,12 +102,22 @@ class AppStatusStoreSuite extends SparkFunSuite {
     new AppStatusStore(store)
   }
 
-  Seq(
-    "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false),
-    "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
-    "in memory" -> createAppStore(disk = false, live = false),
-    "in memory live" -> createAppStore(disk = false, live = true)
-  ).foreach { case (hint, appStore) =>
+  private val cases = {
+    val baseCases = Seq(
+      "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
+      "in memory" -> createAppStore(disk = false, live = false),
+      "in memory live" -> createAppStore(disk = false, live = true)
+    )
+    if (Utils.isMacOnAppleSilicon) {
+      baseCases
+    } else {
+      Seq(
+        "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false)
+      ) ++ baseCases
+    }
+  }
+
+  cases.foreach { case (hint, appStore) =>
     test(s"SPARK-26260: summary should contain only successful tasks' metrics (store = $hint)") {
       assume(appStore != null)
       val store = appStore.store

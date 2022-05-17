@@ -48,6 +48,7 @@ object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
     _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
     case f @ Filter(cond, _) => f.copy(condition = simplifyConditional(cond))
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(simplifyConditional(cond)))
+    case rd @ ReplaceData(_, cond, _, _, _) => rd.copy(condition = simplifyConditional(cond))
     case d @ DeleteFromTable(_, cond) => d.copy(condition = simplifyConditional(cond))
     case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(simplifyConditional(cond)))
   }

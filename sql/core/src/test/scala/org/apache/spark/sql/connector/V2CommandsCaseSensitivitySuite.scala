@@ -147,7 +147,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
         AddColumns(
           table,
           Seq(QualifiedColType(
-            Some(UnresolvedFieldName(field.init)), field.last, LongType, true, None, None))),
+            Some(UnresolvedFieldName(field.init)), field.last, LongType, true, None, None, None))),
         Seq("Missing field " + field.head)
       )
     }
@@ -164,7 +164,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
             LongType,
             true,
             None,
-            Some(UnresolvedFieldPosition(ColumnPosition.after(ref)))))),
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
+            None))),
         Seq("reference column", ref)
       )
     }
@@ -180,14 +181,16 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id"))),
+          None),
         QualifiedColType(
           None,
           "y",
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(ColumnPosition.after("X")))))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("X"))),
+          None))),
       Seq("Couldn't find the reference column for AFTER X at root")
     )
   }
@@ -203,7 +206,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
             LongType,
             true,
             None,
-            Some(UnresolvedFieldPosition(ColumnPosition.after(ref)))))),
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
+            None))),
         Seq("reference column", ref)
       )
     }
@@ -219,6 +223,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
+          None,
           None),
         QualifiedColType(
           Some(UnresolvedFieldName(Seq("point"))),
@@ -226,7 +231,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(ColumnPosition.after("Z")))))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("Z"))),
+          None))),
       Seq("Couldn't find the reference column for AFTER Z at point")
     )
   }
@@ -241,12 +247,14 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
+          None,
           None),
         QualifiedColType(
           Some(UnresolvedFieldName(Seq("point"))),
           "Z",
           LongType,
           true,
+          None,
           None,
           None))),
       Seq("Found duplicate column(s) in the user specified columns: `point.z`"),
@@ -263,7 +271,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id"))),
+          None))),
       Seq("Cannot add column, because ID already exists in root"),
       expectErrorOnCaseSensitive = false)
   }
@@ -277,10 +286,21 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
-      alterTableTest(
-        DropColumns(table, Seq(UnresolvedFieldName(ref))),
-        Seq("Missing field " + ref.quoted)
-      )
+      Seq(true, false).foreach { ifExists =>
+        val expectedErrors = if (ifExists) {
+          Seq.empty[String]
+        } else {
+          Seq("Missing field " + ref.quoted)
+        }
+        val alter = DropColumns(table, Seq(UnresolvedFieldName(ref)), ifExists)
+        if (ifExists) {
+          // using IF EXISTS will silence all errors for missing columns
+          assertAnalysisSuccess(alter, caseSensitive = true)
+          assertAnalysisSuccess(alter, caseSensitive = false)
+        } else {
+          alterTableTest(alter, expectedErrors, expectErrorOnCaseSensitive = true)
+        }
+      }
     }
   }
 
@@ -296,7 +316,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: drop column nullability resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
+        AlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None, None),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -305,7 +325,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column type resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
+        AlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None, None),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -314,7 +334,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column comment resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
+        AlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None, None),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -324,8 +344,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     alterTableTest(
       ReplaceColumns(
         table,
-        Seq(QualifiedColType(None, "f", LongType, true, None, None),
-          QualifiedColType(None, "F", LongType, true, None, None))),
+        Seq(QualifiedColType(None, "f", LongType, true, None, None, None),
+          QualifiedColType(None, "F", LongType, true, None, None, None))),
       Seq("Found duplicate column(s) in the user specified columns: `f`"),
       expectErrorOnCaseSensitive = false)
   }

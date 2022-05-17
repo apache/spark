@@ -499,6 +499,7 @@ object CatalystTypeConverters {
    */
   def convertToCatalyst(a: Any): Any = a match {
     case s: String => StringConverter.toCatalyst(s)
+    case c: Char => StringConverter.toCatalyst(c.toString)
     case d: Date => DateConverter.toCatalyst(d)
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: Timestamp => TimestampConverter.toCatalyst(t)

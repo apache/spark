@@ -56,7 +56,7 @@ class InMemoryTable(
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
-  private object PartitionKeyColumn extends MetadataColumn {
+  protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
     override def dataType: DataType = StringType
     override def comment: String = "Partition key used to store the row"
@@ -104,7 +104,11 @@ class InMemoryTable(
   private val UTC = ZoneId.of("UTC")
   private val EPOCH_LOCAL_DATE = Instant.EPOCH.atZone(UTC).toLocalDate
 
-  private def getKey(row: InternalRow): Seq[Any] = {
+  protected def getKey(row: InternalRow): Seq[Any] = {
+    getKey(row, schema)
+  }
+
+  protected def getKey(row: InternalRow, rowSchema: StructType): Seq[Any] = {
     @scala.annotation.tailrec
     def extractor(
         fieldNames: Array[String],
@@ -124,7 +128,7 @@ class InMemoryTable(
       }
     }
 
-    val cleanedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+    val cleanedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(rowSchema)
     partitioning.map {
       case IdentityTransform(ref) =>
         extractor(ref.fieldNames, cleanedSchema, row)._1
@@ -219,9 +223,15 @@ class InMemoryTable(
     dataMap(key).clear()
   }
 
-  def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
+  def withData(data: Array[BufferedRows]): InMemoryTable = {
+    withData(data, schema)
+  }
+
+  def withData(
+      data: Array[BufferedRows],
+      writeSchema: StructType): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
-      val key = getKey(row)
+      val key = getKey(row, writeSchema)
       dataMap += dataMap.get(key)
         .map(key -> _.withRow(row))
         .getOrElse(key -> new BufferedRows(key).withRow(row))
@@ -372,7 +382,7 @@ class InMemoryTable(
     }
   }
 
-  private abstract class TestBatchWrite extends BatchWrite {
+  protected abstract class TestBatchWrite extends BatchWrite {
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory
     }

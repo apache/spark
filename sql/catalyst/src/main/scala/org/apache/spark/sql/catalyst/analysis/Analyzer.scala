@@ -319,6 +319,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
+      RewriteDeleteFromTable ::
       typeCoercionRules ++
       Seq(ResolveWithCTE) ++
       extendedResolutionRules : _*),
@@ -1681,6 +1682,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
     (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
+    ("user", () => CurrentUser(), toPrettySQL),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 
@@ -2220,8 +2222,16 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
         // We get an aggregate function, we need to wrap it in an AggregateExpression.
         case agg: AggregateFunction =>
-          if (u.filter.isDefined && !u.filter.get.deterministic) {
-            throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
+          u.filter match {
+            case Some(filter) if !filter.deterministic =>
+              throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
+            case Some(filter) if filter.dataType != BooleanType =>
+              throw QueryCompilationErrors.nonBooleanFilterInAggregateError
+            case Some(filter) if filter.exists(_.isInstanceOf[AggregateExpression]) =>
+              throw QueryCompilationErrors.aggregateInAggregateFilterError
+            case Some(filter) if filter.exists(_.isInstanceOf[WindowExpression]) =>
+              throw QueryCompilationErrors.windowFunctionInAggregateFilterError
+            case _ =>
           }
           if (u.ignoreNulls) {
             val aggFunc = agg match {
@@ -3150,7 +3160,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // We only extract Window Expressions after all expressions of the Project
       // have been resolved.
       case p @ Project(projectList, child)
-        if hasWindowFunction(projectList) && !p.expressions.exists(!_.resolved) =>
+        if hasWindowFunction(projectList) && p.expressions.forall(_.resolved) =>
         val (windowExpressions, regularExpressions) = extract(projectList.toIndexedSeq)
         // We add a project to get all needed expressions for window expressions from the child
         // of the original Project operator.
@@ -3667,6 +3677,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           case other => other
         })
 
+      case a: DropColumns if a.table.resolved && hasUnresolvedFieldName(a) && a.ifExists =>
+        // for DropColumn with IF EXISTS clause, we should resolve and ignore missing column errors
+        val table = a.table.asInstanceOf[ResolvedTable]
+        val columnsToDrop = a.columnsToDrop
+        a.copy(columnsToDrop = columnsToDrop.flatMap(c => resolveFieldNamesOpt(table, c.name, c)))
+
       case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
         a.transformExpressions {
@@ -3727,7 +3743,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         resolved
 
       case a @ AlterColumn(
-          table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position) =>
+          table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position, _) =>
         val newDataType = dataType.flatMap { dt =>
           // Hive style syntax provides the column type, even if it may not have changed.
           val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
@@ -3756,11 +3772,19 @@ class Analyzer(override val catalogManager: CatalogManager)
         table: ResolvedTable,
         fieldName: Seq[String],
         context: Expression): ResolvedFieldName = {
+      resolveFieldNamesOpt(table, fieldName, context)
+        .getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context.origin))
+    }
+
+    private def resolveFieldNamesOpt(
+        table: ResolvedTable,
+        fieldName: Seq[String],
+        context: Expression): Option[ResolvedFieldName] = {
       table.schema.findNestedField(
         fieldName, includeCollections = true, conf.resolver, context.origin
       ).map {
         case (path, field) => ResolvedFieldName(path, field)
-      }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context.origin))
+      }
     }
 
     private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
@@ -4201,6 +4225,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.charVarcharAsString) {
+      return plan
+    }
     plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN)) {
       case operator => operator.transformExpressionsUpWithPruning(
         _.containsAnyPattern(BINARY_COMPARISON, IN)) {

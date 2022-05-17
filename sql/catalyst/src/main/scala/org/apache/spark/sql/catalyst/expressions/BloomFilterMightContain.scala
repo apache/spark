@@ -56,6 +56,9 @@ case class BloomFilterMightContain(
           case e : Expression if e.foldable => TypeCheckResult.TypeCheckSuccess
           case subquery : PlanExpression[_] if !subquery.containsPattern(OUTER_REFERENCE) =>
             TypeCheckResult.TypeCheckSuccess
+          case GetStructField(subquery: PlanExpression[_], _, _)
+            if !subquery.containsPattern(OUTER_REFERENCE) =>
+            TypeCheckResult.TypeCheckSuccess
           case _ =>
             TypeCheckResult.TypeCheckFailure(s"The Bloom filter binary input to $prettyName " +
               "should be either a constant value or a scalar subquery expression")

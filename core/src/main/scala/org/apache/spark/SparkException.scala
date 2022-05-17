@@ -78,13 +78,6 @@ private[spark] class SparkUpgradeException(
   extends RuntimeException(SparkThrowableHelper.getMessage(errorClass, messageParameters), cause)
     with SparkThrowable {
 
-  def this(version: String, message: String, cause: Throwable) =
-    this (
-      errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-      messageParameters = Array(version, message),
-      cause = cause
-    )
-
   override def getErrorClass: String = errorClass
 }
 

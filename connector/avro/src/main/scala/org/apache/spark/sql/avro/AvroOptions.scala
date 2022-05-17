@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -33,7 +34,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 private[sql] class AvroOptions(
     @transient val parameters: CaseInsensitiveMap[String],
-    @transient val conf: Configuration) extends Logging with Serializable {
+    @transient val conf: Configuration)
+  extends FileSourceOptions(parameters) with Logging {
 
   def this(parameters: Map[String, String], conf: Configuration) = {
     this(CaseInsensitiveMap(parameters), conf)

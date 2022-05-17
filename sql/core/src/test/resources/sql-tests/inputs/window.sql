@@ -446,7 +446,9 @@ SELECT
     department,
     salary,
     percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department),
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department)
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department),
+    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department),
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department)
 FROM basic_pays
 ORDER BY salary;
 
@@ -463,6 +465,15 @@ SELECT
     employee_name,
     department,
     salary,
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ORDER BY salary),
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary)
+FROM basic_pays
+ORDER BY salary;
+
+SELECT
+    employee_name,
+    department,
+    salary,
     percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
     percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 FROM basic_pays
@@ -472,9 +483,33 @@ SELECT
     employee_name,
     department,
     salary,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 FROM basic_pays
+ORDER BY salary;
+
+SELECT
+    employee_name,
+    department,
+    salary,
+    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
+    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w,
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w
+FROM basic_pays
+WINDOW w AS (PARTITION BY department)
+ORDER BY salary;
+
+SELECT
+    employee_name,
+    department,
+    salary,
+    percentile_cont(0.5) WITHIN GROUP (ORDER BY salary) OVER w,
+    percentile_disc(0.5) WITHIN GROUP (ORDER BY salary) OVER w,
+    percentile_cont(0.5) WITHIN GROUP (ORDER BY salary DESC) OVER w,
+    percentile_disc(0.5) WITHIN GROUP (ORDER BY salary DESC) OVER w
+FROM basic_pays
+WHERE salary > 8900
 WINDOW w AS (PARTITION BY department)
 ORDER BY salary;
 
@@ -492,8 +527,28 @@ SELECT
     employee_name,
     department,
     salary,
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w
+FROM basic_pays
+WINDOW w AS (PARTITION BY department ORDER BY salary)
+ORDER BY salary;
+
+SELECT
+    employee_name,
+    department,
+    salary,
     percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
     percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w
+FROM basic_pays
+WINDOW w AS (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
+ORDER BY salary;
+
+SELECT
+    employee_name,
+    department,
+    salary,
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
+    percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w
 FROM basic_pays
 WINDOW w AS (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY salary;

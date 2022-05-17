@@ -592,9 +592,8 @@ class SparkContext(config: SparkConf) extends Logging {
       _env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
     }
     if (_conf.get(UI_REVERSE_PROXY)) {
-      val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
-        "/proxy/" + _applicationId
-      System.setProperty("spark.ui.proxyBase", proxyUrl)
+      val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL).getOrElse("").stripSuffix("/")
+      System.setProperty("spark.ui.proxyBase", proxyUrl + "/proxy/" + _applicationId)
     }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
@@ -2591,7 +2590,8 @@ class SparkContext(config: SparkConf) extends Logging {
       val addedFilePaths = addedFiles.keys.toSeq
       val addedArchivePaths = addedArchives.keys.toSeq
       val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
-        schedulingMode, addedJarPaths, addedFilePaths, addedArchivePaths)
+        schedulingMode, addedJarPaths, addedFilePaths, addedArchivePaths,
+        env.metricsSystem.metricsProperties.asScala.toMap)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }

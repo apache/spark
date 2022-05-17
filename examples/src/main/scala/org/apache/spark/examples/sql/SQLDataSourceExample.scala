@@ -45,13 +45,26 @@ object SQLDataSourceExample {
 
   private def runGenericFileSourceOptionsExample(spark: SparkSession): Unit = {
     // $example on:ignore_corrupt_files$
-    // enable ignore corrupt files
-    spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
+    // enable ignore corrupt files via the data source option
     // dir1/file3.json is corrupt from parquet's view
-    val testCorruptDF = spark.read.parquet(
+    val testCorruptDF0 = spark.read.option("ignoreCorruptFiles", "true").parquet(
       "examples/src/main/resources/dir1/",
       "examples/src/main/resources/dir1/dir2/")
-    testCorruptDF.show()
+    testCorruptDF0.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+
+    // enable ignore corrupt files via the configuration
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
+    // dir1/file3.json is corrupt from parquet's view
+    val testCorruptDF1 = spark.read.parquet(
+      "examples/src/main/resources/dir1/",
+      "examples/src/main/resources/dir1/dir2/")
+    testCorruptDF1.show()
     // +-------------+
     // |         file|
     // +-------------+

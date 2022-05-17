@@ -124,6 +124,10 @@ class ParquetFileFormat
       SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key,
       sparkSession.sessionState.conf.parquetFieldIdWriteEnabled.toString)
 
+    conf.set(
+      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
+      sparkSession.sessionState.conf.parquetTimestampNTZEnabled.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
@@ -230,6 +234,9 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
+      sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -251,7 +258,7 @@ class ParquetFileFormat
     val pushDownDate = sqlConf.parquetFilterPushDownDate
     val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
     val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
-    val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+    val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
     val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
@@ -279,7 +286,7 @@ class ParquetFileFormat
           pushDownDate,
           pushDownTimestamp,
           pushDownDecimal,
-          pushDownStringStartWith,
+          pushDownStringPredicate,
           pushDownInFilterThreshold,
           isCaseSensitive,
           datetimeRebaseSpec)
@@ -417,7 +424,8 @@ object ParquetFileFormat extends Logging {
 
     val converter = new ParquetToSparkSchemaConverter(
       sparkSession.sessionState.conf.isParquetBinaryAsString,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+      sparkSession.sessionState.conf.isParquetINT96AsTimestamp,
+      timestampNTZEnabled = sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -513,12 +521,14 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
+    val timestampNTZEnabled = sparkSession.sessionState.conf.parquetTimestampNTZEnabled
 
     val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean) => {
       // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
       val converter = new ParquetToSparkSchemaConverter(
         assumeBinaryIsString = assumeBinaryIsString,
-        assumeInt96IsTimestamp = assumeInt96IsTimestamp)
+        assumeInt96IsTimestamp = assumeInt96IsTimestamp,
+        timestampNTZEnabled = timestampNTZEnabled)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))

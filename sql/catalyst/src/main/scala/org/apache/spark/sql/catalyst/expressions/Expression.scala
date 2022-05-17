@@ -455,6 +455,25 @@ trait Nondeterministic extends Expression {
 }
 
 /**
+ * An expression that contains conditional expression branches, so not all branches will be hit.
+ * All optimization should be careful with the evaluation order.
+ */
+trait ConditionalExpression extends Expression {
+  final override def foldable: Boolean = children.forall(_.foldable)
+
+  /**
+   * Return the children expressions which can always be hit at runtime.
+   */
+  def alwaysEvaluatedInputs: Seq[Expression]
+
+  /**
+   * Return groups of branches. For each group, at least one branch will be hit at runtime,
+   * so that we can eagerly evaluate the common expressions of a group.
+   */
+  def branchGroups: Seq[Seq[Expression]]
+}
+
+/**
  * An expression that contains mutable state. A stateful expression is always non-deterministic
  * because the results it produces during evaluation are not only dependent on the given input
  * but also on its internal state.
@@ -569,6 +588,28 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
   }
 }
 
+/**
+ * An expression with SQL query context. The context string can be serialized from the Driver
+ * to executors. It will also be kept after rule transforms.
+ */
+trait SupportQueryContext extends Expression with Serializable {
+  protected var queryContext: String = initQueryContext()
+
+  def initQueryContext(): String
+
+  // Note: Even though query contexts are serialized to executors, it will be regenerated from an
+  //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors
+  //       for better performance. Thus, we need to copy the original query context during
+  //       transforms. The query context string is considered as a "tag" on the expression here.
+  override def copyTagsFrom(other: Expression): Unit = {
+    other match {
+      case s: SupportQueryContext =>
+        queryContext = s.queryContext
+      case _ =>
+    }
+    super.copyTagsFrom(other)
+  }
+}
 
 object UnaryExpression {
   def unapply(e: UnaryExpression): Option[Expression] = Some(e.child)

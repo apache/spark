@@ -23,7 +23,7 @@ from py4j.java_gateway import JavaObject, java_import
 
 from pyspark import since
 from pyspark.sql.utils import StreamingQueryException
-from pyspark.sql.streaming.listener import StreamingQueryListener, JStreamingQueryListener
+from pyspark.sql.streaming.listener import StreamingQueryListener
 
 __all__ = ["StreamingQuery", "StreamingQueryManager"]
 
@@ -309,11 +309,15 @@ class StreamingQueryManager:
         java_import(gw.jvm, "org.apache.spark.sql.streaming.*")
         ensure_callback_server_started(gw)
 
-        self._jsqm.addListener(
-            SparkContext._jvm.PythonStreamingQueryListenerWrapper(  # type: ignore[union-attr]
-                JStreamingQueryListener(listener)
-            )
-        )
+        self._jsqm.addListener(listener._jlistener)
+
+    def removeListener(self, listener: StreamingQueryListener) -> None:
+        """
+        Deregister a :class:`StreamingQueryListener`.
+
+        .. versionadded:: 3.4.0
+        """
+        self._jsqm.removeListener(listener._jlistener)
 
 
 def _test() -> None:

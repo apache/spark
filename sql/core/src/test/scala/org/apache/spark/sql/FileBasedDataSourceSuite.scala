@@ -181,7 +181,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
   allFileBasedDataSources.foreach { format =>
     testQuietly(s"Enabling/disabling ignoreMissingFiles using $format") {
-      def testIgnoreMissingFiles(): Unit = {
+      def testIgnoreMissingFiles(options: Map[String, String]): Unit = {
         withTempDir { dir =>
           val basePath = dir.getCanonicalPath
 
@@ -197,7 +197,7 @@ class FileBasedDataSourceSuite extends QueryTest
             fs.listStatus(p).filter(_.isFile).map(_.getPath)
           }
 
-          val df = spark.read.format(format).load(
+          val df = spark.read.options(options).format(format).load(
             new Path(basePath, "first").toString,
             new Path(basePath, "second").toString,
             new Path(basePath, "third").toString,
@@ -214,20 +214,27 @@ class FileBasedDataSourceSuite extends QueryTest
         }
       }
 
+      // Test set ignoreMissingFiles via SQL Conf and Data Source reader options
       for {
-        ignore <- Seq("true", "false")
+        (ignore, options, sqlConf) <- Seq(
+          // Set via SQL Conf: leave options empty
+          ("true", Map.empty[String, String], "true"),
+          ("false", Map.empty[String, String], "false"),
+          // Set via reader options: explicitly set SQL Conf to opposite
+          ("true", Map("ignoreMissingFiles" -> "true"), "false"),
+          ("false", Map("ignoreMissingFiles" -> "false"), "true"))
         sources <- Seq("", format)
       } {
-        withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> ignore,
-          SQLConf.USE_V1_SOURCE_LIST.key -> sources) {
-            if (ignore.toBoolean) {
-              testIgnoreMissingFiles()
-            } else {
-              val exception = intercept[SparkException] {
-                testIgnoreMissingFiles()
-              }
-              assert(exception.getMessage().contains("does not exist"))
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> sources,
+          SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
+          if (ignore.toBoolean) {
+            testIgnoreMissingFiles(options)
+          } else {
+            val exception = intercept[SparkException] {
+              testIgnoreMissingFiles(options)
             }
+            assert(exception.getMessage().contains("does not exist"))
+          }
         }
       }
     }

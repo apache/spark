@@ -40,6 +40,7 @@ public final class StreamChunkId implements Encodable {
     return 8 + 4;
   }
 
+  @Override
   public void encode(ByteBuf buffer) {
     buffer.writeLong(streamId);
     buffer.writeInt(chunkIndex);

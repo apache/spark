@@ -49,7 +49,7 @@ private[sql] object ArrowUtils {
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType =>
       if (timeZoneId == null) {
-        throw QueryExecutionErrors.timeZoneIdNotSpecifiedForTimestampTypeError()
+        throw QueryExecutionErrors.internalMissingTimezoneIdError()
       } else {
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       }
