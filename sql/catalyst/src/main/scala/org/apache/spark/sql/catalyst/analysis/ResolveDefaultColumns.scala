@@ -530,11 +530,10 @@ case class ResolveDefaultColumns(
           val id = Identifier.of(Array.empty[String], tableName.identifier)
           val capabilities = tableCatalog.loadTable(id).capabilities
           var it = capabilities.iterator()
-          while (it.hasNext) {
-            if (it() == TableCapability.ACCEPT_ANY_SCHEMA)) {
+          while (it.hasNext()) {
+            if (it.next() == TableCapability.ACCEPT_ANY_SCHEMA) {
               return None
             }
-            it = it.next()
           }
         case _ =>
       }
