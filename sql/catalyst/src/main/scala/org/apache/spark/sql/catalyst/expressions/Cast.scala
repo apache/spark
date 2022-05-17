@@ -2292,16 +2292,15 @@ case class Cast(
     Cast.canCast(from, to)
   }
 
-  private val (fallbackConfKey, fallbackConfValue) =
-    if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
-      (SQLConf.STORE_ASSIGNMENT_POLICY.key, SQLConf.StoreAssignmentPolicy.LEGACY.toString)
-    } else {
-      (SQLConf.ANSI_ENABLED.key, "false")
-    }
-
   override def typeCheckFailureMessage: String = if (ansiEnabled) {
-    Cast.typeCheckFailureMessage(child.dataType, dataType,
-      Some(fallbackConfKey), Some(fallbackConfValue))
+    if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
+      Cast.typeCheckFailureMessage(child.dataType, dataType,
+        Some(SQLConf.STORE_ASSIGNMENT_POLICY.key),
+        Some(SQLConf.StoreAssignmentPolicy.LEGACY.toString))
+    } else {
+      Cast.typeCheckFailureMessage(child.dataType, dataType,
+        Some(SQLConf.ANSI_ENABLED.key), Some("false"))
+    }
   } else {
     s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
   }
