@@ -150,8 +150,8 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pdf.a.kurtosis(skipna=False), psdf.a.kurtosis(skipna=False))
         self.assert_eq(pdf.a.kurtosis(), psdf.a.kurtosis())
         self.assert_eq(pdf.b.kurtosis(skipna=False), psdf.b.kurtosis(skipna=False))
-        # self.assert_eq(pdf.b.kurtosis(), psdf.b.kurtosis())  AssertionError: nan != -2.0
-        self.assert_eq(-1.5, psdf.c.kurtosis())
+        self.assert_eq(pdf.b.kurtosis(), psdf.b.kurtosis())
+        self.assert_eq(pdf.c.kurtosis(), psdf.c.kurtosis())
 
 
 if __name__ == "__main__":
