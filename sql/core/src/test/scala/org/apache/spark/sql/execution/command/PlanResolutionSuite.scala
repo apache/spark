@@ -1194,6 +1194,8 @@ class PlanResolutionSuite extends AnalysisTest {
           case s: StaticInvoke =>
             assert(s.arguments.length == 2)
             assert(s.arguments.head.isInstanceOf[Cast])
+            val cast = s.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get)
             assert(s.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect StaticInvoke, but got: " + other)
         }
@@ -1936,6 +1938,8 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
             assert(s2.arguments.head.isInstanceOf[Cast])
+            val cast = s2.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get)
             assert(s2.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect UpdateAction, but got: " + other)
         }
@@ -1947,6 +1951,8 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
             assert(s2.arguments.head.isInstanceOf[Cast])
+            val cast = s2.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.TABLE_INSERTION_RESOLVER).get)
             assert(s2.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect UpdateAction, but got: " + other)
         }
