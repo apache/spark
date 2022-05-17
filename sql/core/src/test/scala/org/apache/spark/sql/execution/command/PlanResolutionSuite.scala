@@ -1164,7 +1164,7 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
         case _ =>
-          fail("Expect UpdateTable, but got:\n" + parsed8.treeString)
+          fail("Expect UpdateTable, but got:\n" + parsed10.treeString)
       }
 
     }
@@ -1948,7 +1948,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |MERGE INTO v2TableWithAcceptAnySchemaCapability AS target
          |USING v2Table AS source
          |ON target.i = source.i
-         |WHEN MATCHED AND (target.s='delete') THEN DELETE
+         |WHEN MATCHED AND (target.s='delete')THEN DELETE
          |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
          |WHEN NOT MATCHED AND (target.s=DEFAULT)
          |  THEN INSERT (target.i, target.s) values (source.i, source.s)
