@@ -233,17 +233,17 @@ def _transform_missing(
     ...                     "pandas.DataFrame", "pyspark.pandas.DataFrame")
     '``axis`` , ``fill_value`` , ``level``'
     """
-    missing_str = " , ".join(f"``{x}``" for x in sorted(missing_set)[:MAX_MISSING_PARAMS_SIZE])
+    missing_str = " , ".join("``%s``" % x for x in sorted(missing_set)[:MAX_MISSING_PARAMS_SIZE])
     if len(missing_set) > MAX_MISSING_PARAMS_SIZE:
-        module_dot_func = f"{module_name}.{pd_func_name}" if module_name else pd_func_name
+        module_dot_func = "%s.%s" % (module_name, pd_func_name) if module_name else pd_func_name
         additional_str = (
             " and more. See the "
-            f"`{pd_module_path}.{module_dot_func} "
-            "<https://pandas.pydata.org/docs/reference/api/"
-            f"{pd_module_path}.{module_dot_func}.html>`__ and "
-            f"`{ps_module_path}.{module_dot_func} "
-            "<https://spark.apache.org/docs/latest/api/python/reference/pyspark.pandas/api/"
-            f"{ps_module_path}.{module_dot_func}.html>`__ for detail."
+            + "`%s.%s " % (pd_module_path, module_dot_func)
+            + "<https://pandas.pydata.org/docs/reference/api/"
+            + "%s.%s.html>`__ and " % (pd_module_path, module_dot_func)
+            + "`%s.%s " % (ps_module_path, module_dot_func)
+            + "<https://spark.apache.org/docs/latest/api/python/reference/pyspark.pandas/api/"
+            + "%s.%s.html>`__ for detail." % (ps_module_path, module_dot_func)
         )
         missing_str += additional_str
     return missing_str
@@ -308,9 +308,9 @@ def _write_table(
     lines.append(" APIs\n")
     lines.append("-" * 100)
     lines.append("\n")
-    lines.append(f".. currentmodule:: {module_path}")
+    lines.append(".. currentmodule:: %s" % module_path)
     if module_name:
-        lines.append(f".{module_name}\n")
+        lines.append(".%s\n" % module_name)
     else:
         lines.append("\n")
     lines.append("\n")
@@ -323,12 +323,12 @@ def _write_table(
     for func_str, status in supported_status.items():
         func_str = _escape_func_str(func_str)
         if status.implemented == Implemented.NOT_IMPLEMENTED.value:
-            lines.append(f"    * - {func_str}\n")
+            lines.append("    * - %s\n" % func_str)
         else:
-            lines.append(f"    * - :func:`{func_str}`\n")
-        lines.append(f"      - {status.implemented}\n")
+            lines.append("    * - :func:`%s`\n" % func_str)
+        lines.append("      - %s\n" % status.implemented)
         lines.append("      - \n") if not status.missing else lines.append(
-            f"      - {status.missing}\n"
+            "      - %s\n" % status.missing
         )
     w_fd.writelines(lines)
 
