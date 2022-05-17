@@ -570,27 +570,30 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
     val serializer = new TestCachedBatchSerializer(true, 1)
     val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None)
 
-    val maxRound = 10000
     @volatile var isCachedColumnBuffersLoaded = false
+    @volatile var stopped = false
 
     val th1 = new Thread {
       override def run(): Unit = {
-        var i = 0
-        while (!isCachedColumnBuffersLoaded && i < maxRound) {
+        while (!isCachedColumnBuffersLoaded && !stopped) {
           cachedRDDBuilder.cachedColumnBuffers
           cachedRDDBuilder.clearCache()
-          i += 1
         }
       }
     }
 
     val th2 = new Thread {
       override def run(): Unit = {
-        var i = 0
-        while (!isCachedColumnBuffersLoaded && i < maxRound) {
+        while (!isCachedColumnBuffersLoaded && !stopped) {
           isCachedColumnBuffersLoaded = cachedRDDBuilder.isCachedColumnBuffersLoaded
-          i += 1
         }
+      }
+    }
+
+    val th3 = new Thread {
+      override def run(): Unit = {
+        Thread.sleep(3000L)
+        stopped = true
       }
     }
 
@@ -604,8 +607,10 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
     th2.setUncaughtExceptionHandler(exceptionHandler)
     th1.start()
     th2.start()
+    th3.start()
     th1.join()
     th2.join()
+    th3.join()
 
     cachedRDDBuilder.clearCache()
 
