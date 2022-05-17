@@ -3763,7 +3763,7 @@ object SQLConf {
       .doc("PySpark's SparkSession.createDataFrame infers the element type of an array from all " +
         "values in the array by default. If this config is set to true, it restores the legacy " +
         "behavior of only inferring the type from the first array element.")
-      .version("3.3.0")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
 

@@ -20,4 +20,4 @@
 Upgrading from PySpark 3.3 to 3.4
 =================================
 
-* In Spark 3.4, the schema of an array column is inferred by merging the schemas of all elements in the array. To restore the previous behavior where the schema is only inferred from the first element, set the spark configuration as follows: ``{"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}``.
+* In Spark 3.4, the schema of an array column is inferred by merging the schemas of all elements in the array. To restore the previous behavior where the schema is only inferred from the first element, you can set ``spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled`` to ``true``.

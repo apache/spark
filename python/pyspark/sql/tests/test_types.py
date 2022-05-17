@@ -291,8 +291,8 @@ class TypesTests(ReusedSQLTestCase):
 
         data = [ArrayRow([1, None], [None, 2])]
 
-        nestedRdd = self.sc.parallelize(data)
-        df = self.spark.createDataFrame(nestedRdd)
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
         self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
 
         df = self.spark.createDataFrame(data)
@@ -323,8 +323,8 @@ class TypesTests(ReusedSQLTestCase):
 
         data = [ArrayRow([]), ArrayRow([None]), ArrayRow([1])]
 
-        nestedRdd = self.sc.parallelize(data)
-        df = self.spark.createDataFrame(nestedRdd)
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
         rows = df.collect()
         self.assertEqual(Row(f1=[]), rows[0])
         self.assertEqual(Row(f1=[None]), rows[1])
