@@ -419,7 +419,10 @@ class JacksonParser(
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
-
+    // Apply default values from the column metadata to the initial row, if any.
+    for ((value: Any, i: Int) <- schema.defaultValues.zipWithIndex) {
+      row.update(i, value)
+    }
     structFilters.reset()
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
