@@ -18,16 +18,15 @@
 """
 Generate 'Supported pandas APIs' documentation file
 """
-import os
+import warnings
 from distutils.version import LooseVersion
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
-from typing import Any, Callable, Dict, List, Set, TextIO, Tuple
+from typing import Any, Callable, Dict, List, NamedTuple, Set, TextIO, Tuple
 
 import pyspark.pandas as ps
 import pyspark.pandas.groupby as psg
 import pyspark.pandas.window as psw
-from pyspark.find_spark_home import _find_spark_home
 
 import pandas as pd
 import pandas.core.groupby as pdg
@@ -41,10 +40,6 @@ COMMON_PARAMETER_SET = {
 }  # These are not counted as missing parameters.
 MODULE_GROUP_MATCH = [(pd, ps), (pdw, psw), (pdg, psg)]
 
-SPARK_HOME = _find_spark_home()
-TARGET_RST_FILE = os.path.join(
-    SPARK_HOME, "python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst"
-)
 RST_HEADER = """
 =====================
 Supported pandas APIs
@@ -84,28 +79,29 @@ class Implemented(Enum):
     PARTIALLY_IMPLEMENTED = "P"
 
 
-class SupportedStatus:
+class SupportedStatus(NamedTuple):
     """
-    SupportedStatus class that defines a supported status for a specific pandas API
+    Defines a supported status for a specific pandas API
     """
 
-    def __init__(self, implemented: str, missing: str = ""):
-        self.implemented = implemented
-        self.missing = missing
+    implemented: str
+    missing: str
 
 
-def generate_supported_api() -> None:
+def generate_supported_api(output_rst_file_path: str) -> None:
     """
     Generate supported APIs status dictionary.
+    Parameters
+    ----------
+    output_rst_file_path : str
+        The path to the document file in RST format.
 
     Write supported APIs documentation.
     """
     if LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
-        import warnings
-
         warnings.warn(
             "Warning: Latest version of pandas(>=1.4.0) is required to generate the documentation; "
-            + f"however, your version was {pd.__version__}",
+            + "however, your version was %s" % pd.__version__,
             UserWarning,
         )
 
@@ -115,7 +111,7 @@ def generate_supported_api() -> None:
         _update_all_supported_status(
             all_supported_status, pd_modules, pd_module_group, ps_module_group
         )
-    _write_rst(all_supported_status)
+    _write_rst(output_rst_file_path, all_supported_status)
 
 
 def _create_supported_by_module(
@@ -186,8 +182,8 @@ def _organize_by_implementation_status(
             if missing_set:
                 # partially implemented
                 pd_dict[pd_func_name] = SupportedStatus(
-                    Implemented.PARTIALLY_IMPLEMENTED.value,
-                    _transform_missing(
+                    implemented=Implemented.PARTIALLY_IMPLEMENTED.value,
+                    missing=_transform_missing(
                         module_name,
                         pd_func_name,
                         missing_set,
@@ -197,10 +193,14 @@ def _organize_by_implementation_status(
                 )
             else:
                 # implemented including it's whole parameter
-                pd_dict[pd_func_name] = SupportedStatus(Implemented.IMPLEMENTED.value)
+                pd_dict[pd_func_name] = SupportedStatus(
+                    implemented=Implemented.IMPLEMENTED.value, missing=""
+                )
         else:
             # not implemented yet
-            pd_dict[pd_func_name] = SupportedStatus(Implemented.NOT_IMPLEMENTED.value)
+            pd_dict[pd_func_name] = SupportedStatus(
+                implemented=Implemented.NOT_IMPLEMENTED.value, missing=""
+            )
     return pd_dict
 
 
@@ -345,11 +345,14 @@ def _escape_func_str(func_str: str) -> str:
         return func_str
 
 
-def _write_rst(all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]]) -> None:
+def _write_rst(
+    output_rst_file_path: str,
+    all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]],
+) -> None:
     """
     Writes the documentation to the target file path.
     """
-    with open(TARGET_RST_FILE, "w") as w_fd:
+    with open(output_rst_file_path, "w") as w_fd:
         w_fd.write(RST_HEADER)
         for module_info, supported_status in all_supported_status.items():
             module, module_path = module_info
