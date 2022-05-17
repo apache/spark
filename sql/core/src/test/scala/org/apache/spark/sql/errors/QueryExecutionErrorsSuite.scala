@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -586,6 +586,33 @@ class QueryExecutionErrorsSuite
       msg = s"Unrecognized SQL type $unrecognizedColumnType")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
+  }
+
+  test("MULTI_VALUE_SUBQUERY_ERROR: " +
+    "more than one row returned by a subquery used as an expression") {
+    checkErrorClass(
+      exception = intercept[SparkIllegalStateException] {
+        sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
+      },
+      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      msg =
+        """more than one row returned by a subquery used as an expression: """ +
+        """Subquery subquery#\w+, \[id=#\w+\]
+          |\+\- AdaptiveSparkPlan isFinalPlan=true
+          |   \+\- == Final Plan ==
+          |      Union
+          |      :\- \*\(1\) Project \[\w+ AS a#\w+\]
+          |      :  \+\- \*\(1\) Scan OneRowRelation\[\]
+          |      \+\- \*\(2\) Project \[\w+ AS a#\w+\]
+          |         \+\- \*\(2\) Scan OneRowRelation\[\]
+          |   \+\- == Initial Plan ==
+          |      Union
+          |      :\- Project \[\w+ AS a#\w+\]
+          |      :  \+\- Scan OneRowRelation\[\]
+          |      \+\- Project \[\w+ AS a#\w+\]
+          |         \+\- Scan OneRowRelation\[\]
+          |""".stripMargin,
+      matchMsg = true)
   }
 }
 

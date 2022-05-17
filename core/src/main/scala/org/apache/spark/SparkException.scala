@@ -292,3 +292,15 @@ private[spark] class SparkSQLFeatureNotSupportedException(
 
   override def getErrorClass: String = errorClass
 }
+
+/**
+ * Illegal state exception thrown from Spark with an error class.
+ */
+private[spark] class SparkIllegalStateException(
+    errorClass: String,
+    messageParameters: Array[String])
+  extends IllegalArgumentException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+}
