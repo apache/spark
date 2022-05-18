@@ -1568,20 +1568,24 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
 
     // This represents one test configuration over a data source.
-    case class Config(dataSource: String, sqlConf: Seq[(String, String)] = Seq())
+    case class Config(dataSource: String, sqlConf: Seq[Option[(String, String)]] = Seq())
     Seq(
       Config(dataSource = "json",
         Seq(
-          SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")),
+          Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false"))),
       Config(dataSource = "csv",
         Seq(
-          SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false"))
+          None,
+          Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))
     ).foreach { config: Config =>
-      // First run the test with default settings.
-      runTest(config.dataSource)
-      // Then run the test again with each pair of custom SQLConf values.
-      config.sqlConf.foreach { kv: (String, String) =>
-        withSQLConf(kv) {
+      config.sqlConf.foreach {
+        _.map { kv: (String, String) =>
+          withSQLConf(kv) {
+            // Run the test with the pair of custom SQLConf values.
+            runTest(config.dataSource)
+          }
+        }.getOrElse {
+          // Run the test with default settings.
           runTest(config.dataSource)
         }
       }
