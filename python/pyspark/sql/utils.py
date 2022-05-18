@@ -292,12 +292,4 @@ def is_timestamp_ntz_preferred() -> bool:
     """
     Return a bool if TimestampNTZType is preferred according to the SQL configuration set.
     """
-    jvm = SparkContext._jvm
-    return (
-        jvm is not None
-        and getattr(getattr(jvm.org.apache.spark.sql.internal, "SQLConf$"), "MODULE$")
-        .get()
-        .timestampType()
-        .typeName()
-        == "timestamp_ntz"
-    )
+    return SparkContext._jvm.PythonSQLUtils.isTimestampNTZPreferred()
