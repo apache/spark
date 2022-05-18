@@ -453,10 +453,10 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
           .build()),
       StructField("c3", BooleanType)))
-    assert(source1.defaultValues.size == 3)
-    assert(source1.defaultValues(0) == 42)
-    assert(source1.defaultValues(1) == UTF8String.fromString("abc"))
-    assert(source1.defaultValues(2) == null)
+    assert(source1.existenceDefaultValues.size == 3)
+    assert(source1.existenceDefaultValues(0) == 42)
+    assert(source1.existenceDefaultValues(1) == UTF8String.fromString("abc"))
+    assert(source1.existenceDefaultValues(2) == null)
 
     // Negative test: StructType.defaultValues fails because the existence default value parses and
     // resolves successfully, but evaluates to a non-literal expression.
@@ -468,7 +468,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .build())))
     val error = "fails to parse as a valid literal value"
   assert(intercept[AnalysisException] {
-      source2.defaultValues
+      source2.existenceDefaultValues
     }.getMessage.contains(error))
 
     // Negative test: StructType.defaultValues fails because the existence default value fails to
@@ -480,7 +480,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .build())))
     assert(intercept[AnalysisException] {
-      source3.defaultValues
+      source3.existenceDefaultValues
     }.getMessage.contains(error))
 
     // Negative test: StructType.defaultValues fails because the existence default value fails to
@@ -496,7 +496,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
             "(SELECT 'abc' FROM missingtable)")
           .build())))
     assert(intercept[AnalysisException] {
-      source4.defaultValues
+      source4.existenceDefaultValues
     }.getMessage.contains(error))
   }
 }

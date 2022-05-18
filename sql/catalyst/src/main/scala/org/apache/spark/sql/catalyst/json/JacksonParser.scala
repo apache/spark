@@ -420,7 +420,7 @@ class JacksonParser(
     var badRecordException: Option[Throwable] = None
     var skipRow = false
     // Apply default values from the column metadata to the initial row, if any.
-    for ((value: Any, i: Int) <- schema.defaultValues.zipWithIndex) {
+    for ((value: Any, i: Int) <- schema.existenceDefaultValues.zipWithIndex) {
       row.update(i, value)
     }
     structFilters.reset()
