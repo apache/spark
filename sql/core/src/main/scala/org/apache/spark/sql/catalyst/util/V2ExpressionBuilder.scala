@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
@@ -283,6 +285,14 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
         None
       }
     // TODO supports other expressions
+    case ApplyFunctionExpression(function, children) =>
+      val childrenExpressions = children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == children.length) {
+        Some(new GeneralScalarExpression(function.name().toUpperCase(Locale.ROOT),
+          childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
     case _ => None
   }
 }

@@ -24,7 +24,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -59,7 +59,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val connectionTimeout = timeout(3.minutes)
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
+    .set("spark.sql.catalog.db2", classOf[JDBCCatalog].getName)
     .set("spark.sql.catalog.db2.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.db2.pushDownAggregate", "true")
 

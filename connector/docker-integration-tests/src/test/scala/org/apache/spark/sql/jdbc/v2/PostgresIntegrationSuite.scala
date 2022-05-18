@@ -21,7 +21,7 @@ import java.sql.Connection
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -47,7 +47,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
   }
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.postgresql", classOf[JDBCTableCatalog].getName)
+    .set("spark.sql.catalog.postgresql", classOf[JDBCCatalog].getName)
     .set("spark.sql.catalog.postgresql.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.postgresql.pushDownTableSample", "true")
     .set("spark.sql.catalog.postgresql.pushDownLimit", "true")

@@ -30,7 +30,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
+class JDBCCatalogSuite extends QueryTest with SharedSparkSession {
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
@@ -38,7 +38,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   var conn: java.sql.Connection = null
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
+    .set("spark.sql.catalog.h2", classOf[JDBCCatalog].getName)
     .set("spark.sql.catalog.h2.url", url)
     .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
 

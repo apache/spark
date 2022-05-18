@@ -22,10 +22,12 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
@@ -41,8 +43,40 @@ private[sql] object H2Dialect extends JdbcDialect {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  class H2SQLBuilder extends JDBCSQLBuilder {
+    override def visitUnexpectedExpr(expr: Expression): String = {
+      expr match {
+        case e: GeneralScalarExpression if e.name() == "CHAR_LENGTH" =>
+          val children = e.children().map(build)
+          s"""${e.name()}(${children.mkString(", ")})"""
+        case _ => super.visitUnexpectedExpr(expr)
+      }
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val h2SQLBuilder = new H2SQLBuilder()
+    try {
+      Some(h2SQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  private def compileUDAF(aggFunction: AggregateFunc): Option[String] = {
+    aggFunction match {
+      case f: GeneralAggregateFunc if f.name() == "IAVG" =>
+        assert(f.children().length == 1)
+        val distinct = if (f.isDistinct) "DISTINCT " else ""
+        compileExpression(f.children().head).map(v => s"AVG($distinct$v)")
+      case _ => None
+    }
+  }
+
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    super.compileAggregate(aggFunction).orElse(
+    super.compileAggregate(aggFunction).orElse(compileUDAF(aggFunction)).orElse(
       aggFunction match {
         case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
           assert(f.children().length == 1)

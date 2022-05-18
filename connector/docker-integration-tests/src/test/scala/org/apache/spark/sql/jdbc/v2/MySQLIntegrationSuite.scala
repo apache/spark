@@ -23,7 +23,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -52,7 +52,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   }
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
+    .set("spark.sql.catalog.mysql", classOf[JDBCCatalog].getName)
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.mysql.pushDownAggregate", "true")
 

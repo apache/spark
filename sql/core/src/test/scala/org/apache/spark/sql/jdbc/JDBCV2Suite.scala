@@ -22,6 +22,7 @@ import java.util.Properties
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
 import org.apache.spark.sql.connector.IntegralAverage
@@ -914,6 +915,42 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkPushedInfo(df8, expectedPlanFragment8)
         checkAnswer(df8, Seq(Row(2, "david", 10000, 1300, true)))
       }
+    }
+  }
+
+  test("scan with filter push-down with UDF") {
+    val df1 = sql("SELECT * FROM h2.test.people where h2.test.h2_strlen(name) > 2")
+    checkFiltersRemoved(df1)
+    checkPushedInfo(df1, "PushedFilters: [>(CHAR_LENGTH(NAME,2)]")
+    checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+
+    val df2 = sql("SELECT * FROM h2.test.people where h2.test.h2_strlen(name) > 4")
+    checkFiltersRemoved(df2)
+    checkPushedInfo(df2, "PushedFilters: [>(CHAR_LENGTH(NAME,4)]")
+    checkAnswer(df2, Seq())
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df3 = sql(
+        """
+          |SELECT *
+          |FROM h2.test.people
+          |WHERE h2.test.h2_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+      """.stripMargin)
+      checkFiltersRemoved(df3)
+      checkPushedInfo(df3,
+        "PushedFilters: [>(CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END,2)]")
+      checkAnswer(df3, Seq(Row("fred", 1), Row("mary", 2)))
+
+      val df4 = sql(
+        """
+          |SELECT *
+          |FROM h2.test.people
+          |WHERE h2.test.h2_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 3
+      """.stripMargin)
+      checkFiltersRemoved(df4)
+      checkPushedInfo(df4,
+        "PushedFilters: [>(CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END,3)]")
+      checkAnswer(df4, Seq(Row("fred", 1)))
     }
   }
 
@@ -1851,5 +1888,46 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
     }
     assert(e2.getMessage.contains("Undefined function: h2.my_avg2"))
+  }
+
+  test("scan with aggregate push-down: complete push-down UDAF") {
+    val df1 = sql("SELECT h2.test.h2_avg(id) FROM h2.test.people")
+    checkAggregateRemoved(df1)
+    checkPushedInfo(df1,
+      "PushedAggregates: [IAVG(ID)], PushedFilters: [], PushedGroupByExpressions: []")
+    checkAnswer(df1, Seq(Row(1)))
+
+    val df2 = sql("SELECT name, h2.test.h2_avg(id) FROM h2.test.people group by name")
+    checkAggregateRemoved(df2)
+    checkPushedInfo(df2,
+      "PushedAggregates: [IAVG(ID)], PushedFilters: [], PushedGroupByExpressions: [NAME]")
+    checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df3 = sql(
+        """
+          |SELECT
+          |  h2.test.h2_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
+          |FROM h2.test.people
+      """.stripMargin)
+      checkAggregateRemoved(df3)
+      checkPushedInfo(df3,
+        "PushedAggregates: [IAVG(CASE WHEN NAME = 'fred' THEN ID + 1 ELSE ID END)]," +
+          " PushedFilters: [], PushedGroupByExpressions: []")
+      checkAnswer(df3, Seq(Row(2)))
+
+      val df4 = sql(
+        """
+          |SELECT
+          |  name,
+          |  h2.test.h2_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
+          |FROM h2.test.people
+          |GROUP BY name
+      """.stripMargin)
+      checkAggregateRemoved(df4)
+      checkPushedInfo(df4,
+        "PushedAggregates: [IAVG(CASE WHEN NAME = 'fred' THEN ID + 1 ELSE ID END)]," +
+          " PushedFilters: [], PushedGroupByExpressions: [NAME]")
+      checkAnswer(df4, Seq(Row("fred", 2), Row("mary", 2)))
+    }
   }
 }

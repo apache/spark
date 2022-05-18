@@ -23,7 +23,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -56,7 +56,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   }
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
+    .set("spark.sql.catalog.mssql", classOf[JDBCCatalog].getName)
     .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.mssql.pushDownAggregate", "true")
 
