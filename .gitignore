@@ -77,6 +77,7 @@ python/coverage.xml
 python/deps
 python/docs/_site/
 python/docs/source/reference/**/api/
+python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python

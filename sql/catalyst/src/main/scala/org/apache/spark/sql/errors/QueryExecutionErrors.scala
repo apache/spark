@@ -84,9 +84,13 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def castingCauseOverflowError(t: Any, from: DataType, to: DataType): ArithmeticException = {
-    new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
+    new SparkArithmeticException(
+      errorClass = "CAST_OVERFLOW",
       messageParameters = Array(
-        toSQLValue(t, from), toSQLType(to), toSQLConf(SQLConf.ANSI_ENABLED.key)))
+        toSQLValue(t, from),
+        toSQLType(from),
+        toSQLType(to),
+        toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -104,15 +108,44 @@ object QueryExecutionErrors extends QueryErrorsBase {
         context))
   }
 
-  def invalidInputSyntaxForNumericError(
+  def invalidInputInCastToDatetimeError(
+      value: Any,
+      from: DataType,
+      to: DataType,
+      errorContext: String): Throwable = {
+    new SparkDateTimeException(
+      errorClass = "CAST_INVALID_INPUT",
+      messageParameters = Array(
+        toSQLValue(value, from),
+        toSQLType(from),
+        toSQLType(to),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        errorContext))
+  }
+
+  def invalidInputSyntaxForBooleanError(
+      s: UTF8String,
+      errorContext: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "CAST_INVALID_INPUT",
+      messageParameters = Array(
+        toSQLValue(s, StringType),
+        toSQLType(StringType),
+        toSQLType(BooleanType),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        errorContext))
+  }
+
+  def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
       errorContext: String): SparkNumberFormatException = {
     new SparkNumberFormatException(
-      errorClass = "INVALID_SYNTAX_FOR_CAST",
+      errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
-        toSQLType(to),
         toSQLValue(s, StringType),
+        toSQLType(StringType),
+        toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key),
         errorContext))
   }
@@ -814,7 +847,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
          |Could not execute broadcast in $timeout secs. You can increase the timeout
          |for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or disable broadcast join
          |by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1
-       """.stripMargin.replaceAll("\n", " "), ex.getOrElse(null))
+       """.stripMargin.replaceAll("\n", " "), ex.orNull)
   }
 
   def cannotCompareCostWithTargetCostError(cost: String): Throwable = {
@@ -1011,17 +1044,6 @@ object QueryExecutionErrors extends QueryErrorsBase {
       e)
   }
 
-  def cannotCastToDateTimeError(
-      value: Any, from: DataType, to: DataType, errorContext: String): Throwable = {
-    new SparkDateTimeException(
-      errorClass = "INVALID_SYNTAX_FOR_CAST",
-      messageParameters = Array(
-        toSQLType(to),
-        toSQLValue(value, from),
-        toSQLConf(SQLConf.ANSI_ENABLED.key),
-        errorContext))
-  }
-
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
     new SparkException("Exception when registering StreamingQueryListener", e)
   }
@@ -1152,14 +1174,6 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def userDefinedTypeNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
     new SparkException(s"${udt.userClass.getName} is not annotated with " +
       "SQLUserDefinedType nor registered with UDTRegistration.}")
-  }
-
-  def invalidInputSyntaxForBooleanError(
-      s: UTF8String,
-      errorContext: String): UnsupportedOperationException = {
-    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s. " +
-      s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
-      "to false to bypass this error." + errorContext)
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {

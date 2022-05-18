@@ -26,18 +26,17 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
 
   private val ansiConf = "\"" + SQLConf.ANSI_ENABLED.key + "\""
 
-  test("CAST_CAUSES_OVERFLOW: from timestamp to int") {
+  test("CAST_OVERFLOW: from timestamp to int") {
     checkErrorClass(
       exception = intercept[SparkArithmeticException] {
         sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
       },
-      errorClass = "CAST_CAUSES_OVERFLOW",
+      errorClass = "CAST_OVERFLOW",
       msg =
-        "Casting TIMESTAMP '9999-12-.*.56789' to \"INT\" causes overflow. " +
-        "To return NULL instead, use `try_cast`. " +
+        "The value TIMESTAMP '9999-12-31 04:13:14.56789' of the type \"TIMESTAMP\" cannot be cast" +
+        " to \"INT\" due to an overflow. To return NULL instead, use `try_cast`. " +
         s"""If necessary set $ansiConf to "false" to bypass this error.""",
-      sqlState = Some("22005"),
-      matchMsg = true)
+      sqlState = Some("22005"))
   }
 
   test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
@@ -125,14 +124,14 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
     )
   }
 
-  test("INVALID_SYNTAX_FOR_CAST: cast string to double") {
+  test("CAST_INVALID_INPUT: cast string to double") {
     checkErrorClass(
       exception = intercept[SparkNumberFormatException] {
         sql("select CAST('111111111111xe23' AS DOUBLE)").collect()
       },
-      errorClass = "INVALID_SYNTAX_FOR_CAST",
-      msg = """Invalid input syntax for type "DOUBLE": '111111111111xe23'. """ +
-        """To return NULL instead, use `try_cast`. If necessary set """ +
+      errorClass = "CAST_INVALID_INPUT",
+      msg = """The value '111111111111xe23' of the type "STRING" cannot be cast to "DOUBLE" """ +
+        """because it is malformed. To return NULL instead, use `try_cast`. If necessary set """ +
         s"""$ansiConf to \"false\" to bypass this error.
           |== SQL(line 1, position 7) ==
           |select CAST('111111111111xe23' AS DOUBLE)
