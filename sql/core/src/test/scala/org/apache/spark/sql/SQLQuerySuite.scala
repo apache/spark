@@ -4427,6 +4427,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         ))
     }
   }
+
+  test("SPARK-39216: Do not combine unions if project contains subqueries") {
+    val df = spark.sql(
+      """
+        |SELECT (SELECT IF(x, 1, 0)) AS a
+        |FROM (SELECT true) t(x)
+        |UNION
+        |SELECT 1 AS a
+      """.stripMargin)
+
+    checkAnswer(df, Seq(Row(1)))
+  }
 }
 
 case class Foo(bar: Option[String])

@@ -1332,6 +1332,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 object CombineUnions extends Rule[LogicalPlan] {
   import CollapseProject.{buildCleanedProjectList, canCollapseExpressions}
   import PushProjectionThroughUnion.pushProjectionThroughUnion
+  import SubqueryExpression.hasSubquery
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
@@ -1355,7 +1356,8 @@ object CombineUnions extends Rule[LogicalPlan] {
     while (stack.nonEmpty) {
       stack.pop() match {
         case p1 @ Project(_, p2: Project)
-            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) =>
+            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) &&
+              !p1.projectList.exists(hasSubquery) && !p2.projectList.exists(hasSubquery) =>
           val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
           stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
         case Distinct(Union(children, byName, allowMissingCol))
@@ -1372,15 +1374,16 @@ object CombineUnions extends Rule[LogicalPlan] {
         // Push down projection through Union and then push pushed plan to Stack if
         // there is a Project.
         case Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
-            if projectList.forall(_.deterministic) && children.nonEmpty &&
+            if projectList.forall(e => e.deterministic && !hasSubquery(e)) && children.nonEmpty &&
               flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
-            if projectList.forall(_.deterministic) && flattenDistinct && u.byName == topByName &&
-              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+            if projectList.forall(e => e.deterministic && !hasSubquery(e)) && flattenDistinct &&
+              u.byName == topByName && u.allowMissingCol == topAllowMissingCol &&
+              AttributeSet(keys) == u.outputSet =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case Project(projectList, u @ Union(children, byName, allowMissingCol))
-            if projectList.forall(_.deterministic) && children.nonEmpty &&
+            if projectList.forall(e => e.deterministic && !hasSubquery(e)) && children.nonEmpty &&
               byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case child =>
