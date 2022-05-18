@@ -1596,9 +1596,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // By default, INSERT commands into JSON tables do not store NULL values. Therefore, if such
     // destination table columns have DEFAULT values, SELECTing out the same columns will return the
     // default values (instead of NULL) since nothing is present in storage.
-    sql("create table t(a string default 'abc') using json")
-    sql("insert into t values(null)")
-    checkAnswer(spark.table("t"), Row("abc"))
+    withTable("t") {
+      sql("create table t(a string default 'abc') using json")
+      sql("insert into t values(null)")
+      checkAnswer(spark.table("t"), Row("abc"))
+    }
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {
