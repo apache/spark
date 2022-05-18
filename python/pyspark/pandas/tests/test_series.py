@@ -2987,9 +2987,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             name="Koalas",
         )
         psser = ps.from_pandas(pser)
-
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
 
         # MultiIndex
         pser.index = pd.MultiIndex.from_tuples(
@@ -2998,10 +2998,14 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
 
         # Null Series
         self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
         self.assert_eq(pd.Series([np.nan]).argmax(), ps.Series([np.nan]).argmax())
+        self.assert_eq(
+            pd.Series([np.nan]).argmax(skipna=False), ps.Series([np.nan]).argmax(skipna=False)
+        )
 
         with self.assertRaisesRegex(ValueError, "attempt to get argmin of an empty sequence"):
             ps.Series([]).argmin()
