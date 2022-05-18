@@ -43,7 +43,7 @@ object UTF8StringUtils {
       f
     } catch {
       case e: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(to, s, errorContext)
+        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, s, errorContext)
     }
   }
 }
