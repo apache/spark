@@ -29,9 +29,13 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
     def _test_expanding_func(self, f):
         pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
         psser = ps.from_pandas(pser)
-        self.assert_eq(getattr(psser.expanding(2), f)(), getattr(pser.expanding(2), f)())
         self.assert_eq(
-            getattr(psser.expanding(2), f)().sum(), getattr(pser.expanding(2), f)().sum()
+            getattr(psser.expanding(2), f)(), getattr(pser.expanding(2), f)(), almost=True
+        )
+        self.assert_eq(
+            getattr(psser.expanding(2), f)().sum(),
+            getattr(pser.expanding(2), f)().sum(),
+            almost=True,
         )
 
         # Multiindex
