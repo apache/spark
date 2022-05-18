@@ -1545,25 +1545,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("alter table t add column (s string default concat('abc', 'def'))")
         sql("insert into t values(null, null, null)")
         sql("alter table t add column (x boolean default true)")
-        val insertedColumn: Any =
-          if (dataSource == "json") {
-            // JSON does not distinguish between NULL values and the absence of values. Therefore
-            // inserting NULL and then selecting back the same column yields the default value (if
-            // any), since the insert did not change any storage.
-            "abcdef"
-          } else {
-            // For data sources that distinguish between stored NULL values and the absence of
-            // values, inserting NULL and then selecting it back should yield NULL again.
-            null
-          }
         checkAnswer(spark.table("t"),
           Seq(
             Row("xyz", 42, "abcdef", true),
-            Row(null, null, insertedColumn, true)))
+            Row(null, null, null, true)))
         checkAnswer(sql("select i, s, x from t"),
           Seq(
             Row(42, "abcdef", true),
-            Row(null, insertedColumn, true)))
+            Row(null, null, true)))
       }
       // Adding two columns where only the first has a valid default value works successfully.
       // Querying data from the altered table returns the default value as well as NULL for the
@@ -1581,7 +1570,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // This represents one test configuration over a data source.
     case class Config(dataSource: String, sqlConf: Seq[(String, String)] = Seq())
     Seq(
-      Config(dataSource = "json"),
+      Config(dataSource = "json",
+        Seq(
+          SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")),
       Config(dataSource = "csv",
         Seq(
           SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false"))
@@ -1595,6 +1586,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-39211 INSERT into JSON table, ADD COLUMNS with DEFAULTs, then SELECT them") {
+    // By default, INSERT commands into JSON tables do not store NULL values. Therefore, if such
+    // destination table columns have DEFAULT values, SELECTing out the same columns will return the
+    // default values (instead of NULL) since nothing is present in storage.
+    sql("create table t(a string default 'abc') using json")
+    sql("insert into t values(null)")
+    checkAnswer(spark.table("t"), Row("abc"))
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {
