@@ -381,11 +381,16 @@ private[hive] class HiveClientImpl(
     Option(client.getDatabase(dbName)).map { d =>
       val params = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
         Map(PROP_OWNER -> shim.getDatabaseOwnerName(d))
+      val locationUri = if (d.getLocationUri == null || d.getLocationUri.length==0) {
+        "placeholder"
+      } else {
+        d.getLocationUri
+      }
 
       CatalogDatabase(
         name = d.getName,
         description = Option(d.getDescription).getOrElse(""),
-        locationUri = CatalogUtils.stringToURI(d.getLocationUri),
+        locationUri = CatalogUtils.stringToURI(locationUri),
         properties = params)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }
