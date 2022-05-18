@@ -4423,8 +4423,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-39190, SPARK-39208: Query context of decimal overflow error should be serialized " +
-    "to executors when WSCG is off") {
+  test("SPARK-39190,SPARK-39208,SPARK-39210: Query context of decimal overflow error should " +
+    "be serialized to executors when WSCG is off") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
       SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("t") {
@@ -4432,7 +4432,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("insert into t values (6e37BD),(6e37BD)")
         Seq(
           "select d / 0.1 from t",
-          "select sum(d) from t").foreach { query =>
+          "select sum(d) from t",
+          "select avg(d) from t").foreach { query =>
           val msg = intercept[SparkException] {
             sql(query).collect()
           }.getMessage
