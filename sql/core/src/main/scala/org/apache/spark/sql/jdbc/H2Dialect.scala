@@ -20,13 +20,9 @@ package org.apache.spark.sql.jdbc
 import java.sql.{SQLException, Types}
 import java.util.Locale
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
 
@@ -34,27 +30,11 @@ private object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
-  class H2SQLBuilder extends JDBCSQLBuilder {
-    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
-      funcName match {
-        case "WIDTH_BUCKET" =>
-          val functionInfo = super.visitSQLFunction(funcName, inputs)
-          throw QueryCompilationErrors.noSuchFunctionError("H2", functionInfo)
-        case _ => super.visitSQLFunction(funcName, inputs)
-      }
-    }
-  }
+  private val supportedFunctions =
+    Set("ABS", "COALESCE", "LN", "EXP", "POWER", "SQRT", "FLOOR", "CEIL")
 
-  override def compileExpression(expr: Expression): Option[String] = {
-    val h2SQLBuilder = new H2SQLBuilder()
-    try {
-      Some(h2SQLBuilder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
 
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
