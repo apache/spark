@@ -529,7 +529,7 @@ case class ResolveDefaultColumns(
         case tableCatalog: TableCatalog =>
           val id = Identifier.of(Array.empty[String], tableName.identifier)
           val capabilities = tableCatalog.loadTable(id).capabilities
-          var it = capabilities.iterator()
+          val it = capabilities.iterator()
           while (it.hasNext()) {
             if (it.next() == TableCapability.ACCEPT_ANY_SCHEMA) {
               return None
@@ -539,7 +539,8 @@ case class ResolveDefaultColumns(
       }
       catalog.lookupRelation(tableName)
     } catch {
-      case _: AnalysisException => return None
+      case e: AnalysisException =>
+        return None
     }
     lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
