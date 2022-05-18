@@ -1374,16 +1374,15 @@ object CombineUnions extends Rule[LogicalPlan] {
         // Push down projection through Union and then push pushed plan to Stack if
         // there is a Project.
         case Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
-            if projectList.forall(e => e.deterministic && !hasSubquery(e)) && children.nonEmpty &&
+            if projectList.forall(_.deterministic) && children.nonEmpty &&
               flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
-            if projectList.forall(e => e.deterministic && !hasSubquery(e)) && flattenDistinct &&
-              u.byName == topByName && u.allowMissingCol == topAllowMissingCol &&
-              AttributeSet(keys) == u.outputSet =>
+            if projectList.forall(_.deterministic) && flattenDistinct && u.byName == topByName &&
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case Project(projectList, u @ Union(children, byName, allowMissingCol))
-            if projectList.forall(e => e.deterministic && !hasSubquery(e)) && children.nonEmpty &&
+            if projectList.forall(_.deterministic) && children.nonEmpty &&
               byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case child =>
