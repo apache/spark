@@ -1885,6 +1885,14 @@ private[spark] class DAGScheduler(
               mapOutputTracker.
                 unregisterMergeResult(shuffleId, reduceId, bmAddress, Option(mapIndex))
             }
+          } else if (mapIndex == -1) {
+            // Unregister the merge result of <shuffleId, reduceId> if
+            // the FetchFailed event contains a mapIndex of -1, and is not a
+            // MetaDataFetchException which is signified by bmAddress being null
+            if (bmAddress != null && pushBasedShuffleEnabled) {
+              mapOutputTracker.
+                unregisterMergeResult(shuffleId, reduceId, bmAddress, Option(mapIndex))
+            }
           }
 
           if (failedStage.rdd.isBarrier()) {
