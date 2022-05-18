@@ -345,7 +345,7 @@ private[spark] class BlockManager(
         }
       } catch {
         case ex: KryoException if ex.getCause.isInstanceOf[IOException] =>
-          processIORelatedException(ex, blockId, 0)
+          logInfo(extendMessageWithBlockDetails(ex.getMessage, blockId))
           throw ex
       } finally {
         IOUtils.closeQuietly(inputStream)
@@ -903,6 +903,10 @@ private[spark] class BlockManager(
     throw SparkCoreErrors.readLockedBlockNotFoundError(blockId)
   }
 
+  private def isIORelatedException(t: Throwable): Boolean =
+    t.isInstanceOf[IOException] ||
+      (t.isInstanceOf[KryoException] && t.getCause.isInstanceOf[IOException])
+
   /**
    * Get block from local block manager as an iterator of Java objects.
    */
@@ -931,58 +935,38 @@ private[spark] class BlockManager(
           })
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
-          var retryCount = 0
-          val retryLimit = 3
           var diskData: BlockData = null
-
-          def handleRetriableException(e: Exception) = {
-            processIORelatedException(e, blockId, retryCount)
-            if (diskData != null) {
-              diskData.dispose()
-              diskData = null
+          try {
+            diskData = diskStore.getBytes(blockId)
+            val iterToReturn = if (level.deserialized) {
+              val diskValues = serializerManager.dataDeserializeStream(
+                blockId,
+                diskData.toInputStream())(info.classTag)
+              maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
+            } else {
+              val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskData)
+                .map { _.toInputStream(dispose = false) }
+                .getOrElse { diskData.toInputStream() }
+              serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
             }
-            if (retryCount == retryLimit) {
-              releaseLock(blockId, taskContext)
-              // Remove the block so that its unavailability is reported to the driver
-              removeBlock(blockId)
-              throw e
-            }
-          }
-
-          var iterToReturn: Iterator[Any] = null
-          while (iterToReturn == null) {
-            try {
-              diskData = diskStore.getBytes(blockId)
-              iterToReturn = if (level.deserialized) {
-                val diskValues = serializerManager.dataDeserializeStream(
-                  blockId,
-                  diskData.toInputStream())(info.classTag)
-                maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
-              } else {
-                val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskData)
-                  .map { _.toInputStream(dispose = false) }
-                  .getOrElse { diskData.toInputStream() }
-                serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
+            val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
+              releaseLockAndDispose(blockId, diskData, taskContext)
+            })
+            Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
+          } catch {
+            case t: Throwable =>
+              if (diskData != null) {
+                diskData.dispose()
+                diskData = null
               }
-            } catch {
-              case e: KryoException if e.getCause.isInstanceOf[IOException] =>
-                handleRetriableException(e)
-              case e: IOException =>
-                handleRetriableException(e)
-              case t: Throwable =>
-                // not a retriable exception
-                if (diskData != null) {
-                  diskData.dispose()
-                }
-                releaseLock(blockId, taskContext)
-                throw t
-            }
-            retryCount += 1
+              releaseLock(blockId, taskContext)
+              if (isIORelatedException(t)) {
+                logInfo(extendMessageWithBlockDetails(t.getMessage, blockId))
+                // Remove the block so that its unavailability is reported to the driver
+                removeBlock(blockId)
+              }
+              throw t
           }
-          val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
-            releaseLockAndDispose(blockId, diskData, taskContext)
-          })
-          Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
           handleLocalReadFailure(blockId)
         }
@@ -993,19 +977,14 @@ private[spark] class BlockManager(
    *  We need to have detailed log message to catch environmental problems easily.
    *  Further details: https://issues.apache.org/jira/browse/SPARK-37710
    */
-   private def processIORelatedException(e: Exception, blockId: BlockId, retryCount: Int): Unit = {
-    var message: String = if (retryCount == 0) {
-      "%s. %s - blockId: %s"
-        .format(e.getMessage, blockManagerId.toString, blockId)
-    } else {
-      "%s. %s - blockId: %s retryCount: %d"
-        .format(e.getMessage, blockManagerId.toString, blockId, retryCount)
-    }
+   private def extendMessageWithBlockDetails(msg: String, blockId: BlockId): String = {
+    val message: String = "%s. %s - blockId: %s".format(msg, blockManagerId.toString, blockId)
     val file = diskBlockManager.getFile(blockId)
     if (file.exists()) {
-      message = "%s - blockDiskPath: %s".format(message, file.getAbsolutePath)
+      "%s - blockDiskPath: %s".format(message, file.getAbsolutePath)
+    } else {
+      message
     }
-    logInfo(message)
   }
 
   /**
