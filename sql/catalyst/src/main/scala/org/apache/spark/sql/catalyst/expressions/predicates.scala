@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -140,6 +140,17 @@ trait PredicateHelper extends AliasHelper with Logging {
         findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
         Some((exp, l))
+      case u: Union =>
+        val firstChild = u.children.head
+        val newOtherChildren = u.children.tail.map { child =>
+          val newProjectList = child.output.zip(firstChild.output).map {
+            case (c, f) => Alias(c, f.name)(f.exprId, f.qualifier)
+          }
+          Project(newProjectList, child)
+        }
+        (firstChild +: newOtherChildren)
+          .flatMap(findExpressionAndTrackLineageDown(exp, _))
+          .sortBy(_._2.stats.sizeInBytes).lastOption
       case other =>
         other.children.flatMap {
           child => if (exp.references.subsetOf(child.outputSet)) {
