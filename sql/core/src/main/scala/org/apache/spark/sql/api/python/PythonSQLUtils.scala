@@ -31,7 +31,7 @@ import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.PandasSkewness
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -126,6 +126,10 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def pandasSkewness(e: Column): Column = {
     Column(PandasSkewness(e.expr).toAggregateExpression(false))
+  }
+
+  def pandasKurtosis(e: Column): Column = {
+    Column(PandasKurtosis(e.expr).toAggregateExpression(false))
   }
 }
 

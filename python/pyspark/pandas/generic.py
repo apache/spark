@@ -1556,20 +1556,20 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan, 6], 'b': [0.1, 0.2, 0.3, np.nan, 0.8]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
 
         >>> df.kurtosis()
-        a   -1.5
-        b   -1.5
+        a    1.500000
+        b    2.703924
         dtype: float64
 
         On a Series:
 
         >>> df['a'].kurtosis()
-        -1.5
+        1.5
         """
         axis = validate_axis(axis)
 
@@ -1587,7 +1587,9 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.kurtosis(spark_column)
+
+            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            return Column(sql_utils.pandasKurtosis(spark_column._jc))
 
         return self._reduce_for_stat_function(
             kurtosis,
