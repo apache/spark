@@ -272,7 +272,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-39195: Spark should use two step update of outputCommitCoordinator") {
-    var stage = 1
+    val stage = 1
     val taskAttempt = 1
     val partition = 1
 
