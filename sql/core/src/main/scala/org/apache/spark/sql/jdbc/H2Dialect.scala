@@ -32,7 +32,7 @@ private object H2Dialect extends JdbcDialect {
 
   private val supportedFunctions =
     Set("ABS", "COALESCE", "LN", "EXP", "POWER", "SQRT", "FLOOR", "CEIL",
-      "SUBSTRING", "UPPER", "LOWER", "TRANSLATE")
+      "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
