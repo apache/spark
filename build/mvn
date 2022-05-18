@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+APACHE_MIRROR=https://archive.apache.org/dist/
+
 # Determine the current working directory
 _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Preserve the calling directory
