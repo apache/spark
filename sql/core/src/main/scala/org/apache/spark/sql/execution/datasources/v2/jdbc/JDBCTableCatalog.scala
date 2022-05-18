@@ -38,12 +38,12 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   private var dialect: JdbcDialect = _
 
   override def name(): String = {
-    require(catalogName != null, "The JDBC table catalog is not initialed")
+    require(catalogName != null, "The JDBC table catalog is not initialized")
     catalogName
   }
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
-    assert(catalogName == null, "The JDBC table catalog is already initialed")
+    assert(catalogName == null, "The JDBC table catalog is already initialized")
     catalogName = name
 
     val map = options.asCaseSensitiveMap().asScala.toMap
