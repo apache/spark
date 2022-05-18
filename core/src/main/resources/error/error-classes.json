@@ -4,7 +4,7 @@
     "sqlState" : "42000"
   },
   "ARITHMETIC_OVERFLOW" : {
-    "message" : [ "<message>.<alternative> If necessary set <config> to false (except for ANSI interval type) to bypass this error.<context>" ],
+    "message" : [ "<message>.<alternative> If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error.<context>" ],
     "sqlState" : "22003"
   },
   "CANNOT_CAST_DATATYPE" : {
@@ -12,7 +12,7 @@
     "sqlState" : "22005"
   },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
-    "message" : [ "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to false to bypass this error.<details>" ],
+    "message" : [ "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error.<details>" ],
     "sqlState" : "22005"
   },
   "CANNOT_PARSE_DECIMAL" : {
@@ -23,11 +23,11 @@
     "message" : [ "Cannot up cast <value> from <sourceType> to <targetType>.\n<details>" ]
   },
   "CAST_INVALID_INPUT" : {
-    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. To return NULL instead, use `try_cast`. If necessary set <config> to false to bypass this error.<details>" ],
+    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error.<details>" ],
     "sqlState" : "42000"
   },
   "CAST_OVERFLOW" : {
-    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <config> to false to bypass this error." ],
+    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error." ],
     "sqlState" : "22005"
   },
   "CONCURRENT_QUERY" : {
@@ -38,7 +38,7 @@
     "sqlState" : "22008"
   },
   "DIVIDE_BY_ZERO" : {
-    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to false (except for ANSI interval type) to bypass this error.<details>" ],
+    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error.<details>" ],
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
@@ -86,19 +86,19 @@
     "message" : [ "You may get a different result due to the upgrading to" ],
     "subClass" : {
       "DATETIME_PATTERN_RECOGNITION" : {
-        "message" : [ " Spark >= 3.0: \nFail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to 'LEGACY' to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html" ]
+        "message" : [ " Spark >= 3.0: \nFail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html" ]
       },
       "FORMAT_DATETIME_BY_NEW_PARSER" : {
-        "message" : [ " Spark >= 3.0: \nFail to format it to <resultCandidate> in the new formatter. You can set\n<config> to 'LEGACY' to restore the behavior before\nSpark 3.0, or set to 'CORRECTED' and treat it as an invalid datetime string.\n" ]
+        "message" : [ " Spark >= 3.0: \nFail to format it to <resultCandidate> in the new formatter. You can set\n<config> to \"LEGACY\" to restore the behavior before\nSpark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string.\n" ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
-        "message" : [ " Spark >= 3.0: \nFail to parse <datetime> in the new parser. You can set <config> to 'LEGACY' to restore the behavior before Spark 3.0, or set to 'CORRECTED' and treat it as an invalid datetime string." ]
+        "message" : [ " Spark >= 3.0: \nFail to parse <datetime> in the new parser. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string." ]
       },
       "READ_ANCIENT_DATETIME" : {
-        "message" : [ " Spark >= 3.0: \nreading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z\nfrom <format> files can be ambiguous, as the files may be written by\nSpark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar\nthat is different from Spark 3.0+'s Proleptic Gregorian calendar.\nSee more details in SPARK-31404. You can set the SQL config <config> or\nthe datasource option '<option>' to 'LEGACY' to rebase the datetime values\nw.r.t. the calendar difference during reading. To read the datetime values\nas it is, set the SQL config <config> or the datasource option '<option>'\nto 'CORRECTED'.\n" ]
+        "message" : [ " Spark >= 3.0: \nreading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z\nfrom <format> files can be ambiguous, as the files may be written by\nSpark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar\nthat is different from Spark 3.0+'s Proleptic Gregorian calendar.\nSee more details in SPARK-31404. You can set the SQL config <config> or\nthe datasource option <option> to \"LEGACY\" to rebase the datetime values\nw.r.t. the calendar difference during reading. To read the datetime values\nas it is, set the SQL config <config> or the datasource option <option>\nto \"CORRECTED\".\n" ]
       },
       "WRITE_ANCIENT_DATETIME" : {
-        "message" : [ " Spark >= 3.0: \nwriting dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z\ninto <format> files can be dangerous, as the files may be read by Spark 2.x\nor legacy versions of Hive later, which uses a legacy hybrid calendar that\nis different from Spark 3.0+'s Proleptic Gregorian calendar. See more\ndetails in SPARK-31404. You can set <config> to 'LEGACY' to rebase the\ndatetime values w.r.t. the calendar difference during writing, to get maximum\ninteroperability. Or set <config> to 'CORRECTED' to write the datetime\nvalues as it is, if you are sure that the written files will only be read by\nSpark 3.0+ or other systems that use Proleptic Gregorian calendar.\n" ]
+        "message" : [ " Spark >= 3.0: \nwriting dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z\ninto <format> files can be dangerous, as the files may be read by Spark 2.x\nor legacy versions of Hive later, which uses a legacy hybrid calendar that\nis different from Spark 3.0+'s Proleptic Gregorian calendar. See more\ndetails in SPARK-31404. You can set <config> to \"LEGACY\" to rebase the\ndatetime values w.r.t. the calendar difference during writing, to get maximum\ninteroperability. Or set <config> to \"CORRECTED\" to write the datetime\nvalues as it is, if you are sure that the written files will only be read by\nSpark 3.0+ or other systems that use Proleptic Gregorian calendar.\n" ]
       }
     }
   },
@@ -110,17 +110,17 @@
     "message" : [ "<message>" ]
   },
   "INVALID_ARRAY_INDEX" : {
-    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to false to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to \"false\" to bypass this error." ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
-    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to false to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error." ]
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name <fieldName> is invalid: <path> is not a struct." ],
     "sqlState" : "42000"
   },
   "INVALID_FRACTION_OF_SECOND" : {
-    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to false to bypass this error. " ],
+    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to \"false\" to bypass this error. " ],
     "sqlState" : "22023"
   },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
@@ -138,7 +138,7 @@
     "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key <keyValue> does not exist. To return NULL instead, use 'try_element_at'. If necessary set <config> to false to bypass this error.<details>" ]
+    "message" : [ "Key <keyValue> does not exist. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error.<details>" ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "Column '<columnName>' does not exist. Did you mean one of the following? [<proposal>]" ],
@@ -289,7 +289,7 @@
     }
   },
   "UNTYPED_SCALA_UDF" : {
-    "message" : [ "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:\n1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive\n3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to true and use this API with caution" ]
+    "message" : [ "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:\n1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive\n3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution" ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],

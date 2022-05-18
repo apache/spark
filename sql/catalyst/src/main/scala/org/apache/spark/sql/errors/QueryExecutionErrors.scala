@@ -214,8 +214,12 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def mapKeyNotExistError(key: Any, dataType: DataType, context: String): NoSuchElementException = {
-    new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(toSQLValue(key, dataType), SQLConf.ANSI_ENABLED.key, context))
+    new SparkNoSuchElementException(
+      errorClass = "MAP_KEY_DOES_NOT_EXIST",
+      messageParameters = Array(
+        toSQLValue(key, dataType),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        context))
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
@@ -557,9 +561,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
         "READ_ANCIENT_DATETIME",
         format,
         toSQLConf(config),
-        option,
+        toDSOption(option),
         toSQLConf(config),
-        option),
+        toDSOption(option)),
       cause = null
     )
   }
