@@ -538,8 +538,8 @@ case class DataSource(
         DataWritingCommand.propogateMetrics(sparkSession.sparkContext, resolved, metrics)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
-      case _ =>
-        sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
+      case _ => throw new IllegalStateException(
+        s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
   }
 
@@ -555,8 +555,8 @@ case class DataSource(
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
         DataSource.validateSchema(data.schema)
         planForWritingFileFormat(format, mode, data)
-      case _ =>
-        sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
+      case _ => throw new IllegalStateException(
+        s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
   }
 

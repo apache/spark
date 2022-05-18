@@ -144,7 +144,7 @@ case class ReplaceColumns(
     require(table.resolved)
     val deleteChanges = table.schema.fieldNames.map { name =>
       // REPLACE COLUMN should require column to exist
-      TableChange.deleteColumn(Array(name), ifExists = false)
+      TableChange.deleteColumn(Array(name), false /* ifExists */)
     }
     val addChanges = columnsToAdd.map { col =>
       assert(col.path.isEmpty)

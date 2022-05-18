@@ -1303,35 +1303,28 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
-object LimitAndOffset {
-  def unapply(p: GlobalLimitAndOffset): Option[(Expression, Expression, LogicalPlan)] = {
+object OffsetAndLimit {
+  def unapply(p: GlobalLimit): Option[(Int, Int, LogicalPlan)] = {
     p match {
-      case GlobalLimitAndOffset(le1, le2, LocalLimit(le3, child)) if le1.eval().asInstanceOf[Int]
-        + le2.eval().asInstanceOf[Int] == le3.eval().asInstanceOf[Int] =>
-        Some((le1, le2, child))
+      // Optimizer pushes local limit through offset, so we need to match the plan this way.
+      case GlobalLimit(IntegerLiteral(globalLimit),
+             Offset(IntegerLiteral(offset),
+               LocalLimit(IntegerLiteral(localLimit), child)))
+          if globalLimit + offset == localLimit =>
+        Some((offset, globalLimit, child))
       case _ => None
     }
   }
 }
 
-/**
- * A global (coordinated) limit with offset. This operator can skip at most `offsetExpr` number and
- * emit at most `limitExpr` number in total. For example, if we have LIMIT 10 OFFSET 5, we impose a
- * total limit of 10 + 5 = 15 rows and then discard the first 5, leaving 10 rows remaining.
- */
-case class GlobalLimitAndOffset(
-    limitExpr: Expression,
-    offsetExpr: Expression,
-    child: LogicalPlan) extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = {
-    limitExpr match {
-      case IntegerLiteral(limit) => Some(limit)
+object LimitAndOffset {
+  def unapply(p: Offset): Option[(Int, Int, LogicalPlan)] = {
+    p match {
+      case Offset(IntegerLiteral(offset), Limit(IntegerLiteral(limit), child)) =>
+        Some((limit, offset, child))
       case _ => None
     }
   }
-  override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimitAndOffset =
-    copy(child = newChild)
 }
 
 /**

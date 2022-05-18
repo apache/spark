@@ -30,6 +30,7 @@ import org.apache.ivy.core.settings.IvySettings
 
 import org.apache.spark.TestUtils.{createCompiledClass, JavaSourceFromString}
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
+import org.apache.spark.util.Utils
 
 private[deploy] object IvyTestUtils {
 
@@ -294,7 +295,7 @@ private[deploy] object IvyTestUtils {
       withPython: Boolean = false,
       withR: Boolean = false): File = {
     // Where the root of the repository exists, and what Ivy will search in
-    val tempPath = tempDir.getOrElse(Files.createTempDir())
+    val tempPath = tempDir.getOrElse(Utils.createTempDir())
     // Create directory if it doesn't exist
     Files.createParentDirs(tempPath)
     // Where to create temporary class files and such

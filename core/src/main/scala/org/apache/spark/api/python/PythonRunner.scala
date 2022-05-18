@@ -556,7 +556,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val obj = new Array[Byte](exLength)
       stream.readFully(obj)
       new PythonException(new String(obj, StandardCharsets.UTF_8),
-        writerThread.exception.getOrElse(null))
+        writerThread.exception.orNull)
     }
 
     protected def handleEndOfDataSection(): Unit = {
