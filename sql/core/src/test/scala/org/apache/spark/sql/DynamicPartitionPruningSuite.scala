@@ -1642,6 +1642,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
       checkAnswer(df, Row(4, 1300, "California") :: Row(1, 1000, "North-Holland") :: Nil)
+      // CleanupDynamicPruningFilters should remove DPP in first child of union
+      assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
     }
   }
 }
