@@ -1575,8 +1575,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false"))),
       Config(dataSource = "csv",
         Seq(
-          None,
-          Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))
+          Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false"),
+          None))
     ).foreach { config: Config =>
       config.sqlConf.foreach {
         _.map { kv: (String, String) =>
