@@ -1394,7 +1394,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 "it is expensive to infer the data type internally."
             )
             limit = get_option("compute.shortcut_limit")
-            pdf = psdf.head(limit + 1)._to_internal_pandas()
+            # Ensure sampling rows >= 2 to make sure apply's infer schema is accurate
+            # See related: https://github.com/pandas-dev/pandas/issues/46893
+            sample_limit = limit + 1 if limit else 2
+            pdf = psdf.head(sample_limit)._to_internal_pandas()
             groupkeys = [
                 pdf[groupkey_name].rename(psser.name)
                 for groupkey_name, psser in zip(groupkey_names, self._groupkeys)

@@ -453,7 +453,23 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       val errMsg = intercept[DateTimeException] {
         formatter.parse("x123")
       }.getMessage
-      assert(errMsg.contains("""Invalid input syntax for type "TIMESTAMP": 'x123'"""))
+      assert(errMsg.contains(
+        """The value 'x123' of the type "STRING" cannot be cast to "TIMESTAMP""""))
     }
+  }
+
+  test("SPARK-39193: support returning optional parse results in the default formatter") {
+    val formatter = new DefaultTimestampFormatter(
+      DateTimeTestUtils.LA,
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = true)
+    assert(formatter.parseOptional("2021-01-01T00:00:00").contains(1609488000000000L))
+    assert(
+      formatter.parseWithoutTimeZoneOptional("2021-01-01T00:00:00", false)
+        .contains(1609459200000000L))
+    assert(formatter.parseOptional("abc").isEmpty)
+    assert(
+      formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
   }
 }

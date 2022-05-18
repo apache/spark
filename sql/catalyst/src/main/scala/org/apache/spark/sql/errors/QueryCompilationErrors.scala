@@ -2445,4 +2445,10 @@ object QueryCompilationErrors extends QueryErrorsBase {
       "Failed to execute MERGE INTO command because one of its INSERT or UPDATE assignments " +
         "contains a DEFAULT column reference as part of another expression; this is not allowed")
   }
+
+  def failedToParseExistenceDefaultAsLiteral(fieldName: String, defaultValue: String): Throwable = {
+    throw new AnalysisException(
+      s"Invalid DEFAULT value for column $fieldName: $defaultValue fails to parse as a valid " +
+        "literal value")
+  }
 }
