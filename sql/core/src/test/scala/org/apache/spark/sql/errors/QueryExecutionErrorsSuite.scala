@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -39,8 +39,7 @@ import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.types.{DataType, DecimalType, MetadataBuilder, StructType, TimestampType}
-import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.types.{DataType, DecimalType, MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
@@ -272,15 +271,6 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("INTERNAL_ERROR: timeZoneId not specified while converting TimestampType to Arrow") {
-    checkErrorClass(
-      exception = intercept[SparkIllegalStateException] {
-        ArrowUtils.toArrowSchema(new StructType().add("value", TimestampType), null)
-      },
-      errorClass = "INTERNAL_ERROR",
-      msg = "Missing timezoneId where it is mandatory.")
-  }
-
   test("UNSUPPORTED_FEATURE - SPARK-36346: can't read Timestamp as TimestampNTZ") {
     withTempPath { file =>
       sql("select timestamp_ltz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
@@ -358,10 +348,10 @@ class QueryExecutionErrorsSuite
     assert(e3.getCause.isInstanceOf[BadRecordException])
 
     val e4 = e3.getCause.asInstanceOf[BadRecordException]
-    assert(e4.getCause.isInstanceOf[SparkIllegalStateException])
+    assert(e4.getCause.isInstanceOf[SparkRuntimeException])
 
     checkErrorClass(
-      exception = e4.getCause.asInstanceOf[SparkIllegalStateException],
+      exception = e4.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "CANNOT_PARSE_DECIMAL",
       msg = "Cannot parse decimal",
       sqlState = Some("42000"))
