@@ -109,7 +109,7 @@ class SparkSqlParserSuite extends AnalysisTest {
 
     val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
       "'SET key=value'. If you want to include special characters in key, or include semicolon " +
-      "in value, please use quotes, e.g., SET `ke y`=`v;alue`."
+      "in value, please use quotes, e.g., SET `key`=`value`."
     intercept("SET spark.sql.key value", expectedErrMsg)
     intercept("SET spark.sql.key   'value'", expectedErrMsg)
     intercept("SET    spark.sql.key \"value\" ", expectedErrMsg)
@@ -136,7 +136,7 @@ class SparkSqlParserSuite extends AnalysisTest {
 
     val expectedErrMsg = "Expected format is 'RESET' or 'RESET key'. " +
       "If you want to include special characters in key, " +
-      "please use quotes, e.g., RESET `ke y`."
+      "please use quotes, e.g., RESET `key`."
     intercept("RESET spark.sql.key1 key2", expectedErrMsg)
     intercept("RESET spark.  sql.key1 key2", expectedErrMsg)
     intercept("RESET spark.sql.key1 key2 key3", expectedErrMsg)
@@ -162,7 +162,7 @@ class SparkSqlParserSuite extends AnalysisTest {
 
     val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
       "'SET key=value'. If you want to include special characters in key, or include semicolon " +
-      "in value, please use quotes, e.g., SET `ke y`=`v;alue`."
+      "in value, please use quotes, e.g., SET `key`=`value`."
 
     intercept("SET a=1; SELECT 1", expectedErrMsg)
     intercept("SET a=1;2;;", expectedErrMsg)
