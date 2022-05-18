@@ -391,14 +391,16 @@ object QueryParsingErrors extends QueryErrorsBase {
   def invalidPropertyKeyForSetQuotedConfigurationError(
       keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "INVALID_PROPERTY_KEY",
-      messageParameters = Array(keyCandidate, keyCandidate, valueStr),
+      messageParameters = Array(toSQLConf(keyCandidate),
+        toSQLConf(keyCandidate), toSQLConf(valueStr)),
       ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
       valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "INVALID_PROPERTY_VALUE",
-      messageParameters = Array(valueCandidate, keyStr, valueCandidate),
+      messageParameters = Array(toSQLConf(valueCandidate),
+        toSQLConf(keyStr), toSQLConf(valueCandidate)),
       ctx)
   }
 

@@ -687,7 +687,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_PROPERTY_KEY",
       sqlState = null,
       message =
-        s"""'' is an invalid property key, please use quotes, e.g. SET ``=`value`(line 1, pos 0)
+        s""""" is an invalid property key, please use quotes, e.g. SET ""="value"(line 1, pos 0)
           |
           |== SQL ==
           |$sql
@@ -702,8 +702,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_PROPERTY_VALUE",
       sqlState = null,
       message =
-        """'1;2;;' is an invalid property value, please use quotes, """ +
-        """e.g. SET `key`=`1;2;;`(line 1, pos 0)""" +
+        """"1;2;;" is an invalid property value, please use quotes, """ +
+        """e.g. SET "key"="1;2;;"(line 1, pos 0)""" +
         s"""
            |
            |== SQL ==
@@ -721,8 +721,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorSubClass = Some("SET_PROPERTIES_AND_DBPROPERTIES"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: Either PROPERTIES or DBPROPERTIES """ +
-        """is allowed.(line 1, pos 0)""" +
+        """The feature is not supported: set PROPERTIES and DBPROPERTIES at the same time.""" +
+        """(line 1, pos 0)""" +
         s"""
           |
           |== SQL ==
