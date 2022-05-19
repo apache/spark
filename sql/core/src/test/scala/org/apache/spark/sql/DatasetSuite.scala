@@ -318,6 +318,134 @@ class DatasetSuite extends QueryTest
       ("a", ClassData("a", 1)), ("b", ClassData("b", 2)), ("c", ClassData("c", 3)))
   }
 
+  test("select typed n") {
+    val df = Seq((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+      12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22)).toDF()
+
+    // First check that all tuples compile
+    val ds2: Dataset[(Int, Int)] = df.select(col("_1").as[Int], col("_2").as[Int])
+    val ds3: Dataset[(Int, Int, Int)] = df.select(col("_1").as[Int], col("_2").as[Int],
+      col("_3").as[Int])
+    val ds4: Dataset[(Int, Int, Int, Int)] = df.select(col("_1").as[Int], col("_2").as[Int],
+      col("_3").as[Int], col("_4").as[Int])
+    val ds5: Dataset[(Int, Int, Int, Int, Int)] = df.select(col("_1").as[Int], col("_2").as[Int],
+      col("_3").as[Int], col("_4").as[Int], col("_5").as[Int])
+    val ds6: Dataset[(Int, Int, Int, Int, Int, Int)] = df.select(col("_1").as[Int],
+      col("_2").as[Int], col("_3").as[Int], col("_4").as[Int], col("_5").as[Int],
+      col("_6").as[Int])
+    val ds7: Dataset[(Int, Int, Int, Int, Int, Int, Int)] = df.select(col("_1").as[Int],
+      col("_2").as[Int], col("_3").as[Int], col("_4").as[Int], col("_5").as[Int],
+      col("_6").as[Int], col("_7").as[Int])
+    val ds8: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int)] = df.select(col("_1").as[Int],
+      col("_2").as[Int], col("_3").as[Int], col("_4").as[Int], col("_5").as[Int],
+      col("_6").as[Int], col("_7").as[Int], col("_8").as[Int])
+    val ds9: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int)] = df.select(col("_1").as[Int],
+      col("_2").as[Int], col("_3").as[Int], col("_4").as[Int], col("_5").as[Int],
+      col("_6").as[Int], col("_7").as[Int], col("_8").as[Int], col("_9").as[Int])
+    val ds10: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)] = df.select(
+      col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+      col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+      col("_9").as[Int], col("_10").as[Int])
+    val ds11: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)] = df.select(
+      col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+      col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+      col("_9").as[Int], col("_10").as[Int], col("_11").as[Int])
+    val ds12: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)] = df.select(
+      col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+      col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+      col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int])
+    val ds13: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int])
+    val ds14: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int], col("_14").as[Int])
+    val ds15: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
+      Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int], col("_14").as[Int], col("_15").as[Int])
+    val ds16: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
+      Int, Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int], col("_14").as[Int], col("_15").as[Int], col("_16").as[Int])
+    val ds17: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
+      Int, Int, Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int], col("_14").as[Int], col("_15").as[Int], col("_16").as[Int],
+        col("_17").as[Int])
+    val ds18: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
+      Int, Int, Int, Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int], col("_14").as[Int], col("_15").as[Int], col("_16").as[Int],
+        col("_17").as[Int], col("_18").as[Int])
+    val ds19: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
+      Int, Int, Int, Int, Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int], col("_14").as[Int], col("_15").as[Int], col("_16").as[Int],
+        col("_17").as[Int], col("_18").as[Int], col("_19").as[Int])
+    val ds20: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
+      Int, Int, Int, Int, Int, Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int], col("_14").as[Int], col("_15").as[Int], col("_16").as[Int],
+        col("_17").as[Int], col("_18").as[Int], col("_19").as[Int], col("_20").as[Int])
+    val ds21: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
+      Int, Int, Int, Int, Int, Int, Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int], col("_14").as[Int], col("_15").as[Int], col("_16").as[Int],
+        col("_17").as[Int], col("_18").as[Int], col("_19").as[Int], col("_20").as[Int],
+        col("_21").as[Int])
+    val ds22: Dataset[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
+      Int, Int, Int, Int, Int, Int, Int, Int)] =
+      df.select(col("_1").as[Int], col("_2").as[Int], col("_3").as[Int], col("_4").as[Int],
+        col("_5").as[Int], col("_6").as[Int], col("_7").as[Int], col("_8").as[Int],
+        col("_9").as[Int], col("_10").as[Int], col("_11").as[Int], col("_12").as[Int],
+        col("_13").as[Int], col("_14").as[Int], col("_15").as[Int], col("_16").as[Int],
+        col("_17").as[Int], col("_18").as[Int], col("_19").as[Int], col("_20").as[Int],
+        col("_21").as[Int], col("_22").as[Int])
+
+    // Then check that they all give the right results
+    checkDataset(ds2, (1, 2))
+    checkDataset(ds3, (1, 2, 3))
+    checkDataset(ds4, (1, 2, 3, 4))
+    checkDataset(ds5, (1, 2, 3, 4, 5))
+    checkDataset(ds6, (1, 2, 3, 4, 5, 6))
+    checkDataset(ds7, (1, 2, 3, 4, 5, 6, 7))
+    checkDataset(ds8, (1, 2, 3, 4, 5, 6, 7, 8))
+    checkDataset(ds9, (1, 2, 3, 4, 5, 6, 7, 8, 9))
+    checkDataset(ds10, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+    checkDataset(ds11, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11))
+    checkDataset(ds12, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12))
+    checkDataset(ds13, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))
+    checkDataset(ds14, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14))
+    checkDataset(ds15, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
+    checkDataset(ds16, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16))
+    checkDataset(ds17, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17))
+    checkDataset(ds18, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18))
+    checkDataset(ds19, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19))
+    checkDataset(ds20, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20))
+    checkDataset(ds21, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21))
+    checkDataset(ds22, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      22))
+  }
+
   test("REGEX column specification") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 

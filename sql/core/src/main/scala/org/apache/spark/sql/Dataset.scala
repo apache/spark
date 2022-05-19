@@ -1698,6 +1698,448 @@ class Dataset[T] private[sql](
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
   /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6]): Dataset[(U1, U2, U3, U4, U5, U6)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6).asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7]): Dataset[(U1, U2, U3, U4, U5, U6, U7)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7).asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10)]]
+
+  // scalastyle:off argcount
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+      c13)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+      U13)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13],
+      c14: TypedColumn[T, U14]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13, U14)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+      c13, c14)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+      U13, U14)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14, U15](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13],
+      c14: TypedColumn[T, U14],
+      c15: TypedColumn[T, U15]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13, U14, U15)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+      c13, c14, c15)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+      U13, U14, U15)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14, U15, U16](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13],
+      c14: TypedColumn[T, U14],
+      c15: TypedColumn[T, U15],
+      c16: TypedColumn[T, U16]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13, U14, U15, U16)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+      c13, c14, c15, c16)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+      U13, U14, U15, U16)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14, U15, U16, U17](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13],
+      c14: TypedColumn[T, U14],
+      c15: TypedColumn[T, U15],
+      c16: TypedColumn[T, U16],
+      c17: TypedColumn[T, U17]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13, U14, U15, U16, U17)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+      c13, c14, c15, c16, c17)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+      U13, U14, U15, U16, U17)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14, U15, U16, U17, U18](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13],
+      c14: TypedColumn[T, U14],
+      c15: TypedColumn[T, U15],
+      c16: TypedColumn[T, U16],
+      c17: TypedColumn[T, U17],
+      c18: TypedColumn[T, U18]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13, U14, U15, U16, U17, U18)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11,
+      c12, c13, c14, c15, c16, c17, c18)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+      U13, U14, U15, U16, U17, U18)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14, U15, U16, U17, U18, U19](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13],
+      c14: TypedColumn[T, U14],
+      c15: TypedColumn[T, U15],
+      c16: TypedColumn[T, U16],
+      c17: TypedColumn[T, U17],
+      c18: TypedColumn[T, U18],
+      c19: TypedColumn[T, U19]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13, U14, U15, U16, U17, U18, U19)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+      c13, c14, c15, c16, c17, c18, c19)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11,
+      U12, U13, U14, U15, U16, U17, U18, U19)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14, U15, U16, U17, U18, U19,
+    U20](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13],
+      c14: TypedColumn[T, U14],
+      c15: TypedColumn[T, U15],
+      c16: TypedColumn[T, U16],
+      c17: TypedColumn[T, U17],
+      c18: TypedColumn[T, U18],
+      c19: TypedColumn[T, U19],
+      c20: TypedColumn[T, U20]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13, U14, U15, U16, U17, U18, U19, U20)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+      c13, c14, c15, c16, c17, c18, c19, c20)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+      U13, U14, U15, U16, U17, U18, U19, U20)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14, U15, U16, U17, U18, U19,
+    U20, U21](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13],
+      c14: TypedColumn[T, U14],
+      c15: TypedColumn[T, U15],
+      c16: TypedColumn[T, U16],
+      c17: TypedColumn[T, U17],
+      c18: TypedColumn[T, U18],
+      c19: TypedColumn[T, U19],
+      c20: TypedColumn[T, U20],
+      c21: TypedColumn[T, U21]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13, U14, U15, U16, U17, U18, U19, U20, U21)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+      c13, c14, c15, c16, c17, c18, c19, c20, c21)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+      U13, U14, U15, U16, U17, U18, U19, U20, U21)]]
+
+  /**
+   * returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.3
+   */
+  def select[U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U13, U14, U15, U16, U17, U18, U19,
+    U20, U21, U22](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5],
+      c6: TypedColumn[T, U6],
+      c7: TypedColumn[T, U7],
+      c8: TypedColumn[T, U8],
+      c9: TypedColumn[T, U9],
+      c10: TypedColumn[T, U10],
+      c11: TypedColumn[T, U11],
+      c12: TypedColumn[T, U12],
+      c13: TypedColumn[T, U13],
+      c14: TypedColumn[T, U14],
+      c15: TypedColumn[T, U15],
+      c16: TypedColumn[T, U16],
+      c17: TypedColumn[T, U17],
+      c18: TypedColumn[T, U18],
+      c19: TypedColumn[T, U19],
+      c20: TypedColumn[T, U20],
+      c21: TypedColumn[T, U21],
+      c22: TypedColumn[T, U22]): Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+    U13, U14, U15, U16, U17, U18, U19, U20, U21, U22)] =
+    selectUntyped(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+      c13, c14, c15, c16, c17, c18, c19, c20, c21, c22)
+      .asInstanceOf[Dataset[(U1, U2, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12,
+      U13, U14, U15, U16, U17, U18, U19, U20, U21, U22)]]
+
+  // scalastyle:on argcount
+
+  /**
    * Filters rows using the given condition.
    * {{{
    *   // The following are equivalent:
