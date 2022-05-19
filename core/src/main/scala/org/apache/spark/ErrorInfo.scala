@@ -85,11 +85,11 @@ private[spark] object SparkThrowableHelper {
       val subMessageParameters = messageParameters.tail
       "[" + errorClass + "." + subErrorClass + "] " + String.format((errorInfo.messageFormat +
         errorSubInfo.messageFormat).replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-        subMessageParameters: _*) + queryContext
+        subMessageParameters: _*) + "\n" + queryContext
     } else {
       "[" + errorClass + "] " + String.format(
         errorInfo.messageFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-        messageParameters: _*) + queryContext
+        messageParameters: _*) + "\n" + queryContext
     }
   }
 
