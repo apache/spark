@@ -406,7 +406,6 @@ class JacksonParser(
       throw QueryExecutionErrors.failToParseValueForDataTypeError(parser, token, dataType)
   }
 
-
   /**
    * Parse an object from the token stream into a new Row representing the schema.
    * Fields in the json that are not defined in the requested schema will be dropped.
