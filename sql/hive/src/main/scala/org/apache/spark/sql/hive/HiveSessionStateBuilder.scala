@@ -129,13 +129,6 @@ class HiveSessionStateBuilder(
   }
 
   override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _)
-
-  /*
-  just for compatible for old code in spark 3.1
-  */
-  def this(session: SparkSession, parentState: Option[SessionState], options: Map[String, String]) {
-    this(session, parentState)
-  }
 }
 
 class HiveSessionResourceLoader(
