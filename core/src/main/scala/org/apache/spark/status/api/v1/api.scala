@@ -50,6 +50,7 @@ case class ApplicationAttemptInfo private[spark](
     endTime: Date,
     lastUpdated: Date,
     duration: Long,
+    queue: String,
     sparkUser: String,
     completed: Boolean = false,
     appSparkVersion: String) {

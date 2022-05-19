@@ -169,6 +169,7 @@ private[spark] class SparkUI private (
         endTime = new Date(-1),
         duration = 0,
         lastUpdated = new Date(startTime),
+        queue = "",
         sparkUser = getSparkUser,
         completed = false,
         appSparkVersion = appSparkVersion

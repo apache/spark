@@ -137,24 +137,25 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
           start: Long,
           end: Long,
           lastMod: Long,
+          queue: String,
           user: String,
           completed: Boolean): ApplicationInfo = {
 
         val duration = if (end > 0) end - start else 0
         new ApplicationInfo(id, name, None, None, None, None,
           List(ApplicationAttemptInfo(None, new Date(start),
-            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION)))
+            new Date(end), new Date(lastMod), duration, queue, user, completed, SPARK_VERSION)))
       }
 
       // For completed files, lastUpdated would be lastModified time.
       list(0) should be (makeAppInfo("new-app-complete", newAppComplete.getName(), 1L, 5L,
-        newAppComplete.lastModified(), "test", true))
+        newAppComplete.lastModified(), null, "test", true))
       list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName(),
-        1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
+        1L, 4L, newAppCompressedComplete.lastModified(), null, "test", true))
 
       // For Inprogress files, lastUpdated would be current loading time.
       list(2) should be (makeAppInfo("new-incomplete", newAppIncomplete.getName(), 1L, -1L,
-        clock.getTimeMillis(), "test", false))
+        clock.getTimeMillis(), null, "test", false))
 
       // Make sure the UI can be rendered.
       list.foreach { info =>
@@ -1324,7 +1325,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
 
     val serializer = new KVStoreScalaSerializer()
     val appInfo = new ApplicationAttemptInfo(None, new Date(1), new Date(1), new Date(1),
-      10, "spark", false, "dummy")
+      10, "queue", "spark", false, "dummy")
     val attemptInfoWithIndexAsNone = new AttemptInfoWrapper(appInfo, "dummyPath", 10, None,
       None, None, None, None)
     assertSerDe(serializer, attemptInfoWithIndexAsNone)

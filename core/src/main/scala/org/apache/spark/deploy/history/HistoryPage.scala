@@ -32,6 +32,12 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
     val displayApplications = parent.getApplicationList()
       .exists(isApplicationCompleted(_) != requestedIncomplete)
+
+    val user = Option(request.getParameter("user"))
+      .getOrElse("")
+    val queue = Option(request.getParameter("queue"))
+      .getOrElse("")
+
     val eventLogsUnderProcessCount = parent.getEventLogsUnderProcess()
     val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()
@@ -67,7 +73,9 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
                 request, "/static/dataTables.rowsGroup.js")}></script> ++
                 <div id="history-summary"></div> ++
                 <script src={UIUtils.prependBaseUri(request, "/static/historypage.js")}></script> ++
-                <script>setAppLimit({parent.maxApplications})</script>
+                <script>setAppLimit({parent.maxApplications})</script> ++
+                <script>setQueue('{queue}')</script> ++
+                <script>setUser('{user}')</script>
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
             } else if (eventLogsUnderProcessCount > 0) {
@@ -77,7 +85,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             }
             }
 
-            <a href={makePageLink(request, !requestedIncomplete)}>
+            <a href={makePageLink(request, !requestedIncomplete, queue, user)}>
               {
               if (requestedIncomplete) {
                 "Back to completed applications"
@@ -91,8 +99,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     UIUtils.basicSparkPage(request, content, "History Server", true)
   }
 
-  private def makePageLink(request: HttpServletRequest, showIncomplete: Boolean): String = {
-    UIUtils.prependBaseUri(request, "/?" + "showIncomplete=" + showIncomplete)
+  private def makePageLink(request: HttpServletRequest, showIncomplete: Boolean,
+                           queue: String, user: String): String = {
+    UIUtils.prependBaseUri(request, "/?" + "showIncomplete=" + showIncomplete +
+      "&queue=" + queue + "&user=" + user)
   }
 
   private def isApplicationCompleted(appInfo: ApplicationInfo): Boolean = {

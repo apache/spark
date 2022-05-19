@@ -776,7 +776,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       ((!appCompleted && fastInProgressParsing) || reparseChunkSize > 0)
 
     val bus = new ReplayListenerBus()
-    val listener = new AppListingListener(reader, clock, shouldHalt)
+    val listener = new AppListingListener(conf, reader, clock, shouldHalt)
     bus.addListener(listener)
 
     logInfo(s"Parsing $logPath for listing data...")
@@ -1488,6 +1488,7 @@ private[history] class ApplicationInfoWrapper(
 }
 
 private[history] class AppListingListener(
+    conf: SparkConf,
     reader: EventLogFileReader,
     clock: Clock,
     haltEnabled: Boolean) extends SparkListener {
@@ -1532,6 +1533,7 @@ private[history] class AppListingListener(
       attempt.adminAcls = emptyStringToNone(allProperties.get(ADMIN_ACLS.key))
       attempt.viewAclsGroups = emptyStringToNone(allProperties.get(UI_VIEW_ACLS_GROUPS.key))
       attempt.adminAclsGroups = emptyStringToNone(allProperties.get(ADMIN_ACLS_GROUPS.key))
+      attempt.queue = allProperties.get(conf.get(SPARK_PROPERTIES_KEY_QUEUE)).getOrElse().toString
 
       gotEnvUpdate = true
       checkProgress()
@@ -1583,6 +1585,7 @@ private[history] class AppListingListener(
     var sparkUser: String = null
     var completed = false
     var appSparkVersion = ""
+    var queue: String = null
 
     var adminAcls: Option[String] = None
     var viewAcls: Option[String] = None
@@ -1596,6 +1599,7 @@ private[history] class AppListingListener(
         endTime,
         lastUpdated,
         duration,
+        queue,
         sparkUser,
         completed,
         appSparkVersion)

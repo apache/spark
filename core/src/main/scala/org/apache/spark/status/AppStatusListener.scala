@@ -51,6 +51,7 @@ private[spark] class AppStatusListener(
     lastUpdateTime: Option[Long] = None) extends SparkListener with Logging {
 
   private var sparkVersion = SPARK_VERSION
+  private var queue = ""
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
   private var defaultCpusPerTask: Int = 1
@@ -123,6 +124,7 @@ private[spark] class AppStatusListener(
       new Date(-1),
       new Date(event.time),
       -1L,
+      queue,
       event.sparkUser,
       false,
       sparkVersion)
@@ -197,6 +199,7 @@ private[spark] class AppStatusListener(
       new Date(event.time),
       new Date(event.time),
       event.time - old.startTime.getTime(),
+      old.queue,
       old.sparkUser,
       true,
       old.appSparkVersion)

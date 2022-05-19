@@ -2363,4 +2363,12 @@ package object config {
       .version("3.3.0")
       .intConf
       .createWithDefault(5)
+
+  val SPARK_PROPERTIES_KEY_QUEUE = ConfigBuilder("spark.properties.key.queue")
+    .doc("Specifies the spark property key name for queue information." +
+      " When it is specified, the eventLog parser could use it as the key" +
+      " to extract the queue value from the Spark Properties in the eventLog files.")
+    .version("3.3.0")
+    .stringConf
+    .createWithDefault("spark.yarn.queue")
 }

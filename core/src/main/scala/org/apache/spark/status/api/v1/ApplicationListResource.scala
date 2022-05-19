@@ -30,7 +30,9 @@ private[v1] class ApplicationListResource extends ApiRequestContext {
       @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam,
       @DefaultValue("2010-01-01") @QueryParam("minEndDate") minEndDate: SimpleDateParam,
       @DefaultValue("3000-01-01") @QueryParam("maxEndDate") maxEndDate: SimpleDateParam,
-      @QueryParam("limit") limit: Integer)
+      @QueryParam("limit") limit: Integer,
+      @DefaultValue("") @QueryParam("queue") queue: String,
+      @DefaultValue("") @QueryParam("user") user: String)
   : Iterator[ApplicationInfo] = {
 
     val numApps = Option(limit).map(_.toInt).getOrElse(Integer.MAX_VALUE)
@@ -45,7 +47,10 @@ private[v1] class ApplicationListResource extends ApiRequestContext {
       app.attempts.exists { attempt =>
         isAttemptInRange(attempt, minDate, maxDate, minEndDate, maxEndDate, anyRunning)
       }
-    }.take(numApps)
+    }.filter(app =>
+      (app.attempts.head.queue == queue || queue.isEmpty) &&
+        (app.attempts.head.sparkUser == user || user.isEmpty))
+      .take(numApps)
   }
 
   private def isAttemptInRange(

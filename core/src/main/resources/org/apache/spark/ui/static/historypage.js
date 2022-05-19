@@ -18,10 +18,18 @@
 /* global $, Mustache, formatDuration, formatTimeMillis, jQuery, uiRoot */
 
 var appLimit = -1;
+var user = "";
+var queue = "";
 
 /* eslint-disable no-unused-vars */
 function setAppLimit(val) {
   appLimit = val;
+}
+function setQueue(val) {
+  queue = val;
+}
+function setUser(val) {
+  user = val;
 }
 /* eslint-enable no-unused-vars*/
 
@@ -114,6 +122,8 @@ $(document).ready(function() {
 
   var appParams = {
     limit: appLimit,
+    user: user,
+    queue: queue,
     status: (requestedIncomplete ? "running" : "completed")
   };
 
@@ -126,8 +136,12 @@ $(document).ready(function() {
         continue; // if we want to show for Incomplete, we skip the completed apps; otherwise skip incomplete ones.
       }
       var version = "Unknown"
+      var queue = "Unknown"
+      var sparkUser = "Unknown"
       if (app["attempts"].length > 0) {
         version = app["attempts"][0]["appSparkVersion"]
+        queue = app["attempts"][0]["queue"]
+        sparkUser = app["attempts"][0]["sparkUser"]
       }
       var id = app["id"];
       var name = app["name"];
@@ -149,6 +163,10 @@ $(document).ready(function() {
         attempt["id"] = id;
         attempt["name"] = name;
         attempt["version"] = version;
+        attempt["queue"] = queue;
+        attempt["sparkUser"] = sparkUser;
+        attempt["sparkUserUrl"] = uiRoot + "?user=" + sparkUser;
+        attempt["queueUrl"] = uiRoot + "?queue=" + queue;
         attempt["attemptUrl"] = uiRoot + "/history/" + id + "/" +
           (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "jobs/";
         array.push(attempt);
@@ -193,7 +211,14 @@ $(document).ready(function() {
           {name: startedColumnName, data: 'startTime' },
           {name: completedColumnName, data: 'endTime' },
           {name: durationColumnName, type: "title-numeric", data: 'duration' },
-          {name: 'user', data: 'sparkUser' },
+          {name: 'queue',
+            data: 'queue',
+            render:  (id, type, row) => `<span title="${row.queue}"><a href="${row.queueUrl}">${row.queue}</a></span>`
+          },
+          {name: 'user',
+            data: 'user',
+            render:  (id, type, row) => `<span title="${row.sparkUser}"><a href="${row.sparkUserUrl}">${row.sparkUser}</a></span>`
+          },
           {name: 'lastUpdated', data: 'lastUpdated' },
           {
             name: 'eventLog',
@@ -219,6 +244,8 @@ $(document).ready(function() {
         conf.rowsGroup = [
           'appId:name',
           'version:name',
+          'queue:name',
+          'sparkUser:name',
           'appName:name'
         ];
       } else {
