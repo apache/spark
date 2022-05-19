@@ -1432,10 +1432,13 @@ abstract class RoundBase(child: Expression, scale: Expression,
       if (_scale < 0) {
         // negative scale means we need to adjust `-scale` number of digits before the decimal
         // point, which means we need at lease `-scale + 1` digits (after rounding).
-        DecimalType(math.max(integralLeastNumDigits, -_scale + 1), 0)
+        val newPrecision = math.max(integralLeastNumDigits, -_scale + 1)
+        // We have to accept the risk of overflow as we can't exceed the max precision.
+        DecimalType(math.min(newPrecision, DecimalType.MAX_PRECISION), 0)
       } else {
         val newScale = math.min(s, _scale)
-        DecimalType(integralLeastNumDigits + newScale, newScale)
+        // We have to accept the risk of overflow as we can't exceed the max precision.
+        DecimalType(math.min(integralLeastNumDigits + newScale, 38), newScale)
       }
     case t => t
   }
