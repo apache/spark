@@ -38,7 +38,7 @@
     "sqlState" : "22008"
   },
   "DIVIDE_BY_ZERO" : {
-    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error.<details>" ],
+    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error." ],
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
@@ -138,7 +138,7 @@
     "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key <keyValue> does not exist. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error.<details>" ]
+    "message" : [ "Key <keyValue> does not exist. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "Column '<columnName>' does not exist. Did you mean one of the following? [<proposal>]" ],

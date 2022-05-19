@@ -180,7 +180,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def divideByZeroError(context: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
-      messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key), context))
+      messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
@@ -218,8 +218,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(
         toSQLValue(key, dataType),
-        toSQLConf(SQLConf.ANSI_ENABLED.key),
-        context))
+        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context)
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
