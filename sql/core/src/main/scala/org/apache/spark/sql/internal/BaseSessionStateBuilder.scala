@@ -61,6 +61,13 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 abstract class BaseSessionStateBuilder(
     val session: SparkSession,
     val parentState: Option[SessionState]) {
+
+  /*
+  just for compatible for old code in spark 3.1
+  */
+  def this(session: SparkSession, parentState: Option[SessionState], options: Map[String, String]) {
+    this(session, parentState)
+  }
   type NewBuilder = (SparkSession, Option[SessionState]) => BaseSessionStateBuilder
 
   /**
