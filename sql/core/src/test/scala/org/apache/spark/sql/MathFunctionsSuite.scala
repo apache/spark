@@ -208,7 +208,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
           types.StructType(Seq(types.StructField("a", types.LongType))))
     assert(
       spark.range(1).select(ceil(col("id"), lit(0)).alias("a")).schema ==
-          types.StructType(Seq(types.StructField("a", types.DecimalType(20, 0)))))
+          types.StructType(Seq(types.StructField("a", types.DecimalType(21, 0)))))
     checkAnswer(
       sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
       Row(0L, 1L, 2L))
@@ -263,7 +263,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
           types.StructType(Seq(types.StructField("a", types.LongType))))
     assert(
       spark.range(1).select(floor(col("id"), lit(0)).alias("a")).schema ==
-          types.StructType(Seq(types.StructField("a", types.DecimalType(20, 0)))))
+          types.StructType(Seq(types.StructField("a", types.DecimalType(21, 0)))))
   }
 
   test("factorial") {
