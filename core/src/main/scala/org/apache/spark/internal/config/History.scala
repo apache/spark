@@ -48,7 +48,8 @@ private[spark] object History {
       "be scanned in time in large environments.")
     .version("3.4.0")
     .intConf
-    .createWithDefault(1000)
+    .checkValue(v => v > 0, "The update batchSize should be a positive integer.")
+    .createWithDefault(Int.MaxValue)
 
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
     .version("1.4.0")

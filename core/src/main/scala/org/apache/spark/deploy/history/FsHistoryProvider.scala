@@ -472,6 +472,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Builds the application list based on the current contents of the log directory.
    * Tries to reuse as much of the data already in memory as possible, by not reading
    * applications that haven't been updated since last time the logs were checked.
+   * Only a max of UPDATE_BATCHSIZE jobs are processed in each cycle, to prevent the process
+   * from running for too long which blocks updating newly appeared eventlog files.
    */
   private[history] def checkForLogs(): Unit = {
     var count: Int = 0
