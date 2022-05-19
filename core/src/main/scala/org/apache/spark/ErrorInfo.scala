@@ -71,26 +71,32 @@ private[spark] object SparkThrowableHelper {
     mapper.readValue(errorClassesUrl, new TypeReference[SortedMap[String, ErrorInfo]]() {})
   }
 
+  def loadErrorClass(errorClass: String): ErrorInfo =
+    errorClassToInfoMap.getOrElse(errorClass,
+      throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
+
   def getMessage(
       errorClass: String,
       messageParameters: Array[String],
       queryContext: String = ""): String = {
-    val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
-      throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
-    if (errorInfo.subClass.isDefined) {
-      val subClass = errorInfo.subClass.get
-      val subErrorClass = messageParameters.head
-      val errorSubInfo = subClass.getOrElse(subErrorClass,
-        throw new IllegalArgumentException(s"Cannot find sub error class '$subErrorClass'"))
-      val subMessageParameters = messageParameters.tail
-      "[" + errorClass + "." + subErrorClass + "] " + String.format((errorInfo.messageFormat +
-        errorSubInfo.messageFormat).replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-        subMessageParameters: _*) + "\n" + queryContext
+    val errorInfo = loadErrorClass(errorClass)
+    val (subClass, displayMessageParameters) = if (errorInfo.subClass.isDefined) {
+      (Some(messageParameters.head), messageParameters.tail)
     } else {
-      "[" + errorClass + "] " + String.format(
-        errorInfo.messageFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-        messageParameters: _*) + "\n" + queryContext
+      (None, messageParameters)
     }
+    val displayErrorClass = subClass.map {  s =>
+      errorClass + "." + s
+    }.getOrElse(errorClass)
+    val errorSubInfo = subClass.map(loadErrorClass)
+    val displayFormat = errorInfo.messageFormat + errorSubInfo.map(_.messageFormat).getOrElse("")
+    val displayMessage = String.format(displayFormat, displayMessageParameters: _*)
+    val displayQueryContext = if (queryContext.isEmpty) {
+      ""
+    } else {
+      s"\n$queryContext"
+    }
+    s"[$displayErrorClass] $displayMessage\n$displayQueryContext"
   }
 
   def getSqlState(errorClass: String): String = {
