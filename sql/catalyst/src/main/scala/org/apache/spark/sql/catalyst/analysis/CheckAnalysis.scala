@@ -32,7 +32,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -159,11 +158,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
       case _: ShowTableExtended =>
         throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
-
-      case operator: LogicalPlan
-        if !Utils.isTesting && operator.output.exists(attr =>
-          attr.resolved && attr.dataType.isInstanceOf[TimestampNTZType]) =>
-        operator.failAnalysis("TimestampNTZ type is not supported in Spark 3.3.")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
