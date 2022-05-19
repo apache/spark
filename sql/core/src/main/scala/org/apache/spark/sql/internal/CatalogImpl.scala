@@ -23,13 +23,13 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedTable
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, RecoverPartitions, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
@@ -97,8 +97,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
-    val tables = sessionCatalog.listTables(dbName).map(makeTable)
-    CatalogImpl.makeDataset(tables, sparkSession)
+    if (sessionCatalog.databaseExists(dbName)) {
+      val tables = sessionCatalog.listTables(dbName).map(makeTable)
+      CatalogImpl.makeDataset(tables, sparkSession)
+    } else {
+      val multiParts = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+      val plan = ShowTables(UnresolvedNamespace(multiParts), None)
+      val ret = sparkSession.sessionState.executePlan(plan).toRdd.collect()
+      val tables = ret
+        .map(row => TableIdentifier(row.getString(1), Some(row.getString(0))))
+        .map(makeTable)
+      CatalogImpl.makeDataset(tables, sparkSession)
+    }
   }
 
   /**
@@ -367,24 +377,40 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       schema: StructType,
       description: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val idents = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val storage = DataSource.buildStorageFormatFromOptions(options)
     val tableType = if (storage.locationUri.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
     }
-    val tableDesc = CatalogTable(
-      identifier = tableIdent,
-      tableType = tableType,
-      storage = storage,
-      schema = schema,
-      provider = Some(source),
-      comment = { if (description.isEmpty) None else Some(description) }
-    )
-    val plan = CreateTable(tableDesc, SaveMode.ErrorIfExists, None)
+    val location = if (storage.locationUri.isDefined) {
+      val locationStr = storage.locationUri.get.toString
+      Some(locationStr)
+    } else {
+      None
+    }
+
+    val tableSpec =
+      TableSpec(
+        properties = Map(),
+        provider = Some(source),
+        options = options,
+        location = location,
+        comment = { if (description.isEmpty) None else Some(description) },
+        serde = None,
+        external = tableType == CatalogTableType.EXTERNAL)
+
+    val plan =
+      CreateTable(
+        name = UnresolvedDBObjectName(idents, isNamespace = true),
+        tableSchema = schema,
+        partitioning = Seq(),
+        tableSpec = tableSpec,
+        ignoreIfExists = false)
+
     sparkSession.sessionState.executePlan(plan).toRdd
-    sparkSession.table(tableIdent)
+    sparkSession.table(tableName)
   }
 
   /**
