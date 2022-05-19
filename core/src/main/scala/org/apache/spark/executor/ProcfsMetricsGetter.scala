@@ -46,8 +46,6 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
   private val testing = Utils.isTesting
   private val pageSize = computePageSize()
   private var isAvailable: Boolean = isProcfsAvailable
-  private var ignoreProcfsMetricsGetterWarning =
-    SparkEnv.get.conf.get(config.IGNORE_PROCFS_TREE_METRICS_GETTER_WARNING)
   private val pid = computePid()
 
   private lazy val isProcfsAvailable: Boolean = {
@@ -79,10 +77,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     }
     catch {
       case e: SparkException =>
-        if (!ignoreProcfsMetricsGetterWarning) {
-          logWarning("Exception when trying to compute process tree." +
-            " As a result reporting of ProcessTree metrics is stopped", e)
-        }
+        logDebug("Exception when trying to compute process tree." +
+          " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         -1
     }
@@ -98,10 +94,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       Integer.parseInt(out.split("\n")(0))
     } catch {
       case e: Exception =>
-        if (!ignoreProcfsMetricsGetterWarning) {
-          logWarning("Exception when trying to compute pagesize, as a" +
-            " result reporting of ProcessTree metrics is stopped")
-        }
+        logDebug("Exception when trying to compute pagesize, as a" +
+          " result reporting of ProcessTree metrics is stopped")
         isAvailable = false
         0
     }
@@ -159,10 +153,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       childPidsInInt
     } catch {
       case e: Exception =>
-        if (!ignoreProcfsMetricsGetterWarning) {
-          logWarning("Exception when trying to compute process tree." +
-            " As a result reporting of ProcessTree metrics is stopped.", e)
-        }
+        logDebug("Exception when trying to compute process tree." +
+          " As a result reporting of ProcessTree metrics is stopped.", e)
         isAvailable = false
         mutable.ArrayBuffer.empty[Int]
     }
@@ -207,10 +199,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       }
     } catch {
       case f: IOException =>
-        if (!ignoreProcfsMetricsGetterWarning) {
-          logWarning("There was a problem with reading" +
-            " the stat file of the process. ", f)
-        }
+        logDebug("There was a problem with reading" +
+          " the stat file of the process. ", f)
         throw f
     }
   }

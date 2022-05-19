@@ -278,13 +278,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val IGNORE_PROCFS_TREE_METRICS_GETTER_WARNING =
-    ConfigBuilder("spark.executor.ignoreProcfsTreeMetricsGetterWarning")
-      .doc("When true, Spark will ignore warning messages in ProcfsTreeMetricsGetter.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(true)
-
   private[spark] val EXECUTOR_METRICS_POLLING_INTERVAL =
     ConfigBuilder("spark.executor.metrics.pollingInterval")
       .doc("How often to collect executor metrics (in milliseconds). " +
