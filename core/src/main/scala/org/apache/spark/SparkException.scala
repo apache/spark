@@ -136,9 +136,13 @@ private[spark] class SparkConcurrentModificationException(
 /**
  * Datetime exception thrown from Spark with an error class.
  */
-private[spark] class SparkDateTimeException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkDateTimeException(
+    errorClass: String,
+    messageParameters: Array[String],
+    queryContext: String = "")
   extends DateTimeException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
+    SparkThrowableHelper.getMessage(errorClass, messageParameters, queryContext))
+    with SparkThrowable {
 
   override def getErrorClass: String = errorClass
 }
@@ -172,9 +176,11 @@ private[spark] class SparkFileNotFoundException(
  */
 private[spark] class SparkNumberFormatException(
     errorClass: String,
-    messageParameters: Array[String])
+    messageParameters: Array[String],
+    queryContext: String)
   extends NumberFormatException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
+    SparkThrowableHelper.getMessage(errorClass, messageParameters, queryContext))
+    with SparkThrowable {
 
   override def getErrorClass: String = errorClass
 }
@@ -230,9 +236,11 @@ private[spark] class SparkIOException(
 private[spark] class SparkRuntimeException(
     errorClass: String,
     messageParameters: Array[String],
-    cause: Throwable = null)
+    cause: Throwable = null,
+    queryContext: String = "")
   extends RuntimeException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters), cause) with SparkThrowable {
+    SparkThrowableHelper.getMessage(errorClass, messageParameters, queryContext), cause)
+    with SparkThrowable {
 
   override def getErrorClass: String = errorClass
 }
