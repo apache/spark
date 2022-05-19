@@ -346,7 +346,7 @@ class SparkContext:
         # Create a temporary directory inside spark.local.dir:
         assert self._jvm is not None
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
-        self._temp_dir = self._jvm.org.apache.spark.util.Utils.createTempDir(
+        self._temp_dir = self._jvm.org.apache.spark.network.util.JavaUtils.createTempDir(
             local_dir, "pyspark"
         ).getAbsolutePath()
 
