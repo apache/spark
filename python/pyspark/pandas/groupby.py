@@ -2122,22 +2122,60 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_scols = [psdf._internal.spark_column_for(label) for label in groupkey_labels]
 
         sdf = psdf._internal.spark_frame
-        tmp_col = verify_temp_column_name(sdf, "__row_number__")
 
+        window = Window.partitionBy(*groupkey_scols)
         # This part is handled differently depending on whether it is a tail or a head.
-        window = (
-            Window.partitionBy(*groupkey_scols).orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).asc())
+        ordered_window = (
+            window.orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).asc())
             if asc
-            else Window.partitionBy(*groupkey_scols).orderBy(
-                F.col(NATURAL_ORDER_COLUMN_NAME).desc()
-            )
+            else window.orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).desc())
         )
 
-        sdf = (
-            sdf.withColumn(tmp_col, F.row_number().over(window))
-            .filter(F.col(tmp_col) <= n)
-            .drop(tmp_col)
-        )
+        if n >= 0 or LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
+            tmp_row_num_col = verify_temp_column_name(sdf, "__row_number__")
+            sdf = (
+                sdf.withColumn(tmp_row_num_col, F.row_number().over(ordered_window))
+                .filter(F.col(tmp_row_num_col) <= n)
+                .drop(tmp_row_num_col)
+            )
+        else:
+            # Pandas supports Groupby positional indexing since v1.4.0
+            # https://pandas.pydata.org/docs/whatsnew/v1.4.0.html#groupby-positional-indexing
+            #
+            # To support groupby positional indexing, we need add a `__tmp_lag__` column to help
+            # us filtering rows before the specified offset row.
+            #
+            # For example for the dataframe:
+            # >>> df = ps.DataFrame([["g", "g0"],
+            # ...                   ["g", "g1"],
+            # ...                   ["g", "g2"],
+            # ...                   ["g", "g3"],
+            # ...                   ["h", "h0"],
+            # ...                   ["h", "h1"]], columns=["A", "B"])
+            # >>> df.groupby("A").head(-1)
+            #
+            # Below is a result to show the `__tmp_lag__` column for above df, the limit n is
+            # `-1`, the `__tmp_lag__` will be set to `0` in rows[:-1], and left will be set to
+            # `null`:
+            #
+            # >>> sdf.withColumn(tmp_lag_col, F.lag(F.lit(0), -1).over(ordered_window))
+            # +-----------------+--------------+---+---+-----------------+-----------+
+            # |__index_level_0__|__groupkey_0__|  A|  B|__natural_order__|__tmp_lag__|
+            # +-----------------+--------------+---+---+-----------------+-----------+
+            # |                0|             g|  g| g0|                0|          0|
+            # |                1|             g|  g| g1|       8589934592|          0|
+            # |                2|             g|  g| g2|      17179869184|          0|
+            # |                3|             g|  g| g3|      25769803776|       null|
+            # |                4|             h|  h| h0|      34359738368|          0|
+            # |                5|             h|  h| h1|      42949672960|       null|
+            # +-----------------+--------------+---+---+-----------------+-----------+
+            #
+            tmp_lag_col = verify_temp_column_name(sdf, "__tmp_lag__")
+            sdf = (
+                sdf.withColumn(tmp_lag_col, F.lag(F.lit(0), n).over(ordered_window))
+                .where(~F.isnull(F.col(tmp_lag_col)))
+                .drop(tmp_lag_col)
+            )
 
         internal = psdf._internal.with_new_sdf(sdf)
         return self._cleanup_and_return(DataFrame(internal).drop(groupkey_labels, axis=1))
@@ -2187,6 +2225,21 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         7      2
         10    10
         Name: b, dtype: int64
+
+        Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+):
+
+        >>> df = ps.DataFrame([["g", "g0"],
+        ...                   ["g", "g1"],
+        ...                   ["g", "g2"],
+        ...                   ["g", "g3"],
+        ...                   ["h", "h0"],
+        ...                   ["h", "h1"]], columns=["A", "B"])
+        >>> df.groupby("A").head(-1) # doctest: +SKIP
+           A   B
+        0  g  g0
+        1  g  g1
+        2  g  g2
+        4  h  h0
         """
         return self._limit(n, asc=True)
 
@@ -2240,6 +2293,21 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         6    5
         9    8
         Name: b, dtype: int64
+
+        Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+):
+
+        >>> df = ps.DataFrame([["g", "g0"],
+        ...                   ["g", "g1"],
+        ...                   ["g", "g2"],
+        ...                   ["g", "g3"],
+        ...                   ["h", "h0"],
+        ...                   ["h", "h1"]], columns=["A", "B"])
+        >>> df.groupby("A").tail(-1) # doctest: +SKIP
+           A   B
+        3  g  g3
+        2  g  g2
+        1  g  g1
+        5  h  h1
         """
         return self._limit(n, asc=False)
 

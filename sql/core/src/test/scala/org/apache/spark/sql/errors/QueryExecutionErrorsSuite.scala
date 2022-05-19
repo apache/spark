@@ -220,7 +220,7 @@ class QueryExecutionErrorsSuite
 
       val format = "Parquet"
       val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_READ.key + "\""
-      val option = "datetimeRebaseMode"
+      val option = "\"datetimeRebaseMode\""
       checkErrorClass(
         exception = e,
         errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
@@ -233,10 +233,10 @@ class QueryExecutionErrorsSuite
             |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
             |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
             |See more details in SPARK-31404. You can set the SQL config $config or
-            |the datasource option '$option' to 'LEGACY' to rebase the datetime values
+            |the datasource option $option to "LEGACY" to rebase the datetime values
             |w.r.t. the calendar difference during reading. To read the datetime values
-            |as it is, set the SQL config $config or the datasource option '$option'
-            |to 'CORRECTED'.
+            |as it is, set the SQL config $config or the datasource option $option
+            |to "CORRECTED".
             |""".stripMargin)
     }
 
@@ -261,9 +261,9 @@ class QueryExecutionErrorsSuite
               |into $format files can be dangerous, as the files may be read by Spark 2.x
               |or legacy versions of Hive later, which uses a legacy hybrid calendar that
               |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
-              |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
+              |details in SPARK-31404. You can set $config to "LEGACY" to rebase the
               |datetime values w.r.t. the calendar difference during writing, to get maximum
-              |interoperability. Or set $config to 'CORRECTED' to write the datetime
+              |interoperability. Or set $config to "CORRECTED" to write the datetime
               |values as it is, if you are sure that the written files will only be read by
               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
               |""".stripMargin)

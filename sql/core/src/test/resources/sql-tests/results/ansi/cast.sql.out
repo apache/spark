@@ -8,7 +8,7 @@ SELECT CAST('1.23' AS int)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": '1.23'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '1.23' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('1.23' AS int)
        ^^^^^^^^^^^^^^^^^^^
@@ -20,7 +20,7 @@ SELECT CAST('1.23' AS long)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": '1.23'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '1.23' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('1.23' AS long)
        ^^^^^^^^^^^^^^^^^^^^
@@ -32,7 +32,7 @@ SELECT CAST('-4.56' AS int)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": '-4.56'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '-4.56' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('-4.56' AS int)
        ^^^^^^^^^^^^^^^^^^^^
@@ -44,7 +44,7 @@ SELECT CAST('-4.56' AS long)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": '-4.56'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '-4.56' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('-4.56' AS long)
        ^^^^^^^^^^^^^^^^^^^^^
@@ -56,7 +56,7 @@ SELECT CAST('abc' AS int)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": 'abc'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'abc' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('abc' AS int)
        ^^^^^^^^^^^^^^^^^^
@@ -68,7 +68,7 @@ SELECT CAST('abc' AS long)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": 'abc'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'abc' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('abc' AS long)
        ^^^^^^^^^^^^^^^^^^^
@@ -80,7 +80,7 @@ SELECT CAST('abc' AS float)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "FLOAT": 'abc'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'abc' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('abc' AS float)
        ^^^^^^^^^^^^^^^^^^^^
@@ -92,7 +92,7 @@ SELECT CAST('abc' AS double)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": 'abc'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'abc' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('abc' AS double)
        ^^^^^^^^^^^^^^^^^^^^^
@@ -104,7 +104,7 @@ SELECT CAST('1234567890123' AS int)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": '1234567890123'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '1234567890123' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('1234567890123' AS int)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -116,7 +116,7 @@ SELECT CAST('12345678901234567890123' AS long)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": '12345678901234567890123'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '12345678901234567890123' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('12345678901234567890123' AS long)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -128,7 +128,7 @@ SELECT CAST('' AS int)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": ''. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('' AS int)
        ^^^^^^^^^^^^^^^
@@ -140,7 +140,7 @@ SELECT CAST('' AS long)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": ''. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('' AS long)
        ^^^^^^^^^^^^^^^^
@@ -152,7 +152,7 @@ SELECT CAST('' AS float)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "FLOAT": ''. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('' AS float)
        ^^^^^^^^^^^^^^^^^
@@ -164,7 +164,7 @@ SELECT CAST('' AS double)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": ''. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('' AS double)
        ^^^^^^^^^^^^^^^^^^
@@ -192,7 +192,7 @@ SELECT CAST('123.a' AS int)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": '123.a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '123.a' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('123.a' AS int)
        ^^^^^^^^^^^^^^^^^^^^
@@ -204,7 +204,7 @@ SELECT CAST('123.a' AS long)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": '123.a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '123.a' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('123.a' AS long)
        ^^^^^^^^^^^^^^^^^^^^^
@@ -216,7 +216,7 @@ SELECT CAST('123.a' AS float)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "FLOAT": '123.a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '123.a' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('123.a' AS float)
        ^^^^^^^^^^^^^^^^^^^^^^
@@ -228,7 +228,7 @@ SELECT CAST('123.a' AS double)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": '123.a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '123.a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('123.a' AS double)
        ^^^^^^^^^^^^^^^^^^^^^^^
@@ -248,7 +248,7 @@ SELECT CAST('-2147483649' AS int)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": '-2147483649'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '-2147483649' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('-2147483649' AS int)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -268,7 +268,7 @@ SELECT CAST('2147483648' AS int)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": '2147483648'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '2147483648' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('2147483648' AS int)
        ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -288,7 +288,7 @@ SELECT CAST('-9223372036854775809' AS long)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": '-9223372036854775809'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '-9223372036854775809' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('-9223372036854775809' AS long)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -308,7 +308,7 @@ SELECT CAST('9223372036854775808' AS long)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": '9223372036854775808'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '9223372036854775808' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT CAST('9223372036854775808' AS long)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -567,7 +567,7 @@ select cast('1中文' as tinyint)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TINYINT": '1中文'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '1中文' of the type "STRING" cannot be cast to "TINYINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('1中文' as tinyint)
        ^^^^^^^^^^^^^^^^^^^^^^
@@ -579,7 +579,7 @@ select cast('1中文' as smallint)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "SMALLINT": '1中文'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '1中文' of the type "STRING" cannot be cast to "SMALLINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('1中文' as smallint)
        ^^^^^^^^^^^^^^^^^^^^^^^
@@ -591,7 +591,7 @@ select cast('1中文' as INT)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": '1中文'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '1中文' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('1中文' as INT)
        ^^^^^^^^^^^^^^^^^^
@@ -603,7 +603,7 @@ select cast('中文1' as bigint)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": '中文1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '中文1' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('中文1' as bigint)
        ^^^^^^^^^^^^^^^^^^^^^
@@ -615,7 +615,7 @@ select cast('1中文' as bigint)
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": '1中文'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '1中文' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('1中文' as bigint)
        ^^^^^^^^^^^^^^^^^^^^^
@@ -644,9 +644,9 @@ select cast('\t\n xyz \t\r' as boolean)
 -- !query schema
 struct<>
 -- !query output
-java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: 	
- xyz 	. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkRuntimeException
+[CAST_INVALID_INPUT] The value '	
+ xyz 	' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('\t\n xyz \t\r' as boolean)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -666,7 +666,7 @@ select cast('123.45' as decimal(4, 2))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 123.45, 5, 2) cannot be represented as Decimal(4, 2). If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
+[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 123.45, 5, 2) cannot be represented as Decimal(4, 2). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('123.45' as decimal(4, 2))
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -678,7 +678,7 @@ select cast('xyz' as decimal(4, 2))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DECIMAL(4,2)": 'xyz'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'xyz' of the type "STRING" cannot be cast to "DECIMAL(4,2)" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('xyz' as decimal(4, 2))
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -698,7 +698,7 @@ select cast('a' as date)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DATE": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DATE" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('a' as date)
        ^^^^^^^^^^^^^^^^^
@@ -718,7 +718,7 @@ select cast('a' as timestamp)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('a' as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^
@@ -738,7 +738,7 @@ select cast('a' as timestamp_ntz)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP_NTZ": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "TIMESTAMP_NTZ" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('a' as timestamp_ntz)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -750,7 +750,7 @@ select cast(cast('inf' as double) as timestamp)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": Infinity. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value Infinity of the type "DOUBLE" cannot be cast to "TIMESTAMP" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast(cast('inf' as double) as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -762,7 +762,7 @@ select cast(cast('inf' as float) as timestamp)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": Infinity. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value Infinity of the type "DOUBLE" cannot be cast to "TIMESTAMP" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select cast(cast('inf' as float) as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

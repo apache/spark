@@ -232,7 +232,7 @@ class QueryCompilationErrorsSuite
         "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
         "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
         "if input types are all non primitive\n" +
-        s"""3. set "${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key}" to true and """ +
+        s"""3. set "${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key}" to "true" and """ +
         s"use this API with caution")
   }
 

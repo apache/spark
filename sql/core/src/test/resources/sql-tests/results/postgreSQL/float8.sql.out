@@ -128,7 +128,7 @@ SELECT double('N A N')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": 'N A N'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'N A N' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT double('N A N')
        ^^^^^^^^^^^^^^^
@@ -140,7 +140,7 @@ SELECT double('NaN x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": 'NaN x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'NaN x' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT double('NaN x')
        ^^^^^^^^^^^^^^^
@@ -152,7 +152,7 @@ SELECT double(' INFINITY    x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": ' INFINITY    x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value ' INFINITY    x' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT double(' INFINITY    x')
        ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -188,7 +188,7 @@ SELECT double(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DECIMAL(10,0)": 'nan'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'nan' of the type "STRING" cannot be cast to "DECIMAL(10,0)" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 14) ==
 SELECT double(decimal('nan'))
               ^^^^^^^^^^^^^^
@@ -845,7 +845,7 @@ SELECT bigint(double('-9223372036854780000'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_CAUSES_OVERFLOW] Casting -9.22337203685478E18D to "BIGINT" causes overflow. To return NULL instead, use 'try_cast'. If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
+[CAST_OVERFLOW] The value -9.22337203685478E18D of the type "DOUBLE" cannot be cast to "BIGINT" due to an overflow. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
