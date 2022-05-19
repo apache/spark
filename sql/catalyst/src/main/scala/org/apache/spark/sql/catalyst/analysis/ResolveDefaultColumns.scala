@@ -504,12 +504,30 @@ case class ResolveDefaultColumns(
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
-    // Check if the target table is already resolved. If so, return the computed schema.
-    // Note that we use 'collectFirst' to descend past any SubqueryAlias nodes that may be present.
+    // First find the source relation. Note that we use 'collectFirst' to descend past any
+    // SubqueryAlias nodes that may be present.
     val source: Option[LogicalPlan] = table.collectFirst {
       case r: NamedRelation => r
       case r: UnresolvedCatalogRelation => r
     }
+    // Check if the target table has "ACCEPT_ANY_SCHEMA" capabilities and if so,
+    // don't do anything.
+    source match {
+      case Some(dsv2: DataSourceV2Relation) =>
+        val id = Identifier.of(Array.empty[String], dsv2.table.name())
+        if (dsv2.catalog.isDefined && dsv2.catalog.get.isInstanceOf[TableCatalog]) {
+          val tableCatalog = dsv2.catalog.get.asInstanceOf[TableCatalog]
+          val capabilities = tableCatalog.loadTable(id).capabilities
+          val it = capabilities.iterator()
+          while (it.hasNext()) {
+            if (it.next() == TableCapability.ACCEPT_ANY_SCHEMA) {
+              return None
+            }
+          }
+        }
+      case _ =>
+    }
+    // Check if the target table is already resolved. If so, return the computed schema.
     source.map { r =>
       if (r.schema.fields.nonEmpty) {
         return Some(r.schema)
@@ -523,25 +541,10 @@ case class ResolveDefaultColumns(
       case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
       case _ => return None
     }
-    // Check if the target table has "ACCEPT_ANY_SCHEMA" capabilities and if so,
-    // don't do anything.
     val lookup: LogicalPlan = try {
-      source match {
-        case Some(DataSourceV2Relation(_, _, tableCatalog: TableCatalog, _, _)) =>
-          val id = Identifier.of(Array.empty[String], tableName.identifier)
-          val capabilities = tableCatalog.loadTable(id).capabilities
-          val it = capabilities.iterator()
-          while (it.hasNext()) {
-            if (it.next() == TableCapability.ACCEPT_ANY_SCHEMA) {
-              return None
-            }
-          }
-        case _ =>
-      }
       catalog.lookupRelation(tableName)
     } catch {
-      case e: AnalysisException =>
-        return None
+      case _: AnalysisException => return None
     }
     lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>

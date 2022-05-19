@@ -73,6 +73,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   private val tableWithAcceptAnySchemaCapability: Table = {
     val t = mock(classOf[Table])
+    when(t.name()).thenReturn("v2TableWithAcceptAnySchemaCapability")
     when(t.schema()).thenReturn(new StructType().add("i", "int"))
     when(t.capabilities()).thenReturn(Collections.singleton(TableCapability.ACCEPT_ANY_SCHEMA))
     t
