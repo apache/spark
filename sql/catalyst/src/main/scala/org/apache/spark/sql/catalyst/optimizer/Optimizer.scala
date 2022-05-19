@@ -1332,7 +1332,6 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 object CombineUnions extends Rule[LogicalPlan] {
   import CollapseProject.{buildCleanedProjectList, canCollapseExpressions}
   import PushProjectionThroughUnion.pushProjectionThroughUnion
-  import SubqueryExpression.hasSubquery
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
@@ -1357,7 +1356,8 @@ object CombineUnions extends Rule[LogicalPlan] {
       stack.pop() match {
         case p1 @ Project(_, p2: Project)
             if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) &&
-              !p1.projectList.exists(hasSubquery) && !p2.projectList.exists(hasSubquery) =>
+              !p1.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) &&
+              !p2.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) =>
           val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
           stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
         case Distinct(Union(children, byName, allowMissingCol))
