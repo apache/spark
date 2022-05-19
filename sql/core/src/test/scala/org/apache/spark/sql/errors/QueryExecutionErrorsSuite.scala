@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.errors
 
-import java.io.IOException
-import java.net.URL
+import java.io.{File, IOException}
+import java.net.{URI, URL}
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
@@ -586,6 +586,30 @@ class QueryExecutionErrorsSuite
       msg = s"Unrecognized SQL type $unrecognizedColumnType")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
+  }
+
+  test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
+    val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).
+      toDF("i", "j", "k").as("df1")
+
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i").
+        saveAsTable("bucketed_table")
+      val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+      val tableDir = new File(warehouseFilePath, "bucketed_table")
+      Utils.deleteRecursively(tableDir)
+      df1.write.parquet(tableDir.getAbsolutePath)
+
+      val aggregated = spark.table("bucketed_table").groupBy("i").count()
+
+      checkErrorClass(
+        exception = intercept[SparkException] {
+          aggregated.count()
+        },
+        errorClass = "INVALID_BUCKET_FILE",
+        msg = "Invalid bucket file: .+",
+        matchMsg = true)
+    }
   }
 }
 

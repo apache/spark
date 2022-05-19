@@ -2000,4 +2000,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
         s"add ${toSQLValue(amount, IntegerType)} $unit to " +
         s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}"))
   }
+
+  def invalidBucketFile(path: String): Throwable = {
+    new SparkException(errorClass = "INVALID_BUCKET_FILE", messageParameters = Array(path),
+      cause = null)
+  }
 }
