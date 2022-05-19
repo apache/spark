@@ -1167,7 +1167,8 @@ final class ShuffleBlockFetcherIterator(
         throw SparkCoreErrors.fetchFailedError(address, shuffleId, mapId, mapIndex, startReduceId,
           msg, e)
       case ShuffleBlockChunkId(shuffleId, _, reduceId, _) =>
-        SparkCoreErrors.fetchFailedError(address, shuffleId, -1L, SHUFFLE_PUSH_MAP_ID, reduceId, msg, e)
+        SparkCoreErrors.fetchFailedError(address, shuffleId,
+          -1L, SHUFFLE_PUSH_MAP_ID, reduceId, msg, e)
       case _ => throw SparkCoreErrors.failToGetNonShuffleBlockError(blockId, e)
     }
   }
