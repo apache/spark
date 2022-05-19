@@ -21,6 +21,7 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Sort}
@@ -34,7 +35,7 @@ import org.apache.spark.util.Utils
 class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHelper {
   import testImplicits._
 
-  val tempDir = Utils.createTempDir()
+  val tempDir = JavaUtils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   var conn: java.sql.Connection = null
 

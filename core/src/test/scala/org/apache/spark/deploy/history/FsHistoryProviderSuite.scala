@@ -45,6 +45,7 @@ import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, UI_VIEW_ACLS, UI_VIEW_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
@@ -62,7 +63,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
+    testDir = JavaUtils.createTempDirWithPrefix("a b%20c+d")
   }
 
   override def afterEach(): Unit = {
@@ -665,7 +666,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     val maxAge = TimeUnit.SECONDS.toSeconds(40)
     val clock = new ManualClock(0)
     val testConf = new SparkConf()
-    testConf.set(HISTORY_LOG_DIR, Utils.createTempDir(namePrefix = "eventLog").getAbsolutePath())
+    testConf.set(HISTORY_LOG_DIR, JavaUtils.createTempDirWithPrefix("eventLog").getAbsolutePath())
     testConf.set(DRIVER_LOG_DFS_DIR, testDir.getAbsolutePath())
     testConf.set(DRIVER_LOG_CLEANER_ENABLED, true)
     testConf.set(DRIVER_LOG_CLEANER_INTERVAL, maxAge / 4)
@@ -1657,7 +1658,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
       .set(FAST_IN_PROGRESS_PARSING, true)
 
     if (!inMemory) {
-      conf.set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
+      conf.set(LOCAL_STORE_DIR, JavaUtils.createTempDir().getAbsolutePath())
     }
     conf.set(HYBRID_STORE_ENABLED, useHybridStore)
     conf.set(HYBRID_STORE_DISK_BACKEND.key, diskBackend.toString)

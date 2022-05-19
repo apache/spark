@@ -30,7 +30,8 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.ResetSystemProperties
 
 class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
   with ResetSystemProperties {
@@ -52,7 +53,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
     if (hasBash) test(name)(fn) else ignore(name)(fn)
 
   bashTest("shell script escaping") {
-    val scriptFile = File.createTempFile("script.", ".sh", Utils.createTempDir())
+    val scriptFile = File.createTempFile("script.", ".sh", JavaUtils.createTempDir())
     val args = Array("arg1", "${arg.2}", "\"arg3\"", "'arg4'", "$arg5", "\\arg6")
     try {
       val argLine = args.map(a => YarnSparkHadoopUtil.escapeForShell(a)).mkString(" ")

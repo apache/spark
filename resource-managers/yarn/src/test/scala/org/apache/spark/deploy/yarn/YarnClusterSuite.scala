@@ -43,6 +43,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.tags.ExtendedYarnTest
@@ -132,7 +133,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   test("yarn-cluster should respect conf overrides in SparkHadoopUtil (SPARK-16414, SPARK-23630)") {
     // Create a custom hadoop config file, to make sure it's contents are propagated to the driver.
-    val customConf = Utils.createTempDir()
+    val customConf = JavaUtils.createTempDir()
     val coreSite = """<?xml version="1.0" encoding="UTF-8"?>
       |<configuration>
       |  <property>

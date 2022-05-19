@@ -31,6 +31,7 @@ import org.apache.spark._
 import org.apache.spark.internal.config.{EVENT_LOG_STAGE_EXECUTOR_METRICS, EXECUTOR_PROCESS_TREE_METRICS_ENABLED}
 import org.apache.spark.internal.config.History.{HISTORY_LOG_DIR, LOCAL_STORE_DIR, UPDATE_INTERVAL_S}
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
@@ -44,7 +45,7 @@ abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
 
   private val driverPropPrefix = "spark.test."
   private val logDir = getTestResourcePath("spark-events")
-  private val storeDir = Utils.createTempDir(namePrefix = "history")
+  private val storeDir = JavaUtils.createTempDirWithPrefix("history")
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null

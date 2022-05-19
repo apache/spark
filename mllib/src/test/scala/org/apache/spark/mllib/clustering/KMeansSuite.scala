@@ -24,6 +24,7 @@ import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -278,7 +279,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("model save/load") {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
 
     Array(true, false).foreach { case selector =>

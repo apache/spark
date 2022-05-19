@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.network.util.JavaUtils
 
 private[spark] case class IvyProperties(
     packagesExclusions: String,
@@ -191,7 +192,7 @@ private[spark] object DependencyUtils extends Logging {
       userJar: String,
       sparkConf: SparkConf,
       hadoopConf: Configuration): String = {
-    val targetDir = Utils.createTempDir()
+    val targetDir = JavaUtils.createTempDir()
     val userJarName = userJar.split(File.separatorChar).last
     Option(jars)
       .map {

@@ -55,6 +55,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util._
 
 /**
@@ -341,7 +342,7 @@ private[spark] class SparkSubmit extends Logging {
     // update spark config from args
     args.toSparkConf(Option(sparkConf))
     val hadoopConf = conf.getOrElse(SparkHadoopUtil.newConfiguration(sparkConf))
-    val targetDir = Utils.createTempDir()
+    val targetDir = JavaUtils.createTempDir()
 
     // Kerberos is not supported in standalone mode, and keytab support is not yet available
     // in Mesos cluster mode.

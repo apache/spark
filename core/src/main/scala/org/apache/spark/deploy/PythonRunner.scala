@@ -28,6 +28,7 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkUserAppException}
 import org.apache.spark.api.python.{Py4JServer, PythonUtils}
 import org.apache.spark.internal.config._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
@@ -157,7 +158,7 @@ object PythonRunner {
    * if exist in the given paths.
    */
   private def resolvePyFiles(pyFiles: Array[String]): Array[String] = {
-    lazy val dest = Utils.createTempDir(namePrefix = "localPyFiles")
+    lazy val dest = JavaUtils.createTempDirWithPrefix("localPyFiles")
     pyFiles.flatMap { pyFile =>
       // In case of client with submit, the python paths should be set before context
       // initialization because the context initialization can be done later.

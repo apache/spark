@@ -44,6 +44,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.metrics.source.JVMCPUSource
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
@@ -988,7 +989,7 @@ private[spark] class Executor(
         logInfo(s"Fetching $name with timestamp $timestamp")
         val sourceURI = new URI(name)
         val uriToDownload = UriBuilder.fromUri(sourceURI).fragment(null).build()
-        val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
+        val source = Utils.fetchFile(uriToDownload.toString, JavaUtils.createTempDir(), conf,
           hadoopConf, timestamp, useCache = !isLocal, shouldUntar = false)
         val dest = new File(
           SparkFiles.getRootDirectory(),

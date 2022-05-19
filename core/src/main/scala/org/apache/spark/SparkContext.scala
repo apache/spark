@@ -54,6 +54,7 @@ import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.launcher.JavaModuleOptions
 import org.apache.spark.metrics.source.JVMCPUSource
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.resource._
@@ -1655,7 +1656,7 @@ class SparkContext(config: SparkConf) extends Logging {
       // If the scheme is file, use URI to simply copy instead of downloading.
       val uriToUse = if (!isLocal && scheme == "file") uri else new URI(key)
       val uriToDownload = UriBuilder.fromUri(uriToUse).fragment(null).build()
-      val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
+      val source = Utils.fetchFile(uriToDownload.toString, JavaUtils.createTempDir(), conf,
         hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
       val dest = new File(
         SparkFiles.getRootDirectory(),

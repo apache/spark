@@ -35,7 +35,8 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.ThreadUtils
 
 /**
  * This suite tests the fault tolerance of the Spark standalone scheduler, mainly the Master.
@@ -408,7 +409,7 @@ private object SparkDocker {
 
   private def startNode(dockerCmd: ProcessBuilder) : (String, DockerId, File) = {
     val ipPromise = Promise[String]()
-    val outFile = File.createTempFile("fault-tolerance-test", "", Utils.createTempDir())
+    val outFile = File.createTempFile("fault-tolerance-test", "", JavaUtils.createTempDir())
     val outStream: FileWriter = new FileWriter(outFile)
     def findIpAndLog(line: String): Unit = {
       if (line.startsWith("CONTAINER_IP=")) {

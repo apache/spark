@@ -26,11 +26,11 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.python.PythonForeachWriter.UnsafeRowBuffer
 import org.apache.spark.sql.types.{DataType, IntegerType}
-import org.apache.spark.util.Utils
 
 class PythonForeachWriterSuite extends SparkFunSuite with Eventually with MockitoSugar {
 
@@ -94,7 +94,7 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
       val mem = new TestMemoryManager(conf)
       mem.limit(memBytes)
       val taskM = new TaskMemoryManager(mem, 0)
-      new UnsafeRowBuffer(taskM, Utils.createTempDir(), 1)
+      new UnsafeRowBuffer(taskM, JavaUtils.createTempDir(), 1)
     }
     private val iterator = buffer.iterator
     private val outputBuffer = new ArrayBuffer[Int]

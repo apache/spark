@@ -44,6 +44,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{CommandLineUtils, DependencyUtils, ResetSystemProperties, Utils}
 
 trait TestPrematureExit {
@@ -1008,36 +1009,36 @@ class SparkSubmitSuite
   }
 
   test("SPARK-27575: yarn confs should merge new value with existing value") {
-    val tmpJarDir = Utils.createTempDir()
+    val tmpJarDir = JavaUtils.createTempDir()
     val jar1 = TestUtils.createJarWithFiles(Map("test.resource" -> "1"), tmpJarDir)
     val jar2 = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpJarDir)
 
-    val tmpJarDirYarnOpt = Utils.createTempDir()
+    val tmpJarDirYarnOpt = JavaUtils.createTempDir()
     val jar1YarnOpt = TestUtils.createJarWithFiles(Map("test.resource" -> "2"), tmpJarDirYarnOpt)
     val jar2YarnOpt = TestUtils.createJarWithFiles(Map("test.resource" -> "USER2"),
       tmpJarDirYarnOpt)
 
-    val tmpFileDir = Utils.createTempDir()
+    val tmpFileDir = JavaUtils.createTempDir()
     val file1 = File.createTempFile("tmpFile1", "", tmpFileDir)
     val file2 = File.createTempFile("tmpFile2", "", tmpFileDir)
 
-    val tmpFileDirYarnOpt = Utils.createTempDir()
+    val tmpFileDirYarnOpt = JavaUtils.createTempDir()
     val file1YarnOpt = File.createTempFile("tmpPy1YarnOpt", ".py", tmpFileDirYarnOpt)
     val file2YarnOpt = File.createTempFile("tmpPy2YarnOpt", ".egg", tmpFileDirYarnOpt)
 
-    val tmpPyFileDir = Utils.createTempDir()
+    val tmpPyFileDir = JavaUtils.createTempDir()
     val pyFile1 = File.createTempFile("tmpPy1", ".py", tmpPyFileDir)
     val pyFile2 = File.createTempFile("tmpPy2", ".egg", tmpPyFileDir)
 
-    val tmpPyFileDirYarnOpt = Utils.createTempDir()
+    val tmpPyFileDirYarnOpt = JavaUtils.createTempDir()
     val pyFile1YarnOpt = File.createTempFile("tmpPy1YarnOpt", ".py", tmpPyFileDirYarnOpt)
     val pyFile2YarnOpt = File.createTempFile("tmpPy2YarnOpt", ".egg", tmpPyFileDirYarnOpt)
 
-    val tmpArchiveDir = Utils.createTempDir()
+    val tmpArchiveDir = JavaUtils.createTempDir()
     val archive1 = File.createTempFile("archive1", ".zip", tmpArchiveDir)
     val archive2 = File.createTempFile("archive2", ".zip", tmpArchiveDir)
 
-    val tmpArchiveDirYarnOpt = Utils.createTempDir()
+    val tmpArchiveDirYarnOpt = JavaUtils.createTempDir()
     val archive1YarnOpt = File.createTempFile("archive1YarnOpt", ".zip", tmpArchiveDirYarnOpt)
     val archive2YarnOpt = File.createTempFile("archive2YarnOpt", ".zip", tmpArchiveDirYarnOpt)
 
@@ -1112,14 +1113,14 @@ class SparkSubmitSuite
     val sparkConf = new SparkConf(false)
     intercept[IOException] {
       DependencyUtils.downloadFile(
-        "abc:/my/file", Utils.createTempDir(), sparkConf, new Configuration())
+        "abc:/my/file", JavaUtils.createTempDir(), sparkConf, new Configuration())
     }
   }
 
   test("downloadFile - file doesn't exist") {
     val sparkConf = new SparkConf(false)
     val hadoopConf = new Configuration()
-    val tmpDir = Utils.createTempDir()
+    val tmpDir = JavaUtils.createTempDir()
     updateConfWithFakeS3Fs(hadoopConf)
     intercept[FileNotFoundException] {
       DependencyUtils.downloadFile("s3a:/no/such/file", tmpDir, sparkConf, hadoopConf)
@@ -1243,7 +1244,7 @@ class SparkSubmitSuite
   }
 
   test("SPARK-32119: Jars and files should be loaded when Executors launch for plugins") {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val tempFileName = "test.txt"
     val tempFile = new File(tempDir, tempFileName)
 
@@ -1334,7 +1335,7 @@ class SparkSubmitSuite
     }
     hadoopConf.set("fs.http.impl.disable.cache", "true")
 
-    val tmpDir = Utils.createTempDir()
+    val tmpDir = JavaUtils.createTempDir()
     val mainResource = File.createTempFile("tmpPy", ".py", tmpDir)
     val tmpS3Jar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
     val tmpS3JarPath = s"s3a://${new File(tmpS3Jar.toURI).getAbsolutePath}"
@@ -1469,7 +1470,7 @@ class SparkSubmitSuite
 
     val props = new java.util.Properties()
     val propsFile = File.createTempFile("test-spark-conf", ".properties",
-      Utils.createTempDir())
+      JavaUtils.createTempDir())
     val propsOutputStream = new FileOutputStream(propsFile)
     try {
       testProps.foreach { case (k, v) => props.put(k, v) }

@@ -29,12 +29,12 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config
-import org.apache.spark.util.Utils
+import org.apache.spark.network.util.JavaUtils
 
 class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
 
   def testSetup(inputFiles: Map[String, Array[Byte]]): SparkConf = {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val sparkConf = new SparkConf(loadDefaults = false)
       .setSparkHome(tempDir.getAbsolutePath)
 

@@ -18,13 +18,14 @@
 package test.org.apache.spark.sql;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.util.Utils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -36,9 +37,9 @@ public class JavaDataFrameReaderWriterSuite {
   private transient String output;
 
   @Before
-  public void setUp() {
-    input = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
-    File f = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "output");
+  public void setUp() throws IOException {
+    input = JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
+    File f = JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "output");
     f.delete();
     output = f.toString();
   }

@@ -27,7 +27,8 @@ import io.fabric8.kubernetes.api.model.ConfigMap
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.util.{SparkConfWithEnv, Utils}
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.SparkConfWithEnv
 
 class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
 
@@ -44,7 +45,7 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
   }
 
   test("create hadoop config map if config dir is defined") {
-    val confDir = Utils.createTempDir()
+    val confDir = JavaUtils.createTempDir()
     val confFiles = Set("core-site.xml", "hdfs-site.xml")
 
     confFiles.foreach { f =>

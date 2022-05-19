@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{State, Time}
 import org.apache.spark.streaming.util.OpenHashMapBasedStateMap
@@ -39,7 +40,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
     super.beforeAll()
     sc = new SparkContext(
       new SparkConf().setMaster("local").setAppName("MapWithStateRDDSuite"))
-    checkpointDir = Utils.createTempDir()
+    checkpointDir = JavaUtils.createTempDir()
     sc.setCheckpointDir(checkpointDir.toString)
   }
 

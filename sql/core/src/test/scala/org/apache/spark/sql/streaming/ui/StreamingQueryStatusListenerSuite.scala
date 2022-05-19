@@ -25,6 +25,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -225,7 +226,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     assume(!Utils.isMacOnAppleSilicon)
     val conf = new SparkConf()
       .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.LEVELDB.toString)
-    val testDir = Utils.createTempDir()
+    val testDir = JavaUtils.createTempDir()
     val kvStore = KVUtils.open(testDir, getClass.getName, conf)
     try {
       testStreamingQueryData(kvStore)
@@ -238,7 +239,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   test("SPARK-38056: test writing StreamingQueryData to a RocksDB store") {
     val conf = new SparkConf()
       .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.ROCKSDB.toString)
-    val testDir = Utils.createTempDir()
+    val testDir = JavaUtils.createTempDir()
     val kvStore = KVUtils.open(testDir, getClass.getName, conf)
     try {
       testStreamingQueryData(kvStore)

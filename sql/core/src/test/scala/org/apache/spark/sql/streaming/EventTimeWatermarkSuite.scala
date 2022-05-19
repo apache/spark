@@ -29,6 +29,7 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -38,7 +39,6 @@ import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
-import org.apache.spark.util.Utils
 
 class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matchers with Logging {
 
@@ -237,7 +237,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-2.3.1-without-commit-log-metadata/").toURI
 
-    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
@@ -702,7 +702,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
-    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
     withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
       testStream(dfWithMultipleWatermarks(input1, input2))(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
@@ -733,7 +733,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-2.3.1-for-multi-watermark-policy/").toURI
 
-    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)

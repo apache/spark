@@ -39,6 +39,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EVENT_LOG_DIR, EVENT_LOG_ENABLED}
 import org.apache.spark.io._
 import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -59,7 +60,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   private var testDirPath: Path = _
 
   before {
-    testDir = Utils.createTempDir(namePrefix = s"history log")
+    testDir = JavaUtils.createTempDirWithPrefix("history log")
     testDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
   }

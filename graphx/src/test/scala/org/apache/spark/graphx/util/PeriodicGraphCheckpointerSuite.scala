@@ -22,6 +22,7 @@ import org.scalatest.Assertions
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.{Edge, Graph, LocalSparkContext}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -54,7 +55,7 @@ class PeriodicGraphCheckpointerSuite extends SparkFunSuite with LocalSparkContex
 
   test("Checkpointing") {
     withSpark { sc =>
-      val tempDir = Utils.createTempDir()
+      val tempDir = JavaUtils.createTempDir()
       val path = tempDir.toURI.toString
       val checkpointInterval = 2
       var graphsToCheck = Seq.empty[GraphToCheck]

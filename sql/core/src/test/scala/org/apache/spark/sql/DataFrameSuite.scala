@@ -30,6 +30,7 @@ import scala.util.Random
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
@@ -2153,7 +2154,7 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-13774: Check error message for non existent path without globbed paths") {
     val uuid = UUID.randomUUID().toString
-    val baseDir = Utils.createTempDir()
+    val baseDir = JavaUtils.createTempDir()
     try {
       val e = intercept[AnalysisException] {
         spark.read.format("csv").load(
@@ -2179,8 +2180,8 @@ class DataFrameSuite extends QueryTest
     assert(e.getMessage.startsWith("Path does not exist"))
 
     // Existent initial path component, but no matching files:
-    val baseDir = Utils.createTempDir()
-    val childDir = Utils.createTempDir(baseDir.getAbsolutePath)
+    val baseDir = JavaUtils.createTempDir()
+    val childDir = JavaUtils.createTempDirWithRoot(baseDir.getAbsolutePath)
     assert(childDir.exists())
     try {
       val e1 = intercept[AnalysisException] {

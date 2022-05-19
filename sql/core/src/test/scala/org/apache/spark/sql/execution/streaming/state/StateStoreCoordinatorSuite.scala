@@ -23,12 +23,12 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
-import org.apache.spark.util.Utils
 
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
@@ -130,7 +130,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       // Start a query and run a batch to load state stores
       val inputData = MemoryStream[Int]
       val aggregated = inputData.toDF().groupBy("value").agg(count("*")) // stateful query
-      val checkpointLocation = Utils.createTempDir().getAbsoluteFile
+      val checkpointLocation = JavaUtils.createTempDir().getAbsoluteFile
       val query = aggregated.writeStream
         .format("memory")
         .outputMode("update")

@@ -32,6 +32,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapRedCommitProtocol, SparkHadoopWriterUtils}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -76,7 +77,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
   var sc: SparkContext = null
 
   before {
-    tempDir = Utils.createTempDir()
+    tempDir = JavaUtils.createTempDir()
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName(classOf[OutputCommitCoordinatorSuite].getSimpleName)

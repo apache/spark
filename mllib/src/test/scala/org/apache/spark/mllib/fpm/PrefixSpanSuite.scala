@@ -18,6 +18,7 @@ package org.apache.spark.mllib.fpm
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -414,7 +415,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMaxPatternLength(5)
     val model = prefixSpan.run(rdd)
 
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
     try {
       model.save(sc, path)

@@ -40,6 +40,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
@@ -59,8 +60,8 @@ class ExecutorClassLoaderSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    tempDir1 = Utils.createTempDir()
-    tempDir2 = Utils.createTempDir()
+    tempDir1 = JavaUtils.createTempDir()
+    tempDir2 = JavaUtils.createTempDir()
     url1 = tempDir1.toURI.toURL.toString
     urls2 = List(tempDir2.toURI.toURL).toArray
     childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
@@ -284,7 +285,7 @@ class ExecutorClassLoaderSuite
 
   test("SPARK-20547 ExecutorClassLoader should not throw ClassNotFoundException without " +
     "acknowledgment from driver") {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     try {
       // Create two classes, "TestClassB" calls "TestClassA", so when calling "TestClassB.foo", JVM
       // will try to load "TestClassA".

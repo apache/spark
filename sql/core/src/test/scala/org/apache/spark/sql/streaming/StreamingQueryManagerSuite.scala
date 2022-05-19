@@ -29,12 +29,12 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
-import org.apache.spark.util.Utils
 
 class StreamingQueryManagerSuite extends StreamTest {
 
@@ -409,7 +409,7 @@ class StreamingQueryManagerSuite extends StreamTest {
           try {
             val df = ds.toDF
             val metadataRoot =
-              Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
+              JavaUtils.createTempDirWithPrefix("streaming.checkpoint").getCanonicalPath
             query =
               df.writeStream
                 .format("memory")

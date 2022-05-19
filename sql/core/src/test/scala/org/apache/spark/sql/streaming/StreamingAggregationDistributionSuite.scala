@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StateStoreRestoreExec, StateStoreSaveExec}
@@ -29,7 +30,6 @@ import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
-import org.apache.spark.util.Utils
 
 class StreamingAggregationDistributionSuite extends StreamTest
   with StatefulOpClusteredDistributionTestHelper with Assertions {
@@ -98,7 +98,7 @@ class StreamingAggregationDistributionSuite extends StreamTest
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-3.2.0-streaming-aggregate-with-repartition/").toURI
 
-    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)

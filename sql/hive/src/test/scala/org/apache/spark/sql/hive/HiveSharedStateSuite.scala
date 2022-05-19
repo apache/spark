@@ -23,10 +23,10 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.config.UI
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.util.Utils
 
 class HiveSharedStateSuite extends SparkFunSuite {
 
@@ -39,9 +39,9 @@ class HiveSharedStateSuite extends SparkFunSuite {
   test("initial configs should be passed to SharedState but not SparkContext") {
     val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
     val sc = SparkContext.getOrCreate(conf)
-    val warehousePath = Utils.createTempDir().toString
+    val warehousePath = JavaUtils.createTempDir().toString
     val invalidPath = "invalid/path"
-    val metastorePath = Utils.createTempDir()
+    val metastorePath = JavaUtils.createTempDir()
     val tmpDb = "tmp_db"
 
     // The initial configs used to generate SharedState, none of these should affect the global

@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.util.Utils
 
@@ -97,7 +98,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val model = new Word2VecModel(word2VecMap)
 
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
 
     try {
@@ -132,7 +133,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     // (floatSize * vectorSize + 15) * numWords
     // (4 * 10 + 15) * 10 = 550
     // therefore it should generate multiple partitions
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
 
     try {

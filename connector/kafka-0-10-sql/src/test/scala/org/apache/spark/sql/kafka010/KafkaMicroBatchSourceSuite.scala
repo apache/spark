@@ -34,6 +34,7 @@ import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{Dataset, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
@@ -48,7 +49,6 @@ import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.Utils
 
 abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with KafkaTest {
 
@@ -1502,7 +1502,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-2.4.3-kafka-include-headers-default/").toURI
 
-    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)

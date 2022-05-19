@@ -32,6 +32,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 class RPackageUtilsSuite
@@ -143,7 +144,7 @@ class RPackageUtilsSuite
   }
 
   test("SparkR zipping works properly") {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     Utils.tryWithSafeFinally {
       IvyTestUtils.writeFile(tempDir, "test.R", "abc")
       val fakeSparkRDir = new File(tempDir, "SparkR")

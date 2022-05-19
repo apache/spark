@@ -34,6 +34,7 @@ import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.internal.config
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
@@ -65,7 +66,7 @@ class BypassMergeSortShuffleWriterSuite
   override def beforeEach(): Unit = {
     super.beforeEach()
     MockitoAnnotations.openMocks(this).close()
-    tempDir = Utils.createTempDir()
+    tempDir = JavaUtils.createTempDir()
     outputFile = File.createTempFile("shuffle", null, tempDir)
     taskMetrics = new TaskMetrics
     shuffleHandle = new BypassMergeSortShuffleHandle[Int, Int](

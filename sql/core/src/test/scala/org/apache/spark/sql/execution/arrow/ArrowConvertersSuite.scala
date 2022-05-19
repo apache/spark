@@ -29,6 +29,7 @@ import org.apache.arrow.vector.ipc.JsonFileReader
 import org.apache.arrow.vector.util.{ByteArrayReadableSeekableByteChannel, Validator}
 
 import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -46,7 +47,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    tempDataPath = Utils.createTempDir(namePrefix = "arrow").getAbsolutePath
+    tempDataPath = JavaUtils.createTempDirWithPrefix("arrow").getAbsolutePath
   }
 
   test("collect to arrow record batch") {

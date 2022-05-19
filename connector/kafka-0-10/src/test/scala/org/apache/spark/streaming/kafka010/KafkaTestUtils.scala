@@ -40,6 +40,7 @@ import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -234,7 +235,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
     producer = null
   }
 
-  val brokerLogDir = Utils.createTempDir().getAbsolutePath
+  val brokerLogDir = JavaUtils.createTempDir().getAbsolutePath
 
   private def brokerConfiguration: Properties = {
     val props = new Properties()
@@ -313,8 +314,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
   }
 
   private class EmbeddedZookeeper(val zkConnect: String) {
-    val snapshotDir = Utils.createTempDir()
-    val logDir = Utils.createTempDir()
+    val snapshotDir = JavaUtils.createTempDir()
+    val logDir = JavaUtils.createTempDir()
 
     val zookeeper = new ZooKeeperServer(snapshotDir, logDir, 500)
     val (ip, port) = {

@@ -22,7 +22,7 @@ import java.security.PrivilegedExceptionAction
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.util.Utils
+import org.apache.spark.network.util.JavaUtils
 
 class HiveClientUserNameSuite(version: String) extends HiveVersionSuite(version) {
 
@@ -55,7 +55,7 @@ class HiveClientUserNameSuite(version: String) extends HiveVersionSuite(version)
 
   private def getUserNameFromHiveClient: String = {
     val hadoopConf = new Configuration()
-    hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().toURI().toString())
+    hadoopConf.set("hive.metastore.warehouse.dir", JavaUtils.createTempDir().toURI().toString())
     val client = buildClient(hadoopConf)
     client.userName
   }

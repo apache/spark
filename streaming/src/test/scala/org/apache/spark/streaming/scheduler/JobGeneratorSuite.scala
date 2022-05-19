@@ -23,9 +23,10 @@ import scala.concurrent.duration._
 
 import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
-import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.util.ManualClock
 
 class JobGeneratorSuite extends TestSuiteBase {
 
@@ -57,7 +58,7 @@ class JobGeneratorSuite extends TestSuiteBase {
   //
   test("SPARK-6222: Do not clear received block data too soon") {
     import JobGeneratorSuite._
-    val checkpointDir = Utils.createTempDir()
+    val checkpointDir = JavaUtils.createTempDir()
     val testConf = conf
     testConf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
     testConf.set("spark.streaming.receiver.writeAheadLog.rollingInterval", "1")

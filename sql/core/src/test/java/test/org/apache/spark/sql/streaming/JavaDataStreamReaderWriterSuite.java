@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql.streaming;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
 import org.junit.After;
@@ -25,6 +26,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.function.VoidFunction2;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.ForeachWriter;
 import org.apache.spark.sql.SparkSession;
@@ -37,9 +39,9 @@ public class JavaDataStreamReaderWriterSuite {
   private String input;
 
   @Before
-  public void setUp() {
+  public void setUp() throws IOException {
     spark = new TestSparkSession();
-    input = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
+    input = JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
   }
 
   @After

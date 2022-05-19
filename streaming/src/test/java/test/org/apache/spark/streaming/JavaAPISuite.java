@@ -1604,7 +1604,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testTextFileStream() throws IOException {
-    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
+    File testDir = JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     List<List<String>> expected = fileTestPrepare(testDir);
 
     JavaDStream<String> input = ssc.textFileStream(testDir.toString());
@@ -1616,7 +1616,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testFileStream() throws IOException {
-    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
+    File testDir = JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     List<List<String>> expected = fileTestPrepare(testDir);
 
     JavaPairInputDStream<LongWritable, Text> inputStream = ssc.fileStream(

@@ -25,12 +25,12 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.util.Utils
+import org.apache.spark.network.util.JavaUtils
 
 class WriteAheadLogUtilsSuite extends SparkFunSuite {
   import WriteAheadLogUtilsSuite._
 
-  private val logDir = Utils.createTempDir().getAbsolutePath()
+  private val logDir = JavaUtils.createTempDir().getAbsolutePath()
   private val hadoopConf = new Configuration()
 
   def assertDriverLogClass[T <: WriteAheadLog: ClassTag](

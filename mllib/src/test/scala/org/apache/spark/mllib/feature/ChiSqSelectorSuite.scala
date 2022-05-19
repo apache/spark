@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -169,7 +170,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("model load / save") {
     val model = ChiSqSelectorSuite.createModel()
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
     try {
       model.save(sc, path)

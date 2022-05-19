@@ -18,8 +18,8 @@
 package org.apache.spark.graphx
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
 
 class EdgeRDDSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -38,7 +38,7 @@ class EdgeRDDSuite extends SparkFunSuite with LocalSparkContext {
     withSpark { sc =>
       val verts = sc.parallelize(List((0L, 0), (1L, 1), (1L, 2), (2L, 3), (2L, 3), (2L, 3)))
       val edges = EdgeRDD.fromEdges(sc.parallelize(List.empty[Edge[Int]]))
-      sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
+      sc.setCheckpointDir(JavaUtils.createTempDir().getCanonicalPath)
       edges.checkpoint()
 
       // EdgeRDD not yet checkpointed

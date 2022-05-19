@@ -28,6 +28,7 @@ import com.google.common.io.{ByteStreams, Files}
 
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[deploy] object RPackageUtils extends Logging {
@@ -140,7 +141,7 @@ private[deploy] object RPackageUtils extends Logging {
    * Extracts the files under /R in the jar to a temporary directory for building.
    */
   private def extractRFolder(jar: JarFile, printStream: PrintStream, verbose: Boolean): File = {
-    val tempDir = Utils.createTempDir(null)
+    val tempDir = JavaUtils.createTempDir()
     val jarEntries = jar.entries()
     while (jarEntries.hasMoreElements) {
       val entry = jarEntries.nextElement()
@@ -184,7 +185,7 @@ private[deploy] object RPackageUtils extends Logging {
             print(s"$file contains R source code. Now installing package.", printStream, Level.INFO)
             val rSource = extractRFolder(jar, printStream, verbose)
             if (RUtils.rPackages.isEmpty) {
-              RUtils.rPackages = Some(Utils.createTempDir().getAbsolutePath)
+              RUtils.rPackages = Some(JavaUtils.createTempDir().getAbsolutePath)
             }
             try {
               if (!rPackageBuilder(rSource, printStream, verbose, RUtils.rPackages.get)) {

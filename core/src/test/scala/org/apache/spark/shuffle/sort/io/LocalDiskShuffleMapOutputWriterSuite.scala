@@ -30,6 +30,7 @@ import org.mockito.MockitoAnnotations
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.util.Utils
 
@@ -66,7 +67,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
 
   override def beforeEach(): Unit = {
     MockitoAnnotations.openMocks(this).close()
-    tempDir = Utils.createTempDir()
+    tempDir = JavaUtils.createTempDir()
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir)
     tempFile = File.createTempFile("tempfile", "", tempDir)
     partitionSizesInMergedFile = null

@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, TableAlreadyExistsException}
@@ -33,7 +34,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 
 /**
@@ -486,7 +486,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val table = CatalogTable(
       identifier = TableIdentifier("tbl", Some("db1")),
       tableType = CatalogTableType.EXTERNAL,
-      storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
+      storage = storageFormat.copy(locationUri = Some(JavaUtils.createTempDir().toURI)),
       schema = new StructType()
         .add("col1", "int")
         .add("col2", "string")
@@ -871,7 +871,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       identifier = TableIdentifier("external_table", Some("db1")),
       tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat(
-        Some(Utils.createTempDir().toURI),
+        Some(JavaUtils.createTempDir().toURI),
         None, None, None, false, Map.empty),
       schema = new StructType().add("a", "int").add("b", "string"),
       provider = Some(defaultProvider)
@@ -914,7 +914,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(!exists(tableLocation, "partCol1=3", "partCol2=4"))
     assert(!exists(tableLocation, "partCol1=5", "partCol2=6"))
 
-    val tempPath = Utils.createTempDir()
+    val tempPath = JavaUtils.createTempDir()
     // create partition with existing directory is OK.
     val partWithExistingDir = CatalogTablePartition(
       Map("partCol1" -> "7", "partCol2" -> "8"),
@@ -1012,10 +1012,10 @@ abstract class CatalogTestUtils {
 
   def newFunc(): CatalogFunction = newFunc("funcName")
 
-  def newUriForDatabase(): URI = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
+  def newUriForDatabase(): URI = new URI(JavaUtils.createTempDir().toURI.toString.stripSuffix("/"))
 
   def newUriForPartition(parts: Seq[String]): URI = {
-    val path = parts.foldLeft(Utils.createTempDir())(new java.io.File(_, _))
+    val path = parts.foldLeft(JavaUtils.createTempDir())(new java.io.File(_, _))
     new URI(path.toURI.toString.stripSuffix("/"))
   }
 
@@ -1032,7 +1032,7 @@ abstract class CatalogTestUtils {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
-      storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
+      storage = storageFormat.copy(locationUri = Some(JavaUtils.createTempDir().toURI)),
       schema = if (defaultColumns) {
         new StructType()
           .add("col1", "int")

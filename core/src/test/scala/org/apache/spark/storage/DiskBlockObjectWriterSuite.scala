@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.util.Utils
 
@@ -31,7 +32,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    tempDir = Utils.createTempDir()
+    tempDir = JavaUtils.createTempDir()
   }
 
   override def afterEach(): Unit = {

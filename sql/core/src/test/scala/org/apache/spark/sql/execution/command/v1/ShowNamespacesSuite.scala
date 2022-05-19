@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.execution.command
-import org.apache.spark.util.Utils
 
 /**
  * This base suite contains unified tests for the `SHOW NAMESPACES` and `SHOW DATABASES` commands
@@ -39,7 +39,7 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
       CatalogDatabase(
         name = ns,
         description = "",
-        locationUri = Utils.createTempDir().toURI,
+        locationUri = JavaUtils.createTempDir().toURI,
         properties = Map.empty),
       ignoreIfExists = false)
   }

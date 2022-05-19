@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -195,7 +196,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("REFRESH TABLE also needs to recache the data (data source tables)") {
-    val tempPath: File = Utils.createTempDir()
+    val tempPath: File = JavaUtils.createTempDir()
     tempPath.delete()
     table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")
@@ -233,7 +234,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("SPARK-15678: REFRESH PATH") {
-    val tempPath: File = Utils.createTempDir()
+    val tempPath: File = JavaUtils.createTempDir()
     tempPath.delete()
     table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")

@@ -32,7 +32,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
-import org.apache.spark.util.Utils
+import org.apache.spark.network.util.JavaUtils
 
 class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
@@ -56,7 +56,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     super.beforeAll()
     // We don't want to write logs during testing
     SparkSubmitUtils.printStream = new BufferPrintStream
-    tempIvyPath = Utils.createTempDir(namePrefix = "ivy").getAbsolutePath()
+    tempIvyPath = JavaUtils.createTempDirWithPrefix("ivy").getAbsolutePath()
   }
 
   test("incorrect maven coordinate throws error") {

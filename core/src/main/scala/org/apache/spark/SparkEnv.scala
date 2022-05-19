@@ -39,6 +39,7 @@ import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
@@ -417,7 +418,8 @@ object SparkEnv extends Logging {
     // called, and we only need to do it for driver. Because driver may run as a service, and if we
     // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.
     if (isDriver) {
-      val sparkFilesDir = Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
+      val sparkFilesDir =
+        JavaUtils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
       envInstance.driverTmpDir = Some(sparkFilesDir)
     }
 

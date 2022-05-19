@@ -21,9 +21,9 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.util.Utils
 
 /**
  * The test suite for window functions. To actually compare results with Hive,
@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
  * files, every `createQueryTest` calls should explicitly set `reset` to `false`.
  */
 class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfter {
-  private val testTempDir = Utils.createTempDir()
+  private val testTempDir = JavaUtils.createTempDir()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -738,7 +738,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
 
 class HiveWindowFunctionQueryFileSuite
   extends HiveCompatibilitySuite with BeforeAndAfter {
-  private val testTempDir = Utils.createTempDir()
+  private val testTempDir = JavaUtils.createTempDir()
 
   override def beforeAll(): Unit = {
     super.beforeAll()

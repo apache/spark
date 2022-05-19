@@ -32,6 +32,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.{Range, RepartitionByExpression}
@@ -47,7 +48,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
-import org.apache.spark.util.Utils
 
 class StreamSuite extends StreamTest {
 
@@ -746,7 +746,8 @@ class StreamSuite extends StreamTest {
 
     // 1 - Test if recovery from the checkpoint is successful.
     prepareMemoryStream()
-    val dir1 = Utils.createTempDir().getCanonicalFile // not using withTempDir {}, makes test flaky
+    val dir1 =
+      JavaUtils.createTempDir().getCanonicalFile // not using withTempDir {}, makes test flaky
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(checkpointDir, dir1)
@@ -774,7 +775,7 @@ class StreamSuite extends StreamTest {
 
     // 2 - Check recovery with wrong num shuffle partitions
     prepareMemoryStream()
-    val dir2 = Utils.createTempDir().getCanonicalFile
+    val dir2 = JavaUtils.createTempDir().getCanonicalFile
     FileUtils.copyDirectory(checkpointDir, dir2)
     // Since the number of partitions is greater than 10, should throw exception.
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "15") {

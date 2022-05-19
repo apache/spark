@@ -21,6 +21,7 @@ import java.io.File
 
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -37,7 +38,7 @@ trait TempDirectory extends BeforeAndAfterAll { self: Suite =>
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    _tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
+    _tempDir = JavaUtils.createTempDirWithPrefix(this.getClass.getName)
   }
 
   override def afterAll(): Unit = {

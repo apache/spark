@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkException
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.datasources.PartitionedFile
@@ -36,7 +37,6 @@ import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
   import BinaryFileFormat._
@@ -52,7 +52,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    testDir = Utils.createTempDir().getAbsolutePath
+    testDir = JavaUtils.createTempDir().getAbsolutePath
     fsTestDir = new Path(testDir)
     fs = fsTestDir.getFileSystem(sparkContext.hadoopConfiguration)
 

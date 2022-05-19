@@ -30,6 +30,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
@@ -585,7 +586,7 @@ abstract class JsonSuite
 
   test("Loading a JSON dataset from a text file") {
     withTempView("jsonTable") {
-      val dir = Utils.createTempDir()
+      val dir = JavaUtils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
       primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
@@ -619,7 +620,7 @@ abstract class JsonSuite
 
   test("Loading a JSON dataset primitivesAsString returns schema with primitive types as strings") {
     withTempView("jsonTable") {
-      val dir = Utils.createTempDir()
+      val dir = JavaUtils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
       primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
@@ -850,7 +851,7 @@ abstract class JsonSuite
   }
 
   test("Loading a JSON dataset from a text file with SQL") {
-    val dir = Utils.createTempDir()
+    val dir = JavaUtils.createTempDir()
     dir.delete()
     val path = dir.toURI.toString
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
@@ -878,7 +879,7 @@ abstract class JsonSuite
 
   test("Applying schemas") {
     withTempView("jsonTable1", "jsonTable2") {
-      val dir = Utils.createTempDir()
+      val dir = JavaUtils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
       primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
@@ -1620,7 +1621,7 @@ abstract class JsonSuite
 
   test("Parse JSON rows having an array type and a struct type in the same field.") {
     withTempDir { dir =>
-      val dir = Utils.createTempDir()
+      val dir = JavaUtils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
       arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).write.text(path)
@@ -1637,7 +1638,7 @@ abstract class JsonSuite
 
   test("SPARK-12872 Support to specify the option for compression codec") {
     withTempDir { dir =>
-      val dir = Utils.createTempDir()
+      val dir = JavaUtils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
       primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
@@ -1672,7 +1673,7 @@ abstract class JsonSuite
       "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
     )
     withTempDir { dir =>
-      val dir = Utils.createTempDir()
+      val dir = JavaUtils.createTempDir()
       dir.delete()
 
       val path = dir.getCanonicalPath

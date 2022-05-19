@@ -37,10 +37,10 @@ import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
-import org.apache.spark.util.Utils
 
 class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with LocalSparkContext {
 
@@ -165,7 +165,7 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
   }
 
   test("plugin initialization in non-local mode") {
-    val path = Utils.createTempDir()
+    val path = JavaUtils.createTempDir()
 
     val conf = new SparkConf()
       .setAppName(getClass().getName())

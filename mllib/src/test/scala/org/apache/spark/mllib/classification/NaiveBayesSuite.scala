@@ -28,6 +28,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 object NaiveBayesSuite {
@@ -304,7 +305,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("model save/load: 2.0 to 2.0") {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
 
     Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).foreach {
@@ -326,7 +327,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("model save/load: 1.0 to 2.0") {
     val model = NaiveBayesSuite.binaryMultinomialModel
 
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
 
     // Save model as version 1.0, load it back, and compare.

@@ -33,6 +33,7 @@ import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutput
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -46,7 +47,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   @transient val numBuckets: Int = 10
 
   before {
-    tmpDir = Utils.createTempDir()
+    tmpDir = JavaUtils.createTempDir()
     val testTempDir = new File(tmpDir, "test")
     testTempDir.mkdir()
 

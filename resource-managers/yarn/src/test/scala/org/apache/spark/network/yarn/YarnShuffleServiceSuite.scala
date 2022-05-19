@@ -45,9 +45,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.{NoOpMergedShuffleFileManager, RemoteBlockPushResolver, ShuffleTestAccessor}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
-import org.apache.spark.network.util.TransportConf
+import org.apache.spark.network.util.{JavaUtils, TransportConf}
 import org.apache.spark.tags.ExtendedLevelDBTest
-import org.apache.spark.util.Utils
 
 @ExtendedLevelDBTest
 class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
@@ -67,10 +66,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       classOf[YarnShuffleService].getCanonicalName)
     yarnConfig.setInt(SHUFFLE_SERVICE_PORT.key, 0)
     yarnConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
-    val localDir = Utils.createTempDir()
+    val localDir = JavaUtils.createTempDir()
     yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
 
-    recoveryLocalDir = Utils.createTempDir()
+    recoveryLocalDir = JavaUtils.createTempDir()
   }
 
   var s1: YarnShuffleService = null
@@ -272,7 +271,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     // Test recovery path is set outside the shuffle service, this is to simulate NM recovery
     // enabled scenario, where recovery path will be set by yarn.
     s1 = new YarnShuffleService
-    val recoveryPath = new Path(Utils.createTempDir().toURI)
+    val recoveryPath = new Path(JavaUtils.createTempDir().toURI)
     s1.setRecoveryPath(recoveryPath)
 
     s1.init(yarnConfig)
@@ -362,7 +361,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
   test("service throws error if cannot start") {
     // Set up a read-only local dir.
-    val roDir = Utils.createTempDir()
+    val roDir = JavaUtils.createTempDir()
     Files.setPosixFilePermissions(roDir.toPath(), EnumSet.of(OWNER_READ, OWNER_EXECUTE))
 
     // Try to start the shuffle service, it should fail.

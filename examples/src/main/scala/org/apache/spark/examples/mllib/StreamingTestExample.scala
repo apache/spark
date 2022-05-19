@@ -19,8 +19,8 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.SparkConf
 import org.apache.spark.mllib.stat.test.{BinarySample, StreamingTest}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.util.Utils
 
 /**
  * Perform streaming testing using Welch's 2-sample t-test on a stream of data, where the data
@@ -60,7 +60,7 @@ object StreamingTestExample {
     val conf = new SparkConf().setMaster("local").setAppName("StreamingTestExample")
     val ssc = new StreamingContext(conf, batchDuration)
     ssc.checkpoint {
-      val dir = Utils.createTempDir()
+      val dir = JavaUtils.createTempDir()
       dir.toString
     }
 

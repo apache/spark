@@ -34,6 +34,7 @@ import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -55,8 +56,8 @@ abstract class OrcSuite
   protected override def beforeAll(): Unit = {
     super.beforeAll()
 
-    orcTableAsDir = Utils.createTempDir(namePrefix = "orctests")
-    orcTableDir = Utils.createTempDir(namePrefix = "orctests")
+    orcTableAsDir = JavaUtils.createTempDirWithPrefix("orctests")
+    orcTableDir = JavaUtils.createTempDirWithPrefix("orctests")
 
     sparkContext
       .makeRDD(1 to 10)

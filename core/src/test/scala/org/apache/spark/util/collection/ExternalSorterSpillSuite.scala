@@ -31,6 +31,7 @@ import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite, TaskContext}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{KryoSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager, DiskBlockManager, DiskBlockObjectWriter, TempShuffleBlockId}
 import org.apache.spark.util.{Utils => UUtils}
@@ -48,7 +49,7 @@ class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
   private var taskContext: TaskContext = _
 
   override protected def beforeEach(): Unit = {
-    tempDir = UUtils.createTempDir(null, "test")
+    tempDir = JavaUtils.createTempDir(null, "test")
     spillFilesCreated.clear()
 
     val env: SparkEnv = mock(classOf[SparkEnv])

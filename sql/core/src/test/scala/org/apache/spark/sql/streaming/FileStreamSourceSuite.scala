@@ -33,6 +33,7 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.read.streaming.ReadLimit
@@ -182,7 +183,8 @@ abstract class FileStreamSourceTest
   }
 
   protected def getSourceFromFileStream(df: DataFrame): FileStreamSource = {
-    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+    val checkpointLocation =
+      JavaUtils.createTempDirWithPrefix("streaming.metadata").getCanonicalPath
     df.queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
         // There is only one source in our tests so just set sourceId to 0
@@ -198,8 +200,8 @@ abstract class FileStreamSourceTest
   }
 
   protected def withTempDirs(body: (File, File) => Unit): Unit = {
-    val src = Utils.createTempDir(namePrefix = "streaming.src")
-    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
+    val src = JavaUtils.createTempDirWithPrefix("streaming.src")
+    val tmp = JavaUtils.createTempDirWithPrefix("streaming.tmp")
     try {
       body(src, tmp)
     } finally {
@@ -209,9 +211,9 @@ abstract class FileStreamSourceTest
   }
 
   protected def withThreeTempDirs(body: (File, File, File) => Unit): Unit = {
-    val src = Utils.createTempDir(namePrefix = "streaming.src")
-    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
-    val archive = Utils.createTempDir(namePrefix = "streaming.archive")
+    val src = JavaUtils.createTempDirWithPrefix("streaming.src")
+    val tmp = JavaUtils.createTempDirWithPrefix("streaming.tmp")
+    val archive = JavaUtils.createTempDirWithPrefix("streaming.archive")
     try {
       body(src, tmp, archive)
     } finally {
@@ -2348,8 +2350,8 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
   import testImplicits._
 
   testQuietly("file source stress test") {
-    val src = Utils.createTempDir(namePrefix = "streaming.src")
-    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
+    val src = JavaUtils.createTempDirWithPrefix("streaming.src")
+    val tmp = JavaUtils.createTempDirWithPrefix("streaming.tmp")
 
     val fileStream = createFileStream("text", src.getCanonicalPath)
     val ds = fileStream.as[String].map(_.toInt + 1)

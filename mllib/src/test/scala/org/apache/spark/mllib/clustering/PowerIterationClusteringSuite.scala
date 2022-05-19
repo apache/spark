@@ -24,6 +24,7 @@ import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -164,7 +165,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
   }
 
   test("model save/load") {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
     val model = PowerIterationClusteringSuite.createModel(sc, 3, 10)
     try {

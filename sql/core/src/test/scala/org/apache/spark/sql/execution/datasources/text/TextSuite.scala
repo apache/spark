@@ -25,6 +25,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, TestUtils}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
@@ -48,7 +49,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
   test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
     val df = spark.read.text(testFile).withColumnRenamed("value", "adwrasdf")
 
-    val tempFile = Utils.createTempDir()
+    val tempFile = JavaUtils.createTempDir()
     tempFile.delete()
     df.write.text(tempFile.getCanonicalPath)
     verifyFrame(spark.read.text(tempFile.getCanonicalPath))
@@ -57,7 +58,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
   }
 
   test("error handling for invalid schema") {
-    val tempFile = Utils.createTempDir()
+    val tempFile = JavaUtils.createTempDir()
     tempFile.delete()
 
     val df = spark.range(2)
@@ -95,7 +96,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     val extensionNameMap = Map("bzip2" -> ".bz2", "deflate" -> ".deflate", "gzip" -> ".gz")
     extensionNameMap.foreach {
       case (codecName, extension) =>
-        val tempDir = Utils.createTempDir()
+        val tempDir = JavaUtils.createTempDir()
         val tempDirPath = tempDir.getAbsolutePath
         testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
         val compressedFiles = new File(tempDirPath).listFiles()
@@ -104,7 +105,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     }
 
     val errMsg = intercept[IllegalArgumentException] {
-      val tempDirPath = Utils.createTempDir().getAbsolutePath
+      val tempDirPath = JavaUtils.createTempDir().getAbsolutePath
       testDf.write.option("compression", "illegal").mode(SaveMode.Overwrite).text(tempDirPath)
     }
     assert(errMsg.getMessage.contains("Codec [illegal] is not available. " +

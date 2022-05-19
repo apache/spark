@@ -31,6 +31,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.QueryTest$;
@@ -39,7 +40,6 @@ import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.test.TestHive$;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.catalyst.TableIdentifier;
-import org.apache.spark.util.Utils;
 
 public class JavaMetastoreDataSourcesSuite {
   private transient JavaSparkContext sc;
@@ -55,8 +55,8 @@ public class JavaMetastoreDataSourcesSuite {
     sqlContext = TestHive$.MODULE$;
     sc = new JavaSparkContext(sqlContext.sparkContext());
 
-    path =
-      Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
+    path = JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource")
+      .getCanonicalFile();
     if (path.exists()) {
       path.delete();
     }

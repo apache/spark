@@ -25,6 +25,7 @@ import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
 import org.apache.spark.mllib.tree.model.RandomForestModel
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 
@@ -136,7 +137,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("model save/load") {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
 
     Array(Classification, Regression).foreach { algo =>

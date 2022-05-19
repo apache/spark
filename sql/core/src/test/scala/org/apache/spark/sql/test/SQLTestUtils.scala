@@ -33,6 +33,7 @@ import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -202,7 +203,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
    * deleted after `f` returns.
    */
   protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
-    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
+    val files = Array.fill[File](numPaths)(JavaUtils.createTempDir().getCanonicalFile)
     try f(files) finally {
       // wait for all tasks to finish before deleting files
       waitForTasksToFinish()

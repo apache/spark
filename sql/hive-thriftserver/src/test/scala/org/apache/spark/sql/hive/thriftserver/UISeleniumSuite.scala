@@ -71,7 +71,7 @@ class UISeleniumSuite
     val driverClassPath = {
       // Writes a temporary log4j2.properties and prepend it to driver classpath, so that it
       // overrides all other potential log4j configurations contained in other dependency jar files.
-      val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
+      val tempLog4jConf = org.apache.spark.network.util.JavaUtils.createTempDir().getCanonicalPath
 
       Files.write(
         """rootLogger.level = info

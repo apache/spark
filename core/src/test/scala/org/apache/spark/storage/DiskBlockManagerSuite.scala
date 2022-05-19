@@ -30,6 +30,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 
@@ -43,8 +44,8 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    rootDir0 = Utils.createTempDir()
-    rootDir1 = Utils.createTempDir()
+    rootDir0 = JavaUtils.createTempDir()
+    rootDir1 = JavaUtils.createTempDir()
     rootDirs = rootDir0.getAbsolutePath + "," + rootDir1.getAbsolutePath
   }
 

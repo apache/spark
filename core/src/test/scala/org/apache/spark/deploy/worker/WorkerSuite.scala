@@ -41,11 +41,11 @@ import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorState
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Worker._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs.{WORKER_FPGA_ID, WORKER_GPU_ID}
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
-import org.apache.spark.util.Utils
 
 class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
@@ -70,7 +70,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, securityMgr)
     val resourcesFile = conf.get(SPARK_WORKER_RESOURCE_FILE)
-    val workDir = Utils.createTempDir(namePrefix = this.getClass.getSimpleName).toString
+    val workDir = JavaUtils.createTempDirWithPrefix(this.getClass.getSimpleName).toString
     val localWorker = new Worker(rpcEnv, 50000, 20, 1234 * 5,
       Array.fill(1)(RpcAddress("1.2.3.4", 1234)), "Worker", workDir,
       conf, securityMgr, resourcesFile, shuffleServiceSupplier)
@@ -362,7 +362,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
       override def get: ExternalShuffleService = shuffleService
     }
     val worker = makeWorker(conf, externalShuffleServiceSupplier)
-    val workDir = Utils.createTempDir(namePrefix = "work")
+    val workDir = JavaUtils.createTempDirWithPrefix("work")
     // initialize workers
     worker.workDir = workDir
     // Create the executor's working directory

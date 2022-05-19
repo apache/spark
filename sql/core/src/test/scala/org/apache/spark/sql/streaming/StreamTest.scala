@@ -31,6 +31,7 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -45,7 +46,7 @@ import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -357,7 +358,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
     val sink = new MemorySink
     val resetConfValues = mutable.Map[String, Option[String]]()
     val defaultCheckpointLocation =
-      Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+      JavaUtils.createTempDirWithPrefix("streaming.metadata").getCanonicalPath
     var manualClockExpectedTime = -1L
 
     @volatile

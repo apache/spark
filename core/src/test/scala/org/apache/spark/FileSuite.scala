@@ -35,6 +35,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInp
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
 import org.apache.spark.internal.config._
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
@@ -45,7 +46,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    tempDir = Utils.createTempDir()
+    tempDir = JavaUtils.createTempDir()
   }
 
   override def afterEach(): Unit = {

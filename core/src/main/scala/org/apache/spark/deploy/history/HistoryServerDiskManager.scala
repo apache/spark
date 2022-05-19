@@ -28,6 +28,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend.LEVELDB
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.util.{Clock, Utils}
@@ -120,7 +121,7 @@ private class HistoryServerDiskManager(
     val needed = approximateSize(eventLogSize, isCompressed)
     makeRoom(needed)
 
-    val tmp = Utils.createTempDir(tmpStoreDir.getPath(), "appstore")
+    val tmp = JavaUtils.createTempDir(tmpStoreDir.getPath(), "appstore")
     Utils.chmod700(tmp)
 
     updateUsage(needed)

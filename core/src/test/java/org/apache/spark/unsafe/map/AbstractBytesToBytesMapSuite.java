@@ -83,7 +83,7 @@ public abstract class AbstractBytesToBytesMapSuite {
           .set(package$.MODULE$.SHUFFLE_COMPRESS(), false));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
 
-    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
+    tempDir = JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
     spillFilesCreated.clear();
     MockitoAnnotations.openMocks(this).close();
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);

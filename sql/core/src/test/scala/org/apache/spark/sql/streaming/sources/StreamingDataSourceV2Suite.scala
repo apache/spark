@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming.sources
 
 import java.util
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -35,7 +36,6 @@ import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.Utils
 
 class FakeDataStream extends MicroBatchStream with ContinuousStream {
   override def deserializeOffset(json: String): Offset = RateStreamOffset(Map())
@@ -273,7 +273,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val fakeCheckpoint = Utils.createTempDir()
+    val fakeCheckpoint = JavaUtils.createTempDir()
     spark.conf.set(SQLConf.CHECKPOINT_LOCATION.key, fakeCheckpoint.getCanonicalPath)
   }
 

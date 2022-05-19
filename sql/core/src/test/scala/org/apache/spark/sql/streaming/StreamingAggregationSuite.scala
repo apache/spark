@@ -26,6 +26,7 @@ import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -43,7 +44,6 @@ import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
-import org.apache.spark.util.Utils
 
 object FailureSingleton {
   var firstTime = true
@@ -726,7 +726,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-2.3.1-streaming-aggregate-state-format-1/").toURI
 
-    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)

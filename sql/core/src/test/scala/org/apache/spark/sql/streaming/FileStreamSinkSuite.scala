@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.JobContext
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.util.stringToFile
@@ -40,7 +41,6 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.util.Utils
 
 abstract class FileStreamSinkSuite extends StreamTest {
   import testImplicits._
@@ -64,8 +64,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
 
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+    val outputDir = JavaUtils.createTempDirWithPrefix("stream.output").getCanonicalPath
+    val checkpointDir = JavaUtils.createTempDirWithPrefix("stream.checkpoint").getCanonicalPath
 
     var query: StreamingQuery = null
 
@@ -96,8 +96,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
     val inputData = MemoryStream[String]
     val ds = inputData.toDS()
 
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+    val outputDir = JavaUtils.createTempDirWithPrefix("stream.output").getCanonicalPath
+    val checkpointDir = JavaUtils.createTempDirWithPrefix("stream.checkpoint").getCanonicalPath
 
     val query = ds.map(s => (s, s.length))
       .toDF("value", "len")
@@ -125,8 +125,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
     val inputData = MemoryStream[Int]
     val ds = inputData.toDS()
 
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+    val outputDir = JavaUtils.createTempDirWithPrefix("stream.output").getCanonicalPath
+    val checkpointDir = JavaUtils.createTempDirWithPrefix("stream.checkpoint").getCanonicalPath
 
     var query: StreamingQuery = null
 
@@ -218,8 +218,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
       .count()
       .select("window.start", "window.end", "count")
 
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+    val outputDir = JavaUtils.createTempDirWithPrefix("stream.output").getCanonicalPath
+    val checkpointDir = JavaUtils.createTempDirWithPrefix("stream.checkpoint").getCanonicalPath
 
     var query: StreamingQuery = null
 
@@ -268,7 +268,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
 
   test("Update and Complete output mode not supported") {
     val df = MemoryStream[Int].toDF().groupBy().count()
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val outputDir = JavaUtils.createTempDirWithPrefix("stream.output").getCanonicalPath
 
     withTempDir { dir =>
 
@@ -307,8 +307,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
     val inputData = MemoryStream[Int]
     val ds = inputData.toDS()
 
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+    val outputDir = JavaUtils.createTempDirWithPrefix("stream.output").getCanonicalPath
+    val checkpointDir = JavaUtils.createTempDirWithPrefix("stream.checkpoint").getCanonicalPath
 
     var query: StreamingQuery = null
 
@@ -349,8 +349,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
         val inputData = MemoryStream[(Int, Int)]
         val df = inputData.toDF()
 
-        val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-        val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+        val outputDir = JavaUtils.createTempDirWithPrefix("stream.output").getCanonicalPath
+        val checkpointDir = JavaUtils.createTempDirWithPrefix("stream.checkpoint").getCanonicalPath
 
         var query: StreamingQuery = null
         try {

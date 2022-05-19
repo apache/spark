@@ -33,6 +33,7 @@ import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -526,8 +527,8 @@ abstract class OrcQueryTest extends OrcTest {
   }
 
   test("read from multiple orc input paths") {
-    val path1 = Utils.createTempDir()
-    val path2 = Utils.createTempDir()
+    val path1 = JavaUtils.createTempDir()
+    val path2 = JavaUtils.createTempDir()
     makeOrcFile((1 to 10).map(Tuple1.apply), path1)
     makeOrcFile((1 to 10).map(Tuple1.apply), path2)
     val df = spark.read.orc(path1.getCanonicalPath, path2.getCanonicalPath)

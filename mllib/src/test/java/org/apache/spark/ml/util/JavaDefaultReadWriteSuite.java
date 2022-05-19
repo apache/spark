@@ -24,6 +24,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.Utils;
 
 public class JavaDefaultReadWriteSuite extends SharedSparkSession {
@@ -32,7 +33,7 @@ public class JavaDefaultReadWriteSuite extends SharedSparkSession {
   @Override
   public void setUp() throws IOException {
     super.setUp();
-    tempDir = Utils.createTempDir(
+    tempDir = JavaUtils.createTempDir(
       System.getProperty("java.io.tmpdir"), "JavaDefaultReadWriteSuite");
   }
 

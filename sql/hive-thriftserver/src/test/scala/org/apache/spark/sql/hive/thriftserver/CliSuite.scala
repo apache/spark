@@ -37,6 +37,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -48,10 +49,10 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * A test suite for the `spark-sql` CLI tool.
  */
 class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
-  val warehousePath = Utils.createTempDir()
-  val metastorePath = Utils.createTempDir()
-  val scratchDirPath = Utils.createTempDir()
-  val sparkWareHouseDir = Utils.createTempDir()
+  val warehousePath = JavaUtils.createTempDir()
+  val metastorePath = JavaUtils.createTempDir()
+  val scratchDirPath = JavaUtils.createTempDir()
+  val sparkWareHouseDir = JavaUtils.createTempDir()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -225,7 +226,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("load warehouse dir from hive-site.xml") {
-    val metastore = Utils.createTempDir()
+    val metastore = JavaUtils.createTempDir()
     metastore.delete()
     try {
       runCliWithin(1.minute,
@@ -250,7 +251,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("load warehouse dir from --conf spark(.hadoop).hive.*") {
     // override conf from hive-site.xml
-    val metastore = Utils.createTempDir()
+    val metastore = JavaUtils.createTempDir()
     metastore.delete()
     try {
       runCliWithin(2.minute,
@@ -279,7 +280,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("load warehouse dir from spark.sql.warehouse.dir") {
     // spark.sql.warehouse.dir overrides all hive ones
-    val metastore = Utils.createTempDir()
+    val metastore = JavaUtils.createTempDir()
     metastore.delete()
     try {
       runCliWithin(2.minute,

@@ -35,11 +35,12 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
 class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
-  val testFile = new File(Utils.createTempDir(), "FileAppenderSuite-test").getAbsoluteFile
+  val testFile = new File(JavaUtils.createTempDir(), "FileAppenderSuite-test").getAbsoluteFile
 
   before {
     cleanup()

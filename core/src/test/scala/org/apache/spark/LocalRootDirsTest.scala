@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.File
 import java.util.UUID
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 
@@ -39,7 +40,7 @@ trait LocalRootDirsTest extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    tempDir = Utils.createTempDir(namePrefix = "local")
+    tempDir = JavaUtils.createTempDirWithPrefix("local")
     conf.set("spark.local.dir",
       tempDir.getAbsolutePath + File.separator + UUID.randomUUID().toString)
   }

@@ -26,6 +26,7 @@ import org.apache.spark.mllib.tree.impurity.Variance
 import org.apache.spark.mllib.tree.loss.{AbsoluteError, LogLoss, SquaredError}
 import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -134,7 +135,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("model save/load") {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
 
     val trees = Range(0, 3).map(_ => DecisionTreeSuite.createModel(Regression)).toArray
@@ -159,7 +160,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("Checkpointing") {
-    val tempDir = Utils.createTempDir()
+    val tempDir = JavaUtils.createTempDir()
     val path = tempDir.toURI.toString
     sc.setCheckpointDir(path)
 

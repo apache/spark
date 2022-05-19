@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
@@ -34,7 +35,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StringType, StructType}
-import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
     extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
@@ -69,7 +69,7 @@ class HivePartitionFilteringSuite(version: String)
   private def init(tryDirectSql: Boolean): HiveClient = {
     val hadoopConf = new Configuration()
     hadoopConf.setBoolean(tryDirectSqlKey, tryDirectSql)
-    hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().toURI().toString())
+    hadoopConf.set("hive.metastore.warehouse.dir", JavaUtils.createTempDir().toURI().toString())
     val client = buildClient(hadoopConf)
     val tableSchema =
       new StructType().add("value", "int").add("ds", "int").add("h", "int").add("chunk", "string")
