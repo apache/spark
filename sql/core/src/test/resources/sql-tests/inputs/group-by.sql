@@ -288,6 +288,12 @@ SELECT regr_syy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
 SELECT k, regr_syy(y, x) FROM testRegression GROUP BY k;
 SELECT k, regr_syy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
 
+-- SPARK-39230: Support ANSI Aggregate Function: regr_slope
+SELECT regr_slope(y, x) FROM testRegression;
+SELECT regr_slope(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
+SELECT k, regr_slope(y, x) FROM testRegression GROUP BY k;
+SELECT k, regr_slope(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
+
 -- SPARK-37676: Support ANSI Aggregation Function: percentile_cont
 SELECT
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v),

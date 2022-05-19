@@ -34,7 +34,7 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
   override def dataType: DataType = DoubleType
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
-  protected val n = AttributeReference("n", DoubleType, nullable = false)()
+  protected val count = AttributeReference("count", DoubleType, nullable = false)()
   protected val xAvg = AttributeReference("xAvg", DoubleType, nullable = false)()
   protected val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
   protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
@@ -46,7 +46,7 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
   override def stringArgs: Iterator[Any] =
     super.stringArgs.filter(_.isInstanceOf[Expression])
 
-  override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck)
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq(count, xAvg, yAvg, ck)
 
   override val initialValues: Seq[Expression] = Array.fill(4)(Literal(0.0))
 
@@ -54,8 +54,8 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
 
   override val mergeExpressions: Seq[Expression] = {
 
-    val n1 = n.left
-    val n2 = n.right
+    val n1 = count.left
+    val n2 = count.right
     val newN = n1 + n2
     val dx = xAvg.right - xAvg.left
     val dxN = If(newN === 0.0, 0.0, dx / newN)
@@ -69,7 +69,7 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
   }
 
   protected def updateExpressionsDef: Seq[Expression] = {
-    val newN = n + 1.0
+    val newN = count + 1.0
     val dx = left - xAvg
     val dy = right - yAvg
     val dyN = dy / newN
@@ -79,7 +79,7 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
 
     val isNull = left.isNull || right.isNull
     Seq(
-      If(isNull, n, newN),
+      If(isNull, count, newN),
       If(isNull, xAvg, newXAvg),
       If(isNull, yAvg, newYAvg),
       If(isNull, ck, newCk)
@@ -106,7 +106,7 @@ case class CovPopulation(
     this(left, right, !SQLConf.get.legacyStatisticalAggregate)
 
   override val evaluateExpression: Expression = {
-    If(n === 0.0, Literal.create(null, DoubleType), ck / n)
+    If(count === 0.0, Literal.create(null, DoubleType), ck / count)
   }
   override def prettyName: String = "covar_pop"
 
@@ -135,8 +135,8 @@ case class CovSample(
     this(left, right, !SQLConf.get.legacyStatisticalAggregate)
 
   override val evaluateExpression: Expression = {
-    If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, divideByZeroEvalResult, ck / (n - 1.0)))
+    If(count === 0.0, Literal.create(null, DoubleType),
+      If(count === 1.0, divideByZeroEvalResult, ck / (count - 1.0)))
   }
   override def prettyName: String = "covar_samp"
 
