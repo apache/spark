@@ -4366,18 +4366,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Submit a reduce job that depends which will create a map stage
     submit(reduceRdd, (0 until parts).toArray)
 
-    // Pass in custom bitmap so that the mergeStatus can store
-    // the correct mapIndex.
-    val bitmap = new RoaringBitmap()
-    bitmap.add(-1)
-
     val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
     scheduler.handleRegisterMergeStatuses(shuffleMapStage,
-      Seq((0, MergeStatus(makeBlockManagerId("hostA"), shuffleDep.shuffleMergeId, bitmap, 1000L))))
+      Seq((0, makeMergeStatus("hostA", shuffleDep.shuffleMergeId))))
     scheduler.handleShuffleMergeFinalized(shuffleMapStage,
       shuffleMapStage.shuffleDep.shuffleMergeId)
     scheduler.handleRegisterMergeStatuses(shuffleMapStage,
-      Seq((1, MergeStatus(makeBlockManagerId("hostA"), shuffleDep.shuffleMergeId, bitmap, 1000L))))
+      Seq((1, makeMergeStatus("hostA", shuffleDep.shuffleMergeId))))
 
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 1)
 

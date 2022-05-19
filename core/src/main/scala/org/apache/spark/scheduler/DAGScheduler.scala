@@ -1887,11 +1887,11 @@ private[spark] class DAGScheduler(
             }
           } else {
             // Unregister the merge result of <shuffleId, reduceId> if
-            // the FetchFailed event contains a mapIndex of -1, and is not a
+            // there is a FetchFailed event and is not a
             // MetaDataFetchException which is signified by bmAddress being null
-            if (bmAddress != null && pushBasedShuffleEnabled) {
+            if (bmAddress != null) {
               mapOutputTracker.
-                unregisterMergeResult(shuffleId, reduceId, bmAddress, Option(mapIndex))
+                unregisterMergeResult(shuffleId, reduceId, bmAddress, None)
             }
           }
 
