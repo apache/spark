@@ -133,6 +133,12 @@
     "message" : [ "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>" ],
     "sqlState" : "22023"
   },
+  "INVALID_PROPERTY_KEY" : {
+    "message" : [ "<key> is an invalid property key, please use quotes, e.g. SET <key>=<value>" ]
+  },
+  "INVALID_PROPERTY_VALUE" : {
+    "message" : [ "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>" ]
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [ "Invalid SQL syntax: <inputString>" ],
     "sqlState" : "42000"
@@ -261,6 +267,15 @@
       },
       "REPEATED_PIVOT" : {
         "message" : [ "Repeated PIVOT operation." ]
+      },
+      "SET_NAMESPACE_PROPERTY" : {
+        "message" : [ "<property> is a reserved namespace property, <msg>." ]
+      },
+      "SET_PROPERTIES_AND_DBPROPERTIES" : {
+        "message" : [ "set PROPERTIES and DBPROPERTIES at the same time." ]
+      },
+      "SET_TABLE_PROPERTY" : {
+        "message" : [ "<property> is a reserved table property, <msg>." ]
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
         "message" : [ "UDF class with <n> type arguments." ]

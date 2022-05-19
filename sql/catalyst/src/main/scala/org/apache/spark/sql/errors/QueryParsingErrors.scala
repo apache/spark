@@ -267,16 +267,26 @@ object QueryParsingErrors extends QueryErrorsBase {
 
   def cannotCleanReservedNamespacePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
-    new ParseException(s"$property is a reserved namespace property, $msg.", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("SET_NAMESPACE_PROPERTY", property, msg),
+      ctx)
   }
 
   def propertiesAndDbPropertiesBothSpecifiedError(ctx: CreateNamespaceContext): Throwable = {
-    new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("SET_PROPERTIES_AND_DBPROPERTIES"),
+      ctx
+    )
   }
 
   def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
-    new ParseException(s"$property is a reserved table property, $msg.", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("SET_TABLE_PROPERTY", property, msg),
+      ctx)
   }
 
   def duplicatedTablePathsFoundError(
@@ -378,14 +388,18 @@ object QueryParsingErrors extends QueryErrorsBase {
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
       keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"'$keyCandidate' is an invalid property key, please " +
-      s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
+    new ParseException(errorClass = "INVALID_PROPERTY_KEY",
+      messageParameters = Array(toSQLConf(keyCandidate),
+        toSQLConf(keyCandidate), toSQLConf(valueStr)),
+      ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
       valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"'$valueCandidate' is an invalid property value, please " +
-      s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
+    new ParseException(errorClass = "INVALID_PROPERTY_VALUE",
+      messageParameters = Array(toSQLConf(valueCandidate),
+        toSQLConf(keyStr), toSQLConf(valueCandidate)),
+      ctx)
   }
 
   def unexpectedFormatForResetConfigurationError(ctx: ResetConfigurationContext): Throwable = {

@@ -168,11 +168,11 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("SET a=1;2;;", expectedErrMsg)
 
     intercept("SET a b=`1;;`",
-      "'a b' is an invalid property key, please use quotes, e.g. SET `a b`=`1;;`")
+      "\"a b\" is an invalid property key, please use quotes, e.g. SET \"a b\"=\"1;;\"")
 
     intercept("SET `a`=1;2;;",
-      "'1;2;;' is an invalid property value, please use quotes, e.g." +
-        " SET `a`=`1;2;;`")
+      "\"1;2;;\" is an invalid property value, please use quotes, e.g." +
+        " SET \"a\"=\"1;2;;\"")
   }
 
   test("refresh resource") {
