@@ -1144,7 +1144,7 @@ object SparkSession extends Logging {
       //   SparkSession,
       //   Option[SessionState])
       val clazz = Utils.classForName(className)
-      val ctor = clazz.getConstructors.head
+      val ctor = clazz.getConstructors.filter(c => c.getParameterCount == 2).head
       ctor.newInstance(sparkSession, None).asInstanceOf[BaseSessionStateBuilder].build()
     } catch {
       case NonFatal(e) =>
