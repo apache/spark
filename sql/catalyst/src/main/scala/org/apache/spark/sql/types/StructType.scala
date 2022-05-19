@@ -539,6 +539,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
         expr.eval()
       }.orNull
     }
+
+  private [sql] lazy val hasExistenceDefaultValues = existenceDefaultValues.exists(_ != null)
 }
 
 /**
