@@ -406,6 +406,7 @@ class JacksonParser(
       throw QueryExecutionErrors.failToParseValueForDataTypeError(parser, token, dataType)
   }
 
+
   /**
    * Parse an object from the token stream into a new Row representing the schema.
    * Fields in the json that are not defined in the requested schema will be dropped.
@@ -420,8 +421,10 @@ class JacksonParser(
     var badRecordException: Option[Throwable] = None
     var skipRow = false
     // Apply default values from the column metadata to the initial row, if any.
-    for ((value: Any, i: Int) <- schema.existenceDefaultValues.zipWithIndex) {
-      row.update(i, value)
+    if (schema.existenceDefaultValues.exists(_ != null)) {
+      for ((value: Any, i: Int) <- schema.existenceDefaultValues.zipWithIndex) {
+        row.update(i, value)
+      }
     }
     structFilters.reset()
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {

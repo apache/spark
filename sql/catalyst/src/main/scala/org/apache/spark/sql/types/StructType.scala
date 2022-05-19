@@ -513,7 +513,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     InterpretedOrdering.forSchema(this.fields.map(_.dataType))
 
   /**
-   * Parses the text representing constant-folded default column literal values.
+   * Parses the text representing constant-folded default column literal values. These are known as
+   * "existence" default values because each one is the constant-folded result of the original
+   * default value first assigned to the column at table/column creation time. When scanning a field
+   * from any data source, if the corresponding value is not present in storage, the output row
+   * returns this "existence" default value instead of NULL.
    * @return a sequence of either (1) NULL, if the column had no default value, or (2) an object of
    *         Any type suitable for assigning into a row using the InternalRow.update method.
    */
@@ -533,7 +537,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
         // The expression should be a literal value by this point, possibly wrapped in a cast
         // function. This is enforced by the execution of commands that assign default values.
         expr.eval()
-      }.getOrElse(null)
+      }.orNull
     }
 }
 
