@@ -105,7 +105,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
         decimalPrecision.toString,
         decimalScale.toString,
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-        context)
+      queryContext = context)
   }
 
   def invalidInputInCastToDatetimeError(
@@ -120,7 +120,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-        errorContext)
+      queryContext = errorContext)
   }
 
   def invalidInputSyntaxForBooleanError(
@@ -147,7 +147,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(StringType),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      errorContext)
+      queryContext = errorContext)
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -220,7 +220,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         toSQLValue(key, dataType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context)
+      queryContext = context)
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
@@ -478,9 +478,10 @@ object QueryExecutionErrors extends QueryErrorsBase {
       hint: String = "",
       errorContext: String = ""): ArithmeticException = {
     val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
-    new SparkArithmeticException("ARITHMETIC_OVERFLOW",
-      Array(message, alternative, SQLConf.ANSI_ENABLED.key),
-      errorContext)
+    new SparkArithmeticException(
+      errorClass = "ARITHMETIC_OVERFLOW",
+      messageParameters = Array(message, alternative, SQLConf.ANSI_ENABLED.key),
+      queryContext = errorContext)
   }
 
   def unaryMinusCauseOverflowError(originValue: Int): ArithmeticException = {
