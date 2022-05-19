@@ -207,7 +207,7 @@ class V2ExpressionBuilder(
         substring.children
       }
       val childrenExpressions = children.flatMap(generateExpression(_))
-      if (childrenExpressions.length == substring.children.length) {
+      if (childrenExpressions.length == children.length) {
         Some(new GeneralScalarExpression("SUBSTRING",
           childrenExpressions.toArray[V2Expression]))
       } else {
@@ -253,7 +253,7 @@ class V2ExpressionBuilder(
         overlay.children
       }
       val childrenExpressions = children.flatMap(generateExpression(_))
-      if (childrenExpressions.length == overlay.children.length) {
+      if (childrenExpressions.length == children.length) {
         Some(new GeneralScalarExpression("OVERLAY",
           childrenExpressions.toArray[V2Expression]))
       } else {

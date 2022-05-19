@@ -254,10 +254,16 @@ abstract class JdbcDialect extends Serializable with Logging{
 
     override def visitOverlay(inputs: Array[String]): String = {
       if (isSupportedFunction("OVERLAY")) {
-        super.visitOverlay(inputs)
+        if (inputs.length == 3) {
+          "OVERLAY(" + inputs(0) + " PLACING " + inputs(1) + " FROM " + inputs(2) + ")";
+        } else if (inputs.length == 4) {
+          "OVERLAY(" + inputs(0) + " PLACING " + inputs(1) + " FROM " + inputs(2) +
+            " FOR " + inputs(3) + ")";
+        } else {
+          throw new IllegalStateException("Unexpected V2 function: OVERLAY");
+        }
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+        super.visitOverlay(inputs)
       }
     }
 

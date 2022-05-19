@@ -118,10 +118,10 @@ public class V2ExpressionSQLBuilder {
             Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "LTRIM":
           return visitTrim("LEADING",
-                  Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "RTRIM":
           return visitTrim("TRAILING",
-                  Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "OVERLAY":
           return visitOverlay(
             Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
@@ -246,19 +246,16 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitOverlay(String[] inputs) {
-    if (inputs.length <= 3) {
-      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] +")";
-    } else {
-      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] +
-              " FOR " + inputs[3] +")";
-    }
+    throw new UnsupportedOperationException("Function: OVERLAY does not support ");
   }
 
   protected String visitTrim(String direction, String[] inputs) {
-    if (inputs.length <= 1) {
+    if (inputs.length == 1) {
       return "TRIM(" + direction + " FROM " + inputs[0] + ")";
-    } else {
+    } else if (inputs.length == 2) {
       return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
+    } else {
+      throw new IllegalStateException("Unexpected V2 function: TRIM");
     }
   }
 }
