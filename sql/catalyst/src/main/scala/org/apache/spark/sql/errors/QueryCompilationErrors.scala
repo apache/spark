@@ -112,21 +112,19 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
-    new AnalysisException(
-      "Generators are not supported when it's nested in " +
-        "expressions, but got: " + toPrettySQL(trimmedNestedGenerator))
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+      messageParameters = Array("NESTED_IN_EXPRESSIONS", toPrettySQL(trimmedNestedGenerator)))
   }
 
   def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
-    new AnalysisException(
-      s"Only one generator allowed per $clause clause but found " +
-        generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+      messageParameters = Array("MULTI_GENERATOR",
+        clause, generators.size.toString, generators.map(toPrettySQL).mkString(", ")))
   }
 
   def generatorOutsideSelectError(plan: LogicalPlan): Throwable = {
-    new AnalysisException(
-      "Generators are not supported outside the SELECT clause, but " +
-        "got: " + plan.simpleString(SQLConf.get.maxToStringFields))
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+      messageParameters = Array("OUTSIDE_SELECT", plan.simpleString(SQLConf.get.maxToStringFields)))
   }
 
   def legacyStoreAssignmentPolicyError(): Throwable = {
@@ -324,8 +322,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
-    new AnalysisException(s"$name is expected to be a generator. However, " +
-      s"its class is $classCanonicalName, which is not a generator.")
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+      messageParameters = Array("NOT_GENERATOR", name.toString, classCanonicalName))
   }
 
   def functionWithUnsupportedSyntaxError(prettyName: String, syntax: String): Throwable = {

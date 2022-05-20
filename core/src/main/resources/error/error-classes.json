@@ -292,6 +292,23 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_GENERATOR" : {
+    "message": [ "The generator is not supported: " ],
+    "subClass": {
+      "MULTI_GENERATOR" : {
+        "message" : [ "only one generator allowed per <clause> clause but found <size>: <generators>" ]
+      },
+      "NESTED_IN_EXPRESSIONS": {
+        "message": [ "nested in expressions <expressions>" ]
+      },
+      "NOT_GENERATOR" : {
+        "message" : [ "<name> is expected to be a generator. However, its class is <classCanonicalName>, which is not a generator." ]
+      },
+      "OUTSIDE_SELECT" : {
+        "message" : [ "outside the SELECT clause, found: <plan>" ]
+      }
+    }
+  },
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
   },
