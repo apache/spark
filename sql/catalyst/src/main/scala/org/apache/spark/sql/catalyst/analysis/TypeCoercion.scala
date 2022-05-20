@@ -806,7 +806,6 @@ abstract class TypeCoercionBase {
 object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
-    WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
       InConversion ::
       PromoteStrings ::
@@ -824,7 +823,7 @@ object TypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion :: Nil) :: Nil
+      StringLiteralCoercion :: Nil) :: WidenSetOperationTypes :: Nil
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
 
