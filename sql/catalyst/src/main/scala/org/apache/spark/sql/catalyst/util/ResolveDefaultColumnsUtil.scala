@@ -209,12 +209,12 @@ object ResolveDefaultColumns {
   }
 
   /**
-   * Resets all elements to true within the result of [[getExistenceDefaultsBitmask]] above.
-   * Afterwares, set element(s) to false before calling [[applyExistenceDefaultValuesToRow]] below.
+   * Resets the elements of the array initially returned from [[getExistenceDefaultsBitmask]] above.
+   * Afterwards, set element(s) to false before calling [[applyExistenceDefaultValuesToRow]] below.
    */
   def resetExistenceDefaultsBitmask(schema: StructType): Unit = {
     for (i <- 0 until schema.existenceDefaultValues.size) {
-      schema.existenceDefaultsBitmask(i) = true
+      schema.existenceDefaultsBitmask(i) = (schema.existenceDefaultValues(i) != null)
     }
   }
 
