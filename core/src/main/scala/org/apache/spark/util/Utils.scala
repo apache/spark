@@ -333,6 +333,18 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Create a temporary directory inside the given parent directory. The directory will be
+   * automatically deleted when the VM shuts down.
+   */
+  def createTempDir(
+      root: String = System.getProperty("java.io.tmpdir"),
+      namePrefix: String = "spark"): File = {
+    val dir = createDirectory(root, namePrefix)
+    ShutdownHookManager.registerShutdownDeleteDir(dir)
+    dir
+  }
+
+  /**
    * Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
    * copying is disabled by default unless explicitly set transferToEnabled as true,
    * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].

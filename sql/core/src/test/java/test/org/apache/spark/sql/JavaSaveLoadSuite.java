@@ -28,11 +28,11 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.util.Utils;
 
 public class JavaSaveLoadSuite {
 
@@ -53,8 +53,7 @@ public class JavaSaveLoadSuite {
       .getOrCreate();
 
     path =
-      JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource")
-        .getCanonicalFile();
+      Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
     if (path.exists()) {
       path.delete();
     }
