@@ -21,11 +21,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.apache.spark.sql.connector.expressions.Cast;
-import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
-import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.*;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -134,6 +130,10 @@ public class V2ExpressionSQLBuilder {
         default:
           return visitUnexpectedExpr(expr);
       }
+    } else if (expr instanceof UserDefinedScalarFunc) {
+      UserDefinedScalarFunc f = (UserDefinedScalarFunc) expr;
+      return visitUserDefinedFunction(f.name(), f.canonicalName(),
+        Arrays.stream(f.children()).map(c -> build(c)).toArray(String[]::new));
     } else {
       return visitUnexpectedExpr(expr);
     }
@@ -243,6 +243,11 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitSQLFunction(String funcName, String[] inputs) {
+    return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+  }
+
+  protected String visitUserDefinedFunction(
+      String funcName, String canonicalName, String[] inputs) {
     return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
   }
 

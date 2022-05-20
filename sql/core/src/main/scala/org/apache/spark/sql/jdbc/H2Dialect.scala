@@ -28,7 +28,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc, UserDefinedAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
 
@@ -44,12 +44,12 @@ private[sql] object H2Dialect extends JdbcDialect {
     supportedFunctions.contains(funcName)
 
   class H2SQLBuilder extends JDBCSQLBuilder {
-    override def visitUnexpectedExpr(expr: Expression): String = {
-      expr match {
-        case e: GeneralScalarExpression if e.name() == "CHAR_LENGTH" =>
-          val children = e.children().map(build)
-          s"""${e.name()}(${children.mkString(", ")})"""
-        case _ => super.visitUnexpectedExpr(expr)
+    override def visitUserDefinedFunction(
+        funcName: String, canonicalName: String, inputs: Array[String]): String = {
+      funcName match {
+        case "CHAR_LENGTH" =>
+          s"$funcName(${inputs.mkString(", ")})"
+        case _ => super.visitUserDefinedFunction(funcName, canonicalName, inputs)
       }
     }
   }
@@ -65,50 +65,48 @@ private[sql] object H2Dialect extends JdbcDialect {
     }
   }
 
-  private def compileUDAF(aggFunction: AggregateFunc): Option[String] = {
+  override def compileDialectAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
-      case f: GeneralAggregateFunc if f.name() == "IAVG" =>
+      case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
+        assert(f.children().length == 1)
+        val distinct = if (f.isDistinct) "DISTINCT " else ""
+        Some(s"VAR_POP($distinct${f.children().head})")
+      case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
+        assert(f.children().length == 1)
+        val distinct = if (f.isDistinct) "DISTINCT " else ""
+        Some(s"VAR_SAMP($distinct${f.children().head})")
+      case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
+        assert(f.children().length == 1)
+        val distinct = if (f.isDistinct) "DISTINCT " else ""
+        Some(s"STDDEV_POP($distinct${f.children().head})")
+      case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
+        assert(f.children().length == 1)
+        val distinct = if (f.isDistinct) "DISTINCT " else ""
+        Some(s"STDDEV_SAMP($distinct${f.children().head})")
+      case f: GeneralAggregateFunc if f.name() == "COVAR_POP" =>
+        assert(f.children().length == 2)
+        val distinct = if (f.isDistinct) "DISTINCT " else ""
+        Some(s"COVAR_POP($distinct${f.children().head}, ${f.children().last})")
+      case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" =>
+        assert(f.children().length == 2)
+        val distinct = if (f.isDistinct) "DISTINCT " else ""
+        Some(s"COVAR_SAMP($distinct${f.children().head}, ${f.children().last})")
+      case f: GeneralAggregateFunc if f.name() == "CORR" =>
+        assert(f.children().length == 2)
+        val distinct = if (f.isDistinct) "DISTINCT " else ""
+        Some(s"CORR($distinct${f.children().head}, ${f.children().last})")
+      case _ => None
+    }
+  }
+
+  override def compileUDAF(aggFunction: AggregateFunc): Option[String] = {
+    aggFunction match {
+      case f: UserDefinedAggregateFunc if f.name() == "IAVG" =>
         assert(f.children().length == 1)
         val distinct = if (f.isDistinct) "DISTINCT " else ""
         compileExpression(f.children().head).map(v => s"AVG($distinct$v)")
       case _ => None
     }
-  }
-
-  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    super.compileAggregate(aggFunction).orElse(compileUDAF(aggFunction)).orElse(
-      aggFunction match {
-        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_POP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_POP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" =>
-          assert(f.children().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"COVAR_POP($distinct${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" =>
-          assert(f.children().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"COVAR_SAMP($distinct${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "CORR" =>
-          assert(f.children().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"CORR($distinct${f.children().head}, ${f.children().last})")
-        case _ => None
-      }
-    )
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
