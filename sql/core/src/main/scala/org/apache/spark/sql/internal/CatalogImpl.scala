@@ -101,8 +101,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val tables = sessionCatalog.listTables(dbName).map(makeTable)
       CatalogImpl.makeDataset(tables, sparkSession)
     } else {
-      val multiParts = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
-      val plan = ShowTables(UnresolvedNamespace(multiParts), None)
+      val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+      val plan = ShowTables(UnresolvedNamespace(ident), None)
       val ret = sparkSession.sessionState.executePlan(plan).toRdd.collect()
       val tables = ret
         .map(row => TableIdentifier(row.getString(1), Some(row.getString(0))))
@@ -377,7 +377,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       schema: StructType,
       description: String,
       options: Map[String, String]): DataFrame = {
-    val idents = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val storage = DataSource.buildStorageFormatFromOptions(options)
     val tableType = if (storage.locationUri.isDefined) {
       CatalogTableType.EXTERNAL
@@ -391,23 +391,21 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       None
     }
 
-    val tableSpec =
-      TableSpec(
-        properties = Map(),
-        provider = Some(source),
-        options = options,
-        location = location,
-        comment = { if (description.isEmpty) None else Some(description) },
-        serde = None,
-        external = tableType == CatalogTableType.EXTERNAL)
+    val tableSpec = TableSpec(
+      properties = Map(),
+      provider = Some(source),
+      options = options,
+      location = location,
+      comment = { if (description.isEmpty) None else Some(description) },
+      serde = None,
+      external = tableType == CatalogTableType.EXTERNAL)
 
-    val plan =
-      CreateTable(
-        name = UnresolvedDBObjectName(idents, isNamespace = true),
-        tableSchema = schema,
-        partitioning = Seq(),
-        tableSpec = tableSpec,
-        ignoreIfExists = false)
+    val plan = CreateTable(
+      name = UnresolvedDBObjectName(ident, isNamespace = false),
+      tableSchema = schema,
+      partitioning = Seq(),
+      tableSpec = tableSpec,
+      ignoreIfExists = false)
 
     sparkSession.sessionState.executePlan(plan).toRdd
     sparkSession.table(tableName)
