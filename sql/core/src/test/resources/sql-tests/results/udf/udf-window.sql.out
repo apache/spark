@@ -262,6 +262,9 @@ stddev(udf(val)) OVER w AS stddev,
 first_value(udf(val)) OVER w AS first_value,
 first_value(udf(val), true) OVER w AS first_value_ignore_null,
 first_value(udf(val), false) OVER w AS first_value_contain_null,
+any_value(udf(val)) OVER w AS any_value,
+any_value(udf(val), true) OVER w AS any_value_ignore_null,
+any_value(udf(val), false) OVER w AS any_value_contain_null,
 last_value(udf(val)) OVER w AS last_value,
 last_value(udf(val), true) OVER w AS last_value_ignore_null,
 last_value(udf(val), false) OVER w AS last_value_contain_null,
@@ -286,17 +289,17 @@ FROM testData
 WINDOW w AS (PARTITION BY udf(cate) ORDER BY udf(val))
 ORDER BY cate, udf(val)
 -- !query schema
-struct<udf(val):int,cate:string,max:int,min:int,min:int,count:bigint,sum:bigint,avg:double,stddev:double,first_value:int,first_value_ignore_null:int,first_value_contain_null:int,last_value:int,last_value_ignore_null:int,last_value_contain_null:int,rank:int,dense_rank:int,cume_dist:double,percent_rank:double,ntile:int,row_number:int,var_pop:double,var_samp:double,approx_count_distinct:bigint,covar_pop:double,corr:double,stddev_samp:double,stddev_pop:double,collect_list:array<int>,collect_set:array<int>,skewness:double,kurtosis:double>
+struct<udf(val):int,cate:string,max:int,min:int,min:int,count:bigint,sum:bigint,avg:double,stddev:double,first_value:int,first_value_ignore_null:int,first_value_contain_null:int,any_value:int,any_value_ignore_null:int,any_value_contain_null:int,last_value:int,last_value_ignore_null:int,last_value_contain_null:int,rank:int,dense_rank:int,cume_dist:double,percent_rank:double,ntile:int,row_number:int,var_pop:double,var_samp:double,approx_count_distinct:bigint,covar_pop:double,corr:double,stddev_samp:double,stddev_pop:double,collect_list:array<int>,collect_set:array<int>,skewness:double,kurtosis:double>
 -- !query output
-NULL	NULL	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.5	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
-3	NULL	3	3	3	1	3	3.0	NULL	NULL	3	NULL	3	3	3	2	2	1.0	1.0	2	2	0.0	NULL	1	0.0	NULL	NULL	0.0	[3]	[3]	NULL	NULL
-NULL	a	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.25	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
-1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	1	2	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
-1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	2	3	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
-2	a	2	1	1	3	4	1.3333333333333333	0.5773502691896258	NULL	1	NULL	2	2	2	4	3	1.0	1.0	2	4	0.22222222222222224	0.33333333333333337	2	4.772185885555555E8	1.0	0.5773502691896258	0.4714045207910317	[1,1,2]	[1,2]	1.1539890888012805	-0.6672217220327235
-1	b	1	1	1	1	1	1.0	NULL	1	1	1	1	1	1	1	1	0.3333333333333333	0.0	1	1	0.0	NULL	1	NULL	NULL	NULL	0.0	[1]	[1]	NULL	NULL
-2	b	2	1	1	2	3	1.5	0.7071067811865476	1	1	1	2	2	2	2	2	0.6666666666666666	0.5	1	2	0.25	0.5	2	0.0	NULL	0.7071067811865476	0.5	[1,2]	[1,2]	0.0	-2.0000000000000013
-3	b	3	1	1	3	6	2.0	1.0	1	1	1	3	3	3	3	3	1.0	1.0	2	3	0.6666666666666666	1.0	3	5.3687091175E8	1.0	1.0	0.816496580927726	[1,2,3]	[1,2,3]	0.7057890433107311	-1.4999999999999984
+NULL	NULL	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.5	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
+3	NULL	3	3	3	1	3	3.0	NULL	NULL	3	NULL	NULL	3	NULL	3	3	3	2	2	1.0	1.0	2	2	0.0	NULL	1	0.0	NULL	NULL	0.0	[3]	[3]	NULL	NULL
+NULL	a	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.25	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
+1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	1	2	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
+1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	2	3	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
+2	a	2	1	1	3	4	1.3333333333333333	0.5773502691896258	NULL	1	NULL	NULL	1	NULL	2	2	2	4	3	1.0	1.0	2	4	0.22222222222222224	0.33333333333333337	2	4.772185885555555E8	1.0	0.5773502691896258	0.4714045207910317	[1,1,2]	[1,2]	1.1539890888012805	-0.6672217220327235
+1	b	1	1	1	1	1	1.0	NULL	1	1	1	1	1	1	1	1	1	1	1	0.3333333333333333	0.0	1	1	0.0	NULL	1	NULL	NULL	NULL	0.0	[1]	[1]	NULL	NULL
+2	b	2	1	1	2	3	1.5	0.7071067811865476	1	1	1	1	1	1	2	2	2	2	2	0.6666666666666666	0.5	1	2	0.25	0.5	2	0.0	NULL	0.7071067811865476	0.5	[1,2]	[1,2]	0.0	-2.0000000000000013
+3	b	3	1	1	3	6	2.0	1.0	1	1	1	1	1	1	3	3	3	3	3	1.0	1.0	2	3	0.6666666666666666	1.0	3	5.3687091175E8	1.0	1.0	0.816496580927726	[1,2,3]	[1,2,3]	0.7057890433107311	-1.4999999999999984
 
 
 -- !query
@@ -345,6 +348,9 @@ SELECT udf(val), cate,
 first_value(false) OVER w AS first_value,
 first_value(true, true) OVER w AS first_value_ignore_null,
 first_value(false, false) OVER w AS first_value_contain_null,
+any_value(false) OVER w AS any_value,
+any_value(true, true) OVER w AS any_value_ignore_null,
+any_value(false, false) OVER w AS any_value_contain_null,
 last_value(false) OVER w AS last_value,
 last_value(true, true) OVER w AS last_value_ignore_null,
 last_value(false, false) OVER w AS last_value_contain_null
@@ -352,17 +358,17 @@ FROM testData
 WINDOW w AS ()
 ORDER BY cate, val
 -- !query schema
-struct<udf(val):int,cate:string,first_value:boolean,first_value_ignore_null:boolean,first_value_contain_null:boolean,last_value:boolean,last_value_ignore_null:boolean,last_value_contain_null:boolean>
+struct<udf(val):int,cate:string,first_value:boolean,first_value_ignore_null:boolean,first_value_contain_null:boolean,any_value:boolean,any_value_ignore_null:boolean,any_value_contain_null:boolean,last_value:boolean,last_value_ignore_null:boolean,last_value_contain_null:boolean>
 -- !query output
-NULL	NULL	false	true	false	false	true	false
-3	NULL	false	true	false	false	true	false
-NULL	a	false	true	false	false	true	false
-1	a	false	true	false	false	true	false
-1	a	false	true	false	false	true	false
-2	a	false	true	false	false	true	false
-1	b	false	true	false	false	true	false
-2	b	false	true	false	false	true	false
-3	b	false	true	false	false	true	false
+NULL	NULL	false	true	false	false	true	false	false	true	false
+3	NULL	false	true	false	false	true	false	false	true	false
+NULL	a	false	true	false	false	true	false	false	true	false
+1	a	false	true	false	false	true	false	false	true	false
+1	a	false	true	false	false	true	false	false	true	false
+2	a	false	true	false	false	true	false	false	true	false
+1	b	false	true	false	false	true	false	false	true	false
+2	b	false	true	false	false	true	false	false	true	false
+3	b	false	true	false	false	true	false	false	true	false
 
 
 -- !query
