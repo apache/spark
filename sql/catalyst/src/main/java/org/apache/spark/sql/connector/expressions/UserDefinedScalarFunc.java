@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
-
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
+
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 
 /**
  * The general representation of user defined scalar function, which contains the upper-cased
