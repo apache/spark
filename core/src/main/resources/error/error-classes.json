@@ -293,13 +293,13 @@
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_GENERATOR" : {
-    "message": [ "The generator is not supported: " ],
-    "subClass": {
+    "message" : [ "The generator is not supported: " ],
+    "subClass" : {
       "MULTI_GENERATOR" : {
         "message" : [ "only one generator allowed per <clause> clause but found <size>: <generators>" ]
       },
-      "NESTED_IN_EXPRESSIONS": {
-        "message": [ "nested in expressions <expressions>" ]
+      "NESTED_IN_EXPRESSIONS" : {
+        "message" : [ "nested in expressions <expressions>" ]
       },
       "NOT_GENERATOR" : {
         "message" : [ "<name> is expected to be a generator. However, its class is <classCanonicalName>, which is not a generator." ]
