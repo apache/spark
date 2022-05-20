@@ -420,15 +420,15 @@ class JacksonParser(
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
-    resetExistenceDefaultsBitmask(schema)
     structFilters.reset()
+    resetExistenceDefaultsBitmask(schema)
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
             row.update(index, fieldConverters(index).apply(parser))
-            schema.existenceDefaultsBitmask(index) = false
             skipRow = structFilters.skipRow(row, index)
+            schema.existenceDefaultsBitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
             case NonFatal(e) if isRoot =>
@@ -439,10 +439,10 @@ class JacksonParser(
           parser.skipChildren()
       }
     }
-    applyExistenceDefaultValuesToRow(schema, row)
     if (skipRow) {
       None
     } else if (badRecordException.isEmpty) {
+      applyExistenceDefaultValuesToRow(schema, row)
       Some(row)
     } else {
       throw PartialResultException(row, badRecordException.get)
