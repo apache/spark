@@ -449,13 +449,12 @@ abstract class StreamExecution(
         // after the stream has moved past the expected newOffset or if committedOffsets
         // changed after notify. In this case, its safe to exit, since at-least the given
         // Offset has been reached and the equality condition might never be met.
-        if (newOffset.isInstanceOf[LongOffset]) {
-          val returnedOffset: Long = if (localCommittedOffsets.contains(source)) {
-            localCommittedOffsets(source).toString.toLong
-          } else 0L
-          !localCommittedOffsets.contains(source) || returnedOffset < newOffset.toString.toLong
+        if (!localCommittedOffsets.contains(source)) {
+          true
+        } else if (newOffset.isInstanceOf[LongOffset]) {
+          localCommittedOffsets(source).toString.toLong < newOffset.toString.toLong
         } else {
-          !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
+          localCommittedOffsets(source) != newOffset
         }
       }
     }
