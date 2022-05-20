@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
@@ -105,7 +105,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val plan = ShowTables(UnresolvedNamespace(ident), None)
       val ret = sparkSession.sessionState.executePlan(plan).toRdd.collect()
       val tables = ret
-        .map(row => TableIdentifier(row.getString(1), Some(row.getString(0))))
+        .map(row => ident ++ Seq(row.getString(1)))
         .map(makeTable)
       CatalogImpl.makeDataset(tables, sparkSession)
     }
@@ -133,6 +133,31 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       description = metadata.map(_.comment.orNull).orNull,
       tableType = if (isTemp) "TEMPORARY" else metadata.map(_.tableType.name).orNull,
       isTemporary = isTemp)
+  }
+
+  private def makeTable(ident: Seq[String]): Table = {
+    val plan = UnresolvedTableOrView(ident, "Catalog.listTables", true)
+    val node = sparkSession.sessionState.executePlan(plan).analyzed
+    node match {
+      case t: ResolvedTable =>
+        val isExternal = t.table.properties().getOrDefault("external", "false").equals("true")
+        new Table(
+          name = t.identifier.name(),
+          database = t.identifier.namespace().head,
+          description = t.table.properties().get("comment"),
+          tableType =
+            if (isExternal) CatalogTableType.EXTERNAL.name
+            else CatalogTableType.MANAGED.name,
+          isTemporary = false)
+      case v: ResolvedView =>
+        new Table(
+          name = v.identifier.name(),
+          database = v.identifier.namespace().toString,
+          description = "",
+          tableType = "",
+          isTemporary = v.isTemp)
+      case _ => throw new Exception(ident.mkString(".") + " not found")
+    }
   }
 
   /**

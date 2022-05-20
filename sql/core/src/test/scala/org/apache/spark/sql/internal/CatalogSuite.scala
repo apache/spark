@@ -619,22 +619,48 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("three layer namespace compatibility - list tables") {
-    val catalogName = "testcat"
-    val dbName = "my_db"
-    val tableName = "my_table"
-    val tableSchema = new StructType().add("i", "int")
-    val description = "this is a test table"
+    withTempDir { dir =>
+      val catalogName = "testcat"
+      val dbName = "my_db"
+      val tableName = "my_table"
+      val tableSchema = new StructType().add("i", "int")
+      val description = "this is a test managed table"
 
-    spark.catalog.createTable(
-      tableName = Array(catalogName, dbName, tableName).mkString("."),
-      source = classOf[FakeV2Provider].getName,
-      schema = tableSchema,
-      description = description,
-      options = Map.empty[String, String])
+      spark.catalog.createTable(
+        tableName = Array(catalogName, dbName, tableName).mkString("."),
+        source = classOf[FakeV2Provider].getName,
+        schema = tableSchema,
+        description = description,
+        options = Map.empty[String, String])
 
-    val tables = spark.catalog.listTables("testcat.my_db").collect()
-    assert(tables.size == 1)
-    assert(tables.head.name.equals("my_table"))
-    assert(tables.head.database.equals("my_db"))
+      val tableName2 = "my_table2"
+      val description2 = "this is a test external table"
+
+      spark.catalog.createTable(
+        tableName = Array(catalogName, dbName, tableName2).mkString("."),
+        source = classOf[FakeV2Provider].getName,
+        schema = tableSchema,
+        description = description2,
+        options = Map("path" -> dir.getAbsolutePath))
+
+      val tables = spark.catalog.listTables("testcat.my_db").collect()
+      assert(tables.size == 2)
+
+      val expectedTable1 =
+        new Table(tableName, dbName, description, CatalogTableType.MANAGED.name, false)
+      assert(tables.exists(t =>
+        expectedTable1.name.equals(t.name) && expectedTable1.database.equals(t.database) &&
+        expectedTable1.description.equals(t.description) &&
+        expectedTable1.tableType.equals(t.tableType) &&
+        expectedTable1.isTemporary == t.isTemporary))
+
+      val expectedTable2 =
+        new Table(tableName2, dbName, description2, CatalogTableType.EXTERNAL.name, false)
+      assert(tables.exists(t =>
+        expectedTable2.name.equals(t.name) && expectedTable2.database.equals(t.database) &&
+        expectedTable2.description.equals(t.description) &&
+        expectedTable2.tableType.equals(t.tableType) &&
+        expectedTable2.isTemporary == t.isTemporary))
+    }
   }
 }
