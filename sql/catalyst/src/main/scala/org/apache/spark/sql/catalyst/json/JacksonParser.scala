@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -419,19 +420,14 @@ class JacksonParser(
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
-    // Apply default values from the column metadata to the initial row, if any.
-    if (schema.hasExistenceDefaultValues) {
-      for ((value: Any, i: Int) <- schema.existenceDefaultValues.zipWithIndex) {
-        row.update(i, value)
-      }
-    }
-  }
+    resetExistenceDefaultsBitmask(schema)
     structFilters.reset()
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
             row.update(index, fieldConverters(index).apply(parser))
+            schema.existenceDefaultsBitmask(index) = false
             skipRow = structFilters.skipRow(row, index)
           } catch {
             case e: SparkUpgradeException => throw e
@@ -443,7 +439,7 @@ class JacksonParser(
           parser.skipChildren()
       }
     }
-
+    applyExistenceDefaultValuesToRow(schema, row)
     if (skipRow) {
       None
     } else if (badRecordException.isEmpty) {
