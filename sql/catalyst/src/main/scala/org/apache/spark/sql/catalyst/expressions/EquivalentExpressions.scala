@@ -85,10 +85,14 @@ class EquivalentExpressions {
   }
 
   /**
-   * Adds or removes only expressions which are common in each of given expressions, in a recursive
-   * way.
-   * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`, the common
+   * Adds or removes expressions only when the expressions:
+   * 1. are common in exprs.
+   * For example, given two exprs `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`, the common
    * expression `(c + 1)` will be added into `equivalenceMap`.
+   * 2. are common between alwaysEvaluateExprs and exprs.
+   * For example, given alwaysEvaluateExprs `(a + (b + (c + 1)))` and two exprs `e + f`
+   * and `(d + (e + (c + 1)))`, the common expression `(c + 1)`
+   * will be added into `equivalenceMap`.
    *
    * Note that as we don't know in advance if any child node of an expression will be common across
    * all given expressions, we compute local equivalence maps for all given expressions and filter
@@ -97,6 +101,7 @@ class EquivalentExpressions {
    * expressions.
    */
   private def updateCommonExprs(
+      alwaysEvaluateExprs: Seq[Expression],
       exprs: Seq[Expression],
       map: mutable.HashMap[ExpressionEquals, ExpressionStats],
       useCount: Int): Unit = {
@@ -109,6 +114,21 @@ class EquivalentExpressions {
       updateExprTree(expr, otherLocalEquivalenceMap)
       localEquivalenceMap = localEquivalenceMap.filter { case (key, _) =>
         otherLocalEquivalenceMap.contains(key)
+      }
+    }
+
+    if (alwaysEvaluateExprs.length > 0) {
+      val alwaysEvaluateEquivalenceMap = mutable.HashMap.empty[ExpressionEquals, ExpressionStats]
+      alwaysEvaluateExprs.foreach(updateExprTree(_, alwaysEvaluateEquivalenceMap))
+      // check if part of `exprs` have common expressions with `alwaysEvaluateExprs`.
+      exprs.filter(e => !alwaysEvaluateExprs.exists(_.semanticEquals(e))).foreach { expr =>
+        val otherLocalEquivalenceMap = mutable.HashMap.empty[ExpressionEquals, ExpressionStats]
+        updateExprTree(expr, otherLocalEquivalenceMap)
+        otherLocalEquivalenceMap.foreach { case (key, stats) =>
+          if (alwaysEvaluateEquivalenceMap.contains(key) && !localEquivalenceMap.contains(key)) {
+            updateExprTree(stats.expr, localEquivalenceMap)
+          }
+        }
       }
     }
 
@@ -136,9 +156,10 @@ class EquivalentExpressions {
 
   // For some special expressions we cannot just recurse into all of its children, but we can
   // recursively add the common expressions shared between all of its children.
-  private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
+  private def commonChildrenToRecurse(expr: Expression): Seq[(Seq[Expression], Seq[Expression])] =
+      expr match {
     case _: CodegenFallback => Nil
-    case c: ConditionalExpression => c.branchGroups
+    case c: ConditionalExpression => c.branchGroups.map((c.alwaysEvaluatedInputs, _))
     case _ => Nil
   }
 
@@ -168,7 +189,11 @@ class EquivalentExpressions {
     if (!skip && !updateExprInMap(expr, map, useCount)) {
       val uc = useCount.signum
       childrenToRecurse(expr).foreach(updateExprTree(_, map, uc))
-      commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(updateCommonExprs(_, map, uc))
+      commonChildrenToRecurse(expr)
+        .filter(_._2.nonEmpty)
+        .foreach { case (alwaysEvaluatedInputs, branchGroups) =>
+          updateCommonExprs(alwaysEvaluatedInputs, branchGroups, map, uc)
+        }
     }
   }
 
