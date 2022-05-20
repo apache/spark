@@ -129,6 +129,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields"::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
+      "org.apache.spark.sql.catalyst.optimizer.PullOutComplexJoinKeys" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushFoldableIntoBranches" ::
