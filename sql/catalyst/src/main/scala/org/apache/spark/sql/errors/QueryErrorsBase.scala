@@ -37,6 +37,8 @@ import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
  * 5. SQL configs and datasource options shall be wrapped by double quotes by using
  *   `toSQLConf()`/`toDSOption()`.
  *   For example: "spark.sql.ansi.enabled".
+ * 6. Any values of datasource options or SQL configs shall be double quoted.
+ *   For example: "true", "CORRECTED".
  */
 trait QueryErrorsBase {
   // Converts an error class parameter to its SQL representation
