@@ -171,6 +171,7 @@ object ResolveDefaultColumns {
       str.toLowerCase()
     }
   }
+
   /**
    * Parses the text representing constant-folded default column literal values. These are known as
    * "existence" default values because each one is the constant-folded result of the original
