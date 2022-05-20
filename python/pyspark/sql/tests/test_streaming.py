@@ -595,13 +595,11 @@ class StreamingTests(ReusedSQLTestCase):
     def test_streaming_foreachBatch_graceful_stop(self):
         # SPARK-39218: Make foreachBatch streaming query stop gracefully
         def func(batch_df, _):
-            time.sleep(10)
-            batch_df.count()
+            batch_df.sparkSession._jvm.java.lang.Thread.sleep(10000)
 
         q = self.spark.readStream.format("rate").load().writeStream.foreachBatch(func).start()
-        time.sleep(5)
+        time.sleep(3)  # 'rowsPerSecond' defaults to 1. Waits 3 secs out for the input.
         q.stop()
-        time.sleep(15)  # Wait enough for the exception to be propagated if exists.
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
 
     def test_streaming_read_from_table(self):
