@@ -26,9 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCapability, TableCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -507,25 +505,11 @@ case class ResolveDefaultColumns(
     // First find the source relation. Note that we use 'collectFirst' to descend past any
     // SubqueryAlias nodes that may be present.
     val source: Option[LogicalPlan] = table.collectFirst {
-      case r: NamedRelation => r
+      case r: NamedRelation if !r.skipSchemaResolution =>
+        // Here we only resolve the default columns in the tables that require schema resolution
+        // during write operations.
+        r
       case r: UnresolvedCatalogRelation => r
-    }
-    // Check if the target table has "ACCEPT_ANY_SCHEMA" capabilities and if so,
-    // don't do anything.
-    source match {
-      case Some(dsv2: DataSourceV2Relation) =>
-        val id = Identifier.of(Array.empty[String], dsv2.table.name())
-        if (dsv2.catalog.isDefined && dsv2.catalog.get.isInstanceOf[TableCatalog]) {
-          val tableCatalog = dsv2.catalog.get.asInstanceOf[TableCatalog]
-          val capabilities = tableCatalog.loadTable(id).capabilities
-          val it = capabilities.iterator()
-          while (it.hasNext()) {
-            if (it.next() == TableCapability.ACCEPT_ANY_SCHEMA) {
-              return None
-            }
-          }
-        }
-      case _ =>
     }
     // Check if the target table is already resolved. If so, return the computed schema.
     source.map { r =>
@@ -541,6 +525,7 @@ case class ResolveDefaultColumns(
       case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
       case _ => return None
     }
+
     val lookup: LogicalPlan = try {
       catalog.lookupRelation(tableName)
     } catch {
