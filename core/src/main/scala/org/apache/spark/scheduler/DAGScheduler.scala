@@ -1890,6 +1890,8 @@ private[spark] class DAGScheduler(
             // there is a FetchFailed event and is not a
             // MetaDataFetchException which is signified by bmAddress being null
             if (bmAddress != null) {
+              assert(pushBasedShuffleEnabled, "Pushed based shuffle needs to " +
+                "be enabled so that merge results are present.")
               mapOutputTracker.
                 unregisterMergeResult(shuffleId, reduceId, bmAddress, None)
             }
@@ -2457,7 +2459,12 @@ private[spark] class DAGScheduler(
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
-    if (!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch) {
+    // Check if the execId is a shuffle push merger
+    // We do not remove the executor if it is,
+    // and only remove the outputs on that host/executor.
+    val isShuffleMerger = execId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    if ((!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch)
+      && !isShuffleMerger) {
       executorFailureEpoch(execId) = currentEpoch
       logInfo(s"Executor lost: $execId (epoch $currentEpoch)")
       if (pushBasedShuffleEnabled) {
@@ -2469,7 +2476,7 @@ private[spark] class DAGScheduler(
       clearCacheLocs()
     }
     if (fileLost) {
-      val remove = if (ignoreShuffleFileLostEpoch) {
+      val remove = if (ignoreShuffleFileLostEpoch || isShuffleMerger) {
         true
       } else if (!shuffleFileLostEpoch.contains(execId) ||
         shuffleFileLostEpoch(execId) < currentEpoch) {

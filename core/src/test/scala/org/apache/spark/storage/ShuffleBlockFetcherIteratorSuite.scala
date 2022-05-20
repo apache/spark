@@ -1787,7 +1787,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("SPARK-38987: failure to fetch corrupted shuffle block chunk should " +
-    "throw a FetchFailedException") {
+    "throw a FetchFailedException when corruption detection is turned off") {
     val blockManager = mock(classOf[BlockManager])
     val localDirs = Array("local-dir")
     val localHost = "test-local-host"
