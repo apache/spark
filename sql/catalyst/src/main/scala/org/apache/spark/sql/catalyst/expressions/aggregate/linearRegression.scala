@@ -200,7 +200,7 @@ case class RegrSXX(
 case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) {
   override def prettyName: String = "regr_sxy"
   override val evaluateExpression: Expression = {
-    If(count === 0.0, Literal.create(null, DoubleType), ck)
+    If(n === 0.0, Literal.create(null, DoubleType), ck)
   }
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrSXY =
@@ -279,8 +279,7 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
     covarPop.mergeExpressions ++ varPop.mergeExpressions
 
   override lazy val evaluateExpression: Expression = {
-    If(covarPop.aggBufferAttributes(0) === 0.0, Literal.create(null, DoubleType),
-      covarPop.aggBufferAttributes(3) / varPop.aggBufferAttributes(2))
+    If(covarPop.n === 0.0, Literal.create(null, DoubleType), covarPop.ck / varPop.m2)
   }
 
   override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
