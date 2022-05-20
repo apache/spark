@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.errors
 
-import java.io.IOException
-import java.net.URL
+import java.io.{File, IOException}
+import java.net.{URI, URL}
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -220,7 +220,7 @@ class QueryExecutionErrorsSuite
 
       val format = "Parquet"
       val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_READ.key + "\""
-      val option = "datetimeRebaseMode"
+      val option = "\"datetimeRebaseMode\""
       checkErrorClass(
         exception = e,
         errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
@@ -233,10 +233,10 @@ class QueryExecutionErrorsSuite
             |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
             |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
             |See more details in SPARK-31404. You can set the SQL config $config or
-            |the datasource option '$option' to 'LEGACY' to rebase the datetime values
+            |the datasource option $option to "LEGACY" to rebase the datetime values
             |w.r.t. the calendar difference during reading. To read the datetime values
-            |as it is, set the SQL config $config or the datasource option '$option'
-            |to 'CORRECTED'.
+            |as it is, set the SQL config $config or the datasource option $option
+            |to "CORRECTED".
             |""".stripMargin)
     }
 
@@ -261,9 +261,9 @@ class QueryExecutionErrorsSuite
               |into $format files can be dangerous, as the files may be read by Spark 2.x
               |or legacy versions of Hive later, which uses a legacy hybrid calendar that
               |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
-              |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
+              |details in SPARK-31404. You can set $config to "LEGACY" to rebase the
               |datetime values w.r.t. the calendar difference during writing, to get maximum
-              |interoperability. Or set $config to 'CORRECTED' to write the datetime
+              |interoperability. Or set $config to "CORRECTED" to write the datetime
               |values as it is, if you are sure that the written files will only be read by
               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
               |""".stripMargin)
@@ -588,30 +588,54 @@ class QueryExecutionErrorsSuite
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
   }
 
+  test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
+    val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).
+      toDF("i", "j", "k").as("df1")
+
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i").
+        saveAsTable("bucketed_table")
+      val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+      val tableDir = new File(warehouseFilePath, "bucketed_table")
+      Utils.deleteRecursively(tableDir)
+      df1.write.parquet(tableDir.getAbsolutePath)
+
+      val aggregated = spark.table("bucketed_table").groupBy("i").count()
+
+      checkErrorClass(
+        exception = intercept[SparkException] {
+          aggregated.count()
+        },
+        errorClass = "INVALID_BUCKET_FILE",
+        msg = "Invalid bucket file: .+",
+        matchMsg = true)
+    }
+  }
+
   test("MULTI_VALUE_SUBQUERY_ERROR: " +
     "more than one row returned by a subquery used as an expression") {
     checkErrorClass(
-      exception = intercept[SparkIllegalStateException] {
+      exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
       },
       errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
       msg =
         """more than one row returned by a subquery used as an expression: """ +
-        """Subquery subquery#\w+, \[id=#\w+\]
-          |\+\- AdaptiveSparkPlan isFinalPlan=true
-          |   \+\- == Final Plan ==
-          |      Union
-          |      :\- \*\(1\) Project \[\w+ AS a#\w+\]
-          |      :  \+\- \*\(1\) Scan OneRowRelation\[\]
-          |      \+\- \*\(2\) Project \[\w+ AS a#\w+\]
-          |         \+\- \*\(2\) Scan OneRowRelation\[\]
-          |   \+\- == Initial Plan ==
-          |      Union
-          |      :\- Project \[\w+ AS a#\w+\]
-          |      :  \+\- Scan OneRowRelation\[\]
-          |      \+\- Project \[\w+ AS a#\w+\]
-          |         \+\- Scan OneRowRelation\[\]
-          |""".stripMargin,
+          """Subquery subquery#\w+, \[id=#\w+\]
+            |\+\- AdaptiveSparkPlan isFinalPlan=true
+            |   \+\- == Final Plan ==
+            |      Union
+            |      :\- \*\(1\) Project \[\w+ AS a#\w+\]
+            |      :  \+\- \*\(1\) Scan OneRowRelation\[\]
+            |      \+\- \*\(2\) Project \[\w+ AS a#\w+\]
+            |         \+\- \*\(2\) Scan OneRowRelation\[\]
+            |   \+\- == Initial Plan ==
+            |      Union
+            |      :\- Project \[\w+ AS a#\w+\]
+            |      :  \+\- Scan OneRowRelation\[\]
+            |      \+\- Project \[\w+ AS a#\w+\]
+            |         \+\- Scan OneRowRelation\[\]
+            |""".stripMargin,
       matchMsg = true)
   }
 }

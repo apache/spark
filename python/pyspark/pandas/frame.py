@@ -9367,6 +9367,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         subset: Optional[Union[Name, List[Name]]] = None,
         keep: Union[bool, str] = "first",
         inplace: bool = False,
+        ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
         """
         Return DataFrame with duplicate rows removed, optionally only
@@ -9384,6 +9385,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             - False : Drop all duplicates.
         inplace : boolean, default False
             Whether to drop duplicates in place or to return a copy.
+        ignore_index : boolean, default False
+            If True, the resulting axis will be labeled 0, 1, …, n - 1.
 
         Returns
         -------
@@ -9406,6 +9409,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2  a
         3  2  c
         4  3  d
+
+        >>> df.drop_duplicates(ignore_index=True).sort_index()
+           a  b
+        0  1  a
+        1  2  a
+        2  2  c
+        3  3  d
 
         >>> df.drop_duplicates('a').sort_index()
            a  b
@@ -9439,11 +9449,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         sdf = sdf.where(~scol_for(sdf, column)).drop(column)
         internal = self._internal.with_new_sdf(sdf)
+        psdf: DataFrame = DataFrame(internal)
+
         if inplace:
-            self._update_internal_frame(internal)
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
+            self._update_internal_frame(psdf._internal)
             return None
         else:
-            return DataFrame(internal)
+            return psdf.reset_index(drop=True) if ignore_index else psdf
 
     def reindex(
         self,
@@ -12146,7 +12160,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Returns a frame
             return result
 
-    def explode(self, column: Name) -> "DataFrame":
+    def explode(self, column: Name, ignore_index: bool = False) -> "DataFrame":
         """
         Transform each element of a list-like to a row, replicating index values.
 
@@ -12154,6 +12168,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         column : str or tuple
             Column to explode.
+        ignore_index : bool, default False
+            If True, the resulting index will be labeled 0, 1, …, n - 1.
 
         Returns
         -------
@@ -12184,6 +12200,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  NaN  1
         2  3.0  1
         2  4.0  1
+
+        >>> df.explode('A', ignore_index=True)
+             A  B
+        0  1.0  1
+        1  2.0  1
+        2  3.0  1
+        3  NaN  1
+        4  3.0  1
+        5  4.0  1
         """
         from pyspark.pandas.series import Series
 
@@ -12212,7 +12237,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         data_fields[idx] = field.copy(dtype=dtype, spark_type=spark_type, nullable=True)
 
         internal = psdf._internal.with_new_sdf(sdf, data_fields=data_fields)
-        return DataFrame(internal)
+        result_df: DataFrame = DataFrame(internal)
+        return result_df.reset_index(drop=True) if ignore_index else result_df
 
     def mad(self, axis: Axis = 0) -> "Series":
         """

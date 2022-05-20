@@ -71,23 +71,31 @@ private[spark] object SparkThrowableHelper {
     mapper.readValue(errorClassesUrl, new TypeReference[SortedMap[String, ErrorInfo]]() {})
   }
 
-  def getMessage(errorClass: String, messageParameters: Array[String]): String = {
+  def getMessage(
+      errorClass: String,
+      messageParameters: Array[String],
+      queryContext: String = ""): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
-    if (errorInfo.subClass.isDefined) {
+    val (displayClass, displayMessageParameters, displayFormat) = if (errorInfo.subClass.isEmpty) {
+      (errorClass, messageParameters, errorInfo.messageFormat)
+    } else {
       val subClass = errorInfo.subClass.get
       val subErrorClass = messageParameters.head
       val errorSubInfo = subClass.getOrElse(subErrorClass,
         throw new IllegalArgumentException(s"Cannot find sub error class '$subErrorClass'"))
-      val subMessageParameters = messageParameters.tail
-      "[" + errorClass + "." + subErrorClass + "] " + String.format((errorInfo.messageFormat +
-        errorSubInfo.messageFormat).replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-        subMessageParameters: _*)
-    } else {
-      "[" + errorClass + "] " + String.format(
-        errorInfo.messageFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-        messageParameters: _*)
+      (errorClass + "." + subErrorClass, messageParameters.tail,
+        errorInfo.messageFormat + errorSubInfo.messageFormat)
     }
+    val displayMessage = String.format(
+      displayFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
+      displayMessageParameters : _*)
+    val displayQueryContext = if (queryContext.isEmpty) {
+      ""
+    } else {
+      s"\n$queryContext"
+    }
+    s"[$displayClass] $displayMessage$displayQueryContext"
   }
 
   def getSqlState(errorClass: String): String = {
