@@ -420,6 +420,7 @@ class JacksonParser(
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
+
     structFilters.reset()
     resetExistenceDefaultsBitmask(schema)
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
