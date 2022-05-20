@@ -33,7 +33,6 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer}
 import org.apache.spark.util.Utils
@@ -44,7 +43,7 @@ class PythonRDDSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    tempDir = JavaUtils.createTempDir()
+    tempDir = Utils.createTempDir()
   }
 
   override def afterAll(): Unit = {

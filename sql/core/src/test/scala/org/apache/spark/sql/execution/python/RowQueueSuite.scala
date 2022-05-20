@@ -22,11 +22,11 @@ import java.io.File
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager, TestMemoryManager}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.memory.MemoryBlock
+import org.apache.spark.util.Utils
 
 class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
 
@@ -67,7 +67,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
 
   encryptionTest("disk queue") { conf =>
     val serManager = createSerializerManager(conf)
-    val dir = JavaUtils.createTempDir().getCanonicalFile
+    val dir = Utils.createTempDir().getCanonicalFile
     dir.mkdirs()
     val queue = DiskRowQueue(new File(dir, "buffer"), 1, serManager)
     val row = new UnsafeRow(1)
@@ -102,7 +102,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
       val mem = new TestMemoryManager(conf)
       mem.limit(4<<10)
       val taskM = new TaskMemoryManager(mem, 0)
-      val queue = HybridRowQueue(taskM, JavaUtils.createTempDir().getCanonicalFile, 1, serManager)
+      val queue = HybridRowQueue(taskM, Utils.createTempDir().getCanonicalFile, 1, serManager)
       val mode = if (isOffHeap) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
       assert(queue.getMode === mode)
       val row = new UnsafeRow(1)

@@ -26,7 +26,6 @@ import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
@@ -36,7 +35,7 @@ class RocksDBSuite extends SparkFunSuite {
 
   test("RocksDB: get, put, iterator, commit, load") {
     def testOps(compactOnCommit: Boolean): Unit = {
-      val remoteDir = JavaUtils.createTempDir().toString
+      val remoteDir = Utils.createTempDir().toString
       new File(remoteDir).delete()  // to make sure that the directory gets created
 
       val conf = RocksDBConf().copy(compactOnCommit = compactOnCommit)
@@ -104,7 +103,7 @@ class RocksDBSuite extends SparkFunSuite {
   }
 
   test("RocksDB: cleanup old files") {
-    val remoteDir = JavaUtils.createTempDir().toString
+    val remoteDir = Utils.createTempDir().toString
     val conf = RocksDBConf().copy(compactOnCommit = true, minVersionsToRetain = 10)
 
     def versionsPresent: Seq[Long] = {
@@ -143,7 +142,7 @@ class RocksDBSuite extends SparkFunSuite {
     hadoopConf.set(
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
       classOf[CreateAtomicTestManager].getName)
-    val remoteDir = JavaUtils.createTempDir().getAbsolutePath
+    val remoteDir = Utils.createTempDir().getAbsolutePath
     val conf = RocksDBConf().copy(compactOnCommit = true)
     withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
       // Disable failure of output stream and generate versions
@@ -170,11 +169,11 @@ class RocksDBSuite extends SparkFunSuite {
   }
 
   test("RocksDBFileManager: create init dfs directory with unknown number of keys") {
-    val dfsRootDir = new File(JavaUtils.createTempDir().getAbsolutePath + "/state/1/1")
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     try {
-      val verificationDir = JavaUtils.createTempDir().getAbsolutePath
+      val verificationDir = Utils.createTempDir().getAbsolutePath
       val fileManager = new RocksDBFileManager(
-        dfsRootDir.getAbsolutePath, JavaUtils.createTempDir(), new Configuration)
+        dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
       // Save a version of empty checkpoint files
       val cpFiles = Seq()
       generateFiles(verificationDir, cpFiles)
@@ -191,10 +190,9 @@ class RocksDBSuite extends SparkFunSuite {
   test("RocksDBFileManager: upload only new immutable files") {
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
-      val verificationDir =
-        JavaUtils.createTempDir().getAbsolutePath // local dir to load checkpoints
+      val verificationDir = Utils.createTempDir().getAbsolutePath // local dir to load checkpoints
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, JavaUtils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), new Configuration)
       val sstDir = s"$dfsRootDir/SSTs"
       def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
@@ -205,7 +203,7 @@ class RocksDBSuite extends SparkFunSuite {
 
       // Try to load incorrect versions
       intercept[FileNotFoundException] {
-        fileManager.loadCheckpointFromDfs(1, JavaUtils.createTempDir())
+        fileManager.loadCheckpointFromDfs(1, Utils.createTempDir())
       }
 
       // Save a version of checkpoint files
@@ -283,8 +281,8 @@ class RocksDBSuite extends SparkFunSuite {
       hadoopConf.set(
         SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
         classOf[CreateAtomicTestManager].getName)
-      val dfsRootDir = JavaUtils.createTempDir().getAbsolutePath
-      val fileManager = new RocksDBFileManager(dfsRootDir, JavaUtils.createTempDir(), hadoopConf)
+      val dfsRootDir = Utils.createTempDir().getAbsolutePath
+      val fileManager = new RocksDBFileManager(dfsRootDir, Utils.createTempDir(), hadoopConf)
       val cpFiles = Seq("sst-file1.sst" -> 10, "sst-file2.sst" -> 20, "other-file1" -> 100)
       CreateAtomicTestManager.shouldFailInCreateAtomic = true
       intercept[IOException] {
@@ -297,7 +295,7 @@ class RocksDBSuite extends SparkFunSuite {
   test("disallow concurrent updates to the same RocksDB instance") {
     quietly {
       withDB(
-        JavaUtils.createTempDir().toString,
+        Utils.createTempDir().toString,
         conf = RocksDBConf().copy(lockAcquireTimeoutMs = 20)) { db =>
         // DB has been loaded so current thread has alread acquired the lock on the RocksDB instance
 
@@ -566,7 +564,7 @@ class RocksDBSuite extends SparkFunSuite {
       fileToLengths: Seq[(String, Int)],
       version: Int,
       numKeys: Int): Unit = {
-    val checkpointDir = JavaUtils.createTempDir().getAbsolutePath // local dir to create checkpoints
+    val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
     fileManager.saveCheckpointToDfs(checkpointDir, version, numKeys)
   }
@@ -609,7 +607,7 @@ object RocksDBSuite {
   def withSingletonDB[T](func: => T): T = {
     try {
       singleton = new RocksDB(
-        dfsRootDir = JavaUtils.createTempDir().getAbsolutePath,
+        dfsRootDir = Utils.createTempDir().getAbsolutePath,
         conf = RocksDBConf().copy(compactOnCommit = false, minVersionsToRetain = 100),
         hadoopConf = new Configuration(),
         loggingId = s"[Thread-${Thread.currentThread.getId}]")

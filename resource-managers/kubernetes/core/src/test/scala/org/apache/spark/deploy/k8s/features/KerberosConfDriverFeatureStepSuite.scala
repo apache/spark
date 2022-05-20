@@ -34,14 +34,14 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.config._
-import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.Utils
 
 class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
   import KubernetesFeaturesTestUtils._
   import SecretVolumeUtils._
 
-  private val tmpDir = JavaUtils.createTempDir()
+  private val tmpDir = Utils.createTempDir()
 
   test("mount krb5 config map if defined") {
     val configMap = "testConfigMap"

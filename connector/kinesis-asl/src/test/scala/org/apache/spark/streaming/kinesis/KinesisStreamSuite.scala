@@ -37,6 +37,7 @@ import org.apache.spark.streaming.kinesis.KinesisReadConfigurations._
 import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.util.Utils
 
 abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFunSuite
   with LocalStreamingContext with Eventually with BeforeAndAfter with BeforeAndAfterAll {
@@ -355,7 +356,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
   testIfEnabled("failure recovery") {
     val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
-    val checkpointDir = JavaUtils.createTempDir().getAbsolutePath
+    val checkpointDir = Utils.createTempDir().getAbsolutePath
 
     ssc = new StreamingContext(sc, Milliseconds(1000))
     ssc.checkpoint(checkpointDir)

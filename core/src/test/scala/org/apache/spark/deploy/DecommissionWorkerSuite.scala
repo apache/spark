@@ -35,7 +35,6 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalBlockHandler
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
@@ -380,7 +379,7 @@ class DecommissionWorkerSuite
     workers.clear()
     val rpcAddressToRpcEnv: mutable.HashMap[RpcAddress, RpcEnv] = mutable.HashMap.empty
     workerRpcEnvs.foreach { rpcEnv =>
-      val workDir = JavaUtils.createTempDirWithPrefix(this.getClass.getSimpleName()).toString
+      val workDir = Utils.createTempDir(namePrefix = this.getClass.getSimpleName()).toString
       val worker = new Worker(rpcEnv, 0, cores, memory, Array(masterRpcEnv.address),
         Worker.ENDPOINT_NAME, workDir, masterAndWorkerConf, masterAndWorkerSecurityManager)
       rpcEnv.setupEndpoint(Worker.ENDPOINT_NAME, worker)

@@ -34,7 +34,6 @@ import org.apache.spark.deploy.history.RollingEventLogFilesWriter._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 
@@ -46,7 +45,7 @@ abstract class EventLogFileReadersSuite extends SparkFunSuite with LocalSparkCon
   protected var testDirPath: Path = _
 
   before {
-    testDir = JavaUtils.createTempDirWithPrefix("event log")
+    testDir = Utils.createTempDir(namePrefix = s"event log")
     testDirPath = new Path(testDir.getAbsolutePath())
   }
 

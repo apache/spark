@@ -23,7 +23,6 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -37,7 +36,7 @@ class FailureSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   private var directory: File = null
 
   before {
-    directory = JavaUtils.createTempDir()
+    directory = Utils.createTempDir()
   }
 
   after {

@@ -24,7 +24,7 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.config.STORAGE_REPLICATION_TOPOLOGY_FILE
-import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.Utils
 
 class TopologyMapperSuite  extends SparkFunSuite
   with Matchers
@@ -54,7 +54,7 @@ class TopologyMapperSuite  extends SparkFunSuite
   }
 
   def createPropertiesFile(props: Map[String, String]): File = {
-    val testFile = new File(JavaUtils.createTempDir(), "TopologyMapperSuite-test").getAbsoluteFile
+    val testFile = new File(Utils.createTempDir(), "TopologyMapperSuite-test").getAbsoluteFile
     val fileOS = new FileOutputStream(testFile)
     props.foreach{case (k, v) => fileOS.write(s"$k=$v\n".getBytes)}
     fileOS.close

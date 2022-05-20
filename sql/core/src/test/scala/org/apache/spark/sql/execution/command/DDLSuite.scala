@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry, TempTableAlreadyExistsException}
@@ -2217,7 +2216,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to false") {
-    val directoryToAdd = JavaUtils.createTempDirWithRoot("/tmp/spark/addDirectory/")
+    val directoryToAdd = Utils.createTempDir("/tmp/spark/addDirectory/")
     val testFile = File.createTempFile("testFile", "1", directoryToAdd)
     spark.sql(s"ADD FILE $directoryToAdd")
     assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())

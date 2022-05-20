@@ -29,7 +29,6 @@ import org.junit.Test;
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.linalg.DenseVector;
 import org.apache.spark.ml.linalg.Vectors;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.util.Utils;
@@ -46,7 +45,7 @@ public class JavaLibSVMRelationSuite extends SharedSparkSession {
   @Override
   public void setUp() throws IOException {
     super.setUp();
-    tempDir = JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
+    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
     File file = new File(tempDir, "part-00000");
     String s = "1 1:1.0 3:2.0 5:3.0\n0\n0 2:4.0 4:5.0 6:6.0";
     Files.write(s, file, StandardCharsets.UTF_8);

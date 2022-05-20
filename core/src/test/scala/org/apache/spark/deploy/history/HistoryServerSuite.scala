@@ -47,7 +47,6 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.tags.ExtendedLevelDBTest
@@ -71,7 +70,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   private val logDir = getTestResourcePath("spark-events")
   private val expRoot = getTestResourceFile("HistoryServerExpectations")
-  private val storeDir = JavaUtils.createTempDirWithPrefix("history")
+  private val storeDir = Utils.createTempDir(namePrefix = "history")
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null

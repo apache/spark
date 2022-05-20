@@ -30,7 +30,6 @@ import org.scalatest.time.{Seconds => ScalaTestSeconds, Span}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, ForEachDStream, InputDStream}
 import org.apache.spark.streaming.scheduler._
@@ -224,7 +223,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
 
   // Directory where the checkpoint data will be saved
   lazy val checkpointDir: String = {
-    val dir = JavaUtils.createTempDir()
+    val dir = Utils.createTempDir()
     logDebug(s"checkpointDir: $dir")
     dir.toString
   }

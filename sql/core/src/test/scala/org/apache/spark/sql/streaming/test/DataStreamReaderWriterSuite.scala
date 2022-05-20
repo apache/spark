@@ -29,7 +29,6 @@ import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
@@ -37,6 +36,7 @@ import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 object LastOptions {
 
@@ -112,7 +112,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
 
   private def newMetadataDir =
-    JavaUtils.createTempDirWithPrefix("streaming.metadata").getCanonicalPath
+    Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
   after {
     spark.streams.active.foreach(_.stop())
@@ -423,7 +423,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       meq(Map.empty))
   }
 
-  private def newTextInput = JavaUtils.createTempDirWithPrefix("text").getCanonicalPath
+  private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
 
   test("check foreach() catches null writers") {
     val df = spark.readStream

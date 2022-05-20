@@ -22,7 +22,6 @@ import java.util.Properties
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkConf
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -33,7 +32,7 @@ import org.apache.spark.util.Utils
 
 class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
-  val tempDir = JavaUtils.createTempDir()
+  val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
   var conn: java.sql.Connection = null

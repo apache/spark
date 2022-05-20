@@ -23,7 +23,6 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -219,7 +218,7 @@ private[sql] class RocksDBStateStoreProvider
     val storeIdStr = s"StateStoreId(opId=${stateStoreId.operatorId}," +
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-    val localRootDir = JavaUtils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
+    val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr)
   }
 

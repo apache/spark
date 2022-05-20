@@ -18,9 +18,9 @@
 package org.apache.spark.graphx
 
 import org.apache.spark.{HashPartitioner, SparkContext, SparkFunSuite}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -202,7 +202,7 @@ class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
     withSpark { sc =>
       val n = 100
       val verts = vertices(sc, n)
-      sc.setCheckpointDir(JavaUtils.createTempDir().getCanonicalPath)
+      sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
       verts.checkpoint()
 
       // VertexRDD not yet checkpointed

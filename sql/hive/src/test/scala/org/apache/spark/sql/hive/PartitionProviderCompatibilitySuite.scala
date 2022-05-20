@@ -22,7 +22,6 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -358,10 +357,10 @@ class PartitionProviderCompatibilitySuite
    *   /P1=1/P2=1  -- default location
    */
   private def testCustomLocations(testFn: => Unit): Unit = {
-    val base = JavaUtils.createTempDirWithPrefix("base")
-    val a = JavaUtils.createTempDirWithPrefix("a")
-    val b = JavaUtils.createTempDirWithPrefix("b")
-    val c = JavaUtils.createTempDirWithPrefix("c")
+    val base = Utils.createTempDir(namePrefix = "base")
+    val a = Utils.createTempDir(namePrefix = "a")
+    val b = Utils.createTempDir(namePrefix = "b")
+    val c = Utils.createTempDir(namePrefix = "c")
     try {
       spark.sql(s"""
         |create table test (id long, P1 int, P2 int)

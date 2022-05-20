@@ -34,7 +34,6 @@ import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Encoder, Row, SparkSession}
@@ -1024,8 +1023,8 @@ class ALSCleanerSuite extends SparkFunSuite with LocalRootDirsTest {
 
   test("ALS shuffle cleanup in algorithm") {
     val conf = new SparkConf()
-    val localDir = JavaUtils.createTempDir()
-    val checkpointDir = JavaUtils.createTempDir()
+    val localDir = Utils.createTempDir()
+    val checkpointDir = Utils.createTempDir()
     def getAllFiles: Set[File] = {
       val files = FileUtils.listFiles(
         localDir,

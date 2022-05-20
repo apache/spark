@@ -22,13 +22,13 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
+import org.apache.spark.util.Utils
 
 /**
  * A separate set of DDL tests that uses Hive 2.1 libraries, which behave a little differently
@@ -42,8 +42,8 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
   // Create a custom HiveExternalCatalog instance with the desired configuration. We cannot
   // use SparkSession here since there's already an active on managed by the TestHive object.
   private var catalog = {
-    val warehouse = JavaUtils.createTempDir()
-    val metastore = JavaUtils.createTempDir()
+    val warehouse = Utils.createTempDir()
+    val metastore = Utils.createTempDir()
     metastore.delete()
     val sparkConf = new SparkConf()
       .set(SparkLauncher.SPARK_MASTER, "local")

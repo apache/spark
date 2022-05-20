@@ -22,11 +22,11 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType, TimestampType}
+import org.apache.spark.util.Utils
 
 /**
  * Synthetic benchmark for State Store basic operations.
@@ -366,5 +366,5 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     provider
   }
 
-  private def newDir(): String = JavaUtils.createTempDir().toString
+  private def newDir(): String = Utils.createTempDir().toString
 }

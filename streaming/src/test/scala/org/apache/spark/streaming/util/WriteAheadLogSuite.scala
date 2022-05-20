@@ -40,7 +40,6 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{CompletionIterator, ManualClock, ThreadUtils, Utils}
 
@@ -60,8 +59,8 @@ abstract class CommonWriteAheadLogTests(
   protected var writeAheadLog: WriteAheadLog = null
   protected def testPrefix = if (testTag != "") testTag + " - " else testTag
 
-  tempDir = JavaUtils.createTempDir()
   before {
+    tempDir = Utils.createTempDir()
     testDir = tempDir.toString
     testFile = new File(tempDir, "testFile").toString
     if (writeAheadLog != null) {

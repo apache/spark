@@ -25,7 +25,6 @@ import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -52,7 +51,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("write many partitions") {
-    val path = JavaUtils.createTempDir()
+    val path = Utils.createTempDir()
     path.delete()
 
     val df = spark.range(100).select($"id", lit(1).as("data"))
@@ -66,7 +65,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
   }
 
   test("write many partitions with repeats") {
-    val path = JavaUtils.createTempDir()
+    val path = Utils.createTempDir()
     path.delete()
 
     val base = spark.range(100)

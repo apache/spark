@@ -25,7 +25,6 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
@@ -33,6 +32,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 case class TestData(key: Int, value: String)
 
@@ -122,7 +122,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
   test("SPARK-4203:random partition directory order") {
     sql("CREATE TABLE tmp_table (key int, value string)")
-    val tmpDir = JavaUtils.createTempDir()
+    val tmpDir = Utils.createTempDir()
     // The default value of hive.exec.stagingdir.
     val stagingDir = ".hive-staging"
 

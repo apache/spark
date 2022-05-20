@@ -21,7 +21,6 @@ import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.Logger
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.util.Utils
 
@@ -48,7 +47,7 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
       assert(spark.range(0, 1).count() === 1)
 
       // We should be able to use fs
-      val path = JavaUtils.createTempDir()
+      val path = Utils.createTempDir()
       path.delete()
       try {
         spark.range(0, 1).write.parquet(path.getAbsolutePath)

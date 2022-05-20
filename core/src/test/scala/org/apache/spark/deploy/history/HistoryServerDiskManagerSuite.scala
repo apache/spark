@@ -27,7 +27,6 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.status.KVUtils
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.{ManualClock, Utils}
@@ -50,7 +49,7 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
   private var store: KVStore = _
 
   before {
-    testDir = JavaUtils.createTempDir()
+    testDir = Utils.createTempDir()
     store = KVUtils.open(new File(testDir, "listing"), "test", conf)
   }
 

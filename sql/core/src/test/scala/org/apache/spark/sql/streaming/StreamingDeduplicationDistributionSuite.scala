@@ -21,11 +21,11 @@ import java.io.File
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
+import org.apache.spark.util.Utils
 
 class StreamingDeduplicationDistributionSuite extends StreamTest
   with StatefulOpClusteredDistributionTestHelper {
@@ -72,7 +72,7 @@ class StreamingDeduplicationDistributionSuite extends StreamTest
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-3.2.0-deduplication-with-repartition/").toURI
 
-    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)

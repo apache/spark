@@ -24,7 +24,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.util.Utils
 
@@ -37,7 +36,7 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
 
   test("SPARK-32256: Hadoop VersionInfo should be preloaded") {
     val ivyPath =
-      JavaUtils.createTempDirWithPrefix(s"${classOf[HadoopVersionInfoSuite].getSimpleName}-ivy")
+      Utils.createTempDir(namePrefix = s"${classOf[HadoopVersionInfoSuite].getSimpleName}-ivy")
     try {
       val hadoopConf = new Configuration()
       hadoopConf.set("test", "success")

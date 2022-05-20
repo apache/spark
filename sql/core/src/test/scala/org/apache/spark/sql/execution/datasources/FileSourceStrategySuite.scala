@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.SparkException
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -39,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 class FileSourceStrategySuite extends QueryTest with SharedSparkSession with PredicateHelper {
   import testImplicits._
@@ -652,7 +652,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
   def createTable(
       files: Seq[(String, Int)],
       buckets: Int = 0): DataFrame = {
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     files.foreach {
       case (name, size) =>
         val file = new File(tempDir, name)

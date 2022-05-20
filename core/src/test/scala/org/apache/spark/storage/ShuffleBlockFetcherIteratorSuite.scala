@@ -44,7 +44,6 @@ import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExternalBlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
@@ -841,7 +840,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("ensure big blocks available as a concatenated stream can be read") {
-    val tmpDir = JavaUtils.createTempDir()
+    val tmpDir = Utils.createTempDir()
     val tmpFile = new File(tmpDir, "someFile.txt")
     val os = new FileOutputStream(tmpFile)
     val buf = ByteBuffer.allocate(10000)
@@ -924,7 +923,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     " threshold(maxReqSizeShuffleToMem).") {
     val blockManager = createMockBlockManager()
     val diskBlockManager = mock(classOf[DiskBlockManager])
-    val tmpDir = JavaUtils.createTempDir()
+    val tmpDir = Utils.createTempDir()
     doReturn{
       val blockId = TempLocalBlockId(UUID.randomUUID())
       (blockId, new File(tmpDir, blockId.name))

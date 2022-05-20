@@ -35,7 +35,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 /**
@@ -218,7 +217,7 @@ abstract class SparkFunSuite
    * returns.
    */
   protected def withTempDir(f: File => Unit): Unit = {
-    val dir = JavaUtils.createTempDir()
+    val dir = Utils.createTempDir()
     try f(dir) finally {
       Utils.deleteRecursively(dir)
     }

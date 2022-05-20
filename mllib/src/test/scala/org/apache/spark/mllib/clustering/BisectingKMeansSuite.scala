@@ -21,7 +21,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -183,7 +182,7 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("BisectingKMeans model save/load") {
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
     val points = (1 until 8).map(i => Vectors.dense(i))

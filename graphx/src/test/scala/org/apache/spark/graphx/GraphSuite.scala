@@ -20,9 +20,9 @@ package org.apache.spark.graphx
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class GraphSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -332,7 +332,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("checkpoint") {
-    val checkpointDir = JavaUtils.createTempDir()
+    val checkpointDir = Utils.createTempDir()
     withSpark { sc =>
       sc.setCheckpointDir(checkpointDir.getAbsolutePath)
       val ring = (0L to 100L).zip((1L to 99L) :+ 0L).map { case (a, b) => Edge(a, b, 1)}

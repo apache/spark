@@ -33,7 +33,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogFileReader
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.io.{CompressionCodec, LZ4CompressionCodec}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{JsonProtocol, JsonProtocolSuite, Utils}
 
 /**
@@ -45,7 +44,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   private var testDir: File = _
 
   before {
-    testDir = JavaUtils.createTempDir()
+    testDir = Utils.createTempDir()
   }
 
   after {

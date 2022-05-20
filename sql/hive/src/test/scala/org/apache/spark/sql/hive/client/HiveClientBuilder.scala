@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.SparkConf
-import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.Utils
 
 private[client] object HiveClientBuilder {
   // In order to speed up test execution during development or in Jenkins, you can specify the path
@@ -34,8 +34,8 @@ private[client] object HiveClientBuilder {
   }
 
   private[client] def buildConf(extraConf: Map[String, String]): Map[String, String] = {
-    lazy val warehousePath = JavaUtils.createTempDir()
-    lazy val metastorePath = JavaUtils.createTempDir()
+    lazy val warehousePath = Utils.createTempDir()
+    lazy val metastorePath = Utils.createTempDir()
     metastorePath.delete()
     extraConf ++ Map(
       "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$metastorePath;create=true",

@@ -34,7 +34,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 import org.apache.spark.util.DependencyUtils.downloadFile
@@ -101,7 +100,7 @@ object KubernetesUtils extends Logging {
       conf: SparkConf): SparkPod = {
     try {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-      val localFile = downloadFile(templateFileName, JavaUtils.createTempDir(), conf, hadoopConf)
+      val localFile = downloadFile(templateFileName, Utils.createTempDir(), conf, hadoopConf)
       val templateFile = new File(new java.net.URI(localFile).getPath)
       val pod = kubernetesClient.pods().load(templateFile).get()
       selectSparkContainer(pod, containerName)

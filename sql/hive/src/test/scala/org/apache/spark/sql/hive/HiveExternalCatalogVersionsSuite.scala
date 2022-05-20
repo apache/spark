@@ -34,7 +34,6 @@ import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.launcher.JavaModuleOptions
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
@@ -58,12 +57,12 @@ import org.apache.spark.util.{Utils, VersionUtils}
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   import HiveExternalCatalogVersionsSuite._
   override protected val defaultSparkSubmitTimeout: Span = 5.minutes
-  private val wareHousePath = JavaUtils.createTempDirWithPrefix("warehouse")
-  private val tmpDataDir = JavaUtils.createTempDirWithPrefix("test-data")
+  private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
+  private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
   // For local test, you can set `spark.test.cache-dir` to a static value like `/tmp/test-spark`, to
   // avoid downloading Spark of different versions in each run.
   private val sparkTestingDir = Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY))
-      .map(new File(_)).getOrElse(JavaUtils.createTempDirWithPrefix("test-spark"))
+      .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
   val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
     HiveUtils.builtinHiveVersion

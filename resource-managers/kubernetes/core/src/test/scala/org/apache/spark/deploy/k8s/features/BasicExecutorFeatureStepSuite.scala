@@ -34,7 +34,6 @@ import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestReso
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -284,7 +283,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Auth secret shouldn't propagate if files are loaded.") {
-    val secretDir = JavaUtils.createTempDirWithRoot("temp-secret")
+    val secretDir = Utils.createTempDir("temp-secret")
     val secretFile = new File(secretDir, "secret-file.txt")
     Files.write(secretFile.toPath, "some-secret".getBytes(StandardCharsets.UTF_8))
     val conf = baseConf.clone()

@@ -29,7 +29,6 @@ import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vecto
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.MetadataBuilder
@@ -92,7 +91,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
         |0
         |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
     Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
@@ -125,7 +124,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
         |0
         |0 0:4.0 4:5.0 6:6.0
       """.stripMargin
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
     Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
@@ -142,7 +141,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
         |0
         |0 3:4.0 2:5.0 6:6.0
       """.stripMargin
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
     Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
@@ -158,7 +157,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(1.1, Vectors.sparse(3, Seq((0, 1.23), (2, 4.56)))),
       LabeledPoint(0.0, Vectors.dense(1.01, 2.02, 3.03))
     ), 2)
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val outputDir = new File(tempDir, "output")
     MLUtils.saveAsLibSVMFile(examples, outputDir.toURI.toString)
     val sources = outputDir.listFiles()
@@ -228,7 +227,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.sparse(2, Array(1), Array(-1.0)),
       Vectors.dense(0.0, 1.0)
     ), 2)
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val outputDir = new File(tempDir, "vectors")
     val path = outputDir.toURI.toString
     vectors.saveAsTextFile(path)
@@ -243,7 +242,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))),
       LabeledPoint(1.0, Vectors.dense(0.0, 1.0))
     ), 2)
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val outputDir = new File(tempDir, "points")
     val path = outputDir.toURI.toString
     points.saveAsTextFile(path)

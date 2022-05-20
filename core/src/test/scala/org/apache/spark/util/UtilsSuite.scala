@@ -44,7 +44,6 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
@@ -546,9 +545,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     // create some temporary directories and files
     withTempDir { parent =>
       // The parent directory has two child directories
-      val child1: File = JavaUtils.createTempDirWithRoot(parent.getCanonicalPath)
-      val child2: File = JavaUtils.createTempDirWithRoot(parent.getCanonicalPath)
-      val child3: File = JavaUtils.createTempDirWithRoot(child1.getCanonicalPath)
+      val child1: File = Utils.createTempDir(parent.getCanonicalPath)
+      val child2: File = Utils.createTempDir(parent.getCanonicalPath)
+      val child3: File = Utils.createTempDir(child1.getCanonicalPath)
       // set the last modified time of child1 to 30 secs old
       child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
 
@@ -705,12 +704,12 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("deleteRecursively") {
-    val tempDir1 = JavaUtils.createTempDir()
+    val tempDir1 = Utils.createTempDir()
     assert(tempDir1.exists())
     Utils.deleteRecursively(tempDir1)
     assert(!tempDir1.exists())
 
-    val tempDir2 = JavaUtils.createTempDir()
+    val tempDir2 = Utils.createTempDir()
     val sourceFile1 = new File(tempDir2, "foo.txt")
     Files.touch(sourceFile1)
     assert(sourceFile1.exists())
@@ -759,7 +758,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     withTempDir { tempDir =>
       val sourceDir = new File(tempDir, "source-dir")
       sourceDir.mkdir()
-      val innerSourceDir = JavaUtils.createTempDirWithRoot(sourceDir.getPath)
+      val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
       val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
       val targetDir = new File(tempDir, "target-dir")
       Files.write("some text", sourceFile, UTF_8)

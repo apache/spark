@@ -36,8 +36,8 @@ import org.apache.http.impl.client.HttpClientBuilder
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.{THttpClient, TSocket}
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 trait SharedThriftServer extends SharedSparkSession {
 
@@ -45,9 +45,9 @@ trait SharedThriftServer extends SharedSparkSession {
   private var serverPort: Int = 0
 
   protected val tempScratchDir: File = {
-    val dir = JavaUtils.createTempDir()
+    val dir = Utils.createTempDir()
     dir.setWritable(true, false)
-    JavaUtils.createTempDirWithRoot(dir.getAbsolutePath)
+    Utils.createTempDir(dir.getAbsolutePath)
     dir
   }
 

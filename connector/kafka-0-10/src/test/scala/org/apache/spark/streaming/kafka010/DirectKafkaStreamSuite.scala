@@ -35,7 +35,6 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{LocalStreamingContext, Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.DStream
@@ -336,7 +335,7 @@ class DirectKafkaStreamSuite
   test("offset recovery") {
     val topic = "recovery"
     kafkaTestUtils.createTopic(topic)
-    testDir = JavaUtils.createTempDir()
+    testDir = Utils.createTempDir()
 
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
 

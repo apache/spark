@@ -27,7 +27,6 @@ import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -62,7 +61,7 @@ class LibSVMRelationSuite
       """
         |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
-    val dir = JavaUtils.createTempDir()
+    val dir = Utils.createTempDir()
     val succ = new File(dir, "_SUCCESS")
     val file0 = new File(dir, "part-00000")
     val file1 = new File(dir, "part-00001")
@@ -130,7 +129,7 @@ class LibSVMRelationSuite
 
   test("write libsvm data and read it again") {
     val df = spark.read.format("libsvm").load(path)
-    val writePath = JavaUtils.createTempDir().getPath
+    val writePath = Utils.createTempDir().getPath
 
     // TODO: Remove requirement to coalesce by supporting multiple reads.
     df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writePath)
@@ -161,7 +160,7 @@ class LibSVMRelationSuite
     )
     val df = spark.sqlContext.createDataFrame(rawData, struct)
 
-    val writePath = JavaUtils.createTempDir().getPath
+    val writePath = Utils.createTempDir().getPath
 
     df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writePath)
 

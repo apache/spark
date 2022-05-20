@@ -36,7 +36,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.internal.config.Network.RPC_NUM_RETRIES
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -45,6 +44,7 @@ import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter {
@@ -495,7 +495,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
   test("SPARK-21145: Restarted queries create new provider instances") {
     try {
-      val checkpointLocation = JavaUtils.createTempDir().getAbsoluteFile
+      val checkpointLocation = Utils.createTempDir().getAbsoluteFile
       val spark = SparkSession.builder().master("local[2]").getOrCreate()
       SparkSession.setActiveSession(spark)
       implicit val sqlContext = spark.sqlContext
@@ -548,7 +548,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     hadoopConf.set(
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
       classOf[CreateAtomicTestManager].getName)
-    val remoteDir = JavaUtils.createTempDir().getAbsolutePath
+    val remoteDir = Utils.createTempDir().getAbsolutePath
 
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt, partition = 0,
       dir = remoteDir, hadoopConf = hadoopConf)) { provider =>
@@ -1324,7 +1324,7 @@ object StateStoreTestsHelper {
     Option(store.get(dataToKeyRow(key1, key2))).map(valueRowToData)
   }
 
-  def newDir(): String = JavaUtils.createTempDir().toString
+  def newDir(): String = Utils.createTempDir().toString
 }
 
 /**

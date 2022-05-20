@@ -30,11 +30,11 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
+import org.apache.spark.util.Utils
 
 /** Testsuite for testing the network receiver behavior */
 class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
@@ -208,7 +208,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
       .set("spark.streaming.receiver.writeAheadLog.enable", "true")
       .set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
     val batchDuration = Milliseconds(500)
-    val tempDirectory = JavaUtils.createTempDir()
+    val tempDirectory = Utils.createTempDir()
     val logDirectory1 = new File(checkpointDirToLogDir(tempDirectory.getAbsolutePath, 0))
     val logDirectory2 = new File(checkpointDirToLogDir(tempDirectory.getAbsolutePath, 1))
     val allLogFiles1 = new mutable.HashSet[String]()

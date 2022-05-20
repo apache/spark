@@ -34,7 +34,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    rootDfsDir = JavaUtils.createTempDirWithPrefix("dfs_logs")
+    rootDfsDir = Utils.createTempDir(namePrefix = "dfs_logs")
   }
 
   override def afterAll(): Unit = {

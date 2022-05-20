@@ -29,7 +29,6 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPermanentFunctionException, PartitionsAlreadyExistException}
@@ -45,7 +44,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
   private var versionSpark: TestHiveVersion = null
 
-  private val emptyDir = JavaUtils.createTempDir().getCanonicalPath
+  private val emptyDir = Utils.createTempDir().getCanonicalPath
 
   /**
    * Drops table `tableName` after calling `f`.
@@ -90,7 +89,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
   // Database related API
   ///////////////////////////////////////////////////////////////////////////
 
-  private val tempDatabasePath = JavaUtils.createTempDir().toURI
+  private val tempDatabasePath = Utils.createTempDir().toURI
 
   test("createDatabase") {
     val defaultDB = CatalogDatabase("default", "desc", new URI("loc"), Map())
@@ -113,7 +112,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
       val ownerProps = Map("owner" -> ownerName)
 
       // create database with owner
-      val dbWithOwner = CatalogDatabase(db1, "desc", JavaUtils.createTempDir().toURI, ownerProps)
+      val dbWithOwner = CatalogDatabase(db1, "desc", Utils.createTempDir().toURI, ownerProps)
       client.createDatabase(dbWithOwner, ignoreIfExists = true)
       val getDbWithOwner = client.getDatabase(db1)
       assert(getDbWithOwner.properties("owner") === ownerName)
@@ -122,7 +121,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
       assert(client.getDatabase(db1).properties("owner") === "")
 
       // create database without owner
-      val dbWithoutOwner = CatalogDatabase(db2, "desc", JavaUtils.createTempDir().toURI, Map())
+      val dbWithoutOwner = CatalogDatabase(db2, "desc", Utils.createTempDir().toURI, Map())
       client.createDatabase(dbWithoutOwner, ignoreIfExists = true)
       val getDbWithoutOwner = client.getDatabase(db2)
       assert(getDbWithoutOwner.properties("owner") === currentUser)
@@ -166,7 +165,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
     assert(client.getDatabase("temporary").properties.contains("flag"))
 
     // test alter database location
-    val tempDatabasePath2 = JavaUtils.createTempDir().toURI
+    val tempDatabasePath2 = Utils.createTempDir().toURI
     // Hive support altering database location since HIVE-8472.
     if (version == "3.0" || version == "3.1") {
       client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
@@ -487,7 +486,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
   test("alterPartitions") {
     val spec = Map("key1" -> "1", "key2" -> "2")
     val parameters = Map(StatsSetupConst.TOTAL_SIZE -> "0", StatsSetupConst.NUM_FILES -> "1")
-    val newLocation = new URI(JavaUtils.createTempDir().toURI.toString.stripSuffix("/"))
+    val newLocation = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
     val storage = storageFormat.copy(
       locationUri = Some(newLocation),
       // needed for 0.12 alter partitions

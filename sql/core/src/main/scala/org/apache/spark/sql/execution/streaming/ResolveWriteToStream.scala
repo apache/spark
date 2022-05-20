@@ -23,7 +23,6 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -32,6 +31,7 @@ import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStat
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Replaces logical [[WriteToStreamStatement]] operator with an [[WriteToStream]] operator.
@@ -75,7 +75,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
     }.getOrElse {
       if (s.useTempCheckpointLocation) {
         deleteCheckpointOnStop = true
-        val tempDir = JavaUtils.createTempDirWithPrefix("temporary").getCanonicalPath
+        val tempDir = Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
         logWarning("Temporary checkpoint location created which is deleted normally when" +
           s" the query didn't fail: $tempDir. If it's required to delete it under any" +
           s" circumstances, please set ${SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key} to" +

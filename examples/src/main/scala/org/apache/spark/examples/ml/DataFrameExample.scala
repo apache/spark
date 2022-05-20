@@ -26,8 +26,8 @@ import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.util.Utils
 
 /**
  * An example of how to use [[DataFrame]] for ML. Run with
@@ -85,7 +85,7 @@ object DataFrameExample {
     println(s"Selected features column with average values:\n ${featureSummary.mean.toString}")
 
     // Save the records in a parquet file.
-    val tmpDir = JavaUtils.createTempDir()
+    val tmpDir = Utils.createTempDir()
     val outputDir = new File(tmpDir, "dataframe").toString
     println(s"Saving to $outputDir as Parquet file.")
     df.write.parquet(outputDir)

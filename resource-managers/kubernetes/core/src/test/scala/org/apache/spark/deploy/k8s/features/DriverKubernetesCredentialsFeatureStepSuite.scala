@@ -28,11 +28,11 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.Utils
 
 class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
 
-  private val credentialsTempDirectory = JavaUtils.createTempDir()
+  private val credentialsTempDirectory = Utils.createTempDir()
   private val BASE_DRIVER_POD = SparkPod.initialPod()
 
   test("Don't set any credentials") {

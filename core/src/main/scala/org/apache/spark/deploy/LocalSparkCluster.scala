@@ -25,7 +25,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
@@ -69,7 +68,7 @@ class LocalSparkCluster private (
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
       val workDir = if (Utils.isTesting) {
-        JavaUtils.createTempDirWithPrefix("worker").getAbsolutePath
+        Utils.createTempDir(namePrefix = "worker").getAbsolutePath
       } else null
       if (Utils.isTesting) {
         workerDirs += workDir

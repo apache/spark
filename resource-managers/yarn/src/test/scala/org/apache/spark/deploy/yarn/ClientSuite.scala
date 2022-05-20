@@ -51,7 +51,6 @@ import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils.AMOUNT
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
@@ -136,7 +135,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
       any(classOf[Path]), meq(None), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       // Because we mocked "copyFileToRemote" above to avoid having to create fake local files,
       // we need to create a fake config archive in the temp dir to avoid having
@@ -288,8 +287,8 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
-    val libs = JavaUtils.createTempDir()
-    val single = JavaUtils.createTempDir()
+    val libs = Utils.createTempDir()
+    val single = Utils.createTempDir()
     val jar1 = TestUtils.createJarWithFiles(Map(), libs)
     val jar2 = TestUtils.createJarWithFiles(Map(), libs)
     val jar3 = TestUtils.createJarWithFiles(Map(), single)
@@ -304,7 +303,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val sparkConf = new SparkConf().set(SPARK_JARS, jarsConf)
     val client = createClient(sparkConf)
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
 
     assert(sparkConf.get(SPARK_JARS) ===
@@ -325,7 +324,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("distribute jars archive") {
-    val temp = JavaUtils.createTempDir()
+    val temp = Utils.createTempDir()
     val archive = TestUtils.createJarWithFiles(Map(), temp)
 
     val sparkConf = new SparkConf().set(SPARK_ARCHIVE, archive.getPath())
@@ -343,7 +342,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("SPARK-37239: distribute jars archive with set STAGING_FILE_REPLICATION") {
-    val temp = JavaUtils.createTempDir()
+    val temp = Utils.createTempDir()
     val archive = TestUtils.createJarWithFiles(Map(), temp)
     val replication = 5
 
@@ -362,13 +361,13 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("distribute archive multiple times") {
-    val libs = JavaUtils.createTempDir()
+    val libs = Utils.createTempDir()
     // Create jars dir and RELEASE file to avoid IllegalStateException.
     val jarsDir = new File(libs, "jars")
     assert(jarsDir.mkdir())
     new FileOutputStream(new File(libs, "RELEASE")).close()
 
-    val userLib1 = JavaUtils.createTempDir()
+    val userLib1 = Utils.createTempDir()
     val testJar = TestUtils.createJarWithFiles(Map(), userLib1)
 
     // Case 1:  FILES_TO_DISTRIBUTE and ARCHIVES_TO_DISTRIBUTE can't have duplicate files
@@ -377,7 +376,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(ARCHIVES_TO_DISTRIBUTE, Seq(testJar.getPath))
 
     val client = createClient(sparkConf)
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     intercept[IllegalArgumentException] {
       client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
     }
@@ -387,7 +386,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(FILES_TO_DISTRIBUTE, Seq(testJar.getPath, testJar.getPath))
 
     val clientFiles = createClient(sparkConfFiles)
-    val tempDirForFiles = JavaUtils.createTempDir()
+    val tempDirForFiles = Utils.createTempDir()
     intercept[IllegalArgumentException] {
       clientFiles.prepareLocalResources(new Path(tempDirForFiles.getAbsolutePath()), Nil)
     }
@@ -397,7 +396,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(ARCHIVES_TO_DISTRIBUTE, Seq(testJar.getPath, testJar.getPath))
 
     val clientArchives = createClient(sparkConfArchives)
-    val tempDirForArchives = JavaUtils.createTempDir()
+    val tempDirForArchives = Utils.createTempDir()
     intercept[IllegalArgumentException] {
       clientArchives.prepareLocalResources(new Path(tempDirForArchives.getAbsolutePath()), Nil)
     }
@@ -407,7 +406,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(FILES_TO_DISTRIBUTE, Seq(testJar.getPath))
 
     val clientFilesUniq = createClient(sparkConfFilesUniq)
-    val tempDirForFilesUniq = JavaUtils.createTempDir()
+    val tempDirForFilesUniq = Utils.createTempDir()
     clientFilesUniq.prepareLocalResources(new Path(tempDirForFilesUniq.getAbsolutePath()), Nil)
 
     // Case 5: ARCHIVES_TO_DISTRIBUTE can have unique file.
@@ -415,13 +414,13 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(ARCHIVES_TO_DISTRIBUTE, Seq(testJar.getPath))
 
     val clientArchivesUniq = createClient(sparkConfArchivesUniq)
-    val tempDirArchivesUniq = JavaUtils.createTempDir()
+    val tempDirArchivesUniq = Utils.createTempDir()
     clientArchivesUniq.prepareLocalResources(new Path(tempDirArchivesUniq.getAbsolutePath()), Nil)
 
   }
 
   test("distribute local spark jars") {
-    val temp = JavaUtils.createTempDir()
+    val temp = Utils.createTempDir()
     val jarsDir = new File(temp, "jars")
     assert(jarsDir.mkdir())
     val jar = TestUtils.createJarWithFiles(Map(), jarsDir)
@@ -434,12 +433,12 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("ignore same name jars") {
-    val libs = JavaUtils.createTempDir()
+    val libs = Utils.createTempDir()
     val jarsDir = new File(libs, "jars")
     assert(jarsDir.mkdir())
     new FileOutputStream(new File(libs, "RELEASE")).close()
-    val userLib1 = JavaUtils.createTempDir()
-    val userLib2 = JavaUtils.createTempDir()
+    val userLib1 = Utils.createTempDir()
+    val userLib2 = Utils.createTempDir()
 
     val jar1 = TestUtils.createJarWithFiles(Map(), jarsDir)
     val jar2 = TestUtils.createJarWithFiles(Map(), userLib1)
@@ -456,7 +455,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(JARS_TO_DISTRIBUTE, Seq(jar2.getPath, jar3.getPath))
 
     val client = createClient(sparkConf)
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
 
     // Only jar2 will be added to SECONDARY_JARS, jar3 which has the same name with jar2 will be

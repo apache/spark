@@ -37,7 +37,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.netty.NettyBlockTransferService
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.CryptoStreamUtils
@@ -102,7 +101,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     storageLevel = StorageLevel.MEMORY_ONLY_SER
     blockManager = createBlockManager(blockManagerSize, conf)
 
-    tempDirectory = JavaUtils.createTempDir()
+    tempDirectory = Utils.createTempDir()
     manualClock.setTime(0)
   }
 

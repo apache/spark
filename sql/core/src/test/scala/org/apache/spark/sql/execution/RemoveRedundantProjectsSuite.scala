@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
@@ -54,7 +53,7 @@ abstract class RemoveRedundantProjectsSuiteBase
     }
   }
 
-  private val tmpPath = JavaUtils.createTempDir()
+  private val tmpPath = Utils.createTempDir()
 
   override def beforeAll(): Unit = {
     super.beforeAll()

@@ -23,7 +23,6 @@ import java.nio.file.{Files, Paths}
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -42,7 +41,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAn
     super.beforeAll()
     originalDefaultSource = spark.sessionState.conf.defaultDataSourceName
 
-    path = JavaUtils.createTempDir()
+    path = Utils.createTempDir()
     path.delete()
 
     val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}""").toDS()

@@ -23,7 +23,6 @@ import scala.util.control.NonFatal
 
 import org.scalatest.Assertions.fail
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
@@ -65,7 +64,7 @@ trait SQLHelper {
    * a file/directory is created there by `f`, it will be delete after `f` returns.
    */
   protected def withTempPath(f: File => Unit): Unit = {
-    val path = JavaUtils.createTempDir()
+    val path = Utils.createTempDir()
     path.delete()
     try f(path) finally Utils.deleteRecursively(path)
   }

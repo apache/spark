@@ -35,7 +35,6 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkContext, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -149,7 +148,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   private val userSchemaString = "s STRING"
   private val textSchema = new StructType().add("value", StringType)
   private val data = Seq("1", "2", "3")
-  private val dir = JavaUtils.createTempDirWithPrefix("input").getCanonicalPath
+  private val dir = Utils.createTempDir(namePrefix = "input").getCanonicalPath
 
   before {
     Utils.deleteRecursively(new File(dir))
@@ -470,7 +469,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("check jdbc() does not support partitioning, bucketBy or sortBy") {
-    val df = spark.read.text(JavaUtils.createTempDirWithPrefix("text").getCanonicalPath)
+    val df = spark.read.text(Utils.createTempDir(namePrefix = "text").getCanonicalPath)
 
     var w = df.write.partitionBy("value")
     var e = intercept[AnalysisException](w.jdbc(null, null, null))
@@ -988,7 +987,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
     def checkReadUserSpecifiedDataColumnDuplication(
         df: DataFrame, format: String, colName0: String, colName1: String, tempDir: File): Unit = {
-      val testDir = JavaUtils.createTempDirWithRoot(tempDir.getAbsolutePath)
+      val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
       df.write.format(format).mode("overwrite").save(testDir.getAbsolutePath)
       val errorMsg = intercept[AnalysisException] {
         spark.read.format(format).schema(s"$colName0 INT, $colName1 INT")
@@ -999,7 +998,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
     def checkReadPartitionColumnDuplication(
         format: String, colName0: String, colName1: String, tempDir: File): Unit = {
-      val testDir = JavaUtils.createTempDirWithRoot(tempDir.getAbsolutePath)
+      val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
       Seq(1).toDF("col").write.format(format).mode("overwrite")
         .save(s"${testDir.getAbsolutePath}/$colName0=1/$colName1=1")
       val errorMsg = intercept[AnalysisException] {
@@ -1016,7 +1015,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "csv", c0, c1, src)
           // If `inferSchema` is true, a CSV format is duplicate-safe (See SPARK-16896)
-          var testDir = JavaUtils.createTempDirWithRoot(src.getAbsolutePath)
+          var testDir = Utils.createTempDir(src.getAbsolutePath)
           Seq("a,a", "1,1").toDF().coalesce(1).write.mode("overwrite").text(testDir.getAbsolutePath)
           val df = spark.read.format("csv").option("inferSchema", true).option("header", true)
             .load(testDir.getAbsolutePath)
@@ -1028,7 +1027,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "json", c0, c1, src)
           // Inferred schema cases
-          testDir = JavaUtils.createTempDirWithRoot(src.getAbsolutePath)
+          testDir = Utils.createTempDir(src.getAbsolutePath)
           Seq(s"""{"$c0":3, "$c1":5}""").toDF().write.mode("overwrite")
             .text(testDir.getAbsolutePath)
           val errorMsg = intercept[AnalysisException] {

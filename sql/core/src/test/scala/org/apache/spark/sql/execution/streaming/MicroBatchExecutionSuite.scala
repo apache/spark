@@ -22,7 +22,6 @@ import java.io.File
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.read.streaming
@@ -30,6 +29,7 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.util.Utils
 
 class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
 
@@ -85,7 +85,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-test-offsetId-commitId-inconsistent/").toURI
 
-    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)

@@ -30,8 +30,8 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.security.HadoopDelegationTokenProvider
+import org.apache.spark.util.Utils
 
 private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationTokenProvider {
   ExceptionThrowingDelegationTokenProvider.constructed = true
@@ -90,7 +90,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
     try {
       // UserGroupInformation.setConfiguration needs default kerberos realm which can be set in
       // krb5.conf. MiniKdc sets "java.security.krb5.conf" in start and removes it when stop called.
-      val kdcDir = JavaUtils.createTempDir()
+      val kdcDir = Utils.createTempDir()
       val kdcConf = MiniKdc.createConf()
       // The port for MiniKdc service gets selected in the constructor, but will be bound
       // to it later in MiniKdc.start() -> MiniKdc.initKDCServer() -> KdcServer.start().

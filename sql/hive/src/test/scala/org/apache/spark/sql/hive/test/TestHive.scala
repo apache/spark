@@ -34,7 +34,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
@@ -268,7 +267,7 @@ private[hive] class TestHiveSparkSession(
   // For some hive test case which contain ${system:test.tmp.dir}
   // Make sure it is not called again when cloning sessions.
   if (parentSessionState.isEmpty) {
-    System.setProperty("test.tmp.dir", JavaUtils.createTempDir().toURI.getPath)
+    System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
   }
 
   /** The location of the compiled hive distribution */
@@ -639,13 +638,13 @@ private[hive] object TestHiveContext {
     )
 
   def makeWarehouseDir(): File = {
-    val warehouseDir = JavaUtils.createTempDirWithPrefix("warehouse")
+    val warehouseDir = Utils.createTempDir(namePrefix = "warehouse")
     warehouseDir.delete()
     warehouseDir
   }
 
   def makeScratchDir(): File = {
-    val scratchDir = JavaUtils.createTempDirWithPrefix("scratch")
+    val scratchDir = Utils.createTempDir(namePrefix = "scratch")
     scratchDir.delete()
     scratchDir
   }
@@ -674,7 +673,7 @@ private[sql] class TestHiveSessionStateBuilder(
 
 private[hive] object HiveTestJars {
   private val repository = SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.defaultValueString.split(",")(0)
-  private val hiveTestJarsDir = JavaUtils.createTempDir()
+  private val hiveTestJarsDir = Utils.createTempDir()
 
   def getHiveContribJar(version: String = HiveUtils.builtinHiveVersion): File =
     getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +

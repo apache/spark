@@ -23,7 +23,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, LocalClusterSparkContext,
   MLlibTestSparkContext}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 private object LassoSuite {
@@ -127,7 +126,7 @@ class LassoSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("model save/load") {
     val model = LassoSuite.model
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
     // Save model, load it back, and compare.

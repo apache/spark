@@ -23,11 +23,11 @@ import org.apache.spark.mllib.stat.test.StreamingTest;
 import org.apache.spark.mllib.stat.test.StreamingTestResult;
 // $example off$
 import org.apache.spark.SparkConf;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.Seconds;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
+import org.apache.spark.util.Utils;
 
 
 /**
@@ -68,8 +68,7 @@ public class JavaStreamingTestExample {
     SparkConf conf = new SparkConf().setMaster("local").setAppName("StreamingTestExample");
     JavaStreamingContext ssc = new JavaStreamingContext(conf, batchDuration);
 
-    ssc.checkpoint(
-      JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "spark").toString());
+    ssc.checkpoint(Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark").toString());
 
     // $example on$
     JavaDStream<BinarySample> data = ssc.textFileStream(dataDir).map(line -> {

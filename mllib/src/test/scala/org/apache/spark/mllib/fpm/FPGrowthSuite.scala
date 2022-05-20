@@ -19,7 +19,6 @@ package org.apache.spark.mllib.fpm
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -297,7 +296,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
       (itemset.items.toSet, itemset.freq)
     }
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
     try {
       model3.save(sc, path)
@@ -331,7 +330,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
       (itemset.items.toSet, itemset.freq)
     }
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
     try {
       model3.save(sc, path)

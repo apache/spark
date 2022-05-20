@@ -37,7 +37,6 @@ import org.apache.hive.common.util.HiveVersionInfo
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -510,7 +509,7 @@ private[spark] object HiveUtils extends Logging {
   def newTemporaryConfiguration(useInMemoryDerby: Boolean): Map[String, String] = {
     val withInMemoryMode = if (useInMemoryDerby) "memory:" else ""
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore")
     val propMap: HashMap[String, String] = HashMap()
     // We have to mask all properties in hive-site.xml that relates to metastore data source

@@ -24,12 +24,12 @@ import scala.annotation.tailrec
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{InvalidUnsafeRowException, StateSchemaNotCompatible}
 import org.apache.spark.sql.functions._
+import org.apache.spark.util.Utils
 
 /**
  * An integrated test for streaming state store format compatibility.
@@ -45,7 +45,7 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
   private def prepareCheckpointDir(testName: String): File = {
     val resourceUri = this.getClass.getResource("/structured-streaming/" +
       s"checkpoint-version-2.4.5-for-compatibility-test-${testName}").toURI
-    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
     checkpointDir
   }

@@ -25,7 +25,6 @@ import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
@@ -38,7 +37,7 @@ object Main extends Logging {
   val conf = new SparkConf()
   val rootDir =
     conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
-  val outputDir = JavaUtils.createTempDir(rootDir, "repl")
+  val outputDir = Utils.createTempDir(root = rootDir, namePrefix = "repl")
 
   var sparkContext: SparkContext = _
   var sparkSession: SparkSession = _

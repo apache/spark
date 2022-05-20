@@ -34,7 +34,6 @@ import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.util.{NextIterator, Utils}
 
@@ -54,7 +53,7 @@ import org.apache.spark.util.{NextIterator, Utils}
 class RocksDB(
     dfsRootDir: String,
     val conf: RocksDBConf,
-    localRootDir: File = JavaUtils.createTempDir(),
+    localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "") extends Logging {
 

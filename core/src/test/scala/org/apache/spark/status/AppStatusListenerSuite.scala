@@ -30,7 +30,6 @@ import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.metrics.ExecutorMetricType
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
@@ -58,7 +57,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
 
   before {
     time = 0L
-    testDir = JavaUtils.createTempDir()
+    testDir = Utils.createTempDir()
     store = new ElementTrackingStore(createKVStore, conf)
     taskIdTracker = -1L
   }

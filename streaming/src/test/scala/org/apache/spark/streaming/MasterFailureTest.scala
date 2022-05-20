@@ -33,7 +33,6 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.Assertions._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 
@@ -365,7 +364,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
   extends Thread with Logging {
 
   override def run(): Unit = {
-    val localTestDir = JavaUtils.createTempDir()
+    val localTestDir = Utils.createTempDir()
     var fs = testDir.getFileSystem(new Configuration())
     val maxTries = 3
     try {

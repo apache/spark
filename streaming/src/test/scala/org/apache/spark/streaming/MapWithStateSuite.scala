@@ -26,7 +26,6 @@ import scala.reflect.ClassTag
 import org.scalatest.PrivateMethodTester._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream, MapWithStateDStream, MapWithStateDStreamImpl}
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -44,7 +43,7 @@ class MapWithStateSuite extends SparkFunSuite with LocalStreamingContext
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     sc = new SparkContext(conf)
 
-    checkpointDir = JavaUtils.createTempDirWithPrefix("checkpoint")
+    checkpointDir = Utils.createTempDir(namePrefix = "checkpoint")
   }
 
   override def afterEach(): Unit = {

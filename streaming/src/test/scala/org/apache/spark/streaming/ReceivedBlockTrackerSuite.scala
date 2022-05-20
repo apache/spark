@@ -35,7 +35,6 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.{AllocatedBlocks, _}
@@ -55,7 +54,7 @@ class ReceivedBlockTrackerSuite
 
   before {
     conf = new SparkConf().setMaster("local[2]").setAppName("ReceivedBlockTrackerSuite")
-    checkpointDirectory = JavaUtils.createTempDir()
+    checkpointDirectory = Utils.createTempDir()
   }
 
   after {

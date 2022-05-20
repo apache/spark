@@ -22,7 +22,6 @@ import java.util
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
@@ -38,6 +37,7 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
@@ -330,7 +330,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       dsw.option("path", output.getCanonicalPath)
     }
     val sq = dsw
-      .option("checkpointLocation", JavaUtils.createTempDir().getCanonicalPath)
+      .option("checkpointLocation", Utils.createTempDir().getCanonicalPath)
       .toTable(tableName)
     memory.addData(1, 2, 3)
     sq.processAllAvailable()

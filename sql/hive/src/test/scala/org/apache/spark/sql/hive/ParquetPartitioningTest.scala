@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -58,8 +58,8 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    partitionedTableDir = JavaUtils.createTempDir()
-    normalTableDir = JavaUtils.createTempDir()
+    partitionedTableDir = Utils.createTempDir()
+    normalTableDir = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDir, s"p=$p")
@@ -75,7 +75,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
       .toDF()
       .write.parquet(new File(normalTableDir, "normal").getCanonicalPath)
 
-    partitionedTableDirWithKey = JavaUtils.createTempDir()
+    partitionedTableDirWithKey = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithKey, s"p=$p")
@@ -85,7 +85,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
         .write.parquet(partDir.getCanonicalPath)
     }
 
-    partitionedTableDirWithKeyAndComplexTypes = JavaUtils.createTempDir()
+    partitionedTableDirWithKeyAndComplexTypes = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithKeyAndComplexTypes, s"p=$p")
@@ -95,7 +95,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
       }.toDF().write.parquet(partDir.getCanonicalPath)
     }
 
-    partitionedTableDirWithComplexTypes = JavaUtils.createTempDir()
+    partitionedTableDirWithComplexTypes = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithComplexTypes, s"p=$p")

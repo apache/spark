@@ -23,7 +23,6 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
 import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.{SparkListenerStageSubmitted, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.status.api.v1.SpeculationStageSummary
@@ -94,7 +93,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
 
     val store: KVStore = if (disk) {
       conf.set(HYBRID_STORE_DISK_BACKEND, diskStoreType.toString)
-      val testDir = JavaUtils.createTempDir()
+      val testDir = Utils.createTempDir()
       val diskStore = KVUtils.open(testDir, getClass.getName, conf)
       new ElementTrackingStore(diskStore, conf)
     } else {

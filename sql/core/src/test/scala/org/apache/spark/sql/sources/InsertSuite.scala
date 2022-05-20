@@ -24,7 +24,6 @@ import java.time.{Duration, Period}
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
 
 import org.apache.spark.SparkException
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -66,7 +65,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    path = JavaUtils.createTempDir()
+    path = Utils.createTempDir()
     val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str$i"}""").toDS()
     spark.read.json(ds).createOrReplaceTempView("jt")
     sql(
@@ -602,7 +601,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |partitioned by (part1, part2)
           """.stripMargin)
 
-        val path1 = JavaUtils.createTempDir()
+        val path1 = Utils.createTempDir()
         sql(s"alter table t add partition(part1=1, part2=1) location '$path1'")
         sql(s"insert into t partition(part1=1, part2=1) select 1")
         checkAnswer(spark.table("t"), Row(1, 1, 1))
@@ -613,7 +612,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert overwrite table t partition(part1=2, part2) select 2, 2")
         checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
 
-        val path2 = JavaUtils.createTempDir()
+        val path2 = Utils.createTempDir()
         sql(s"alter table t add partition(part1=1, part2=2) location '$path2'")
         sql("insert overwrite table t partition(part1=1, part2=2) select 3")
         checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)

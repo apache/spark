@@ -30,7 +30,6 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
@@ -537,7 +536,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     model.clearThreshold()
     assert(model.getThreshold.isEmpty)
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
     // Save model, load it back, and compare.
@@ -564,7 +563,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     // NOTE: This will need to be generalized once there are multiple model format versions.
     val model = LogisticRegressionSuite.multiclassModel
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
     // Save model, load it back, and compare.

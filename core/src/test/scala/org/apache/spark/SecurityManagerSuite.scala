@@ -28,9 +28,8 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.security.GroupMappingServiceProvider
-import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv}
+import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
 
 class DummyGroupMappingServiceProvider extends GroupMappingServiceProvider {
 
@@ -513,7 +512,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   private def createTempSecretFile(contents: String = "test-secret"): File = {
-    val secretDir = JavaUtils.createTempDirWithRoot("temp-secrets")
+    val secretDir = Utils.createTempDir("temp-secrets")
     val secretFile = new File(secretDir, "temp-secret.txt")
     Files.write(secretFile.toPath, contents.getBytes(UTF_8))
     secretFile

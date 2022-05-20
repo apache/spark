@@ -36,7 +36,6 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, ThreadUtils, Utils}
 
@@ -205,7 +204,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
    */
   test("failed task deserialized with the correct classloader (SPARK-11195)") {
     // compile a small jar containing an exception that will be thrown on an executor.
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val srcDir = new File(tempDir, "repro/")
     srcDir.mkdirs()
     val excSource = new JavaSourceFromString(new File(srcDir, "MyException").toURI.getPath,

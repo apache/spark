@@ -29,7 +29,6 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -45,7 +44,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    tempDir = JavaUtils.createTempDir()
+    tempDir = Utils.createTempDir()
     MockitoAnnotations.openMocks(this).close()
 
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)

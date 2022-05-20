@@ -45,7 +45,6 @@ import org.apache.spark.io.LZFCompressionCodec;
 import org.apache.spark.io.SnappyCompressionCodec;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.security.CryptoStreamUtils;
@@ -92,7 +91,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.openMocks(this).close();
-    tempDir = JavaUtils.createTempDir(null, "test");
+    tempDir = Utils.createTempDir(null, "test");
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
     partitionSizesInMergedFile = null;
     spillFilesCreated.clear();

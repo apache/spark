@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
@@ -67,7 +66,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
   }
 
   test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
-    val location = JavaUtils.createTempDir()
+    val location = Utils.createTempDir()
     val uri = location.toURI
     try {
       hiveClient.runSqlHive("USE default")

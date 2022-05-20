@@ -20,7 +20,6 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.SparkException
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTableType}
@@ -52,7 +51,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    path = JavaUtils.createTempDir()
+    path = Utils.createTempDir()
     path.delete()
   }
 

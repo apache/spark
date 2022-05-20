@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.reflect.internal.util.AbstractFileClassLoader
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.rules
+import org.apache.spark.util.Utils
 
 /**
  * A collection of generators that build custom bytecode at runtime for performing the evaluation
@@ -45,7 +45,7 @@ package object codegen {
    */
   object DumpByteCode {
     import scala.sys.process._
-    val dumpDirectory = JavaUtils.createTempDir()
+    val dumpDirectory = Utils.createTempDir()
     dumpDirectory.mkdir()
 
     def apply(obj: Any): Unit = {

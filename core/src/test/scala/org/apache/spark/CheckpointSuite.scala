@@ -27,7 +27,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
@@ -255,7 +254,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    checkpointDir = File.createTempFile("temp", "", JavaUtils.createTempDir())
+    checkpointDir = File.createTempFile("temp", "", Utils.createTempDir())
     checkpointDir.delete()
     sc = new SparkContext("local", "test")
     sc.setCheckpointDir(checkpointDir.toString)

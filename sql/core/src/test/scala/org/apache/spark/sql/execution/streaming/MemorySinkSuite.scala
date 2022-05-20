@@ -21,12 +21,12 @@ import scala.language.implicitConversions
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
@@ -270,7 +270,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("error if attempting to resume specific checkpoint") {
-    val location = JavaUtils.createTempDirWithPrefix("steaming.checkpoint").getCanonicalPath
+    val location = Utils.createTempDir(namePrefix = "steaming.checkpoint").getCanonicalPath
 
     val input = MemoryStream[Int]
     val query = input.toDF().writeStream

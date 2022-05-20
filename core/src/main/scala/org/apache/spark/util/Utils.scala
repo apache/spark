@@ -980,7 +980,7 @@ private[spark] object Utils extends Logging {
       try {
         val rootDir = new File(root)
         if (rootDir.exists || rootDir.mkdirs()) {
-          val dir = JavaUtils.createTempDirWithRoot(root)
+          val dir = createTempDir(root)
           chmod700(dir)
           Some(dir.getAbsolutePath)
         } else {

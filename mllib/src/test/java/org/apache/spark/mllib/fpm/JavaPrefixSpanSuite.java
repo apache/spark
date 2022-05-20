@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.fpm;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -28,7 +27,6 @@ import org.junit.Test;
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.fpm.PrefixSpan.FreqSequence;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.Utils;
 
 public class JavaPrefixSpanSuite extends SharedSparkSession {
@@ -56,7 +54,7 @@ public class JavaPrefixSpanSuite extends SharedSparkSession {
   }
 
   @Test
-  public void runPrefixSpanSaveLoad() throws IOException {
+  public void runPrefixSpanSaveLoad() {
     JavaRDD<List<List<Integer>>> sequences = jsc.parallelize(Arrays.asList(
       Arrays.asList(Arrays.asList(1, 2), Arrays.asList(3)),
       Arrays.asList(Arrays.asList(1), Arrays.asList(3, 2), Arrays.asList(1, 2)),
@@ -68,7 +66,7 @@ public class JavaPrefixSpanSuite extends SharedSparkSession {
       .setMaxPatternLength(5);
     PrefixSpanModel<Integer> model = prefixSpan.run(sequences);
 
-    File tempDir = JavaUtils.createTempDir(
+    File tempDir = Utils.createTempDir(
       System.getProperty("java.io.tmpdir"), "JavaPrefixSpanSuite");
     String outputPath = tempDir.getPath();
 

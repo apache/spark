@@ -54,7 +54,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaTokenUtil
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
 
 /**
@@ -132,7 +131,7 @@ class KafkaTestUtils(
   }
 
   private def setUpMiniKdc(): Unit = {
-    val kdcDir = JavaUtils.createTempDir()
+    val kdcDir = Utils.createTempDir()
     val kdcConf = MiniKdc.createConf()
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
     // The port for MiniKdc service gets selected in the constructor, but will be bound
@@ -201,7 +200,7 @@ class KafkaTestUtils(
 
   private def createKeytabsAndJaasConfigFile(): String = {
     assert(kdcReady, "KDC should be set up beforehand")
-    val baseDir = JavaUtils.createTempDir()
+    val baseDir = Utils.createTempDir()
 
     val zkServerUser = s"zookeeper/$localCanonicalHostName"
     val zkServerKeytabFile = new File(baseDir, "zookeeper.keytab")
@@ -491,7 +490,7 @@ class KafkaTestUtils(
     val props = new Properties()
     props.put("broker.id", "0")
     props.put("listeners", s"PLAINTEXT://127.0.0.1:$brokerPort")
-    props.put("log.dir", JavaUtils.createTempDir().getAbsolutePath)
+    props.put("log.dir", Utils.createTempDir().getAbsolutePath)
     props.put("zookeeper.connect", zkAddress)
     props.put("zookeeper.connection.timeout.ms", "60000")
     props.put("log.flush.interval.messages", "1")
@@ -638,8 +637,8 @@ class KafkaTestUtils(
   private class EmbeddedZookeeper(val zkConnect: String) {
     private val ZOOKEEPER_AUTH_PROVIDER = "zookeeper.authProvider.1"
 
-    val snapshotDir = JavaUtils.createTempDir()
-    val logDir = JavaUtils.createTempDir()
+    val snapshotDir = Utils.createTempDir()
+    val logDir = Utils.createTempDir()
 
     if (secure) {
       System.setProperty(ZOOKEEPER_AUTH_PROVIDER, classOf[SASLAuthenticationProvider].getName)

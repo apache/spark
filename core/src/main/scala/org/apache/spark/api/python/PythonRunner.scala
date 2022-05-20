@@ -32,7 +32,6 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
@@ -71,7 +70,7 @@ private[spark] object PythonEvalType {
 
 private object BasePythonRunner {
 
-  private lazy val faultHandlerLogDir = JavaUtils.createTempDirWithPrefix("faulthandler")
+  private lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
   private def faultHandlerLogPath(pid: Int): Path = {
     new File(faultHandlerLogDir, pid.toString).toPath

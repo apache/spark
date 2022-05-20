@@ -23,8 +23,8 @@ import java.util.UUID
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.util.Utils
 
 /**
  * A stress test for streaming queries that read and write files.  This test consists of
@@ -52,10 +52,10 @@ class FileStreamStressSuite extends StreamTest {
 
   def stressTest(partitionWrites: Boolean): Unit = {
     val numRecords = 10000
-    val inputDir = JavaUtils.createTempDirWithPrefix("stream.input").getCanonicalPath
-    val stagingDir = JavaUtils.createTempDirWithPrefix("stream.staging").getCanonicalPath
-    val outputDir = JavaUtils.createTempDirWithPrefix("stream.output").getCanonicalPath
-    val checkpoint = JavaUtils.createTempDirWithPrefix("stream.checkpoint").getCanonicalPath
+    val inputDir = Utils.createTempDir(namePrefix = "stream.input").getCanonicalPath
+    val stagingDir = Utils.createTempDir(namePrefix = "stream.staging").getCanonicalPath
+    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val checkpoint = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
     @volatile
     var continue = true

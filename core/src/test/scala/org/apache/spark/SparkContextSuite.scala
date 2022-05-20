@@ -40,7 +40,6 @@ import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -286,8 +285,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("addFile recursive works") {
     withTempDir { pluto =>
-      val neptune = JavaUtils.createTempDirWithRoot(pluto.getAbsolutePath)
-      val saturn = JavaUtils.createTempDirWithRoot(neptune.getAbsolutePath)
+      val neptune = Utils.createTempDir(pluto.getAbsolutePath)
+      val saturn = Utils.createTempDir(neptune.getAbsolutePath)
       val alien1 = File.createTempFile("alien", "1", neptune)
       val alien2 = File.createTempFile("alien", "2", saturn)
 
@@ -319,7 +318,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     withTempDir { dir =>
       try {
         val sep = File.separator
-        val tmpDir = JavaUtils.createTempDirWithRoot(dir.getAbsolutePath + sep + "test space")
+        val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
         val tmpConfFile1 = File.createTempFile("test file", ".conf", tmpDir)
 
         sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -337,7 +336,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     withTempDir { dir =>
       try {
           val sep = File.separator
-          val tmpDir = JavaUtils.createTempDirWithRoot(dir.getAbsolutePath + sep + "test space")
+          val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
           val tmpConfFile2 = File.createTempFile("test file", ".conf", tmpDir)
 
           sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -416,7 +415,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     withTempDir { dir =>
        try {
           val sep = File.separator
-          val tmpDir = JavaUtils.createTempDirWithRoot(dir.getAbsolutePath + sep + "test space")
+          val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
           val tmpJar = File.createTempFile("test", ".jar", tmpDir)
 
           sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -1308,8 +1307,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
 
         val sep = File.separator
-        val tmpCanonicalDir =
-          JavaUtils.createTempDirWithRoot(dir.getAbsolutePath + sep + "test space")
+        val tmpCanonicalDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
         val tmpAbsoluteDir = new File(tmpCanonicalDir.getAbsolutePath + sep + '.' + sep)
         val tmpJar = File.createTempFile("test", ".jar", tmpAbsoluteDir)
         val tmpFile = File.createTempFile("test", ".txt", tmpAbsoluteDir)

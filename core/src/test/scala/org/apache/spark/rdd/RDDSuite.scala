@@ -33,7 +33,6 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -42,7 +41,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    tempDir = JavaUtils.createTempDir()
+    tempDir = Utils.createTempDir()
   }
 
   override def afterAll(): Unit = {

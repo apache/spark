@@ -25,13 +25,13 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.util.Utils
 
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
   with BeforeAndAfter {
@@ -83,7 +83,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val testRDD = spark.sparkContext.makeRDD[String](Seq("a"), 1)
       val testSchema = StructType(Seq(StructField("key", StringType, true)))
       val testStateInfo = StatefulOperatorStateInfo(
-        checkpointLocation = JavaUtils.createTempDir().getAbsolutePath,
+        checkpointLocation = Utils.createTempDir().getAbsolutePath,
         queryRunId = UUID.randomUUID, operatorId = 0, storeVersion = 0, numPartitions = 5)
 
       // Create state store in a task and get the RocksDBConf from the instantiated RocksDB instance

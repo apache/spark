@@ -36,7 +36,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.internal.config._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
@@ -97,7 +96,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     val batchDurationMillis = batchDuration.milliseconds
 
     // Setup the stream computation
-    val checkpointDir = JavaUtils.createTempDirWithPrefix(this.getClass.getSimpleName()).toString
+    val checkpointDir = Utils.createTempDir(namePrefix = this.getClass.getSimpleName()).toString
     logDebug(s"Using checkpoint directory $checkpointDir")
     val ssc = createContextForCheckpointOperation(batchDuration)
     require(ssc.conf.get("spark.streaming.clock") === classOf[ManualClock].getName,
@@ -486,7 +485,7 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
   }
 
   test("recovery with saveAsHadoopFiles operation") {
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -515,7 +514,7 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
   }
 
   test("recovery with saveAsNewAPIHadoopFiles operation") {
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -559,7 +558,7 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
     //
     // After SPARK-5079 is addressed, should be able to remove this test since a strengthened
     // version of the other saveAsHadoopFile* tests would prevent regressions for this issue.
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -641,7 +640,7 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
   test("recovery with file input stream") {
     // Set up the streaming context and input streams
     val batchDuration = Seconds(2)  // Due to 1-second resolution of setLastModified() on some OS's.
-    val testDir = JavaUtils.createTempDir()
+    val testDir = Utils.createTempDir()
     val outputBuffer = new ConcurrentLinkedQueue[Seq[Int]]
 
     /**
@@ -865,7 +864,7 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
 
   test("SPARK-11267: the race condition of two checkpoints in a batch") {
     val jobGenerator = mock(classOf[JobGenerator])
-    val checkpointDir = JavaUtils.createTempDir().toString
+    val checkpointDir = Utils.createTempDir().toString
     val checkpointWriter =
       new CheckpointWriter(jobGenerator, conf, checkpointDir, new Configuration())
     val bytes1 = Array.fill[Byte](10)(1)

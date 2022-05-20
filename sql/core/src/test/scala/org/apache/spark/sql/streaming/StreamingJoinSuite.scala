@@ -27,7 +27,6 @@ import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
@@ -653,7 +652,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-2.4.0-streaming-join/").toURI
-    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
@@ -1114,7 +1113,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
 
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-2.4.0-streaming-join/").toURI
-    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)

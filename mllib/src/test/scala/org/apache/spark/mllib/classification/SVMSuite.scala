@@ -26,7 +26,6 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 object SVMSuite {
@@ -202,7 +201,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     model.clearThreshold()
     assert(model.getThreshold.isEmpty)
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
     // Save model, load it back, and compare.

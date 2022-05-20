@@ -35,7 +35,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{Config, _}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
-import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.Utils
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -266,7 +266,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     "except templates, spark config, binary files and are within size limit, " +
     "should be populated to pod's configMap.") {
     def testSetup: (SparkConf, Seq[String]) = {
-      val tempDir = JavaUtils.createTempDir()
+      val tempDir = Utils.createTempDir()
       val sparkConf = new SparkConf(loadDefaults = false)
         .setSparkHome(tempDir.getAbsolutePath)
 

@@ -22,7 +22,6 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers {
@@ -81,7 +80,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val predictions = Array(1, 2, 2, 6, 16.5, 16.5, 17.0, 18.0)
     val model = new IsotonicRegressionModel(boundaries, predictions, true)
 
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
     // Save model, load it back, and compare.

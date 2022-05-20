@@ -54,7 +54,6 @@ import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -78,7 +77,7 @@ private[spark] object TestUtils {
       toStringValue: String = "",
       classNamesWithBase: Seq[(String, String)] = Seq.empty,
       classpathUrls: Seq[URL] = Seq.empty): URL = {
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val files1 = for (name <- classNames) yield {
       createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls)
     }
@@ -94,7 +93,7 @@ private[spark] object TestUtils {
    * file names in the jar file to their contents.
    */
   def createJarWithFiles(files: Map[String, String], dir: File = null): URL = {
-    val tempDir = Option(dir).getOrElse(JavaUtils.createTempDir())
+    val tempDir = Option(dir).getOrElse(Utils.createTempDir())
     val jarFile = File.createTempFile("testJar", ".jar", tempDir)
     val jarStream = new JarOutputStream(new FileOutputStream(jarFile))
     files.foreach { case (k, v) =>

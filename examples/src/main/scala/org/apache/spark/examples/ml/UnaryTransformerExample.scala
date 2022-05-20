@@ -22,7 +22,6 @@ package org.apache.spark.examples.ml
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{DataType, DataTypes}
@@ -103,7 +102,7 @@ object UnaryTransformerExample {
     result.show()
 
     // Save and load the Transformer.
-    val tmpDir = JavaUtils.createTempDir()
+    val tmpDir = Utils.createTempDir()
     val dirName = tmpDir.getCanonicalPath
     myTransformer.write.overwrite().save(dirName)
     val sameTransformer = MyTransformer.load(dirName)

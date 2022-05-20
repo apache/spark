@@ -22,7 +22,6 @@ import java.io._
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -191,7 +190,7 @@ class SingletonReplSuite extends SparkFunSuite {
   }
 
   test("interacting with files") {
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val out = new FileWriter(tempDir + "/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")

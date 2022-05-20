@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.jdbc
 
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.NestedDataSourceSuiteBase
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 class JDBCNestedDataSourceSuite extends NestedDataSourceSuiteBase {
   override val nestedDataSources: Seq[String] = Seq("jdbc")
-  private val tempDir = JavaUtils.createTempDir()
+  private val tempDir = Utils.createTempDir()
   private val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   override val colType: String = "in the customSchema option value"
 

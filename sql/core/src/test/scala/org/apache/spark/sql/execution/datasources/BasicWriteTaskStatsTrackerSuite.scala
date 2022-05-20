@@ -23,7 +23,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FilterFileSystem, Path}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker.FILE_LENGTH_XATTR
 import org.apache.spark.util.Utils
 
@@ -38,7 +37,7 @@ import org.apache.spark.util.Utils
  */
 class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
-  private val tempDir = JavaUtils.createTempDir()
+  private val tempDir = Utils.createTempDir()
   private val tempDirPath = new Path(tempDir.toURI)
   private val conf = new Configuration()
   private val localfs = tempDirPath.getFileSystem(conf)

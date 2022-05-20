@@ -47,7 +47,6 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.SQLConf
@@ -1109,7 +1108,7 @@ class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2TestBase {
   var tempScratchDir: File = _
 
   override protected def beforeAll(): Unit = {
-    tempScratchDir = JavaUtils.createTempDir()
+    tempScratchDir = Utils.createTempDir()
     tempScratchDir.setWritable(true, false)
     assert(tempScratchDir.list().isEmpty)
     new File(tempScratchDir.getAbsolutePath + File.separator + "SPARK-31626").createNewFile()
@@ -1201,7 +1200,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   protected var metastorePath: File = _
   protected def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
 
-  private val pidDir: File = JavaUtils.createTempDirWithPrefix("thriftserver-pid")
+  private val pidDir: File = Utils.createTempDir(namePrefix = "thriftserver-pid")
   protected var logPath: File = _
   protected var operationLogPath: File = _
   protected var lScratchDir: File = _
@@ -1220,7 +1219,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
     val driverClassPath = {
       // Writes a temporary log4j2.properties and prepend it to driver classpath, so that it
       // overrides all other potential log4j configurations contained in other dependency jar files.
-      val tempLog4jConf = JavaUtils.createTempDir().getCanonicalPath
+      val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
       Files.write(
         """rootLogger.level = info
@@ -1268,13 +1267,13 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   val SERVER_STARTUP_TIMEOUT = 3.minutes
 
   private def startThriftServer(attempt: Int) = {
-    warehousePath = JavaUtils.createTempDir()
+    warehousePath = Utils.createTempDir()
     warehousePath.delete()
-    metastorePath = JavaUtils.createTempDir()
+    metastorePath = Utils.createTempDir()
     metastorePath.delete()
-    operationLogPath = JavaUtils.createTempDir()
+    operationLogPath = Utils.createTempDir()
     operationLogPath.delete()
-    lScratchDir = JavaUtils.createTempDir()
+    lScratchDir = Utils.createTempDir()
     lScratchDir.delete()
     logPath = null
     logTailingProcess = null

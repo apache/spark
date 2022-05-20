@@ -38,7 +38,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
@@ -117,7 +116,7 @@ class StreamingContextSuite
   }
 
   test("checkPoint from conf") {
-    val checkpointDirectory = JavaUtils.createTempDir().getAbsolutePath()
+    val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
 
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
     myConf.set("spark.streaming.checkpoint.directory", checkpointDirectory)
@@ -148,7 +147,7 @@ class StreamingContextSuite
   }
 
   test("start with non-serializable DStream checkpoints") {
-    val checkpointDir = JavaUtils.createTempDir()
+    val checkpointDir = Utils.createTempDir()
     ssc = new StreamingContext(conf, batchDuration)
     ssc.checkpoint(checkpointDir.getAbsolutePath)
     addInputStream(ssc).foreachRDD { rdd =>
@@ -543,7 +542,7 @@ class StreamingContextSuite
       }
     }
 
-    val emptyPath = JavaUtils.createTempDir().getAbsolutePath()
+    val emptyPath = Utils.createTempDir().getAbsolutePath()
 
     // getOrCreate should create new context with empty path
     testGetOrCreate {
@@ -678,7 +677,7 @@ class StreamingContextSuite
       }
     }
 
-    val emptyPath = JavaUtils.createTempDir().getAbsolutePath()
+    val emptyPath = Utils.createTempDir().getAbsolutePath()
     val corruptedCheckpointPath = createCorruptedCheckpoint()
     val checkpointPath = createValidCheckpoint()
 
@@ -792,7 +791,7 @@ class StreamingContextSuite
   }
 
   test("queueStream doesn't support checkpointing") {
-    val checkpointDirectory = JavaUtils.createTempDir().getAbsolutePath()
+    val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
     def creatingFunction(): StreamingContext = {
       val _ssc = new StreamingContext(conf, batchDuration)
       val rdd = _ssc.sparkContext.parallelize(1 to 10)
@@ -892,8 +891,8 @@ class StreamingContextSuite
   }
 
   def createValidCheckpoint(): String = {
-    val testDirectory = JavaUtils.createTempDir().getAbsolutePath()
-    val checkpointDirectory = JavaUtils.createTempDir().getAbsolutePath()
+    val testDirectory = Utils.createTempDir().getAbsolutePath()
+    val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
     ssc = new StreamingContext(conf.clone.set("someKey", "someValue"), batchDuration)
     ssc.checkpoint(checkpointDirectory)
     ssc.textFileStream(testDirectory).foreachRDD { rdd => rdd.count() }
@@ -909,7 +908,7 @@ class StreamingContextSuite
   }
 
   def createCorruptedCheckpoint(): String = {
-    val checkpointDirectory = JavaUtils.createTempDir().getAbsolutePath()
+    val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
     val fakeCheckpointFile = Checkpoint.checkpointFile(checkpointDirectory, Time(1000))
     FileUtils.write(new File(fakeCheckpointFile.toString()), "blablabla", StandardCharsets.UTF_8)
     assert(Checkpoint.getCheckpointFiles(checkpointDirectory).nonEmpty)

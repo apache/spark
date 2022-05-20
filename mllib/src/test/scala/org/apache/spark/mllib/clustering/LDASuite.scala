@@ -26,7 +26,6 @@ import org.apache.spark.graphx.Edge
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -468,7 +467,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     // Test for LocalLDAModel.
     val localModel = new LocalLDAModel(tinyTopics,
       Vectors.dense(Array.fill(tinyTopics.numRows)(0.01)), 0.5D, 10D)
-    val tempDir1 = JavaUtils.createTempDir()
+    val tempDir1 = Utils.createTempDir()
     val path1 = tempDir1.toURI.toString
 
     // Test for DistributedLDAModel.
@@ -483,7 +482,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       .setSeed(12345)
     val corpus = sc.parallelize(tinyCorpus, 2)
     val distributedModel: DistributedLDAModel = lda.run(corpus).asInstanceOf[DistributedLDAModel]
-    val tempDir2 = JavaUtils.createTempDir()
+    val tempDir2 = Utils.createTempDir()
     val path2 = tempDir2.toURI.toString
 
     try {

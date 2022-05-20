@@ -38,7 +38,6 @@ import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.serializer.JavaSerializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.serializer.SerializerManager;
@@ -94,7 +93,7 @@ public class UnsafeExternalSorterSuite {
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.openMocks(this).close();
-    tempDir = JavaUtils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
+    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
     spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());

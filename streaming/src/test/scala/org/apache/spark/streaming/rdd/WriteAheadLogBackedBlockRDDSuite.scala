@@ -25,7 +25,6 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{FileBasedWriteAheadLogSegment, FileBasedWriteAheadLogWriter}
@@ -48,7 +47,7 @@ class WriteAheadLogBackedBlockRDDSuite
   override def beforeEach(): Unit = {
     super.beforeEach()
     initSparkContext()
-    dir = JavaUtils.createTempDir()
+    dir = Utils.createTempDir()
   }
 
   override def afterEach(): Unit = {

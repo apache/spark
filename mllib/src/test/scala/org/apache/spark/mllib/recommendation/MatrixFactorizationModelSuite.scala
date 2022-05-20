@@ -20,7 +20,6 @@ package org.apache.spark.mllib.recommendation
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
@@ -57,7 +56,7 @@ class MatrixFactorizationModelSuite extends SparkFunSuite with MLlibTestSparkCon
 
   test("save/load") {
     val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
-    val tempDir = JavaUtils.createTempDir()
+    val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
     def collect(features: RDD[(Int, Array[Double])]): Set[(Int, Seq[Double])] = {
       features.mapValues(_.toSeq).collect().toSet

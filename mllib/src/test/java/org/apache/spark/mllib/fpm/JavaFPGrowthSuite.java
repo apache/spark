@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.fpm;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -28,7 +27,6 @@ import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.Utils;
 
 public class JavaFPGrowthSuite extends SharedSparkSession {
@@ -60,7 +58,7 @@ public class JavaFPGrowthSuite extends SharedSparkSession {
   }
 
   @Test
-  public void runFPGrowthSaveLoad() throws IOException {
+  public void runFPGrowthSaveLoad() {
 
     JavaRDD<List<String>> rdd = jsc.parallelize(Arrays.asList(
       Arrays.asList("r z h k p".split(" ")),
@@ -75,7 +73,7 @@ public class JavaFPGrowthSuite extends SharedSparkSession {
       .setNumPartitions(2)
       .run(rdd);
 
-    File tempDir = JavaUtils.createTempDir(
+    File tempDir = Utils.createTempDir(
       System.getProperty("java.io.tmpdir"), "JavaFPGrowthSuite");
     String outputPath = tempDir.getPath();
 

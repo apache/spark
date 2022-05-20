@@ -34,7 +34,6 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
@@ -233,7 +232,7 @@ class HiveSparkSubmitSuite
     // the value of hive.metastore.warehouse.dir. Also, the value of
     // spark.sql.warehouse.dir should be set to the value of hive.metastore.warehouse.dir.
 
-    val hiveWarehouseLocation = JavaUtils.createTempDir()
+    val hiveWarehouseLocation = Utils.createTempDir()
     hiveWarehouseLocation.delete()
     val hiveSiteXmlContent =
       s"""
@@ -246,7 +245,7 @@ class HiveSparkSubmitSuite
      """.stripMargin
 
     // Write a hive-site.xml containing a setting of hive.metastore.warehouse.dir.
-    val hiveSiteDir = JavaUtils.createTempDir()
+    val hiveSiteDir = Utils.createTempDir()
     val file = new File(hiveSiteDir.getCanonicalPath, "hive-site.xml")
     val bw = new BufferedWriter(new FileWriter(file))
     bw.write(hiveSiteXmlContent)
@@ -273,7 +272,7 @@ class HiveSparkSubmitSuite
     // overridden by hive's default settings when we create a HiveConf object inside
     // HiveClientImpl. Please see SPARK-16901 for more details.
 
-    val metastoreLocation = JavaUtils.createTempDir()
+    val metastoreLocation = Utils.createTempDir()
     metastoreLocation.delete()
     val metastoreURL =
       s"jdbc:derby:memory:;databaseName=${metastoreLocation.getAbsolutePath};create=true"
@@ -288,7 +287,7 @@ class HiveSparkSubmitSuite
      """.stripMargin
 
     // Write a hive-site.xml containing a setting of hive.metastore.warehouse.dir.
-    val hiveSiteDir = JavaUtils.createTempDir()
+    val hiveSiteDir = Utils.createTempDir()
     val file = new File(hiveSiteDir.getCanonicalPath, "hive-site.xml")
     val bw = new BufferedWriter(new FileWriter(file))
     bw.write(hiveSiteXmlContent)
@@ -423,9 +422,9 @@ object SetWarehouseLocationTest extends Logging {
         // hive.metastore.warehouse.dir is set at here.
         (new TestHiveContext(new SparkContext(sparkConf)).sparkSession, warehouseDir)
       case None =>
-        val warehouseLocation = JavaUtils.createTempDir()
+        val warehouseLocation = Utils.createTempDir()
         warehouseLocation.delete()
-        val hiveWarehouseLocation = JavaUtils.createTempDir()
+        val hiveWarehouseLocation = Utils.createTempDir()
         hiveWarehouseLocation.delete()
         // If spark.sql.test.expectedWarehouseDir is not set, we will set
         // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
@@ -603,7 +602,7 @@ object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
-    val hiveWarehouseLocation = JavaUtils.createTempDir()
+    val hiveWarehouseLocation = Utils.createTempDir()
     conf.set(UI_ENABLED, false)
     conf.set(WAREHOUSE_PATH.key, hiveWarehouseLocation.toString)
     val sc = new SparkContext(conf)
@@ -714,7 +713,7 @@ object SPARK_9757 extends QueryTest {
   def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j2("INFO")
 
-    val hiveWarehouseLocation = JavaUtils.createTempDir()
+    val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
       new SparkConf()
         .set(HiveUtils.HIVE_METASTORE_VERSION.key, "0.13.1")
@@ -726,7 +725,7 @@ object SPARK_9757 extends QueryTest {
     spark = hiveContext.sparkSession
     import hiveContext.implicits._
 
-    val dir = JavaUtils.createTempDir()
+    val dir = Utils.createTempDir()
     dir.delete()
 
     try {
@@ -832,7 +831,7 @@ object SPARK_18360 {
         schema = new StructType().add("i", "int"),
         provider = Some(DDLUtils.HIVE_PROVIDER))
 
-      val newWarehousePath = JavaUtils.createTempDir().getAbsolutePath
+      val newWarehousePath = Utils.createTempDir().getAbsolutePath
       hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$newWarehousePath")
       hiveClient.createTable(tableMeta, ignoreIfExists = false)
       val rawTable = hiveClient.getTable("default", "test_tbl")

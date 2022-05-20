@@ -22,13 +22,13 @@ import java.io.File
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec}
 import org.apache.spark.sql.functions.{count, session_window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
+import org.apache.spark.util.Utils
 
 class StreamingSessionWindowDistributionSuite extends StreamTest
   with StatefulOpClusteredDistributionTestHelper with Logging {
@@ -139,7 +139,7 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
       val resourceUri = this.getClass.getResource(
         "/structured-streaming/checkpoint-version-3.2.0-session-window-with-repartition/").toURI
 
-      val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
+      val checkpointDir = Utils.createTempDir().getCanonicalFile
       // Copy the checkpoint to a temp dir to prevent changes to the original.
       // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
       FileUtils.copyDirectory(new File(resourceUri), checkpointDir)

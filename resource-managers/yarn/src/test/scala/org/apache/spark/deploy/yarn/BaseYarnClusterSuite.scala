@@ -38,7 +38,6 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 abstract class BaseYarnClusterSuite
@@ -84,7 +83,7 @@ abstract class BaseYarnClusterSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    tempDir = JavaUtils.createTempDir()
+    tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
 

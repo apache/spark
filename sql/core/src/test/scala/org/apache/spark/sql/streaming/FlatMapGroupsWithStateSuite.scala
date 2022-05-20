@@ -26,7 +26,6 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.Optional
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KeyValueGroupedDataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
@@ -40,6 +39,7 @@ import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.util.Utils
 
 /** Class to check custom state types */
 case class RunningCount(count: Long)
@@ -1002,7 +1002,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-2.3.1-flatMapGroupsWithState-state-format-1/").toURI
 
-    val checkpointDir = JavaUtils.createTempDir().getCanonicalFile
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
