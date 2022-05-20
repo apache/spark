@@ -445,7 +445,18 @@ abstract class StreamExecution(
         false
       } else {
         val source = sources(sourceIndex)
-        !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
+        // SPARK-39242 For numeric increasing offsets, we could have called awaitOffset
+        // after the stream has moved past the expected newOffset or if committedOffsets
+        // changed after notify. In this case, its safe to exit, since at-least the given
+        // Offset has been reached and the equality condition might never be met.
+        if (newOffset.isInstanceOf[LongOffset]) {
+          val returnedOffset: Long = if (localCommittedOffsets.contains(source)) {
+            localCommittedOffsets(source).toString.toLong
+          } else 0L
+          !localCommittedOffsets.contains(source) || returnedOffset < newOffset.toString.toLong
+        } else {
+          !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
+        }
       }
     }
 
