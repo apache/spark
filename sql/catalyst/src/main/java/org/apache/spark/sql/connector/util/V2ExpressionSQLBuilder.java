@@ -21,7 +21,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.apache.spark.sql.connector.expressions.*;
+import org.apache.spark.sql.connector.expressions.Cast;
+import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
+import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.UserDefinedScalarFunc;
 import org.apache.spark.sql.types.DataType;
 
 /**
