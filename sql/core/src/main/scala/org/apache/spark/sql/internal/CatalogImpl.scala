@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
@@ -140,7 +141,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val node = sparkSession.sessionState.executePlan(plan).analyzed
     node match {
       case t: ResolvedTable =>
-        val isExternal = t.table.properties().getOrDefault("external", "false").equals("true")
+        val isExternal = t.table.properties().getOrDefault(
+          TableCatalog.PROP_EXTERNAL, "false").equals("true")
         new Table(
           name = t.identifier.name(),
           database = t.identifier.namespace().head,
@@ -154,7 +156,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           name = v.identifier.name(),
           database = v.identifier.namespace().toString,
           description = "",
-          tableType = "",
+          tableType = if (v.isTemp) "TEMPORARY" else "VIEW",
           isTemporary = v.isTemp)
       case _ => throw new Exception(ident.mkString(".") + " not found")
     }

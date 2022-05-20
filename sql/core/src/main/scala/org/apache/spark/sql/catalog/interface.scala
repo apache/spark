@@ -78,7 +78,7 @@ class Table(
       s"tableType='$tableType', " +
       s"isTemporary='$isTemporary']"
   }
-  
+
 }
 
 
