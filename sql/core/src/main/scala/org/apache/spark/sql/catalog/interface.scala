@@ -64,11 +64,13 @@ class Database(
 @Stable
 class Table(
     val name: String,
-    @Nullable val database: String,
+    @Nullable val qualifier: Array[String],
     @Nullable val description: String,
     val tableType: String,
     val isTemporary: Boolean)
   extends DefinedByConstructorParams {
+
+  def database: String = if (qualifier.length == 2) qualifier(1) else null
 
   override def toString: String = {
     "Table[" +

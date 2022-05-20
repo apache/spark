@@ -128,9 +128,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case NonFatal(_) => None
     }
     val isTemp = sessionCatalog.isTempView(tableIdent)
+    val qualifier =
+      Array(metadata.map(_.identifier.database).getOrElse(tableIdent.database).orNull)
     new Table(
       name = tableIdent.table,
-      database = metadata.map(_.identifier.database).getOrElse(tableIdent.database).orNull,
+      qualifier = qualifier,
       description = metadata.map(_.comment.orNull).orNull,
       tableType = if (isTemp) "TEMPORARY" else metadata.map(_.tableType.name).orNull,
       isTemporary = isTemp)

@@ -165,7 +165,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
       assert(spark.catalog.tableExists(globalTempDB, "src"))
       assert(spark.catalog.getTable(globalTempDB, "src").toString == new Table(
         name = "src",
-        database = globalTempDB,
+        qualifier = Array(globalTempDB),
         description = null,
         tableType = "TEMPORARY",
         isTemporary = true).toString)

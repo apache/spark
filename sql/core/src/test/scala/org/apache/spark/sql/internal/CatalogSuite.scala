@@ -275,7 +275,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("Table.toString") {
-    assert(new Table("volley", "databasa", "one", "world", isTemporary = true).toString ==
+    assert(new Table("volley", Array("databasa"), "one", "world", isTemporary = true).toString ==
       "Table[name='volley', database='databasa', description='one', " +
         "tableType='world', isTemporary='true']")
     assert(new Table("volley", null, null, "world", isTemporary = true).toString ==
@@ -304,7 +304,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
   test("catalog classes format in Dataset.show") {
     val db = new Database("nama", "descripta", "locata")
-    val table = new Table("nama", "databasa", "descripta", "typa", isTemporary = false)
+    val table = new Table("nama", Array("databasa"), "descripta", "typa", isTemporary = false)
     val function = new Function("nama", "databasa", "descripta", "classa", isTemporary = false)
     val column = new Column(
       "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
