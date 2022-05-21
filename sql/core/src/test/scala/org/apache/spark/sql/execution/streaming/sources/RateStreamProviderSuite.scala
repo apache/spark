@@ -78,16 +78,6 @@ class RateStreamProviderSuite extends StreamTest {
     )
   }
 
-  // SPARK-39242 Basic test for longOffset conversion validation.
-  test("longOffset conversion") {
-    assert(LongOffset(0).toString.toLong === 0L)
-    assert(LongOffset(2).toString.toLong === 2L)
-    assert(LongOffset(1000).toString.toLong === 1000L)
-    assert(LongOffset(2000000000).toString.toLong === 2000000000L)
-    assert(LongOffset(-1).toString.toLong === -1L)
-    assert(LongOffset(-1000).toString.toLong === -1000L)
-  }
-
   test("microbatch - restart") {
     val input = spark.readStream
       .format("rate")

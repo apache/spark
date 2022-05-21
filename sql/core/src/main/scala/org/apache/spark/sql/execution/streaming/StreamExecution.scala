@@ -452,7 +452,7 @@ abstract class StreamExecution(
         if (!localCommittedOffsets.contains(source)) {
           true
         } else if (newOffset.isInstanceOf[LongOffset]) {
-          localCommittedOffsets(source).toString.toLong < newOffset.toString.toLong
+          localCommittedOffsets(source).toString.toLong < newOffset.asInstanceOf[LongOffset].offset
         } else {
           localCommittedOffsets(source) != newOffset
         }
