@@ -611,6 +611,33 @@ class QueryExecutionErrorsSuite
         matchMsg = true)
     }
   }
+
+  test("MULTI_VALUE_SUBQUERY_ERROR: " +
+    "more than one row returned by a subquery used as an expression") {
+    checkErrorClass(
+      exception = intercept[SparkException] {
+        sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
+      },
+      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      msg =
+        """more than one row returned by a subquery used as an expression: """ +
+          """Subquery subquery#\w+, \[id=#\w+\]
+            |\+\- AdaptiveSparkPlan isFinalPlan=true
+            |   \+\- == Final Plan ==
+            |      Union
+            |      :\- \*\(1\) Project \[\w+ AS a#\w+\]
+            |      :  \+\- \*\(1\) Scan OneRowRelation\[\]
+            |      \+\- \*\(2\) Project \[\w+ AS a#\w+\]
+            |         \+\- \*\(2\) Scan OneRowRelation\[\]
+            |   \+\- == Initial Plan ==
+            |      Union
+            |      :\- Project \[\w+ AS a#\w+\]
+            |      :  \+\- Scan OneRowRelation\[\]
+            |      \+\- Project \[\w+ AS a#\w+\]
+            |         \+\- Scan OneRowRelation\[\]
+            |""".stripMargin,
+      matchMsg = true)
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {

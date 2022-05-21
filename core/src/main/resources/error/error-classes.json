@@ -160,6 +160,9 @@
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [ "Not allowed to implement multiple UDF interfaces, UDF class <class>" ]
   },
+  "MULTI_VALUE_SUBQUERY_ERROR" : {
+    "message" : [ "more than one row returned by a subquery used as an expression: <plan>" ]
+  },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '<expression>'" ],
     "sqlState" : "42000"
