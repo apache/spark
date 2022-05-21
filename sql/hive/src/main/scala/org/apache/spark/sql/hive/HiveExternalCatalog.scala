@@ -842,10 +842,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // source tables. Here we set the table location to `locationUri` field and filter out the
     // path option in storage properties, to avoid exposing this concept externally.
     val storageWithLocation = {
-      val tableLocation = getLocationFromStorageProps(table)
+      val tableLocation = getLocationFromStorageProps(table).map { loc =>
+        HiveExternalCatalog.toAbsoluteURI(
+          CatalogUtils.stringToURI(loc), table.storage.locationUri)
+      }
       // We pass None as `newPath` here, to remove the path option in storage properties.
-      updateLocationInStorageProps(table, newPath = None).copy(
-        locationUri = tableLocation.map(CatalogUtils.stringToURI(_)))
+      updateLocationInStorageProps(table, newPath = None).copy(locationUri = tableLocation)
     }
     val storageWithoutHiveGeneratedProperties = storageWithLocation.copy(properties =
       storageWithLocation.properties.filterKeys(!HIVE_GENERATED_STORAGE_PROPERTIES(_)).toMap)
@@ -1431,5 +1433,21 @@ object HiveExternalCatalog {
     case m: MapType =>
       isHiveCompatibleDataType(m.keyType) && isHiveCompatibleDataType(m.valueType)
     case _ => true
+  }
+
+  /**
+   * Rewrite uri to absolute location. For example:
+   *   uri: /user/hive/warehouse/test_table
+   *   parentUri: viewfs://clusterA/user/hive/warehouse/
+   *   The result is: viewfs://clusterA/user/hive/warehouse/test_table
+   */
+  private[spark] def toAbsoluteURI(uri: URI, parentUri: Option[URI]): URI = {
+    if (!uri.isAbsolute && parentUri.exists(_.isAbsolute)) {
+      val pUri = parentUri.get
+      new URI(pUri.getScheme, pUri.getUserInfo, pUri.getHost, pUri.getPort, uri.getPath,
+        uri.getQuery, uri.getFragment)
+    } else {
+      uri
+    }
   }
 }
