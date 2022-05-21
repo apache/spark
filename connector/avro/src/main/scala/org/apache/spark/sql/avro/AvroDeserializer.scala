@@ -31,10 +31,11 @@ import org.apache.avro.util.Utf8
 
 import org.apache.spark.sql.avro.AvroUtils.{toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
-import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
@@ -78,13 +79,25 @@ private[sql] class AvroDeserializer(
 
       case st: StructType =>
         val resultRow = new SpecificInternalRow(st.map(_.dataType))
-        val fieldUpdater = new RowUpdater(resultRow)
+        val fieldUpdater: CatalystDataUpdater =
+          if (st.hasExistenceDefaultValues) {
+            resetExistenceDefaultsBitmask(st)
+            new CatalystDataUpdaterWithBitmask[RowUpdater, InternalRow](
+              resultRow, st.existenceDefaultsBitmask)
+          } else {
+            new RowUpdater(resultRow)
+          }
         val applyFilters = filters.skipRow(resultRow, _)
         val writer = getRecordWriter(rootAvroType, st, Nil, Nil, applyFilters)
         (data: Any) => {
           val record = data.asInstanceOf[GenericRecord]
           val skipRow = writer(fieldUpdater, record)
-          if (skipRow) None else Some(resultRow)
+          if (skipRow) {
+            None
+          } else {
+            applyExistenceDefaultValuesToRow(st, resultRow)
+            Some(resultRow)
+          }
         }
 
       case _ =>
@@ -221,7 +234,16 @@ private[sql] class AvroDeserializer(
           getRecordWriter(avroType, st, avroPath, catalystPath, applyFilters = _ => false)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
-          writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
+          val fieldUpdater: CatalystDataUpdater =
+            if (st.hasExistenceDefaultValues) {
+              resetExistenceDefaultsBitmask(st)
+              new CatalystDataUpdaterWithBitmask[RowUpdater, InternalRow](
+                row, st.existenceDefaultsBitmask)
+            } else {
+              new RowUpdater(row)
+            }
+          writeRecord(fieldUpdater, value.asInstanceOf[GenericRecord])
+          applyExistenceDefaultValuesToRow(st, row)
           updater.set(ordinal, row)
 
       case (ARRAY, ArrayType(elementType, containsNull)) =>
@@ -318,9 +340,17 @@ private[sql] class AvroDeserializer(
                     }.toArray
                     (updater, ordinal, value) => {
                       val row = new SpecificInternalRow(st)
-                      val fieldUpdater = new RowUpdater(row)
+                      val fieldUpdater: CatalystDataUpdater =
+                        if (st.hasExistenceDefaultValues) {
+                          resetExistenceDefaultsBitmask(st)
+                          new CatalystDataUpdaterWithBitmask[RowUpdater, InternalRow](
+                            row, st.existenceDefaultsBitmask)
+                        } else {
+                          new RowUpdater(row)
+                        }
                       val i = GenericData.get().resolveUnion(nonNullAvroType, value)
                       fieldWriters(i)(fieldUpdater, i, value)
+                      applyExistenceDefaultValuesToRow(st, row)
                       updater.set(ordinal, row)
                     }
 
@@ -421,7 +451,7 @@ private[sql] class AvroDeserializer(
     def setDecimal(ordinal: Int, value: Decimal): Unit = set(ordinal, value)
   }
 
-  final class RowUpdater(row: InternalRow) extends CatalystDataUpdater {
+  class RowUpdater(row: InternalRow) extends CatalystDataUpdater {
     override def set(ordinal: Int, value: Any): Unit = row.update(ordinal, value)
 
     override def setNullAt(ordinal: Int): Unit = row.setNullAt(ordinal)
@@ -436,7 +466,7 @@ private[sql] class AvroDeserializer(
       row.setDecimal(ordinal, value, value.precision)
   }
 
-  final class ArrayDataUpdater(array: ArrayData) extends CatalystDataUpdater {
+  class ArrayDataUpdater(array: ArrayData) extends CatalystDataUpdater {
     override def set(ordinal: Int, value: Any): Unit = array.update(ordinal, value)
 
     override def setNullAt(ordinal: Int): Unit = array.setNullAt(ordinal)
@@ -448,5 +478,62 @@ private[sql] class AvroDeserializer(
     override def setDouble(ordinal: Int, value: Double): Unit = array.setDouble(ordinal, value)
     override def setFloat(ordinal: Int, value: Float): Unit = array.setFloat(ordinal, value)
     override def setDecimal(ordinal: Int, value: Decimal): Unit = array.update(ordinal, value)
+  }
+
+  /**
+   * This inherits from some subclass of CatalystDataUpdater. Each assignment operation writes to
+   * some destination object (such as an InternalRow or ArrayData) and also updates a boolean array
+   * bitmask. In this way, after all assignments are complete, it is possible to inspect the bitmask
+   * to determine which columns have been written at least once.
+   * @param updateObject destination object to update, such as an InternalRow or ArrayData.
+   * @param bitmask boolean array to update whenever assigning to the [[updateObject]].
+   * @tparam BaseClass type of the base CatalystDataUpdater to inherit from.
+   * @tparam UpdateObjectType type of the destination object to update.
+   */
+  final class CatalystDataUpdaterWithBitmask[
+    BaseClass <: CatalystDataUpdater,
+    UpdateObjectType <: SpecializedGetters](
+      updateObject: UpdateObjectType,
+      bitmask: Array[Boolean]) extends BaseClass(updateObject) {
+    override def set(ordinal: Int, value: Any): Unit = {
+      bitmask(ordinal) = false
+      super.set(ordinal, value)
+    }
+    override def setNullAt(ordinal: Int): Unit = {
+      bitmask(ordinal) = false
+      super.setNullAt(ordinal)
+    }
+    override def setBoolean(ordinal: Int, value: Boolean): Unit = {
+      bitmask(ordinal) = false
+      super.setBoolean(ordinal, value)
+    }
+    override def setByte(ordinal: Int, value: Byte): Unit = {
+      bitmask(ordinal) = false
+      super.setByte(ordinal, value)
+    }
+    override def setShort(ordinal: Int, value: Short): Unit = {
+      bitmask(ordinal) = false
+      super.setShort(ordinal, value)
+    }
+    override def setInt(ordinal: Int, value: Int): Unit = {
+      bitmask(ordinal) = false
+      super.setInt(ordinal, value)
+    }
+    override def setLong(ordinal: Int, value: Long): Unit = {
+      bitmask(ordinal) = false
+      super.setLong(ordinal, value)
+    }
+    override def setDouble(ordinal: Int, value: Double): Unit = {
+      bitmask(ordinal) = false
+      super.setDouble(ordinal, value)
+    }
+    override def setFloat(ordinal: Int, value: Float): Unit = {
+      bitmask(ordinal) = false
+      super.setFloat(ordinal, value)
+    }
+    override def setDecimal(ordinal: Int, value: Decimal): Unit = {
+      bitmask(ordinal) = false
+      super.setDecimal(ordinal, value)
+    }
   }
 }
