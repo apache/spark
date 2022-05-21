@@ -94,7 +94,7 @@ class TaskInfo(
     successRunTime = runTime
   }
 
-  private[spark] var taskProgressRate = 0.0D
+  @volatile private[spark] var taskProgressRate = 0.0D
 
   private[spark] def getTaskProgressRate(): Double = taskProgressRate
 
