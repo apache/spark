@@ -476,7 +476,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence1.getAllExprStates().filter(_.useCount == 2).head.expr eq add)
 
     // `add` is in both branches of `If` and predicate, it should be a common expression.
-    val ifExpr2 = If(IsNull(add), Literal(add), KnownNotNull(add))
+    val ifExpr2 = If(IsNull(add), add, KnownNotNull(add))
     val equivalence2 = new EquivalentExpressions
     equivalence2.addExprTree(ifExpr2)
     assert(equivalence2.getCommonSubexpressions.size == 1)
