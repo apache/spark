@@ -724,7 +724,8 @@ class MasterSuite extends SparkFunSuite
       appInfo: ApplicationInfo,
       workerInfos: Array[WorkerInfo],
       spreadOut: Boolean): Array[Int] = {
-    master.invokePrivate(_scheduleExecutorsOnWorkers(appInfo, workerInfos, spreadOut))
+    master.invokePrivate(_scheduleExecutorsOnWorkers(
+      appInfo, appInfo.desc.defaultProfile, workerInfos, spreadOut))
   }
 
   test("SPARK-13604: Master should ask Worker kill unknown executors and drivers") {

@@ -68,7 +68,8 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     }.getMessage()
 
     assert(error.contains(
-      "ResourceProfiles are only supported on YARN and Kubernetes with dynamic allocation"))
+      "ResourceProfiles are only supported on YARN and Kubernetes and Standalone" +
+        " with dynamic allocation"))
   }
 
   test("isSupported yarn with dynamic allocation") {
@@ -115,7 +116,8 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     }.getMessage()
 
     assert(error.contains(
-      "ResourceProfiles are only supported on YARN and Kubernetes with dynamic allocation"))
+      "ResourceProfiles are only supported on YARN and Kubernetes and Standalone" +
+        " with dynamic allocation"))
   }
 
   test("ResourceProfileManager has equivalent profile") {

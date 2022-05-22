@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import java.net.URI
 
 import org.apache.spark.resource.{ResourceProfile, ResourceRequirement, ResourceUtils}
+import org.apache.spark.resource.ResourceProfile.getCustomExecutorResources
 
 private[spark] case class ApplicationDescription(
     name: String,
@@ -39,7 +40,7 @@ private[spark] case class ApplicationDescription(
   def coresPerExecutor: Option[Int] = defaultProfile.getExecutorCores
   def resourceReqsPerExecutor: Seq[ResourceRequirement] =
     ResourceUtils.executorResourceRequestToRequirement(
-      defaultProfile.executorResources.values.toSeq)
+      getCustomExecutorResources(defaultProfile).values.toSeq.sortBy(_.resourceName))
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }

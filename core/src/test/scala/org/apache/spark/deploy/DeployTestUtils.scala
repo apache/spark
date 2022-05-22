@@ -111,7 +111,8 @@ private[deploy] object DeployTestUtils {
       new SparkConf,
       Seq("localDir"),
       ExecutorState.RUNNING,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+      resources)
   }
 
   def createDriverRunner(driverId: String): DriverRunner = {
