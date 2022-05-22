@@ -342,8 +342,9 @@ object ResourceProfile extends Logging {
     val ereqs = new ExecutorResourceRequests()
 
     val isStandalone = conf.getOption("spark.master").exists(_.startsWith("spark://"))
+    val isLocalCluster = conf.getOption("spark.master").exists(_.startsWith("local-cluster"))
     // By default, standalone executors take all available cores, do not have a specific value.
-    val cores = if (isStandalone) {
+    val cores = if (isStandalone || isLocalCluster) {
       conf.getOption(EXECUTOR_CORES.key).map(_.toInt)
     } else {
       Some(conf.get(EXECUTOR_CORES))
@@ -351,7 +352,7 @@ object ResourceProfile extends Logging {
     cores.foreach(ereqs.cores)
 
     // Setting all resources here, cluster managers will take the resources they respect.
-    val memory = if (isStandalone) {
+    val memory = if (isStandalone || isLocalCluster) {
       SparkContext.executorMemoryInMb(conf)
     } else {
       conf.get(EXECUTOR_MEMORY)
