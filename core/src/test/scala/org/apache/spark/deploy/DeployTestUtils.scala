@@ -51,15 +51,22 @@ private[deploy] object DeployTestUtils {
       memoryPerExecutorMb: Int,
       customResources: Map[String, Int] = Map.empty,
       coresPerExecutor: Option[Int] = None): ResourceProfile = {
+    val rp = createResourceProfile(Some(memoryPerExecutorMb), customResources, coresPerExecutor)
+    rp.setToDefaultProfile()
+    rp
+  }
+
+  def createResourceProfile(
+      memoryPerExecutorMb: Option[Int] = None,
+      customResources: Map[String, Int] = Map.empty,
+      coresPerExecutor: Option[Int] = None): ResourceProfile = {
     val treqs = new TaskResourceRequests().cpus(1)
     val ereqs = new ExecutorResourceRequests()
-      .memory(s"${memoryPerExecutorMb}m")
+    memoryPerExecutorMb.foreach(value => ereqs.memory(s"${value}m"))
     customResources.foreach { case (resource, amount) =>
       ereqs.resource(resource, amount) }
     coresPerExecutor.foreach(ereqs.cores)
-    val rp = new ResourceProfile(ereqs.requests, treqs.requests)
-    rp.setToDefaultProfile()
-    rp
+    new ResourceProfile(ereqs.requests, treqs.requests)
   }
 
   def createDriverCommand(): Command = new Command(

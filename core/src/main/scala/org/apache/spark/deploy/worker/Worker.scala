@@ -485,7 +485,7 @@ private[deploy] class Worker(
         }
 
         val execs = executors.values.map { e =>
-          new ExecutorDescription(e.appId, e.execId, e.rpId, e.cores, e.state)
+          new ExecutorDescription(e.appId, e.execId, e.rpId, e.cores, e.memory, e.state)
         }
         masterRef.send(WorkerLatestState(workerId, execs.toList, drivers.keys.toSeq))
 
@@ -555,7 +555,7 @@ private[deploy] class Worker(
 
       val executorResponses = executors.values.map { e =>
         WorkerExecutorStateResponse(new ExecutorDescription(
-          e.appId, e.execId, e.rpId, e.cores, e.state), e.resources)
+          e.appId, e.execId, e.rpId, e.cores, e.memory, e.state), e.resources)
       }
       val driverResponses = drivers.keys.map { id =>
         WorkerDriverStateResponse(id, drivers(id).resources)}
@@ -636,8 +636,8 @@ private[deploy] class Worker(
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
             }
-            syncExecutorStateWithMaster(ExecutorStateChanged(appId, execId,
-              ExecutorState.FAILED, Some(e.toString), None))
+            syncExecutorStateWithMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
+              Some(e.toString), None))
         }
       }
 

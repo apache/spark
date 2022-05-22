@@ -31,6 +31,8 @@ import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMaste
 import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfileBuilder}
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.util.Utils
@@ -153,6 +155,57 @@ class AppClientSuite
         assert(acknowledged)
       }
       assert(getApplications().head.executors.size === 0)
+
+      // Issue stop command for Client to disconnect from Master
+      ci.client.stop()
+
+      // Verify Client is marked dead and unregistered from Master
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        val apps = getApplications()
+        assert(ci.listener.deadReasonList.size === 1, "client should have been marked dead")
+        assert(apps.isEmpty, "master should have 0 registered apps")
+      }
+    }
+  }
+
+  test("request executors with multi resource profiles") {
+    Utils.tryWithResource(new AppClientInst(masterRpcEnv.address.toSparkURL)) { ci =>
+      ci.client.start()
+
+      // Client should connect with one Master which registers the application
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        val apps = getApplications()
+        assert(ci.listener.connectedIdList.size === 1, "client listener should have one connection")
+        assert(apps.size === 1, "master should have 1 registered app")
+      }
+
+      // Send message to Master to request Executors with multiple resource profiles.
+      val rpBuilder = new ResourceProfileBuilder()
+      val ereqs = new ExecutorResourceRequests()
+      ereqs.cores(5)
+      ereqs.memory("1024m")
+      rpBuilder.require(ereqs)
+      val rp = rpBuilder.build()
+      val resourceProfileToTotalExecs = Map(
+        ci.desc.defaultProfile -> 1,
+        rp -> 2
+      )
+      whenReady(
+        ci.client.requestTotalExecutors(resourceProfileToTotalExecs),
+        timeout(10.seconds),
+        interval(10.millis)) { acknowledged =>
+        assert(acknowledged)
+      }
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        val app = getApplications().head
+        assert(app.getRequestedRPIds().length == 2)
+        assert(app.getResourceProfileById(DEFAULT_RESOURCE_PROFILE_ID)
+          === ci.desc.defaultProfile)
+        assert(app.getResourceProfileById(rp.id) === rp)
+        assert(app.getTargetExecutorNumForRPId(DEFAULT_RESOURCE_PROFILE_ID) === 1)
+        assert(app.getTargetExecutorNumForRPId(rp.id) === 2)
+      }
 
       // Issue stop command for Client to disconnect from Master
       ci.client.stop()

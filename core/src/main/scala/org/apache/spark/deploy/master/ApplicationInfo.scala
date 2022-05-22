@@ -23,8 +23,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.deploy.ApplicationDescription
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
-import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceUtils}
+import org.apache.spark.resource.ResourceProfile.{getCustomExecutorResources, DEFAULT_RESOURCE_PROFILE_ID}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -47,6 +47,7 @@ private[spark] class ApplicationInfo(
   @transient private var executorsPerResourceProfileId: mutable.HashMap[Int, mutable.Set[Int]] = _
   @transient private var targetNumExecutorsPerResourceProfileId: mutable.HashMap[Int, Int] = _
   @transient private var rpIdToResourceProfile: mutable.HashMap[Int, ResourceProfile] = _
+  @transient private var rpIdToResourceDesc: mutable.HashMap[Int, ResourceDescription] = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -69,6 +70,8 @@ private[spark] class ApplicationInfo(
 
     rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]()
     rpIdToResourceProfile(DEFAULT_RESOURCE_PROFILE_ID) = desc.defaultProfile
+    rpIdToResourceDesc = new mutable.HashMap[Int, ResourceDescription]()
+    createResourceDescForResourceProfile(desc.defaultProfile)
 
     targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]()
     targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = initialExecutorLimit
@@ -88,9 +91,33 @@ private[spark] class ApplicationInfo(
     rpIdToResourceProfile.keys.toSeq.sorted
   }
 
+  private def createResourceDescForResourceProfile(resourceProfile: ResourceProfile): Unit = {
+    if (!rpIdToResourceDesc.contains(resourceProfile.id)) {
+      val defaultMemoryMbPerExecutor = desc.memoryPerExecutorMB
+      val defaultCoresPerExecutor = desc.coresPerExecutor
+      val coresPerExecutor = resourceProfile.getExecutorCores
+        .orElse(defaultCoresPerExecutor)
+      val memoryMbPerExecutor = resourceProfile.getExecutorMemory
+        .map(_.toInt)
+        .getOrElse(defaultMemoryMbPerExecutor)
+      val customResources = ResourceUtils.executorResourceRequestToRequirement(
+        getCustomExecutorResources(resourceProfile).values.toSeq)
+
+      rpIdToResourceDesc(resourceProfile.id) =
+        ResourceDescription(coresPerExecutor, memoryMbPerExecutor, customResources)
+    }
+  }
+
+  // Get resources required for schedule.
+  private[deploy] def getResourceDescriptionForRpId(rpId: Int): ResourceDescription = {
+    rpIdToResourceDesc(rpId)
+  }
+
   private[deploy] def requestExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
     resourceProfileToTotalExecs.foreach { case (rp, num) =>
+      createResourceDescForResourceProfile(rp)
+
       if (!rpIdToResourceProfile.contains(rp.id)) {
         rpIdToResourceProfile(rp.id) = rp
       }
@@ -99,12 +126,6 @@ private[spark] class ApplicationInfo(
         targetNumExecutorsPerResourceProfileId(rp.id) = num
       }
     }
-  }
-
-  // Request executors with default resource profile.
-  // For testing.
-  private[deploy] def requestExecutors(totalNum: Int): Unit = {
-    targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = totalNum
   }
 
   private[deploy] def getResourceProfileById(rpId: Int): ResourceProfile = {
@@ -126,11 +147,12 @@ private[spark] class ApplicationInfo(
   private[master] def addExecutor(
       worker: WorkerInfo,
       cores: Int,
+      memoryMb: Int,
       resources: Map[String, ResourceInformation],
       rpId: Int,
       useID: Option[Int] = None): ExecutorDesc = {
-    val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores,
-      desc.memoryPerExecutorMB, resources, rpId)
+    val exec = new ExecutorDesc(
+      newExecutorId(useID), this, worker, cores, memoryMb, resources, rpId)
     executors(exec.id) = exec
     getOrUpdateExecutorsForRPId(rpId).add(exec.id)
     coresGranted += cores
