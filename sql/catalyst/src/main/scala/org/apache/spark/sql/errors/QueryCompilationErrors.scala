@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
@@ -113,13 +113,13 @@ object QueryCompilationErrors extends QueryErrorsBase {
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
     new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
-      messageParameters = Array("NESTED_IN_EXPRESSIONS", toPrettySQL(trimmedNestedGenerator)))
+      messageParameters = Array("NESTED_IN_EXPRESSIONS", toSQLExpr(trimmedNestedGenerator)))
   }
 
   def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
     new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
       messageParameters = Array("MULTI_GENERATOR",
-        clause, generators.size.toString, generators.map(toPrettySQL).mkString(", ")))
+        clause, generators.size.toString, generators.map(toSQLExpr).mkString(", ")))
   }
 
   def generatorOutsideSelectError(plan: LogicalPlan): Throwable = {
@@ -323,7 +323,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
 
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
     new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
-      messageParameters = Array("NOT_GENERATOR", name.toString, classCanonicalName))
+      messageParameters = Array("NOT_GENERATOR", toSQLId(name.toString), classCanonicalName))
   }
 
   def functionWithUnsupportedSyntaxError(prettyName: String, syntax: String): Throwable = {

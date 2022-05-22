@@ -594,7 +594,8 @@ class QueryCompilationErrorsSuite
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("NESTED_IN_EXPRESSIONS"),
-      msg = "The generator is not supported: nested in expressions (explode(array(1, 2, 3)) + 1)")
+      msg = """The generator is not supported: """ +
+        """nested in expressions "(explode(array(1, 2, 3)) + 1)"""")
   }
 
   test("UNSUPPORTED_GENERATOR: only one generator allowed") {
@@ -607,7 +608,7 @@ class QueryCompilationErrorsSuite
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("MULTI_GENERATOR"),
       msg = "The generator is not supported: only one generator allowed per select clause " +
-        "but found 2: explode(array(1, 2, 3)), explode(array(1, 2, 3))"
+        """but found 2: "explode(array(1, 2, 3))", "explode(array(1, 2, 3))""""
     )
   }
 
@@ -638,7 +639,7 @@ class QueryCompilationErrorsSuite
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("NOT_GENERATOR"),
-      msg = "The generator is not supported: array_contains is expected to be a generator. " +
+      msg = """The generator is not supported: `array_contains` is expected to be a generator. """ +
         "However, its class is org.apache.spark.sql.catalyst.expressions.ArrayContains, " +
         "which is not a generator.; line 4 pos 0"
     )

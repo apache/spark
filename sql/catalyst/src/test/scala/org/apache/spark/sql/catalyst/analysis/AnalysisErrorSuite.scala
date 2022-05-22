@@ -484,7 +484,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "generator nested in expressions",
     listRelation.select(Explode($"list") + 1),
-    "The generator is not supported: nested in expressions (explode(list) + 1)"
+    """The generator is not supported: nested in expressions "(explode(list) + 1)""""
       :: Nil
   )
 
@@ -496,7 +496,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       nestedListRelation.select(Explode(Explode($"nestedList")))
     },
     "The generator is not supported: nested in expressions " +
-      "explode(explode(nestedList))" :: Nil
+      """"explode(explode(nestedList))"""" :: Nil
   )
 
   errorTest(
@@ -504,14 +504,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation.select(Explode(Explode(
       CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)))),
     "The generator is not supported: nested in expressions " +
-      "explode(explode(array(array(min(a), max(a)))))" :: Nil
+      """"explode(explode(array(array(min(a), max(a)))))"""" :: Nil
   )
 
   errorTest(
     "generator nested in expressions for aggregates",
     testRelation.select(Explode(CreateArray(min($"a") :: max($"a") :: Nil)) + 1),
     "The generator is not supported: nested in expressions " +
-      "(explode(array(min(a), max(a))) + 1)" :: Nil
+      """"(explode(array(min(a), max(a))) + 1)"""" :: Nil
   )
 
   errorTest(
@@ -568,7 +568,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "more than one generators in SELECT",
     listRelation.select(Explode($"list"), Explode($"list")),
     "The generator is not supported: only one generator allowed per select clause but found 2: " +
-      "explode(list), explode(list)" :: Nil
+      """"explode(list)", "explode(list)"""" :: Nil
   )
 
   errorTest(
@@ -576,7 +576,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
       Explode(CreateArray(max($"a") :: Nil))),
     "The generator is not supported: only one generator allowed per select clause but found 2: " +
-      "explode(array(min(a))), explode(array(max(a)))" :: Nil
+      """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
   )
 
   errorTest(

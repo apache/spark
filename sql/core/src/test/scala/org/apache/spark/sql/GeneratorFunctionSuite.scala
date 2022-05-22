@@ -351,7 +351,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
     }.getMessage
     assert(errMsg.contains("The generator is not supported: " +
-      "nested in expressions explode(explode(v))"))
+      """nested in expressions "explode(explode(v))""""))
   }
 
   test("SPARK-30997: generators in aggregate expressions for dataframe") {
