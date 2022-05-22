@@ -26,30 +26,36 @@ import org.apache.spark.resource.{ExecutorResourceRequests, ResourceInformation,
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 
 private[deploy] object DeployTestUtils {
-  val defaultResourceProfile: ResourceProfile = {
+  def defaultResourceProfile: ResourceProfile = {
     createDefaultResourceProfile(1234)
   }
 
-  def createAppDesc(): ApplicationDescription = {
+  def createAppDesc(customResources: Map[String, Int] = Map.empty): ApplicationDescription = {
     val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq(), Seq())
-    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl", defaultResourceProfile)
+    val rp = createDefaultResourceProfile(1234, customResources)
+    new ApplicationDescription("name", Some(4), cmd, "appUiUrl", rp)
   }
 
   def createAppInfo(): ApplicationInfo = {
-    val appDesc = createAppDesc()
+    val customResources = Map(
+      GPU -> 3,
+      FPGA -> 3)
+    val appDesc = createAppDesc(customResources)
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
-      "id", appDesc.copy(resourceReqsPerExecutor = createResourceRequirement),
-      JsonConstants.submitDate, null, Int.MaxValue)
+      "id", appDesc, JsonConstants.submitDate, null, Int.MaxValue)
     appInfo.endTime = JsonConstants.currTimeInMillis
     appInfo
   }
 
   def createDefaultResourceProfile(
       memoryPerExecutorMb: Int,
+      customResources: Map[String, Int] = Map.empty,
       coresPerExecutor: Option[Int] = None): ResourceProfile = {
     val treqs = new TaskResourceRequests().cpus(1)
     val ereqs = new ExecutorResourceRequests()
       .memory(s"${memoryPerExecutorMb}m")
+    customResources.foreach { case (resource, amount) =>
+      ereqs.resource(resource, amount) }
     coresPerExecutor.foreach(ereqs.cores)
     val rp = new ResourceProfile(ereqs.requests, treqs.requests)
     rp.setToDefaultProfile()
@@ -129,6 +135,6 @@ private[deploy] object DeployTestUtils {
   }
 
   private def createResourceRequirement: Seq[ResourceRequirement] = {
-    Seq(ResourceRequirement("gpu", 3), ResourceRequirement("fpga", 3))
+    Seq(ResourceRequirement(GPU, 3), ResourceRequirement(FPGA, 3))
   }
 }

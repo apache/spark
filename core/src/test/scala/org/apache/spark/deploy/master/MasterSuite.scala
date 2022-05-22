@@ -182,13 +182,11 @@ class MasterSuite extends SparkFunSuite
       desc = new ApplicationDescription(
         name = "",
         maxCores = None,
-        memoryPerExecutorMB = 0,
         command = commandToPersist,
         appUiUrl = "",
         defaultProfile = DeployTestUtils.defaultResourceProfile,
         eventLogDir = None,
-        eventLogCodec = None,
-        coresPerExecutor = None),
+        eventLogCodec = None),
       submitDate = new Date(),
       driver = null,
       defaultCores = 0
@@ -700,10 +698,11 @@ class MasterSuite extends SparkFunSuite
       memoryPerExecutorMb: Int,
       coresPerExecutor: Option[Int] = None,
       maxCores: Option[Int] = None): ApplicationInfo = {
-    val rp = DeployTestUtils.createDefaultResourceProfile(memoryPerExecutorMb, coresPerExecutor)
+    val rp = DeployTestUtils.createDefaultResourceProfile(
+      memoryPerExecutorMb, Map.empty, coresPerExecutor)
 
     val desc = new ApplicationDescription(
-      "test", maxCores, memoryPerExecutorMb, null, "", rp, None, None, coresPerExecutor)
+      "test", maxCores, null, "", rp, None, None)
     val appId = System.currentTimeMillis.toString
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
@@ -1032,7 +1031,7 @@ class MasterSuite extends SparkFunSuite
     val masterRef = master.self
     val resourceReqs = Seq(ResourceRequirement(GPU, 3), ResourceRequirement(FPGA, 3))
     val worker = makeWorkerAndRegister(masterRef, Map(GPU -> 6, FPGA -> 6))
-    worker.appDesc = worker.appDesc.copy(resourceReqsPerExecutor = resourceReqs)
+    worker.appDesc = DeployTestUtils.createAppDesc(Map(GPU -> 3, FPGA -> 3))
     val driver = DeployTestUtils.createDriverDesc().copy(resourceReqs = resourceReqs)
     val driverId = masterRef.askSync[SubmitDriverResponse](RequestSubmitDriver(driver)).driverId
     val status = masterRef.askSync[DriverStatusResponse](RequestDriverStatus(driverId.get))

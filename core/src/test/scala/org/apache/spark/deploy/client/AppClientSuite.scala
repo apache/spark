@@ -269,7 +269,7 @@ class AppClientSuite
       List(), Map(), Seq(), Seq(), Seq())
     private val defaultRp = DeployTestUtils.createDefaultResourceProfile(512)
     val desc =
-      ApplicationDescription("AppClientSuite", Some(1), 512, cmd, "ignored", defaultRp)
+      ApplicationDescription("AppClientSuite", Some(1), cmd, "ignored", defaultRp)
     val listener = new AppClientCollector
     val client = new StandaloneAppClient(rpcEnv, Array(masterUrl), desc, listener, new SparkConf)
 

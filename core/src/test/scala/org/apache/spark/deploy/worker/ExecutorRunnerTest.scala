@@ -28,7 +28,7 @@ class ExecutorRunnerTest extends SparkFunSuite {
     val appId = "12345-worker321-9876"
     val conf = new SparkConf()
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    val appDesc = new ApplicationDescription("app name", Some(8), 1234,
+    val appDesc = new ApplicationDescription("app name", Some(8),
       Command("foo", Seq(appId), Map(), Seq(), Seq(), Seq()), "appUiUrl",
       DeployTestUtils.defaultResourceProfile)
     val er = new ExecutorRunner(appId, 1, appDesc, 8, 1234, null, "blah", "http://", "worker321",
