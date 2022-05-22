@@ -266,7 +266,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         funcs = [
             ((True, False), ["sum", "min", "max", "count", "first", "last"]),
             ((True, True), ["mean"]),
-            ((False, False), ["var", "std"]),
+            ((False, False), ["var", "std", "skew"]),
         ]
         funcs = [(check_exact, almost, f) for (check_exact, almost), fs in funcs for f in fs]
 

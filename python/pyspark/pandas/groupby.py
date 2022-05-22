@@ -54,6 +54,7 @@ else:
 
     _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
 
+from pyspark import SparkContext
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -721,6 +722,39 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(
             F.var_pop if ddof == 0 else F.var_samp,
+            accepted_spark_types=(NumericType,),
+            bool_to_numeric=True,
+        )
+
+    def skew(self) -> FrameLike:
+        """
+        Compute skewness of groups, excluding missing values.
+
+        .. versionadded:: 3.4.0
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+
+        >>> df.groupby("A").skew()
+                  B         C
+        A
+        1 -1.732051  1.732051
+        2       NaN       NaN
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+        """
+
+        def skew(scol: Column) -> Column:
+            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            return Column(sql_utils.pandasSkewness(scol._jc))
+
+        return self._reduce_for_stat_function(
+            skew,
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
         )
