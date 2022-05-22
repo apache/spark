@@ -622,8 +622,8 @@ private[deploy] class Worker(
             conf,
             appLocalDirs,
             ExecutorState.LAUNCHING,
-            resources_,
-            rpId)
+            rpId,
+            resources_)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_

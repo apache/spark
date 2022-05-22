@@ -377,7 +377,7 @@ object ResourceProfile extends Logging {
   }
 
   // for testing only
-  private[spark] def reInitDefaultProfile(conf: SparkConf): Unit = {
+  private[spark] def reInitDefaultProfile(conf: SparkConf): ResourceProfile = {
     clearDefaultProfile()
     // force recreate it after clearing
     getOrCreateDefaultProfile(conf)

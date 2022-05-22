@@ -26,13 +26,11 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 import org.apache.spark._
-import org.apache.spark.deploy.{ApplicationDescription, Command}
+import org.apache.spark.deploy.{ApplicationDescription, Command, DeployTestUtils}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState, WorkerDecommissioning}
 import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.internal.config.EXECUTOR_MEMORY
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.util.Utils
@@ -54,7 +52,6 @@ class AppClientSuite
   private var master: Master = null
   private var workers: Seq[Worker] = null
   private var securityManager: SecurityManager = null
-  private var defaultRP: ResourceProfile = null
 
   /**
    * Start the local cluster.
@@ -62,8 +59,7 @@ class AppClientSuite
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf = new SparkConf()
-      .set(config.DECOMMISSION_ENABLED.key, "true")
+    conf = new SparkConf().set(config.DECOMMISSION_ENABLED.key, "true")
     securityManager = new SecurityManager(conf)
     masterRpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityManager)
     workerRpcEnvs = (0 until numWorkers).map { i =>
@@ -75,8 +71,6 @@ class AppClientSuite
     eventually(timeout(1.minute), interval(10.milliseconds)) {
       assert(getMasterState.workers.size === numWorkers)
     }
-
-    defaultRP = ResourceProfile.getOrCreateDefaultProfile(appConf)
   }
 
   override def afterAll(): Unit = {
@@ -109,7 +103,7 @@ class AppClientSuite
       // Send message to Master to request Executors, verify request by change in executor limit
       val numExecutorsRequested = 1
       whenReady(
-        ci.client.requestTotalExecutors(Map(defaultRP -> numExecutorsRequested)),
+        ci.client.requestTotalExecutors(Map(ci.desc.defaultProfile -> numExecutorsRequested)),
         timeout(10.seconds),
         interval(10.millis)) { acknowledged =>
         assert(acknowledged)
@@ -153,7 +147,7 @@ class AppClientSuite
 
       // Verify that asking for executors on the decommissioned workers fails
       whenReady(
-        ci.client.requestTotalExecutors(Map(defaultRP -> numExecutorsRequested)),
+        ci.client.requestTotalExecutors(Map(ci.desc.defaultProfile -> numExecutorsRequested)),
         timeout(10.seconds),
         interval(10.millis)) { acknowledged =>
         assert(acknowledged)
@@ -177,7 +171,7 @@ class AppClientSuite
 
       // requests to master should fail immediately
       whenReady(ci.client
-        .requestTotalExecutors(Map(defaultRP -> 3)), timeout(1.seconds)) { success =>
+        .requestTotalExecutors(Map(ci.desc.defaultProfile -> 3)), timeout(1.seconds)) { success =>
         assert(success === false)
       }
     }
@@ -273,9 +267,9 @@ class AppClientSuite
     val rpcEnv = RpcEnv.create("spark", Utils.localHostName(), 0, conf, securityManager)
     private val cmd = new Command(TestExecutor.getClass.getCanonicalName.stripSuffix("$"),
       List(), Map(), Seq(), Seq(), Seq())
-    private val rp = ResourceProfile.getOrCreateDefaultProfile(
-      appConf.set(EXECUTOR_MEMORY.key, "512m"))
-    private val desc = ApplicationDescription("AppClientSuite", Some(1), 512, cmd, "ignored", rp)
+    private val defaultRp = DeployTestUtils.createDefaultResourceProfile(512)
+    val desc =
+      ApplicationDescription("AppClientSuite", Some(1), 512, cmd, "ignored", defaultRp)
     val listener = new AppClientCollector
     val client = new StandaloneAppClient(rpcEnv, Array(masterUrl), desc, listener, new SparkConf)
 

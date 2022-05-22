@@ -126,7 +126,7 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
       }
 
       appRegistered.countDown()
-    case LaunchExecutor(_, appId, execId, rpId, _, _, _, _) =>
+    case LaunchExecutor(_, appId, execId, _, _, _, _, _) =>
       assert(appRegistered.await(10, TimeUnit.SECONDS))
 
       if (failedCnt == 0) {
@@ -185,7 +185,7 @@ class MasterSuite extends SparkFunSuite
         memoryPerExecutorMB = 0,
         command = commandToPersist,
         appUiUrl = "",
-        defaultProfile = new ResourceProfile(Map.empty, Map.empty),
+        defaultProfile = DeployTestUtils.defaultResourceProfile,
         eventLogDir = None,
         eventLogCodec = None,
         coresPerExecutor = None),
@@ -700,11 +700,7 @@ class MasterSuite extends SparkFunSuite
       memoryPerExecutorMb: Int,
       coresPerExecutor: Option[Int] = None,
       maxCores: Option[Int] = None): ApplicationInfo = {
-    val conf = new SparkConf(loadDefaults = false)
-    conf.set(EXECUTOR_MEMORY.key, s"${memoryPerExecutorMb}m")
-    coresPerExecutor.foreach(cores => conf.set(EXECUTOR_CORES.key, cores.toString))
-    ResourceProfile.clearDefaultProfile()
-    val rp = ResourceProfile.getOrCreateDefaultProfile(conf)
+    val rp = DeployTestUtils.createDefaultResourceProfile(memoryPerExecutorMb, coresPerExecutor)
 
     val desc = new ApplicationDescription(
       "test", maxCores, memoryPerExecutorMb, null, "", rp, None, None, coresPerExecutor)

@@ -58,8 +58,8 @@ private[deploy] class ExecutorRunner(
     conf: SparkConf,
     val appLocalDirs: Seq[String],
     @volatile var state: ExecutorState.Value,
-    val resources: Map[String, ResourceInformation] = Map.empty,
-    val rpId: Int)
+    val rpId: Int,
+    val resources: Map[String, ResourceInformation] = Map.empty)
   extends Logging {
 
   private val fullId = appId + "/" + execId
