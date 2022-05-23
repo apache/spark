@@ -48,12 +48,12 @@
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (<functionName>: (<signature>) => <result>)" ]
   },
+  "FAILED_PERMISSION_RESET_ORIGINAL" : {
+    "message" : [ "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>" ]
+  },
   "FAILED_RENAME_PATH" : {
     "message" : [ "Failed to rename <sourcePath> to <targetPath> as destination already exists" ],
     "sqlState" : "22023"
-  },
-  "FAILED_PERMISSION_RESET_ORIGINAL" : {
-    "message" : [ "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>" ]
   },
   "FORBIDDEN_OPERATION" : {
     "message" : [ "The operation <statement> is not allowed on <objectType>: <objectName>" ]
