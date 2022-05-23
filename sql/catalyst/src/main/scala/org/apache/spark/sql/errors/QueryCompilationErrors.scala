@@ -2366,7 +2366,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FIELD_NAME",
-      messageParameters = Array(fieldName.quoted, path.quoted),
+      messageParameters = Array(toSQLId(fieldName), toSQLId(path)),
       origin = context)
   }
 

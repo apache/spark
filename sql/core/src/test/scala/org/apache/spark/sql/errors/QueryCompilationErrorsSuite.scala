@@ -524,7 +524,7 @@ class QueryCompilationErrorsSuite
       checkErrorClass(
         exception = e,
         errorClass = "INVALID_FIELD_NAME",
-        msg = "Field name m.n is invalid: m is not a struct.; line 1 pos 27")
+        msg = "Field name `m`.`n` is invalid: `m` is not a struct.; line 1 pos 27")
     }
   }
 
