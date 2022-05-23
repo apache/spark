@@ -23,6 +23,7 @@ import java.util.IllegalFormatException
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
 import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.core.util.{DefaultIndenter, DefaultPrettyPrinter}
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
@@ -66,8 +67,11 @@ class SparkThrowableSuite extends SparkFunSuite {
       .addModule(DefaultScalaModule)
       .enable(SerializationFeature.INDENT_OUTPUT)
       .build()
+    val prettyPrinter = new DefaultPrettyPrinter()
+      .withArrayIndenter(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE)
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
       .setSerializationInclusion(Include.NON_ABSENT)
+      .writer(prettyPrinter)
       .writeValueAsString(errorClassToInfoMap)
     assert(rewrittenString.trim == errorClassFileContents.trim)
   }
@@ -85,6 +89,13 @@ class SparkThrowableSuite extends SparkFunSuite {
     assert(Set("07000", "42000", "HZ000").subsetOf(validSqlStates))
     assert(validSqlStates.forall(_.length == 5), validSqlStates)
     checkCondition(sqlStates, s => validSqlStates.contains(s))
+  }
+
+  test("Message invariants") {
+    val messages = errorClassToInfoMap.values.toSeq.map(_.message)
+    messages.foreach { msg =>
+      assert(!msg.contains("\n"))
+    }
   }
 
   test("Message format invariants") {
