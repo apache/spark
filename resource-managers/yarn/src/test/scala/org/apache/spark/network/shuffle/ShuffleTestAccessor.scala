@@ -17,6 +17,7 @@
 package org.apache.spark.network.shuffle
 
 import java.io.File
+import java.nio.channels.FileChannel
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.Semaphore
 
@@ -90,42 +91,46 @@ object ShuffleTestAccessor {
 
   def getOrCreateAppShufflePartitionInfo(
       mergeManager: RemoteBlockPushResolver,
-      appShufflePartitionId: AppShufflePartitionId,
+      appShufflePartitionId: AppAttemptShuffleMergeId,
+      reduceId: Int,
       blockId: String): AppShufflePartitionInfo = {
     mergeManager.getOrCreateAppShufflePartitionInfo(
       mergeManager.appsShuffleInfo.get(appShufflePartitionId.appId),
       appShufflePartitionId.shuffleId, appShufflePartitionId.shuffleMergeId,
-      appShufflePartitionId.reduceId, blockId)
+      reduceId, blockId)
   }
 
   def getMergedShuffleDataFile(
       mergeManager: RemoteBlockPushResolver,
-      appShufflePartitionId: AppShufflePartitionId): File = {
+      appShufflePartitionId: AppAttemptShuffleMergeId,
+      reduceId: Int): File = {
     mergeManager.appsShuffleInfo.get(appShufflePartitionId.appId)
       .getMergedShuffleDataFile(appShufflePartitionId.shuffleId,
-        appShufflePartitionId.shuffleMergeId, appShufflePartitionId.reduceId)
+        appShufflePartitionId.shuffleMergeId, reduceId)
   }
 
   def getMergedShuffleIndexFile(
       mergeManager: RemoteBlockPushResolver,
-      appShufflePartitionId: AppShufflePartitionId): File = {
+      appShufflePartitionId: AppAttemptShuffleMergeId,
+      reduceId: Int): File = {
     new File(mergeManager.appsShuffleInfo.get(appShufflePartitionId.appId)
       .getMergedShuffleIndexFilePath(appShufflePartitionId.shuffleId,
-        appShufflePartitionId.shuffleMergeId, appShufflePartitionId.reduceId))
+        appShufflePartitionId.shuffleMergeId, reduceId))
   }
 
   def getMergedShuffleMetaFile(
       mergeManager: RemoteBlockPushResolver,
-      appShufflePartitionId: AppShufflePartitionId): File = {
+      appShufflePartitionId: AppAttemptShuffleMergeId,
+      reduceId: Int): File = {
     mergeManager.appsShuffleInfo.get(appShufflePartitionId.appId)
       .getMergedShuffleMetaFile(appShufflePartitionId.shuffleId,
-        appShufflePartitionId.shuffleMergeId, appShufflePartitionId.reduceId)
+        appShufflePartitionId.shuffleMergeId, reduceId)
   }
 
   def getPartitionFileHandlers(
       partitionInfo: AppShufflePartitionInfo):
-      (MergeShuffleDataFile, MergeShuffleTrackerFile, MergeShuffleTrackerFile) = {
-    (partitionInfo.getDataFile, partitionInfo.getMetaFile, partitionInfo.getIndexFile)
+      (FileChannel, MergeShuffleFile, MergeShuffleFile) = {
+    (partitionInfo.getDataChannel, partitionInfo.getMetaFile, partitionInfo.getIndexFile)
   }
 
   def closePartitionFiles(partitionInfo: AppShufflePartitionInfo): Unit = {
@@ -137,10 +142,6 @@ object ShuffleTestAccessor {
     mergeMgr.appsShuffleInfo.clear()
     mergeMgr.reloadAppShuffleInfo(db)
     mergeMgr.appsShuffleInfo
-  }
-
-  def registerExecutor(): Unit = {
-
   }
 
   def reloadRegisteredExecutors(

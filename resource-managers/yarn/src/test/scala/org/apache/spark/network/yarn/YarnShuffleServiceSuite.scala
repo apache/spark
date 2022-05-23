@@ -110,21 +110,23 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   private def prepareAppShufflePartition(
       mergeManager: RemoteBlockPushResolver,
-      partitionId: AppShufflePartitionId,
+      partitionId: AppAttemptShuffleMergeId,
+      reduceId: Int,
       blockId: String): AppShufflePartitionInfo = {
-    val dataFile = ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager, partitionId)
+    val dataFile = ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager, partitionId, reduceId)
     dataFile.getParentFile.mkdirs()
-    val indexFile = ShuffleTestAccessor.getMergedShuffleIndexFile(mergeManager, partitionId)
+    val indexFile =
+      ShuffleTestAccessor.getMergedShuffleIndexFile(mergeManager, partitionId, reduceId)
     indexFile.getParentFile.mkdirs()
-    val metaFile = ShuffleTestAccessor.getMergedShuffleMetaFile(mergeManager, partitionId)
+    val metaFile = ShuffleTestAccessor.getMergedShuffleMetaFile(mergeManager, partitionId, reduceId)
     metaFile.getParentFile.mkdirs()
     val partitionInfo = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
-      mergeManager, partitionId, blockId)
+      mergeManager, partitionId, reduceId, blockId)
 
-    val (mergeDataFile, mergeMetaFile, mergeIndexFile) =
+    val (dataChannel, mergeMetaFile, mergeIndexFile) =
       ShuffleTestAccessor.getPartitionFileHandlers(partitionInfo)
     for (chunkId <- 1 to 5) {
-      (0 until 4).foreach(_ => mergeDataFile.getChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA)))
+      (0 until 4).foreach(_ => dataChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA)))
       mergeIndexFile.getDos.writeLong(chunkId * 4 * DUMMY_BLOCK_DATA.length - 1)
       val bitmap = new RoaringBitmap
       for (j <- (chunkId - 1) * 10 until chunkId * 10) {
@@ -132,7 +134,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       }
       bitmap.serialize(mergeMetaFile.getDos())
     }
-    mergeDataFile.getChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA))
+    dataChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA))
     ShuffleTestAccessor.closePartitionFiles(partitionInfo)
 
     partitionInfo
@@ -207,10 +209,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     ShuffleTestAccessor.getAppPathsInfo(app4Id.toString, mergeManager) should
       be (Some(appPathsInfo4))
 
-    val partitionId3 = new AppShufflePartitionId(app3Id.toString, 1, 1, 1, 1)
-    val partitionId4 = new AppShufflePartitionId(app4Id.toString, 1, 2, 1, 2)
-    prepareAppShufflePartition(mergeManager, partitionId3, "3")
-    prepareAppShufflePartition(mergeManager, partitionId4, "4")
+    val partitionId3 = new AppAttemptShuffleMergeId(app3Id.toString, 1, 1, 1)
+    val partitionId4 = new AppAttemptShuffleMergeId(app4Id.toString, 1, 2, 1)
+    prepareAppShufflePartition(mergeManager, partitionId3, 1, "3")
+    prepareAppShufflePartition(mergeManager, partitionId4, 2, "4")
 
     if (!execStateFile.exists()) {
       @tailrec def findExistingParent(file: File): File = {
@@ -252,12 +254,12 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       .getAppPathsInfo(app3Id.toString, mergeManager2) should be (Some(appPathsInfo3))
     ShuffleTestAccessor.getAppPathsInfo(app4Id.toString, mergeManager2) should be (None)
     val partitionInfoReload3 = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
-      mergeManager2, partitionId3, "3")
-    partitionInfoReload3.getDataFile.getPos should be (20 * DUMMY_BLOCK_DATA.length - 1)
+      mergeManager2, partitionId3, 1, "3")
+    partitionInfoReload3.getDataFilePos() should be (20 * DUMMY_BLOCK_DATA.length - 1)
     partitionInfoReload3.getMapTracker.getCardinality should be (50)
     val dataFileReload3 =
-      ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager2, partitionId3)
-    dataFileReload3.length() should be (partitionInfoReload3.getDataFile.getPos)
+      ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager2, partitionId3, 1)
+    dataFileReload3.length() should be (partitionInfoReload3.getDataFilePos)
 
     // Act like the NM restarts one more time
     s2.stop()
@@ -283,12 +285,12 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       .getAppPathsInfo(app3Id.toString, mergeManager3) should be (Some(appPathsInfo3))
     ShuffleTestAccessor.getAppPathsInfo(app4Id.toString, mergeManager3) should be (None)
     val partitionInfoReload3Again = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
-      mergeManager3, partitionId3, "3")
-    partitionInfoReload3Again.getDataFile.getPos should be (20 * DUMMY_BLOCK_DATA.length - 1)
+      mergeManager3, partitionId3, 1, "3")
+    partitionInfoReload3Again.getDataFilePos should be (20 * DUMMY_BLOCK_DATA.length - 1)
     partitionInfoReload3Again.getMapTracker.getCardinality should be (50)
     val dataFileReload3Again =
-      ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager3, partitionId3)
-    dataFileReload3Again.length() should be (partitionInfoReload3Again.getDataFile.getPos)
+      ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager3, partitionId3, 1)
+    dataFileReload3Again.length() should be (partitionInfoReload3Again.getDataFilePos)
     s3.stop()
   }
 
@@ -345,10 +347,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     mergeManager.registerExecutor(app3Id.toString, mergedShuffleInfo3)
     mergeManager.registerExecutor(app4Id.toString, mergedShuffleInfo4)
 
-    val partitionId3 = new AppShufflePartitionId(app3Id.toString, 1, 1, 1, 1)
-    val partitionId4 = new AppShufflePartitionId(app4Id.toString, 1, 2, 1, 2)
-    prepareAppShufflePartition(mergeManager, partitionId3, "3")
-    prepareAppShufflePartition(mergeManager, partitionId4, "4")
+    val partitionId3 = new AppAttemptShuffleMergeId(app3Id.toString, 1, 1, 1)
+    val partitionId4 = new AppAttemptShuffleMergeId(app4Id.toString, 1, 2, 1)
+    prepareAppShufflePartition(mergeManager, partitionId3, 1, "3")
+    prepareAppShufflePartition(mergeManager, partitionId4, 2, "4")
 
     val blockResolverDB = ShuffleTestAccessor.shuffleServiceLevelDB(blockResolver)
     ShuffleTestAccessor.reloadRegisteredExecutors(blockResolverDB) should not be empty
