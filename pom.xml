@@ -115,7 +115,7 @@
     <slf4j.version>1.7.32</slf4j.version>
     <log4j.version>2.17.2</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.2</hadoop.version>
+    <hadoop.version>3.3.3</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.2</zookeeper.version>
@@ -170,8 +170,8 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.13.2</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.13.2.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.13.3</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.13.3</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <netlib.ludovic.dev.version>2.2.1</netlib.ludovic.dev.version>
@@ -1438,7 +1438,7 @@
       <dependency>
         <groupId>xerces</groupId>
         <artifactId>xercesImpl</artifactId>
-        <version>2.12.0</version>
+        <version>2.12.2</version>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>

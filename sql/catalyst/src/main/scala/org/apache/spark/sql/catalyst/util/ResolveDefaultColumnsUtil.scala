@@ -155,4 +155,17 @@ object ResolveDefaultColumns {
           s"statement provided a value of incompatible type ${analyzed.dataType}")
     }
   }
+  /**
+   * Normalizes a schema field name suitable for use in looking up into maps keyed by schema field
+   * names.
+   * @param str the field name to normalize
+   * @return the normalized result
+   */
+  def normalizeFieldName(str: String): String = {
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      str
+    } else {
+      str.toLowerCase()
+    }
+  }
 }

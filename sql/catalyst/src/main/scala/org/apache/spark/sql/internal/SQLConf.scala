@@ -3758,6 +3758,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT =
+    buildConf("spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled")
+      .doc("PySpark's SparkSession.createDataFrame infers the element type of an array from all " +
+        "values in the array by default. If this config is set to true, it restores the legacy " +
+        "behavior of only inferring the type from the first array element.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_USE_V1_COMMAND =
     buildConf("spark.sql.legacy.useV1Command")
       .internal()
@@ -4553,6 +4562,9 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def legacyInferArrayTypeFromFirstElement: Boolean = getConf(
+    SQLConf.LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT)
 
   def parquetFieldIdReadEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED)
 
