@@ -29,6 +29,7 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeExpanding,
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeExponentialMoving,
+    MissingPandasLikeExponentialMovingGroupby,
 )
 
 # For running doctests and reference resolution in PyCharm.
@@ -2240,6 +2241,117 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
     def __repr__(self) -> str:
         return (
             "ExponentialMoving [com={}, span={}, halflife={}, alpha={}, "
+            "min_periods={}, ignore_na={}]".format(
+                self._com,
+                self._span,
+                self._halflife,
+                self._alpha,
+                self._min_periods,
+                self._ignore_na,
+            )
+        )
+
+
+class ExponentialMovingGroupby(ExponentialMovingLike[FrameLike]):
+    def __init__(
+        self,
+        groupby: GroupBy[FrameLike],
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
+        ignore_na: bool = False,
+    ):
+        window_spec = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+        super().__init__(window_spec, com, span, halflife, alpha, min_periods, ignore_na)
+
+        self._groupby = groupby
+        self._window = self._window.partitionBy(*[ser.spark.column for ser in groupby._groupkeys])
+        self._unbounded_window = self._unbounded_window.partitionBy(
+            *[ser.spark.column for ser in groupby._groupkeys]
+        )
+
+    def __getattr__(self, item: str) -> Any:
+        if hasattr(MissingPandasLikeExponentialMovingGroupby, item):
+            property_or_func = getattr(MissingPandasLikeExponentialMovingGroupby, item)
+            if isinstance(property_or_func, property):
+                return property_or_func.fget(self)
+            else:
+                return partial(property_or_func, self)
+        raise AttributeError(item)
+
+    _apply_as_series_or_frame = RollingGroupby._apply_as_series_or_frame
+
+    def mean(self) -> FrameLike:
+        """
+        Calculate an online exponentially weighted mean.
+
+        Notes
+        -----
+        There are behavior differences between pandas-on-Spark and pandas.
+
+        * the current implementation of this API uses Spark's Window without
+          specifying partition specification. This leads to move all data into
+          single partition in single machine and could cause serious
+          performance degradation. Avoid this method against very large dataset.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the exponentially
+            calculation.
+
+        See Also
+        --------
+        Series.expanding : Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.mean : Equivalent method for Series.
+        DataFrame.mean : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s.groupby(s).ewm(alpha=0.5).mean().sort_index()
+        2  0     2.0
+           1     2.0
+        3  2     3.0
+           3     3.0
+           4     3.0
+        4  5     4.0
+           6     4.0
+           7     4.0
+           8     4.0
+        5  9     5.0
+           10    5.0
+        dtype: float64
+
+        For DataFrame, each ewm mean is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.groupby(df.A).ewm(alpha=0.5).mean().sort_index()  # doctest: +NORMALIZE_WHITESPACE
+                 B
+        A
+        2 0    4.0
+          1    4.0
+        3 2    9.0
+          3    9.0
+          4    9.0
+        4 5   16.0
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9   25.0
+          10  25.0
+        """
+        return super().mean()
+
+    # TODO: when add 'adjust' parameter, should add to here too.
+    def __repr__(self) -> str:
+        return (
+            "ExponentialMovingGroupby [com={}, span={}, halflife={}, alpha={}, "
             "min_periods={}, ignore_na={}]".format(
                 self._com,
                 self._span,

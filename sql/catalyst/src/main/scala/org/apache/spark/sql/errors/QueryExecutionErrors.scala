@@ -2005,4 +2005,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(errorClass = "INVALID_BUCKET_FILE", messageParameters = Array(path),
       cause = null)
   }
+
+  def multipleRowSubqueryError(plan: String): Throwable = {
+    new SparkException(
+      errorClass = "MULTI_VALUE_SUBQUERY_ERROR", messageParameters = Array(plan), cause = null)
+  }
 }

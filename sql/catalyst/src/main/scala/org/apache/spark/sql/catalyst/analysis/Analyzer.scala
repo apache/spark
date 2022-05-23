@@ -2245,6 +2245,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             val aggFunc = agg match {
               case first: First => first.copy(ignoreNulls = u.ignoreNulls)
               case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
+              case any_value: AnyValue => any_value.copy(ignoreNulls = u.ignoreNulls)
               case _ =>
                 throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
                   agg.prettyName, "IGNORE NULLS")

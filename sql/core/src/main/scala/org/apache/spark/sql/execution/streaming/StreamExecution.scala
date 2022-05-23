@@ -445,7 +445,17 @@ abstract class StreamExecution(
         false
       } else {
         val source = sources(sourceIndex)
-        !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
+        // SPARK-39242 For numeric increasing offsets, we could have called awaitOffset
+        // after the stream has moved past the expected newOffset or if committedOffsets
+        // changed after notify. In this case, its safe to exit, since at-least the given
+        // Offset has been reached and the equality condition might never be met.
+        if (!localCommittedOffsets.contains(source)) {
+          true
+        } else if (newOffset.isInstanceOf[LongOffset]) {
+          localCommittedOffsets(source).toString.toLong < newOffset.asInstanceOf[LongOffset].offset
+        } else {
+          localCommittedOffsets(source) != newOffset
+        }
       }
     }
 
@@ -618,6 +628,13 @@ abstract class StreamExecution(
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
   val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
+  val IO_EXCEPTION_NAMES = Seq(
+    classOf[InterruptedException].getName,
+    classOf[InterruptedIOException].getName,
+    classOf[ClosedByInterruptException].getName)
+  val PROXY_ERROR = (
+    "py4j.protocol.Py4JJavaError: An error occurred while calling" +
+    s".+(\\r\\n|\\r|\\n): (${IO_EXCEPTION_NAMES.mkString("|")})").r
 
   @scala.annotation.tailrec
   def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = e match {
@@ -647,6 +664,10 @@ object StreamExecution {
       } else {
         false
       }
+    // py4j.Py4JException - with pinned thread mode on, the exception can be interrupted by Py4J
+    //                      access, for example, in `DataFrameWriter.foreachBatch`. See also
+    //                      SPARK-39218.
+    case e: py4j.Py4JException => PROXY_ERROR.findFirstIn(e.getMessage).isDefined
     case _ =>
       false
   }
