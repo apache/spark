@@ -246,16 +246,21 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitOverlay(String[] inputs) {
-    throw new UnsupportedOperationException("Function: OVERLAY does not support ");
+    assert(inputs.length == 3 || inputs.length == 4);
+    if (inputs.length == 3) {
+      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] + ")";
+    } else {
+      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] +
+        " FOR " + inputs[3]+ ")";
+    }
   }
 
   protected String visitTrim(String direction, String[] inputs) {
+    assert(inputs.length == 1 || inputs.length == 2);
     if (inputs.length == 1) {
       return "TRIM(" + direction + " FROM " + inputs[0] + ")";
-    } else if (inputs.length == 2) {
-      return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
     } else {
-      throw new IllegalStateException("Unexpected V2 function: TRIM");
+      return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
     }
   }
 }
