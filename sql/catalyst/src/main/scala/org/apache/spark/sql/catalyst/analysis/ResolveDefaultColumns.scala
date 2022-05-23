@@ -502,12 +502,16 @@ case class ResolveDefaultColumns(
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
-    // Check if the target table is already resolved. If so, return the computed schema.
-    // Note that we use 'collectFirst' to descend past any SubqueryAlias nodes that may be present.
+    // First find the source relation. Note that we use 'collectFirst' to descend past any
+    // SubqueryAlias nodes that may be present.
     val source: Option[LogicalPlan] = table.collectFirst {
-      case r: NamedRelation => r
+      case r: NamedRelation if !r.skipSchemaResolution =>
+        // Here we only resolve the default columns in the tables that require schema resolution
+        // during write operations.
+        r
       case r: UnresolvedCatalogRelation => r
     }
+    // Check if the target table is already resolved. If so, return the computed schema.
     source.map { r =>
       if (r.schema.fields.nonEmpty) {
         return Some(r.schema)
@@ -521,6 +525,7 @@ case class ResolveDefaultColumns(
       case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
       case _ => return None
     }
+
     val lookup: LogicalPlan = try {
       catalog.lookupRelation(tableName)
     } catch {
