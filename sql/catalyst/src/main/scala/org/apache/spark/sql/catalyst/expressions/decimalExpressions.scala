@@ -128,7 +128,7 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
 case class CheckOverflow(
     child: Expression,
     dataType: DecimalType,
-    nullOnOverflow: Boolean) extends UnaryExpression {
+    nullOnOverflow: Boolean) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
@@ -138,13 +138,13 @@ case class CheckOverflow(
       dataType.scale,
       Decimal.ROUND_HALF_UP,
       nullOnOverflow,
-      origin.context)
+      queryContext)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = if (nullOnOverflow) {
-      ctx.addReferenceObj("errCtx", origin.context)
-    } else {
       "\"\""
+    } else {
+      ctx.addReferenceObj("errCtx", queryContext)
     }
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
@@ -163,13 +163,20 @@ case class CheckOverflow(
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
+
+  override def initQueryContext(): String = if (nullOnOverflow) {
+    ""
+  } else {
+    origin.context
+  }
 }
 
 // A variant `CheckOverflow`, which treats null as overflow. This is necessary in `Sum`.
 case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
-    nullOnOverflow: Boolean) extends UnaryExpression {
+    nullOnOverflow: Boolean,
+    queryContext: String = "") extends UnaryExpression {
 
   override def nullable: Boolean = true
 
@@ -177,23 +184,23 @@ case class CheckOverflowInSum(
     val value = child.eval(input)
     if (value == null) {
       if (nullOnOverflow) null
-      else throw QueryExecutionErrors.overflowInSumOfDecimalError(origin.context)
+      else throw QueryExecutionErrors.overflowInSumOfDecimalError(queryContext)
     } else {
       value.asInstanceOf[Decimal].toPrecision(
         dataType.precision,
         dataType.scale,
         Decimal.ROUND_HALF_UP,
         nullOnOverflow,
-        origin.context)
+        queryContext)
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     val errorContextCode = if (nullOnOverflow) {
-      ctx.addReferenceObj("errCtx", origin.context)
-    } else {
       "\"\""
+    } else {
+      ctx.addReferenceObj("errCtx", queryContext)
     }
     val nullHandling = if (nullOnOverflow) {
       ""

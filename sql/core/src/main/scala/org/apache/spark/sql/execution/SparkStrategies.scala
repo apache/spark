@@ -81,55 +81,56 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ReturnAnswer(rootPlan) => rootPlan match {
-        case Limit(IntegerLiteral(limit), Sort(order, true, child))
-            if limit < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-        case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-            if limit < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+      // Call `planTakeOrdered` first which matches a larger plan.
+      case ReturnAnswer(rootPlan) => planTakeOrdered(rootPlan).getOrElse(rootPlan match {
+        // We should match the combination of limit and offset first, to get the optimal physical
+        // plan, instead of planning limit and offset separately.
+        case LimitAndOffset(limit, offset, child) =>
+          CollectLimitExec(limit = limit, child = planLater(child), offset = offset)
+        case OffsetAndLimit(offset, limit, child) =>
+          // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
+          CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
         case Limit(IntegerLiteral(limit), child) =>
-          CollectLimitExec(limit, planLater(child)) :: Nil
-        case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
-          Sort(order, true, child)) if limit + offset < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(
-            limit, order, child.output, planLater(child), offset) :: Nil
-        case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
-          Project(projectList, Sort(order, true, child)))
-            if limit + offset < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(
-            limit, order, projectList, planLater(child), offset) :: Nil
-        case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
-          CollectLimitExec(limit, planLater(child), offset) :: Nil
+          CollectLimitExec(limit = limit, child = planLater(child))
         case logical.Offset(IntegerLiteral(offset), child) =>
-          CollectLimitExec(child = planLater(child), offset = offset) :: Nil
+          CollectLimitExec(child = planLater(child), offset = offset)
         case Tail(IntegerLiteral(limit), child) =>
-          CollectTailExec(limit, planLater(child)) :: Nil
-        case other => planLater(other) :: Nil
-      }
+          CollectTailExec(limit, planLater(child))
+        case other => planLater(other)
+      })  :: Nil
+
+      case other => planTakeOrdered(other).toSeq
+    }
+
+    private def planTakeOrdered(plan: LogicalPlan): Option[SparkPlan] = plan match {
+      // We should match the combination of limit and offset first, to get the optimal physical
+      // plan, instead of planning limit and offset separately.
+      case LimitAndOffset(limit, offset, Sort(order, true, child))
+          if limit < conf.topKSortFallbackThreshold =>
+        Some(TakeOrderedAndProjectExec(
+          limit, order, child.output, planLater(child), offset))
+      case LimitAndOffset(limit, offset, Project(projectList, Sort(order, true, child)))
+          if limit < conf.topKSortFallbackThreshold =>
+        Some(TakeOrderedAndProjectExec(
+          limit, order, projectList, planLater(child), offset))
+      // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
+      case OffsetAndLimit(offset, limit, Sort(order, true, child))
+          if offset + limit < conf.topKSortFallbackThreshold =>
+        Some(TakeOrderedAndProjectExec(
+          offset + limit, order, child.output, planLater(child), offset))
+      case OffsetAndLimit(offset, limit, Project(projectList, Sort(order, true, child)))
+          if offset + limit < conf.topKSortFallbackThreshold =>
+        Some(TakeOrderedAndProjectExec(
+          offset + limit, order, projectList, planLater(child), offset))
       case Limit(IntegerLiteral(limit), Sort(order, true, child))
           if limit < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+        Some(TakeOrderedAndProjectExec(
+          limit, order, child.output, planLater(child)))
       case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
           if limit < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
-      // This is a global LIMIT and OFFSET over a logical sorting operator,
-      // where the sum of specified limit and specified offset is less than a heuristic threshold.
-      // In this case we generate a physical top-K sorting operator, passing down
-      // the limit and offset values to be evaluated inline during the physical
-      // sorting operation for greater efficiency.
-      case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
-        Sort(order, true, child)) if limit + offset < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(
-            limit, order, child.output, planLater(child), offset) :: Nil
-      case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
-        Project(projectList, Sort(order, true, child)))
-          if limit + offset < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, projectList, planLater(child), offset) :: Nil
-      case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
-        GlobalLimitAndOffsetExec(limit, offset, planLater(child)) :: Nil
-      case _ =>
-        Nil
+        Some(TakeOrderedAndProjectExec(
+          limit, order, projectList, planLater(child)))
+      case _ => None
     }
   }
 
@@ -814,12 +815,19 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.LocalRelation(output, data, _) =>
         LocalTableScanExec(output, data) :: Nil
       case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
+      // We should match the combination of limit and offset first, to get the optimal physical
+      // plan, instead of planning limit and offset separately.
+      case LimitAndOffset(limit, offset, child) =>
+        GlobalLimitExec(limit, planLater(child), offset) :: Nil
+      case OffsetAndLimit(offset, limit, child) =>
+        // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
+        GlobalLimitExec(limit = offset + limit, child = planLater(child), offset = offset) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
       case logical.Offset(IntegerLiteral(offset), child) =>
-        GlobalLimitAndOffsetExec(offset = offset, child = planLater(child)) :: Nil
+        GlobalLimitExec(child = planLater(child), offset = offset) :: Nil
       case union: logical.Union =>
         execution.UnionExec(union.children.map(planLater)) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>

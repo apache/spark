@@ -467,6 +467,7 @@ object FunctionRegistry {
     expression[CovSample]("covar_samp"),
     expression[First]("first"),
     expression[First]("first_value", true),
+    expression[AnyValue]("any_value"),
     expression[Kurtosis]("kurtosis"),
     expression[Last]("last"),
     expression[Last]("last_value", true),
