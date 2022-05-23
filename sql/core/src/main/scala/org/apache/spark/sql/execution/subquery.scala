@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
@@ -79,9 +80,7 @@ case class ScalarSubquery(
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     if (rows.length > 1) {
-      // TODO(SPARK-39167): Throw an exception w/ an error class for multiple rows from a subquery
-      throw new IllegalStateException(
-        s"more than one row returned by a subquery used as an expression:\n$plan")
+      throw QueryExecutionErrors.multipleRowSubqueryError(plan.toString)
     }
     if (rows.length == 1) {
       assert(rows(0).numFields == 1,

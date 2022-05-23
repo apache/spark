@@ -1270,9 +1270,6 @@ private[hive] object HiveClientImpl extends Logging {
     }
     // Disable CBO because we removed the Calcite dependency.
     hiveConf.setBoolean("hive.cbo.enable", false)
-    // Disable auto gather statistic by default.
-    hiveConf.setBoolean("hive.stats.autogather", confMap.contains("hive.stats.autogather") &&
-          confMap("hive.stats.autogather").equalsIgnoreCase("true"))
     // If this is true, SessionState.start will create a file to log hive job which will not be
     // deleted on exit and is useless for spark
     if (hiveConf.getBoolean("hive.session.history.enabled", false)) {

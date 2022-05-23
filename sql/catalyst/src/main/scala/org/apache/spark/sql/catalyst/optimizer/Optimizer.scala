@@ -1008,20 +1008,22 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           val producer = producerMap.getOrElse(reference, reference)
           producer.deterministic && (count == 1 || alwaysInline || {
             val relatedConsumers = consumers.filter(_.references.contains(reference))
-            val extractOnly = relatedConsumers.forall(isExtractOnly(_, reference))
+            // It's still exactly-only if there is only one reference in non-extract expressions,
+            // as we won't duplicate the expensive CreateStruct-like expressions.
+            val extractOnly = relatedConsumers.map(refCountInNonExtract(_, reference)).sum <= 1
             shouldInline(producer, extractOnly)
           })
       }
   }
 
-  private def isExtractOnly(expr: Expression, ref: Attribute): Boolean = {
-    def hasRefInNonExtractValue(e: Expression): Boolean = e match {
-      case a: Attribute => a.semanticEquals(ref)
+  private def refCountInNonExtract(expr: Expression, ref: Attribute): Int = {
+    def refCount(e: Expression): Int = e match {
+      case a: Attribute if a.semanticEquals(ref) => 1
       // The first child of `ExtractValue` is the complex type to be extracted.
-      case e: ExtractValue if e.children.head.semanticEquals(ref) => false
-      case _ => e.children.exists(hasRefInNonExtractValue)
+      case e: ExtractValue if e.children.head.semanticEquals(ref) => 0
+      case _ => e.children.map(refCount).sum
     }
-    !hasRefInNonExtractValue(expr)
+    refCount(expr)
   }
 
   /**
@@ -1355,7 +1357,9 @@ object CombineUnions extends Rule[LogicalPlan] {
     while (stack.nonEmpty) {
       stack.pop() match {
         case p1 @ Project(_, p2: Project)
-            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) =>
+            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) &&
+              !p1.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) &&
+              !p2.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) =>
           val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
           stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
         case Distinct(Union(children, byName, allowMissingCol))

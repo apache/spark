@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 import com.google.common.io.Closeables;
-import com.google.common.io.Files;
 
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
@@ -47,9 +46,9 @@ public class TestShuffleDataContext {
     this.subDirsPerLocalDir = subDirsPerLocalDir;
   }
 
-  public void create() {
+  public void create() throws IOException {
     for (int i = 0; i < localDirs.length; i ++) {
-      localDirs[i] = Files.createTempDir().getAbsolutePath();
+      localDirs[i] = JavaUtils.createTempDir().getAbsolutePath();
 
       for (int p = 0; p < subDirsPerLocalDir; p ++) {
         new File(localDirs[i], String.format("%02x", p)).mkdirs();

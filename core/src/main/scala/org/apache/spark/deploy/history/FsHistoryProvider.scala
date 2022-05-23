@@ -472,8 +472,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Builds the application list based on the current contents of the log directory.
    * Tries to reuse as much of the data already in memory as possible, by not reading
    * applications that haven't been updated since last time the logs were checked.
+   * Only a max of UPDATE_BATCHSIZE jobs are processed in each cycle, to prevent the process
+   * from running for too long which blocks updating newly appeared eventlog files.
    */
   private[history] def checkForLogs(): Unit = {
+    var count: Int = 0
     try {
       val newLastScanTime = clock.getTimeMillis()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
@@ -494,6 +497,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
         }
         .flatMap { entry => EventLogFileReader(fs, entry) }
+        .filter { reader =>
+          try {
+            reader.modificationTime
+            true
+          } catch {
+            case e: IllegalArgumentException =>
+              logInfo("Exception in getting modificationTime of "
+                + reader.rootPath.getName + ". " + e.toString)
+              false
+          }
+        }
+        .sortWith { case (entry1, entry2) =>
+          entry1.modificationTime > entry2.modificationTime
+        }
         .filter { reader =>
           try {
             val info = listing.read(classOf[LogInfo], reader.rootPath.toString())
@@ -551,10 +568,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // to parse it. This will allow the cleaner code to detect the file as stale later on
               // if it was not possible to parse it.
               try {
-                listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
-                  LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
-                  None, reader.completed))
-                reader.fileSizeForLastIndex > 0
+                if (count < conf.get(UPDATE_BATCHSIZE)) {
+                  listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
+                    LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
+                    None, reader.completed))
+                  count = count + 1
+                  reader.fileSizeForLastIndex > 0
+                } else {
+                  false
+                }
               } catch {
                 case _: FileNotFoundException => false
                 case NonFatal(e) =>
@@ -566,9 +588,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               logWarning(s"Error while filtering log ${reader.rootPath}", e)
               false
           }
-        }
-        .sortWith { case (entry1, entry2) =>
-          entry1.modificationTime > entry2.modificationTime
         }
 
       if (updated.nonEmpty) {

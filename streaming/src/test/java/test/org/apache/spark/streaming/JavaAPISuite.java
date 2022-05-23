@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.JavaCheckpointTestUtils;
 import org.apache.spark.streaming.JavaTestUtils;
@@ -1463,7 +1464,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   }
 
   @Test
-  public void testCheckpointMasterRecovery() throws InterruptedException {
+  public void testCheckpointMasterRecovery() throws InterruptedException, IOException {
     List<List<String>> inputData = Arrays.asList(
         Arrays.asList("this", "is"),
         Arrays.asList("a", "test"),
@@ -1475,7 +1476,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(1,4),
         Arrays.asList(8,7));
 
-    File tempDir = Files.createTempDir();
+    File tempDir = JavaUtils.createTempDir();
     tempDir.deleteOnExit();
     ssc.checkpoint(tempDir.getAbsolutePath());
 
@@ -1498,7 +1499,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   }
 
   @Test
-  public void testContextGetOrCreate() throws InterruptedException {
+  public void testContextGetOrCreate() throws IOException {
     ssc.stop();
 
     SparkConf conf = new SparkConf()
@@ -1506,7 +1507,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         .setAppName("test")
         .set("newContext", "true");
 
-    File emptyDir = Files.createTempDir();
+    File emptyDir = JavaUtils.createTempDir();
     emptyDir.deleteOnExit();
     StreamingContextSuite contextSuite = new StreamingContextSuite();
     String corruptedCheckpointDir = contextSuite.createCorruptedCheckpoint();

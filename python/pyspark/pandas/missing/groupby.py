@@ -52,7 +52,6 @@ class MissingPandasLikeDataFrameGroupBy:
     ngroups = _unsupported_property("ngroups")
     plot = _unsupported_property("plot")
     quantile = _unsupported_property("quantile")
-    skew = _unsupported_property("skew")
     tshift = _unsupported_property("tshift")
 
     # Deprecated properties
@@ -87,7 +86,6 @@ class MissingPandasLikeSeriesGroupBy:
     ngroups = _unsupported_property("ngroups")
     plot = _unsupported_property("plot")
     quantile = _unsupported_property("quantile")
-    skew = _unsupported_property("skew")
     tshift = _unsupported_property("tshift")
 
     # Deprecated properties

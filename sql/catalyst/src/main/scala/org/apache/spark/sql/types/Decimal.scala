@@ -636,7 +636,7 @@ object Decimal {
       }
     } catch {
       case _: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(to, str, errorContext)
+        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, str, errorContext)
     }
   }
 

@@ -76,7 +76,7 @@ select (5e36BD + 0.1) + 5e36BD
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 10000000000000000000000000000000000000.1, 39, 1) cannot be represented as Decimal(38, 1). If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
+[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 10000000000000000000000000000000000000.1, 39, 1) cannot be represented as Decimal(38, 1). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select (5e36BD + 0.1) + 5e36BD
        ^^^^^^^^^^^^^^^^^^^^^^^
@@ -88,7 +88,7 @@ select (-4e36BD - 0.1) - 7e36BD
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, -11000000000000000000000000000000000000.1, 39, 1) cannot be represented as Decimal(38, 1). If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
+[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, -11000000000000000000000000000000000000.1, 39, 1) cannot be represented as Decimal(38, 1). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select (-4e36BD - 0.1) - 7e36BD
        ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -100,7 +100,7 @@ select 12345678901234567890.0 * 12345678901234567890.0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 152415787532388367501905199875019052100, 39, 0) cannot be represented as Decimal(38, 2). If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
+[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 152415787532388367501905199875019052100, 39, 0) cannot be represented as Decimal(38, 2). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select 12345678901234567890.0 * 12345678901234567890.0
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -112,7 +112,7 @@ select 1e35BD / 0.1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 1000000000000000000000000000000000000, 37, 0) cannot be represented as Decimal(38, 6). If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
+[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 1000000000000000000000000000000000000, 37, 0) cannot be represented as Decimal(38, 6). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select 1e35BD / 0.1
        ^^^^^^^^^^^^

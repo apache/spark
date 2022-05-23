@@ -63,6 +63,8 @@ case class ResolveDefaultColumns(
         resolveDefaultColumnsForInsertFromProject(i)
       case u: UpdateTable =>
         resolveDefaultColumnsForUpdate(u)
+      case m: MergeIntoTable =>
+        resolveDefaultColumnsForMerge(m)
     }
   }
 
@@ -164,11 +166,78 @@ case class ResolveDefaultColumns(
       // For each assignment in the UPDATE command's SET clause with a DEFAULT column reference on
       // the right-hand side, look up the corresponding expression from the above map.
       val newAssignments: Option[Seq[Assignment]] =
-      replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
+      replaceExplicitDefaultValuesForUpdateAssignments(
+        u.assignments, CommandType.Update, columnNamesToExpressions)
       newAssignments.map { n =>
         u.copy(assignments = n)
       }.getOrElse(u)
     }.getOrElse(u)
+  }
+
+  /**
+   * Resolves DEFAULT column references for a MERGE INTO command.
+   */
+  private def resolveDefaultColumnsForMerge(m: MergeIntoTable): LogicalPlan = {
+    val schema: StructType = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
+    // Return a more descriptive error message if the user tries to use a DEFAULT column reference
+    // inside an UPDATE command's WHERE clause; this is not allowed.
+    m.mergeCondition.foreach { c: Expression =>
+      if (c.find(isExplicitDefaultColumn).isDefined) {
+        throw QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition()
+      }
+    }
+    val defaultExpressions: Seq[Expression] = schema.fields.map {
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+        analyze(analyzer, f, "MERGE")
+      case _ => Literal(null)
+    }
+    val columnNamesToExpressions: Map[String, Expression] =
+      mapStructFieldNamesToExpressions(schema, defaultExpressions)
+    var replaced = false
+    val newMatchedActions: Seq[MergeAction] = m.matchedActions.map { action: MergeAction =>
+      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+        replaced = true
+        r
+      }.getOrElse(action)
+    }
+    val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map { action: MergeAction =>
+      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+        replaced = true
+        r
+      }.getOrElse(action)
+    }
+    if (replaced) {
+      m.copy(matchedActions = newMatchedActions,
+        notMatchedActions = newNotMatchedActions)
+    } else {
+      m
+    }
+  }
+
+  /**
+   * Replaces unresolved DEFAULT column references with corresponding values in one action of a
+   * MERGE INTO command.
+   */
+  private def replaceExplicitDefaultValuesInMergeAction(
+      action: MergeAction,
+      columnNamesToExpressions: Map[String, Expression]): Option[MergeAction] = {
+    action match {
+      case u: UpdateAction =>
+        val replaced: Option[Seq[Assignment]] =
+          replaceExplicitDefaultValuesForUpdateAssignments(
+            u.assignments, CommandType.Merge, columnNamesToExpressions)
+        replaced.map { r =>
+          Some(u.copy(assignments = r))
+        }.getOrElse(None)
+      case i: InsertAction =>
+        val replaced: Option[Seq[Assignment]] =
+          replaceExplicitDefaultValuesForUpdateAssignments(
+            i.assignments, CommandType.Merge, columnNamesToExpressions)
+        replaced.map { r =>
+          Some(i.copy(assignments = r))
+        }.getOrElse(None)
+      case _ => Some(action)
+    }
   }
 
   /**
@@ -335,7 +404,7 @@ case class ResolveDefaultColumns(
    * Represents a type of command we are currently processing.
    */
   private object CommandType extends Enumeration {
-    val Insert, Update = Value
+    val Insert, Update, Merge = Value
   }
 
   /**
@@ -372,6 +441,9 @@ case class ResolveDefaultColumns(
           case CommandType.Update =>
             throw QueryCompilationErrors
               .defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause()
+          case CommandType.Merge =>
+            throw QueryCompilationErrors
+              .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates()
         }
       case _ =>
         None
@@ -406,17 +478,6 @@ case class ResolveDefaultColumns(
   }
 
   /**
-   * Normalizes a schema field name suitable for use in map lookups.
-   */
-  private def normalizeFieldName(str: String): String = {
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      str
-    } else {
-      str.toLowerCase()
-    }
-  }
-
-  /**
    * Returns a map of the names of fields in a schema to the fields themselves.
    */
   private def mapStructFieldNamesToFields(schema: StructType): Map[String, StructField] = {
@@ -442,17 +503,22 @@ case class ResolveDefaultColumns(
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     // Check if the target table is already resolved. If so, return the computed schema.
-    table match {
-      case r: NamedRelation if r.schema.fields.nonEmpty => return Some(r.schema)
-      case SubqueryAlias(_, r: NamedRelation) if r.schema.fields.nonEmpty => return Some (r.schema)
-      case _ =>
+    // Note that we use 'collectFirst' to descend past any SubqueryAlias nodes that may be present.
+    val source: Option[LogicalPlan] = table.collectFirst {
+      case r: NamedRelation => r
+      case r: UnresolvedCatalogRelation => r
+    }
+    source.map { r =>
+      if (r.schema.fields.nonEmpty) {
+        return Some(r.schema)
+      }
     }
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
     // found" error. In the latter cases, return out of this rule without changing anything and let
     // the analyzer return a proper error message elsewhere.
-    val tableName: TableIdentifier = table match {
-      case r: UnresolvedRelation => TableIdentifier(r.name)
-      case r: UnresolvedCatalogRelation => r.tableMeta.identifier
+    val tableName: TableIdentifier = source match {
+      case Some(r: UnresolvedRelation) => TableIdentifier(r.name)
+      case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
       case _ => return None
     }
     val lookup: LogicalPlan = try {
@@ -464,17 +530,18 @@ case class ResolveDefaultColumns(
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
         Some(r.tableMeta.schema)
       case SubqueryAlias(_, r: View) if r.isTempView =>
-        Some(r.schema)
+        Some(r.desc.schema)
       case _ => None
     }
   }
 
   /**
    * Replaces unresolved DEFAULT column references with corresponding values in a series of
-   * assignments in an UPDATE command.
+   * assignments in an UPDATE assignment, either comprising an UPDATE command or as part of a MERGE.
    */
   private def replaceExplicitDefaultValuesForUpdateAssignments(
       assignments: Seq[Assignment],
+      command: CommandType.Value,
       columnNamesToExpressions: Map[String, Expression]): Option[Seq[Assignment]] = {
     var replaced = false
     val newAssignments: Seq[Assignment] =
@@ -491,7 +558,7 @@ case class ResolveDefaultColumns(
             replaceExplicitDefaultReferenceInExpression(
               assignment.value,
               defaultExpr,
-              CommandType.Update,
+              command,
               addAlias = false)
           updated.map { e =>
             replaced = true
