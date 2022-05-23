@@ -52,7 +52,8 @@ class InMemoryTable(
     override val properties: util.Map[String, String],
     val distribution: Distribution = Distributions.unspecified(),
     val ordering: Array[SortOrder] = Array.empty,
-    val numPartitions: Option[Int] = None)
+    val numPartitions: Option[Int] = None,
+    val distributionStrictlyRequired: Boolean = true)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
@@ -359,24 +360,51 @@ class InMemoryTable(
         this
       }
 
-      override def build(): Write = new Write with RequiresDistributionAndOrdering {
-        override def requiredDistribution: Distribution = distribution
+      override def build(): Write = {
+        if (distributionStrictlyRequired) {
+          new Write with RequiresDistributionAndOrdering {
+            override def requiredDistribution: Distribution = distribution
 
-        override def requiredOrdering: Array[SortOrder] = ordering
+            override def requiredOrdering: Array[SortOrder] = ordering
 
-        override def requiredNumPartitions(): Int = {
-          numPartitions.getOrElse(0)
-        }
+            override def requiredNumPartitions(): Int = {
+              numPartitions.getOrElse(0)
+            }
 
-        override def toBatch: BatchWrite = writer
+            override def toBatch: BatchWrite = writer
 
-        override def toStreaming: StreamingWrite = streamingWriter match {
-          case exc: StreamingNotSupportedOperation => exc.throwsException()
-          case s => s
-        }
+            override def toStreaming: StreamingWrite = streamingWriter match {
+              case exc: StreamingNotSupportedOperation => exc.throwsException()
+              case s => s
+            }
 
-        override def supportedCustomMetrics(): Array[CustomMetric] = {
-          Array(new InMemorySimpleCustomMetric)
+            override def supportedCustomMetrics(): Array[CustomMetric] = {
+              Array(new InMemorySimpleCustomMetric)
+            }
+          }
+        } else {
+          new Write with RequiresDistributionAndOrdering {
+            override def requiredDistribution: Distribution = distribution
+
+            override def requiredOrdering: Array[SortOrder] = ordering
+
+            override def distributionStrictlyRequired = false
+
+            override def requiredNumPartitions(): Int = {
+              numPartitions.getOrElse(0)
+            }
+
+            override def toBatch: BatchWrite = writer
+
+            override def toStreaming: StreamingWrite = streamingWriter match {
+              case exc: StreamingNotSupportedOperation => exc.throwsException()
+              case s => s
+            }
+
+            override def supportedCustomMetrics(): Array[CustomMetric] = {
+              Array(new InMemorySimpleCustomMetric)
+            }
+          }
         }
       }
     }
