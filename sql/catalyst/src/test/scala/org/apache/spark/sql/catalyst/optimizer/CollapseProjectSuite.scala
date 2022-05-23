@@ -143,6 +143,17 @@ class CollapseProjectSuite extends PlanTest {
       .select(($"a" + ($"a" + 1)).as("add"))
       .analyze
     comparePlans(optimized2, expected2)
+
+    // referencing `CreateStruct` only once in non-extract expression is OK.
+    val query3 = testRelation
+      .select(namedStruct("a", $"a", "a_plus_1", $"a" + 1).as("struct"))
+      .select($"struct", $"struct".getField("a"))
+      .analyze
+    val optimized3 = Optimize.execute(query3)
+    val expected3 = testRelation
+      .select(namedStruct("a", $"a", "a_plus_1", $"a" + 1).as("struct"), $"a".as("struct.a"))
+      .analyze
+    comparePlans(optimized3, expected3)
   }
 
   test("preserve top-level alias metadata while collapsing projects") {
