@@ -263,7 +263,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
   }
 
-  test("SPARK-35378: Check output type of CommandResultExec") {
+  test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
     val plan = spark.sql("SHOW FUNCTIONS").queryExecution.executedPlan
     assert(plan.isInstanceOf[CommandResultExec])
     plan.executeCollect().foreach { row => assert(row.isInstanceOf[UnsafeRow]) }
