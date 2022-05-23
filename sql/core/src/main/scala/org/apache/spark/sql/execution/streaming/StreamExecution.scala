@@ -451,8 +451,10 @@ abstract class StreamExecution(
         // Offset has been reached and the equality condition might never be met.
         if (!localCommittedOffsets.contains(source)) {
           true
-        } else if (newOffset.isInstanceOf[LongOffset]) {
-          localCommittedOffsets(source).toString.toLong < newOffset.asInstanceOf[LongOffset].offset
+        } else if (localCommittedOffsets(source).isInstanceOf[LongOffset] &&
+                   newOffset.isInstanceOf[LongOffset]) {
+          localCommittedOffsets(source).asInstanceOf[LongOffset].offset <
+            newOffset.asInstanceOf[LongOffset].offset
         } else {
           localCommittedOffsets(source) != newOffset
         }
