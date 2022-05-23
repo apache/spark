@@ -443,7 +443,7 @@ class QueryExecutionErrorsSuite
         exception = e1,
         errorClass = "UNSUPPORTED_SAVE_MODE",
         errorSubClass = Some("NON_EXISTENT_PATH"),
-        msg = "The save mode NULL is not supported for: a not existent path.")
+        msg = "The save mode NULL is not supported for: a non existent path.")
 
       Utils.createDirectory(path)
 
