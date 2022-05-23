@@ -1229,7 +1229,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
-        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get).toMap
+        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get)
         val query = addStaticPartitionColumns(r, i.query, staticPartitions)
 
         if (!i.overwrite) {
