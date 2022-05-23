@@ -147,7 +147,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           TableCatalog.PROP_EXTERNAL, "false").equals("true")
         new Table(
           name = t.identifier.name(),
-          database = t.identifier.namespace().head,
+          qualifier = t.identifier.namespace(),
           description = t.table.properties().get("comment"),
           tableType =
             if (isExternal) CatalogTableType.EXTERNAL.name
@@ -156,11 +156,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case v: ResolvedView =>
         new Table(
           name = v.identifier.name(),
-          database = v.identifier.namespace().toString,
+          qualifier = v.identifier.namespace(),
           description = "",
           tableType = if (v.isTemp) "TEMPORARY" else "VIEW",
           isTemporary = v.isTemp)
-      case _ => throw new Exception(ident.mkString(".") + " not found")
+      case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
     }
   }
 

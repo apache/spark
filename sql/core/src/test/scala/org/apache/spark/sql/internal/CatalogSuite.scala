@@ -313,7 +313,9 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val functionFields = ScalaReflection.getConstructorParameterValues(function)
     val columnFields = ScalaReflection.getConstructorParameterValues(column)
     assert(dbFields == Seq("nama", "descripta", "locata"))
-    assert(tableFields == Seq("nama", "databasa", "descripta", "typa", false))
+    assert(Seq(tableFields.apply(0), tableFields.apply(2), tableFields.apply(3),
+      tableFields.apply(4)) == Seq("nama", "descripta", "typa", false))
+    assert(tableFields.apply(1).asInstanceOf[Array[String]].deep == Array("databasa").deep)
     assert(functionFields == Seq("nama", "databasa", "descripta", "classa", false))
     assert(columnFields == Seq("nama", "descripta", "typa", false, true, true))
     val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
@@ -321,7 +323,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val functionString = CatalogImpl.makeDataset(Seq(function), spark).showString(10)
     val columnString = CatalogImpl.makeDataset(Seq(column), spark).showString(10)
     dbFields.foreach { f => assert(dbString.contains(f.toString)) }
-    tableFields.foreach { f => assert(tableString.contains(f.toString)) }
+    tableFields.foreach { f => assert(tableString.contains(f.toString) ||
+      tableString.contains(f.asInstanceOf[Array[String]].mkString(""))) }
     functionFields.foreach { f => assert(functionString.contains(f.toString)) }
     columnFields.foreach { f => assert(columnString.contains(f.toString)) }
   }
@@ -647,7 +650,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       assert(tables.size == 2)
 
       val expectedTable1 =
-        new Table(tableName, dbName, description, CatalogTableType.MANAGED.name, false)
+        new Table(tableName, Array(dbName), description, CatalogTableType.MANAGED.name, false)
       assert(tables.exists(t =>
         expectedTable1.name.equals(t.name) && expectedTable1.database.equals(t.database) &&
         expectedTable1.description.equals(t.description) &&
@@ -655,7 +658,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
         expectedTable1.isTemporary == t.isTemporary))
 
       val expectedTable2 =
-        new Table(tableName2, dbName, description2, CatalogTableType.EXTERNAL.name, false)
+        new Table(tableName2, Array(dbName), description2, CatalogTableType.EXTERNAL.name, false)
       assert(tables.exists(t =>
         expectedTable2.name.equals(t.name) && expectedTable2.database.equals(t.database) &&
         expectedTable2.description.equals(t.description) &&

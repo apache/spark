@@ -70,7 +70,19 @@ class Table(
     val isTemporary: Boolean)
   extends DefinedByConstructorParams {
 
-  def database: String = if (qualifier.length == 2) qualifier(1) else null
+  def database: String = parseQualifier
+
+  def parseQualifier: String = {
+    if (qualifier == null) {
+      null
+    } else if (qualifier.length == 2) {
+      qualifier(1)
+    } else if (qualifier.length == 1) {
+      qualifier(0)
+    } else {
+      null
+    }
+  }
 
   override def toString: String = {
     "Table[" +
