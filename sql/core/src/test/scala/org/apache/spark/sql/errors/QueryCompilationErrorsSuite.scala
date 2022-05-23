@@ -544,8 +544,7 @@ class QueryCompilationErrorsSuite
           agg(sum($"earnings")).collect()
       },
       errorClass = "NON_LITERAL_PIVOT_VALUES",
-      msg = "Literal expressions required for pivot values, found 'earnings#\\w+'",
-      matchMsg = true)
+      msg = """Literal expressions required for pivot values, found "earnings".""")
   }
 
   test("UNSUPPORTED_DESERIALIZER: data type mismatch") {

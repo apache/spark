@@ -164,7 +164,7 @@
     "message" : [ "more than one row returned by a subquery used as an expression: <plan>" ]
   },
   "NON_LITERAL_PIVOT_VALUES" : {
-    "message" : [ "Literal expressions required for pivot values, found '<expression>'" ],
+    "message" : [ "Literal expressions required for pivot values, found <expression>." ],
     "sqlState" : "42000"
   },
   "NON_PARTITION_COLUMN" : {
