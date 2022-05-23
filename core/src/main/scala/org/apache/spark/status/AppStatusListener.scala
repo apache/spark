@@ -179,6 +179,7 @@ private[spark] class AppStatusListener(
       details.getOrElse("Spark Properties", Nil),
       details.getOrElse("Hadoop Properties", Nil),
       details.getOrElse("System Properties", Nil),
+      details.getOrElse("Metrics Properties", Nil),
       details.getOrElse("Classpath Entries", Nil),
       Nil)
 

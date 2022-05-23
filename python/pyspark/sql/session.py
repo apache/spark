@@ -570,10 +570,20 @@ class SparkSession(SparkConversionMixin):
         if not data:
             raise ValueError("can not infer schema from empty dataset")
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
+        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         schema = reduce(
             _merge_type,
-            (_infer_schema(row, names, infer_dict_as_struct, prefer_timestamp_ntz) for row in data),
+            (
+                _infer_schema(
+                    row,
+                    names,
+                    infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
+                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                )
+                for row in data
+            ),
         )
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
@@ -605,6 +615,7 @@ class SparkSession(SparkConversionMixin):
             raise ValueError("The first row in RDD is empty, " "can not infer schema")
 
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
+        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
             schema = _infer_schema(
@@ -621,6 +632,7 @@ class SparkSession(SparkConversionMixin):
                             row,
                             names=names,
                             infer_dict_as_struct=infer_dict_as_struct,
+                            infer_array_from_first_element=infer_array_from_first_element,
                             prefer_timestamp_ntz=prefer_timestamp_ntz,
                         ),
                     )
@@ -639,6 +651,7 @@ class SparkSession(SparkConversionMixin):
                     row,
                     names,
                     infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
                     prefer_timestamp_ntz=prefer_timestamp_ntz,
                 )
             ).reduce(_merge_type)

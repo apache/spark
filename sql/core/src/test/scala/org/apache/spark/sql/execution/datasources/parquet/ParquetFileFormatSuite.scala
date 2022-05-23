@@ -97,7 +97,7 @@ abstract class ParquetFileFormatSuite
         Seq(
           Seq(StructField("f1", IntegerType), StructField("f2", BooleanType)) -> true,
           Seq(StructField("f1", IntegerType), StructField("f2", ArrayType(IntegerType))) -> enabled,
-          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> false
+          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> enabled
         ).foreach { case (schema, expected) =>
           assert(ParquetUtils.isBatchReadSupportedForSchema(conf, StructType(schema)) == expected)
         }
@@ -116,10 +116,10 @@ abstract class ParquetFileFormatSuite
           StructType(Seq(StructField("f1", DecimalType.SYSTEM_DEFAULT),
             StructField("f2", StringType))) -> enabled,
           MapType(keyType = LongType, valueType = DateType) -> enabled,
-          testUDT -> false,
-          ArrayType(testUDT) -> false,
-          StructType(Seq(StructField("f1", ByteType), StructField("f2", testUDT))) -> false,
-          MapType(keyType = testUDT, valueType = BinaryType) -> false
+          testUDT -> enabled,
+          ArrayType(testUDT) -> enabled,
+          StructType(Seq(StructField("f1", ByteType), StructField("f2", testUDT))) -> enabled,
+          MapType(keyType = testUDT, valueType = BinaryType) -> enabled
         ).foreach { case (dt, expected) =>
           assert(ParquetUtils.isBatchReadSupported(conf, dt) == expected)
         }

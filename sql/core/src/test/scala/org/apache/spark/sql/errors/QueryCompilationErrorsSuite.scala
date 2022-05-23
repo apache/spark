@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
@@ -29,6 +29,8 @@ case class StringLongClass(a: String, b: Long)
 case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
+
+case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
   extends QueryTest
@@ -230,7 +232,7 @@ class QueryCompilationErrorsSuite
         "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
         "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
         "if input types are all non primitive\n" +
-        s"""3. set "${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key}" to true and """ +
+        s"""3. set "${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key}" to "true" and """ +
         s"use this API with caution")
   }
 
@@ -524,6 +526,62 @@ class QueryCompilationErrorsSuite
         errorClass = "INVALID_FIELD_NAME",
         msg = "Field name m.n is invalid: m is not a struct.; line 1 pos 27")
     }
+  }
+
+  test("NON_LITERAL_PIVOT_VALUES: literal expressions required for pivot values") {
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("dotNET", 2012, 5000),
+      ("dotNET", 2013, 48000),
+      ("Java", 2013, 30000)
+    ).toDF("course", "year", "earnings")
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        df.groupBy(df("course")).
+          pivot(df("year"), Seq($"earnings")).
+          agg(sum($"earnings")).collect()
+      },
+      errorClass = "NON_LITERAL_PIVOT_VALUES",
+      msg = "Literal expressions required for pivot values, found 'earnings#\\w+'",
+      matchMsg = true)
+  }
+
+  test("UNSUPPORTED_DESERIALIZER: data type mismatch") {
+    val e = intercept[AnalysisException] {
+      sql("select 1 as arr").as[ArrayClass]
+    }
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      errorSubClass = Some("DATA_TYPE_MISMATCH"),
+      msg = """The deserializer is not supported: need an "ARRAY" field but got "INT".""")
+  }
+
+  test("UNSUPPORTED_DESERIALIZER: " +
+    "the real number of fields doesn't match encoder schema") {
+    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
+
+    val e1 = intercept[AnalysisException] {
+      ds.as[(String, Int, Long)]
+    }
+    checkErrorClass(
+      exception = e1,
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+        "to Tuple3, but failed as the number of fields does not line up.")
+
+    val e2 = intercept[AnalysisException] {
+      ds.as[Tuple1[String]]
+    }
+    checkErrorClass(
+      exception = e2,
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+        "to Tuple1, but failed as the number of fields does not line up.")
   }
 }
 

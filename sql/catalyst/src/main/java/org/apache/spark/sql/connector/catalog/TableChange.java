@@ -536,6 +536,7 @@ public interface TableChange {
       this.nullable = nullable;
     }
 
+    @Override
     public String[] fieldNames() {
       return fieldNames;
     }

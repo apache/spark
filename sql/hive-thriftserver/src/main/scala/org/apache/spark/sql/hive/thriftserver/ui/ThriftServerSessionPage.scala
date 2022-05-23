@@ -38,7 +38,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val content = store.synchronized { // make sure all parts in this page are consistent
-        val sessionStat = store.getSession(parameterId).getOrElse(null)
+        val sessionStat = store.getSession(parameterId).orNull
         require(sessionStat != null, "Invalid sessionID[" + parameterId + "]")
 
         generateBasicStats() ++

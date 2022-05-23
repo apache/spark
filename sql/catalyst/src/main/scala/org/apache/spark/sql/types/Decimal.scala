@@ -227,9 +227,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toDebugString: String = {
     if (decimalVal.ne(null)) {
-      s"Decimal(expanded,$decimalVal,$precision,$scale})"
+      s"Decimal(expanded, $decimalVal, $precision, $scale)"
     } else {
-      s"Decimal(compact,$longVal,$precision,$scale})"
+      s"Decimal(compact, $longVal, $precision, $scale)"
     }
   }
 
@@ -636,7 +636,7 @@ object Decimal {
       }
     } catch {
       case _: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(to, str, errorContext)
+        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, str, errorContext)
     }
   }
 

@@ -165,6 +165,7 @@ public class GeneralScalarExpression implements Expression, Serializable {
   }
 
   public String name() { return name; }
+  @Override
   public Expression[] children() { return children; }
 
   @Override

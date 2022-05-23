@@ -55,11 +55,6 @@ object ResolveDefaultColumns {
   // Name of attributes representing explicit references to the value stored in the above
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
-  // Return a more descriptive error message if the user tries to nest the DEFAULT column reference
-  // inside some other expression, such as DEFAULT + 1 (this is not allowed).
-  val DEFAULTS_IN_EXPRESSIONS_ERROR = "Failed to execute INSERT INTO command because the " +
-    "VALUES list contains a DEFAULT column reference as part of another expression; this is " +
-    "not allowed"
 
   /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
@@ -158,6 +153,19 @@ object ResolveDefaultColumns {
         s"Failed to execute $statementType command because the destination table column " +
           s"${field.name} has a DEFAULT value with type ${field.dataType}, but the " +
           s"statement provided a value of incompatible type ${analyzed.dataType}")
+    }
+  }
+  /**
+   * Normalizes a schema field name suitable for use in looking up into maps keyed by schema field
+   * names.
+   * @param str the field name to normalize
+   * @return the normalized result
+   */
+  def normalizeFieldName(str: String): String = {
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      str
+    } else {
+      str.toLowerCase()
     }
   }
 }

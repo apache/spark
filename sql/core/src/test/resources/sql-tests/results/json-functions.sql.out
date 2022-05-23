@@ -340,7 +340,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 [INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0: 
-Fail to parse '02-29' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to 'LEGACY' to restore the behavior before Spark 3.0, or set to 'CORRECTED' and treat it as an invalid datetime string.
+Fail to parse '02-29' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
 
 
 -- !query
@@ -353,7 +353,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 [INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0: 
-Fail to parse '02-29' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to 'LEGACY' to restore the behavior before Spark 3.0, or set to 'CORRECTED' and treat it as an invalid datetime string.
+Fail to parse '02-29' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
 
 
 -- !query

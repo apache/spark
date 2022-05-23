@@ -158,7 +158,7 @@
       - r-mathlib
 
 - name: install required R packages via Rscript (default version)
-  command: /usr/bin/Rscript --slave --no-save --no-restore-history -e "if (! ('{{ item }}' %in% installed.packages()[,'Package'])) { install.packages(pkgs='{{ item }}'); print('Added'); } else { print('Already installed'); }"
+  command: /usr/bin/Rscript --no-echo --no-save --no-restore-history -e "if (! ('{{ item }}' %in% installed.packages()[,'Package'])) { install.packages(pkgs='{{ item }}'); print('Added'); } else { print('Already installed'); }"
   register: r_result
   failed_when: "r_result.rc != 0 or 'had non-zero exit status' in r_result.stderr"
   changed_when: "'Added' in r_result.stdout"
@@ -179,5 +179,5 @@
   register: r_check
 
 - name: install lintr v2.0.0
-  command: /usr/bin/Rscript --slave --no-save --no-restore-history -e "devtools::install_github('jimhester/lintr@v2.0.0')"
+  command: /usr/bin/Rscript --no-echo --no-save --no-restore-history -e "devtools::install_github('jimhester/lintr@v2.0.0')"
   when: "'lintr' not in r_check.stdout"

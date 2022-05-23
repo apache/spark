@@ -232,7 +232,7 @@ select next_day("xx", "Mon")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DATE": 'xx'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'xx' of the type "STRING" cannot be cast to "DATE" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select next_day("xx", "Mon")
        ^^^^^^^^^^^^^^^^^^^^^
@@ -327,7 +327,7 @@ select date_add('2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": '1.2'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '1.2' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select date_add('2011-11-11', '1.2')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -438,7 +438,7 @@ select date_sub(date'2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "INT": '1.2'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value '1.2' of the type "STRING" cannot be cast to "INT" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 7) ==
 select date_sub(date'2011-11-11', '1.2')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -651,7 +651,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 [INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0: 
-Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to 'LEGACY' to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -661,7 +661,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 [INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0: 
-Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to 'LEGACY' to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -671,7 +671,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 [INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0: 
-Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to 'LEGACY' to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
