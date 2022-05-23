@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -123,7 +124,9 @@ public class JavaUtils {
   private static void deleteRecursivelyUsingJavaIO(
       File file,
       FilenameFilter filter) throws IOException {
-    if (file.isDirectory() && !isSymlink(file)) {
+    BasicFileAttributes fileAttributes =
+      Files.readAttributes(file.toPath(), BasicFileAttributes.class);
+    if (fileAttributes.isDirectory() && !isSymlink(file)) {
       IOException savedIOException = null;
       for (File child : listFilesSafely(file, filter)) {
         try {
@@ -139,7 +142,8 @@ public class JavaUtils {
     }
 
     // Delete file only when it's a normal file or an empty directory.
-    if (file.isFile() || (file.isDirectory() && listFilesSafely(file, null).length == 0)) {
+    if (fileAttributes.isRegularFile() ||
+      (fileAttributes.isDirectory() && listFilesSafely(file, null).length == 0)) {
       boolean deleted = file.delete();
       // Delete can also fail if the file simply did not exist.
       if (!deleted && file.exists()) {
