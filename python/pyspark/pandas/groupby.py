@@ -54,6 +54,7 @@ else:
 
     _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
 
+from pyspark import SparkContext
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -98,7 +99,7 @@ from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_pre
 from pyspark.pandas.exceptions import DataError
 
 if TYPE_CHECKING:
-    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
+    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby, ExponentialMovingGroupby
 
 
 # to keep it the same as pandas
@@ -721,6 +722,39 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(
             F.var_pop if ddof == 0 else F.var_samp,
+            accepted_spark_types=(NumericType,),
+            bool_to_numeric=True,
+        )
+
+    def skew(self) -> FrameLike:
+        """
+        Compute skewness of groups, excluding missing values.
+
+        .. versionadded:: 3.4.0
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+
+        >>> df.groupby("A").skew()
+                  B         C
+        A
+        1 -1.732051  1.732051
+        2       NaN       NaN
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+        """
+
+        def skew(scol: Column) -> Column:
+            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            return Column(sql_utils.pandasSkewness(scol._jc))
+
+        return self._reduce_for_stat_function(
+            skew,
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
         )
@@ -2684,6 +2718,74 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         from pyspark.pandas.window import ExpandingGroupby
 
         return ExpandingGroupby(self, min_periods=min_periods)
+
+    # TODO: 'adjust', 'axis', 'method' parameter should be implemented.
+    def ewm(
+        self,
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
+        ignore_na: bool = False,
+    ) -> "ExponentialMovingGroupby[FrameLike]":
+        """
+        Return an ewm grouper, providing ewm functionality per group.
+
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
+            Unlike pandas, NA is also counted as the period. This might be changed
+            in the near future.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        com : float, optional
+            Specify decay in terms of center of mass.
+            alpha = 1 / (1 + com), for com >= 0.
+
+        span : float, optional
+            Specify decay in terms of span.
+            alpha = 2 / (span + 1), for span >= 1.
+
+        halflife : float, optional
+            Specify decay in terms of half-life.
+            alpha = 1 - exp(-ln(2) / halflife), for halflife > 0.
+
+        alpha : float, optional
+            Specify smoothing factor alpha directly.
+            0 < alpha <= 1.
+
+        min_periods : int, default None
+            Minimum number of observations in window required to have a value
+            (otherwise result is NA).
+
+        ignore_na : bool, default False
+            Ignore missing values when calculating weights.
+
+            - When ``ignore_na=False`` (default), weights are based on absolute positions.
+              For example, the weights of :math:`x_0` and :math:`x_2` used in calculating
+              the final weighted average of [:math:`x_0`, None, :math:`x_2`] are
+              :math:`(1-\alpha)^2` and :math:`1` if ``adjust=True``, and
+              :math:`(1-\alpha)^2` and :math:`\alpha` if ``adjust=False``.
+
+            - When ``ignore_na=True``, weights are based
+              on relative positions. For example, the weights of :math:`x_0` and :math:`x_2`
+              used in calculating the final weighted average of
+              [:math:`x_0`, None, :math:`x_2`] are :math:`1-\alpha` and :math:`1` if
+              ``adjust=True``, and :math:`1-\alpha` and :math:`\alpha` if ``adjust=False``.
+        """
+        from pyspark.pandas.window import ExponentialMovingGroupby
+
+        return ExponentialMovingGroupby(
+            self,
+            com=com,
+            span=span,
+            halflife=halflife,
+            alpha=alpha,
+            min_periods=min_periods,
+            ignore_na=ignore_na,
+        )
 
     def get_group(self, name: Union[Name, List[Name]]) -> FrameLike:
         """

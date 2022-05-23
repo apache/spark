@@ -158,3 +158,15 @@ class MissingPandasLikeExponentialMoving:
     adjust = _unsupported_property_exponential_moving("adjust")
     axis = _unsupported_property_exponential_moving("axis")
     method = _unsupported_property_exponential_moving("method")
+
+
+class MissingPandasLikeExponentialMovingGroupby:
+    sum = _unsupported_function_exponential_moving("sum")
+    var = _unsupported_function_exponential_moving("var")
+    std = _unsupported_function_exponential_moving("std")
+    cov = _unsupported_function_exponential_moving("cov")
+    corr = _unsupported_function_exponential_moving("corr")
+
+    adjust = _unsupported_property_exponential_moving("adjust")
+    axis = _unsupported_property_exponential_moving("axis")
+    method = _unsupported_property_exponential_moving("method")
