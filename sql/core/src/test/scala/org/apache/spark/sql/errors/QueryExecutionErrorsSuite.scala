@@ -459,7 +459,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("FAILED_SET_ORIGINAL_PERMISSION_BACK: can't set permission") {
+  test("FAILED_PERMISSION_RESET_ORIGINAL: can't set permission") {
       withTable("t") {
         withSQLConf(
           "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
@@ -473,7 +473,7 @@ class QueryExecutionErrorsSuite
 
           checkErrorClass(
             exception = e.getCause.asInstanceOf[SparkSecurityException],
-            errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+            errorClass = "FAILED_PERMISSION_RESET_ORIGINAL",
             msg = "Failed to set original permission .+ " +
               "back to the created path: .+\\. Exception: .+",
             matchMsg = true)
