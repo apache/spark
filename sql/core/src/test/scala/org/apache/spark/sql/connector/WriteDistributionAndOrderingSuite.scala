@@ -1387,7 +1387,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     } else {
       assert(actualPartitioning == expectedPartitioning, "partitioning must match")
     }
-    
+
     val actualOrdering = plan.outputOrdering
     val expectedOrdering = ordering.map(resolveAttrs(_, plan))
     assert(actualOrdering == expectedOrdering, "ordering must match")
