@@ -168,7 +168,7 @@
     "sqlState" : "42000"
   },
   "NON_PARTITION_COLUMN" : {
-    "message" : [ "PARTITION clause cannot contain a non-partition column name: <columnName>" ],
+    "message" : [ "PARTITION clause cannot contain the non-partition column: <columnName>" ],
     "sqlState" : "42000"
   },
   "NO_HANDLER_FOR_UDAF" : {
