@@ -18,11 +18,14 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -166,6 +169,66 @@ object ResolveDefaultColumns {
       str
     } else {
       str.toLowerCase()
+    }
+  }
+
+  /**
+   * Parses the text representing constant-folded default column literal values. These are known as
+   * "existence" default values because each one is the constant-folded result of the original
+   * default value first assigned to the column at table/column creation time. When scanning a field
+   * from any data source, if the corresponding value is not present in storage, the output row
+   * returns this "existence" default value instead of NULL.
+   * @return a sequence of either (1) NULL, if the column had no default value, or (2) an object of
+   *         Any type suitable for assigning into a row using the InternalRow.update method.
+   */
+  def getExistenceDefaultValues(schema: StructType): Array[Any] = {
+    schema.fields.map { field: StructField =>
+      val defaultValue: Option[String] = field.getExistenceDefaultValue()
+      defaultValue.map { text: String =>
+        val expr = try {
+          val expr = CatalystSqlParser.parseExpression(text)
+          expr match {
+            case _: ExprLiteral | _: AnsiCast | _: Cast => expr
+          }
+        } catch {
+          case _: ParseException | _: MatchError =>
+            throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(field.name, text)
+        }
+        // The expression should be a literal value by this point, possibly wrapped in a cast
+        // function. This is enforced by the execution of commands that assign default values.
+        expr.eval()
+      }.orNull
+    }
+  }
+
+  /**
+   * Returns an array of boolean values equal in size to the result of [[getExistenceDefaultValues]]
+   * above, for convenience.
+   */
+  def getExistenceDefaultsBitmask(schema: StructType): Array[Boolean] = {
+    Array.fill[Boolean](schema.existenceDefaultValues.size)(true)
+  }
+
+  /**
+   * Resets the elements of the array initially returned from [[getExistenceDefaultsBitmask]] above.
+   * Afterwards, set element(s) to false before calling [[applyExistenceDefaultValuesToRow]] below.
+   */
+  def resetExistenceDefaultsBitmask(schema: StructType): Unit = {
+    for (i <- 0 until schema.existenceDefaultValues.size) {
+      schema.existenceDefaultsBitmask(i) = (schema.existenceDefaultValues(i) != null)
+    }
+  }
+
+  /**
+   * Updates a subset of columns in the row with default values from the metadata in the schema.
+   */
+  def applyExistenceDefaultValuesToRow(schema: StructType, row: InternalRow): Unit = {
+    if (schema.hasExistenceDefaultValues) {
+      for (i <- 0 until schema.existenceDefaultValues.size) {
+        if (schema.existenceDefaultsBitmask(i)) {
+          row.update(i, schema.existenceDefaultValues(i))
+        }
+      }
     }
   }
 }

@@ -25,10 +25,11 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{AnsiCast, Attribute, AttributeReference, Cast, InterpretedOrdering, Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser, ParseException}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -513,28 +514,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     InterpretedOrdering.forSchema(this.fields.map(_.dataType))
 
   /**
-   * Parses the text representing constant-folded default column literal values.
-   * @return a sequence of either (1) NULL, if the column had no default value, or (2) an object of
-   *         Any type suitable for assigning into a row using the InternalRow.update method.
+   * These define and cache existence default values for the struct fields for efficiency purposes.
    */
-  private [sql] lazy val defaultValues: Array[Any] =
-    fields.map { field: StructField =>
-      val defaultValue: Option[String] = field.getExistenceDefaultValue()
-      defaultValue.map { text: String =>
-        val expr = try {
-          val expr = CatalystSqlParser.parseExpression(text)
-          expr match {
-            case _: ExprLiteral | _: AnsiCast | _: Cast => expr
-          }
-        } catch {
-          case _: ParseException | _: MatchError =>
-            throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(field.name, text)
-        }
-        // The expression should be a literal value by this point, possibly wrapped in a cast
-        // function. This is enforced by the execution of commands that assign default values.
-        expr.eval()
-      }.getOrElse(null)
-    }
+  private[sql] lazy val existenceDefaultValues: Array[Any] = getExistenceDefaultValues(this)
+  private[sql] lazy val existenceDefaultsBitmask: Array[Boolean] = getExistenceDefaultsBitmask(this)
+  private[sql] lazy val hasExistenceDefaultValues = existenceDefaultValues.exists(_ != null)
 }
 
 /**
