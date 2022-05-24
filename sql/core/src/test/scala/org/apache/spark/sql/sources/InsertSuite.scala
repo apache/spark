@@ -1568,6 +1568,23 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef", null))
         checkAnswer(sql("select i, s, x from t"), Row(42, "abcdef", null))
       }
+      // Test other supported data types.
+      withTableT {
+        sql("alter table t add columns (" +
+          "s boolean default true, " +
+          "t byte default cast('a' as byte), " +
+          "u short default cast(42 as short), " +
+          "v float default 0, " +
+          "w double default 0, " +
+          "x date default date'0000', " +
+          "y timestamp default timestamp'0000', " +
+          "z timestamp_ntz default cast(timestamp'0000' as timestamp_ntz), " +
+          "a1 timestamp_ltz default cast(timestamp'0000' as timestamp_ltz), " +
+          "a2 decimal(5, 2) default 123.45)")
+        checkAnswer(sql("select s, t, u, v, w, x is not null, " +
+          "y is not null, z is not null, a1 is not null, a2 is not null from t"),
+          Row(true, null, 42, 0.0f, 0.0d, true, true, true, true, true))
+      }
     }
 
     // This represents one test configuration over a data source.
