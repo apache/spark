@@ -454,7 +454,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * to rewrite the whole plan, include its subqueries, in one go.
    */
   def transformWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType =
-    transformDownWithSubqueries(f)
+    transformDownWithSubqueries(AlwaysProcess.fn, UnknownRuleId)(f)
 
   /**
    * Returns a copy of this node where the given partial function has been recursively applied
@@ -479,7 +479,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * first to this node, then this node's subqueries and finally this node's children.
    * When the partial function does not apply to a given node, it is left unchanged.
    */
-  def transformDownWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
+  def transformDownWithSubqueries(
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn, ruleId: RuleId = UnknownRuleId)
+    (f: PartialFunction[PlanType, PlanType])
+: PlanType = {
     val g: PartialFunction[PlanType, PlanType] = new PartialFunction[PlanType, PlanType] {
       override def isDefinedAt(x: PlanType): Boolean = true
 
@@ -487,13 +490,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         val transformed = f.applyOrElse[PlanType, PlanType](plan, identity)
         transformed transformExpressionsDown {
           case planExpression: PlanExpression[PlanType] =>
-            val newPlan = planExpression.plan.transformDownWithSubqueries(f)
+            val newPlan = planExpression.plan.transformDownWithSubqueries(cond, ruleId)(f)
             planExpression.withNewPlan(newPlan)
         }
       }
     }
 
-    transformDown(g)
+    transformDownWithPruning(cond, ruleId)(g)
   }
 
   /**
