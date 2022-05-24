@@ -48,9 +48,6 @@
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (<functionName>: (<signature>) => <result>)" ]
   },
-  "FAILED_PERMISSION_RESET_ORIGINAL" : {
-    "message" : [ "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>" ]
-  },
   "FAILED_RENAME_PATH" : {
     "message" : [ "Failed to rename <sourcePath> to <targetPath> as destination already exists" ],
     "sqlState" : "22023"
@@ -196,6 +193,9 @@
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [ "Failed to rename as <sourcePath> was not found" ],
     "sqlState" : "22023"
+  },
+  "RESET_PERMISSION_TO_ORIGINAL" : {
+    "message" : [ "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>" ]
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '<functionName>' function needs to be an integer." ],
