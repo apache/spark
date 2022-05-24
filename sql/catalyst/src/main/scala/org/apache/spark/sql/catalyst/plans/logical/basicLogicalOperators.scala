@@ -1493,7 +1493,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
     copy(child = newChild)
 }
 
-trait hasPartitionExpressions extends SQLConfHelper {
+trait HasPartitionExpressions extends SQLConfHelper {
 
   def partitionExpressions: Seq[Expression]
 
@@ -1530,7 +1530,7 @@ trait hasPartitionExpressions extends SQLConfHelper {
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int]) extends RepartitionOperation with hasPartitionExpressions {
+    optNumPartitions: Option[Int]) extends RepartitionOperation with HasPartitionExpressions {
 
   val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
@@ -1570,7 +1570,7 @@ object RepartitionByExpression {
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int] = None) extends UnaryNode with hasPartitionExpressions {
+    optNumPartitions: Option[Int] = None) extends UnaryNode with HasPartitionExpressions {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
