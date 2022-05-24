@@ -720,13 +720,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue1)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue1}L to "INT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue1}L of the type "BIGINT" cannot be cast to "INT""""))
 
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
         msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue2)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue2}L to "INT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue2}L of the type "BIGINT" cannot be cast to "INT""""))
       }
     }
   }
@@ -740,13 +742,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue1}D to "BIGINT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue1}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue2}D to "BIGINT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue2}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
       }
     }
   }
@@ -1582,11 +1586,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // Run the test several times using each configuration.
     Seq(
       TestCase(
-        dataSource = "parquet",
+        dataSource = "csv",
         Seq(
           Config(
-            sqlConf = Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"),
-            insertNullsToStorage = false))),
+            sqlConf = None,
+            insertNullsToStorage = true),
+          Config(
+            Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false"),
+            insertNullsToStorage = true))),
       TestCase(
         dataSource = "json",
         Seq(
@@ -1597,14 +1604,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             sqlConf = Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false"),
             insertNullsToStorage = true))),
       TestCase(
-        dataSource = "csv",
+        dataSource = "parquet",
         Seq(
           Config(
-            sqlConf = None,
-            insertNullsToStorage = true),
-          Config(
-            Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false"),
-            insertNullsToStorage = true)))
+            sqlConf = Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"),
+            insertNullsToStorage = false)))
     ).foreach { testCase: TestCase =>
       testCase.configs.foreach { config: Config =>
         config.sqlConf.map { kv: (String, String) =>

@@ -854,7 +854,7 @@ abstract class CastBase extends UnaryExpression
           case _: NumberFormatException =>
             val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
             if(ansiEnabled && d == null) {
-              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(
+              throw QueryExecutionErrors.invalidInputInCastToNumberError(
                 DoubleType, s, queryContext)
             } else {
               d
@@ -880,7 +880,7 @@ abstract class CastBase extends UnaryExpression
           case _: NumberFormatException =>
             val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
             if (ansiEnabled && f == null) {
-              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(
+              throw QueryExecutionErrors.invalidInputInCastToNumberError(
                 FloatType, s, queryContext)
             } else {
               f
@@ -1917,7 +1917,7 @@ abstract class CastBase extends UnaryExpression
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
             val errorContext = ctx.addReferenceObj("errCtx", queryContext)
-            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError(" +
+            s"throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
               s"org.apache.spark.sql.types.FloatType$$.MODULE$$,$c, $errorContext);"
           } else {
             s"$evNull = true;"
@@ -1955,7 +1955,7 @@ abstract class CastBase extends UnaryExpression
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
             val errorContext = ctx.addReferenceObj("errCtx", queryContext)
-            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError(" +
+            s"throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
               s"org.apache.spark.sql.types.DoubleType$$.MODULE$$, $c, $errorContext);"
           } else {
             s"$evNull = true;"

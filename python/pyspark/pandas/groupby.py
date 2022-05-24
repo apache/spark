@@ -54,6 +54,7 @@ else:
 
     _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
 
+from pyspark import SparkContext
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -98,7 +99,7 @@ from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_pre
 from pyspark.pandas.exceptions import DataError
 
 if TYPE_CHECKING:
-    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
+    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby, ExponentialMovingGroupby
 
 
 # to keep it the same as pandas
@@ -721,6 +722,39 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(
             F.var_pop if ddof == 0 else F.var_samp,
+            accepted_spark_types=(NumericType,),
+            bool_to_numeric=True,
+        )
+
+    def skew(self) -> FrameLike:
+        """
+        Compute skewness of groups, excluding missing values.
+
+        .. versionadded:: 3.4.0
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+
+        >>> df.groupby("A").skew()
+                  B         C
+        A
+        1 -1.732051  1.732051
+        2       NaN       NaN
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+        """
+
+        def skew(scol: Column) -> Column:
+            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            return Column(sql_utils.pandasSkewness(scol._jc))
+
+        return self._reduce_for_stat_function(
+            skew,
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
         )
@@ -2122,22 +2156,60 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_scols = [psdf._internal.spark_column_for(label) for label in groupkey_labels]
 
         sdf = psdf._internal.spark_frame
-        tmp_col = verify_temp_column_name(sdf, "__row_number__")
 
+        window = Window.partitionBy(*groupkey_scols)
         # This part is handled differently depending on whether it is a tail or a head.
-        window = (
-            Window.partitionBy(*groupkey_scols).orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).asc())
+        ordered_window = (
+            window.orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).asc())
             if asc
-            else Window.partitionBy(*groupkey_scols).orderBy(
-                F.col(NATURAL_ORDER_COLUMN_NAME).desc()
-            )
+            else window.orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).desc())
         )
 
-        sdf = (
-            sdf.withColumn(tmp_col, F.row_number().over(window))
-            .filter(F.col(tmp_col) <= n)
-            .drop(tmp_col)
-        )
+        if n >= 0 or LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
+            tmp_row_num_col = verify_temp_column_name(sdf, "__row_number__")
+            sdf = (
+                sdf.withColumn(tmp_row_num_col, F.row_number().over(ordered_window))
+                .filter(F.col(tmp_row_num_col) <= n)
+                .drop(tmp_row_num_col)
+            )
+        else:
+            # Pandas supports Groupby positional indexing since v1.4.0
+            # https://pandas.pydata.org/docs/whatsnew/v1.4.0.html#groupby-positional-indexing
+            #
+            # To support groupby positional indexing, we need add a `__tmp_lag__` column to help
+            # us filtering rows before the specified offset row.
+            #
+            # For example for the dataframe:
+            # >>> df = ps.DataFrame([["g", "g0"],
+            # ...                   ["g", "g1"],
+            # ...                   ["g", "g2"],
+            # ...                   ["g", "g3"],
+            # ...                   ["h", "h0"],
+            # ...                   ["h", "h1"]], columns=["A", "B"])
+            # >>> df.groupby("A").head(-1)
+            #
+            # Below is a result to show the `__tmp_lag__` column for above df, the limit n is
+            # `-1`, the `__tmp_lag__` will be set to `0` in rows[:-1], and left will be set to
+            # `null`:
+            #
+            # >>> sdf.withColumn(tmp_lag_col, F.lag(F.lit(0), -1).over(ordered_window))
+            # +-----------------+--------------+---+---+-----------------+-----------+
+            # |__index_level_0__|__groupkey_0__|  A|  B|__natural_order__|__tmp_lag__|
+            # +-----------------+--------------+---+---+-----------------+-----------+
+            # |                0|             g|  g| g0|                0|          0|
+            # |                1|             g|  g| g1|       8589934592|          0|
+            # |                2|             g|  g| g2|      17179869184|          0|
+            # |                3|             g|  g| g3|      25769803776|       null|
+            # |                4|             h|  h| h0|      34359738368|          0|
+            # |                5|             h|  h| h1|      42949672960|       null|
+            # +-----------------+--------------+---+---+-----------------+-----------+
+            #
+            tmp_lag_col = verify_temp_column_name(sdf, "__tmp_lag__")
+            sdf = (
+                sdf.withColumn(tmp_lag_col, F.lag(F.lit(0), n).over(ordered_window))
+                .where(~F.isnull(F.col(tmp_lag_col)))
+                .drop(tmp_lag_col)
+            )
 
         internal = psdf._internal.with_new_sdf(sdf)
         return self._cleanup_and_return(DataFrame(internal).drop(groupkey_labels, axis=1))
@@ -2187,6 +2259,21 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         7      2
         10    10
         Name: b, dtype: int64
+
+        Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+):
+
+        >>> df = ps.DataFrame([["g", "g0"],
+        ...                   ["g", "g1"],
+        ...                   ["g", "g2"],
+        ...                   ["g", "g3"],
+        ...                   ["h", "h0"],
+        ...                   ["h", "h1"]], columns=["A", "B"])
+        >>> df.groupby("A").head(-1) # doctest: +SKIP
+           A   B
+        0  g  g0
+        1  g  g1
+        2  g  g2
+        4  h  h0
         """
         return self._limit(n, asc=True)
 
@@ -2240,6 +2327,21 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         6    5
         9    8
         Name: b, dtype: int64
+
+        Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+):
+
+        >>> df = ps.DataFrame([["g", "g0"],
+        ...                   ["g", "g1"],
+        ...                   ["g", "g2"],
+        ...                   ["g", "g3"],
+        ...                   ["h", "h0"],
+        ...                   ["h", "h1"]], columns=["A", "B"])
+        >>> df.groupby("A").tail(-1) # doctest: +SKIP
+           A   B
+        3  g  g3
+        2  g  g2
+        1  g  g1
+        5  h  h1
         """
         return self._limit(n, asc=False)
 
@@ -2616,6 +2718,74 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         from pyspark.pandas.window import ExpandingGroupby
 
         return ExpandingGroupby(self, min_periods=min_periods)
+
+    # TODO: 'adjust', 'axis', 'method' parameter should be implemented.
+    def ewm(
+        self,
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
+        ignore_na: bool = False,
+    ) -> "ExponentialMovingGroupby[FrameLike]":
+        """
+        Return an ewm grouper, providing ewm functionality per group.
+
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
+            Unlike pandas, NA is also counted as the period. This might be changed
+            in the near future.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        com : float, optional
+            Specify decay in terms of center of mass.
+            alpha = 1 / (1 + com), for com >= 0.
+
+        span : float, optional
+            Specify decay in terms of span.
+            alpha = 2 / (span + 1), for span >= 1.
+
+        halflife : float, optional
+            Specify decay in terms of half-life.
+            alpha = 1 - exp(-ln(2) / halflife), for halflife > 0.
+
+        alpha : float, optional
+            Specify smoothing factor alpha directly.
+            0 < alpha <= 1.
+
+        min_periods : int, default None
+            Minimum number of observations in window required to have a value
+            (otherwise result is NA).
+
+        ignore_na : bool, default False
+            Ignore missing values when calculating weights.
+
+            - When ``ignore_na=False`` (default), weights are based on absolute positions.
+              For example, the weights of :math:`x_0` and :math:`x_2` used in calculating
+              the final weighted average of [:math:`x_0`, None, :math:`x_2`] are
+              :math:`(1-\alpha)^2` and :math:`1` if ``adjust=True``, and
+              :math:`(1-\alpha)^2` and :math:`\alpha` if ``adjust=False``.
+
+            - When ``ignore_na=True``, weights are based
+              on relative positions. For example, the weights of :math:`x_0` and :math:`x_2`
+              used in calculating the final weighted average of
+              [:math:`x_0`, None, :math:`x_2`] are :math:`1-\alpha` and :math:`1` if
+              ``adjust=True``, and :math:`1-\alpha` and :math:`\alpha` if ``adjust=False``.
+        """
+        from pyspark.pandas.window import ExponentialMovingGroupby
+
+        return ExponentialMovingGroupby(
+            self,
+            com=com,
+            span=span,
+            halflife=halflife,
+            alpha=alpha,
+            min_periods=min_periods,
+            ignore_na=ignore_na,
+        )
 
     def get_group(self, name: Union[Name, List[Name]]) -> FrameLike:
         """

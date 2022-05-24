@@ -62,8 +62,11 @@ private[hive] class SparkExecuteStatementOperation(
 
   private val forceCancel = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_FORCE_CANCEL)
 
-  private val substitutorStatement = SQLConf.withExistingConf(sqlContext.conf) {
-    new VariableSubstitution().substitute(statement)
+  private val redactedStatement = {
+    val substitutorStatement = SQLConf.withExistingConf(sqlContext.conf) {
+      new VariableSubstitution().substitute(statement)
+    }
+    SparkUtils.redact(sqlContext.conf.stringRedactionPattern, substitutorStatement)
   }
 
   private var result: DataFrame = _
@@ -76,14 +79,14 @@ private[hive] class SparkExecuteStatementOperation(
       val sparkType = new StructType().add("Result", "string")
       SparkExecuteStatementOperation.toTTableSchema(sparkType)
     } else {
-      logInfo(s"Result Schema: ${result.schema}")
+      logInfo(s"Result Schema: ${result.schema.sql}")
       SparkExecuteStatementOperation.toTTableSchema(result.schema)
     }
   }
 
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): TRowSet = withLocalProperties {
     try {
-      sqlContext.sparkContext.setJobGroup(statementId, substitutorStatement, forceCancel)
+      sqlContext.sparkContext.setJobGroup(statementId, redactedStatement, forceCancel)
       getNextRowSetInternal(order, maxRowsL)
     } finally {
       sqlContext.sparkContext.clearJobGroup()
@@ -118,7 +121,6 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
-    val redactedStatement = SparkUtils.redact(sqlContext.conf.stringRedactionPattern, statement)
     logInfo(s"Submitting query '$redactedStatement' with $statementId")
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
@@ -220,7 +222,7 @@ private[hive] class SparkExecuteStatementOperation(
         parentSession.getSessionState.getConf.setClassLoader(executionHiveClassLoader)
       }
 
-      sqlContext.sparkContext.setJobGroup(statementId, substitutorStatement, forceCancel)
+      sqlContext.sparkContext.setJobGroup(statementId, redactedStatement, forceCancel)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
       HiveThriftServer2.eventManager.onStatementParsed(statementId,

@@ -1176,4 +1176,42 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         false)
     }
   }
+
+  test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {
+    val innerRelation = SubqueryAlias("src1", testRelation)
+    val outerRelation = SubqueryAlias("src2", testRelation)
+    val ref1 = testRelation.output.head
+
+    val subPlan = getAnalyzer.execute(
+      Project(
+        Seq(UnresolvedStar(None)),
+        Filter.apply(
+          Exists(
+            Filter.apply(
+              EqualTo(
+                OuterReference(ref1),
+                ref1),
+              innerRelation
+            )
+          ),
+          outerRelation
+        )))
+
+    val finalPlan = {
+      Union.apply(
+        Project(
+          Seq(UnresolvedStar(None)),
+          subPlan
+        ),
+        Filter.apply(
+          Exists(
+            subPlan
+          ),
+          subPlan
+        )
+      )
+    }
+
+    assertAnalysisSuccess(finalPlan)
+  }
 }
