@@ -39,6 +39,8 @@ import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
  *   For example: "spark.sql.ansi.enabled".
  * 6. Any values of datasource options or SQL configs shall be double quoted.
  *   For example: "true", "CORRECTED".
+ * 7. SQL expressions shall be wrapped by double quotes.
+ *   For example: "earnings + 1".
  */
 trait QueryErrorsBase {
   // Converts an error class parameter to its SQL representation

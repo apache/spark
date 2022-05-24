@@ -23,7 +23,7 @@
     "message" : [ "Cannot up cast <value> from <sourceType> to <targetType>.\n<details>" ]
   },
   "CAST_INVALID_INPUT" : {
-    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error." ],
+    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error." ],
     "sqlState" : "42000"
   },
   "CAST_OVERFLOW" : {
@@ -51,9 +51,6 @@
   "FAILED_RENAME_PATH" : {
     "message" : [ "Failed to rename <sourcePath> to <targetPath> as destination already exists" ],
     "sqlState" : "22023"
-  },
-  "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
-    "message" : [ "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>" ]
   },
   "FORBIDDEN_OPERATION" : {
     "message" : [ "The operation <statement> is not allowed on <objectType>: <objectName>" ]
@@ -164,11 +161,11 @@
     "message" : [ "more than one row returned by a subquery used as an expression: <plan>" ]
   },
   "NON_LITERAL_PIVOT_VALUES" : {
-    "message" : [ "Literal expressions required for pivot values, found '<expression>'" ],
+    "message" : [ "Literal expressions required for pivot values, found <expression>." ],
     "sqlState" : "42000"
   },
   "NON_PARTITION_COLUMN" : {
-    "message" : [ "PARTITION clause cannot contain a non-partition column name: <columnName>" ],
+    "message" : [ "PARTITION clause cannot contain the non-partition column: <columnName>." ],
     "sqlState" : "42000"
   },
   "NO_HANDLER_FOR_UDAF" : {
@@ -196,6 +193,9 @@
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [ "Failed to rename as <sourcePath> was not found" ],
     "sqlState" : "22023"
+  },
+  "RESET_PERMISSION_TO_ORIGINAL" : {
+    "message" : [ "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>" ]
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '<functionName>' function needs to be an integer." ],
@@ -322,7 +322,7 @@
         "message" : [ "an existent path." ]
       },
       "NON_EXISTENT_PATH" : {
-        "message" : [ "a not existent path." ]
+        "message" : [ "a non-existent path." ]
       }
     }
   },
