@@ -2103,7 +2103,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset by skipping the first `m` rows.
+   * Returns a new Dataset by skipping the first `n` rows.
    *
    * @group typedrel
    * @since 3.4.0
