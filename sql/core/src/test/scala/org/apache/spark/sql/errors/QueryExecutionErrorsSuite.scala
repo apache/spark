@@ -443,7 +443,7 @@ class QueryExecutionErrorsSuite
         exception = e1,
         errorClass = "UNSUPPORTED_SAVE_MODE",
         errorSubClass = Some("NON_EXISTENT_PATH"),
-        msg = "The save mode NULL is not supported for: a not existent path.")
+        msg = "The save mode NULL is not supported for: a non-existent path.")
 
       Utils.createDirectory(path)
 
@@ -459,7 +459,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("FAILED_SET_ORIGINAL_PERMISSION_BACK: can't set permission") {
+  test("RESET_PERMISSION_TO_ORIGINAL: can't set permission") {
       withTable("t") {
         withSQLConf(
           "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
@@ -473,7 +473,7 @@ class QueryExecutionErrorsSuite
 
           checkErrorClass(
             exception = e.getCause.asInstanceOf[SparkSecurityException],
-            errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+            errorClass = "RESET_PERMISSION_TO_ORIGINAL",
             msg = "Failed to set original permission .+ " +
               "back to the created path: .+\\. Exception: .+",
             matchMsg = true)
