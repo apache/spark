@@ -247,7 +247,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
       File metaFile =
         appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
-      // Make sure unuseful non-finalized merged data/index/meta files get cleaned up during service restart
+      // Make sure unuseful non-finalized merged data/index/meta files get cleaned up
+      // during service restart
       if (dataFile.exists()) dataFile.delete();
       if (indexFile.exists()) indexFile.delete();
       if (metaFile.exists()) metaFile.delete();
@@ -622,7 +623,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // sent to the driver will be empty. This can happen when the service didn't receive any
       // blocks for the shuffle yet and the driver didn't wait for enough time to finalize the
       // shuffle.
-      writeAppAttemptShuffleMergeInfo(msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId);
+      writeAppAttemptShuffleMergeInfo(
+          msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId);
       return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
     });
     Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions = shuffleMergePartitionsRef.get();
