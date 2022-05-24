@@ -2990,6 +2990,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
         self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
+        self.assert_eq((pser + 1).argmax(skipna=False), (psser + 1).argmax(skipna=False))
 
         # MultiIndex
         pser.index = pd.MultiIndex.from_tuples(
