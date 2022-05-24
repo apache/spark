@@ -34,6 +34,8 @@ import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.functions.IntegralAverage
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -814,6 +816,15 @@ class JDBCSuite extends QueryTest
     } finally {
       JdbcDialects.registerDialect(H2Dialect)
     }
+  }
+
+  test("register dialect specific functions") {
+    val h2Dialect = JdbcDialects.get(urlWithUserAndPass)
+    assert(h2Dialect == H2Dialect)
+    h2Dialect.registerFunction(Identifier.of(Array("ns"), "avg"), IntegralAverage)
+    assert(h2Dialect.listFunctions().get(Identifier.of(Array("ns"), "avg")) == IntegralAverage)
+    h2Dialect.clearFunctions()
+    assert(h2Dialect.listFunctions().isEmpty)
   }
 
   test("Aggregated dialects") {

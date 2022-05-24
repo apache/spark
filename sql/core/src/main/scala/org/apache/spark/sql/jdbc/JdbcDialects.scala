@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Date, Driver, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
@@ -31,8 +32,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
@@ -76,6 +78,10 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  */
 @DeveloperApi
 abstract class JdbcDialect extends Serializable with Logging{
+
+  private val functions: util.Map[Identifier, UnboundFunction] =
+    new ConcurrentHashMap[Identifier, UnboundFunction]()
+
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -322,6 +328,26 @@ abstract class JdbcDialect extends Serializable with Logging{
       case _ => None
     }
   }
+
+  /**
+   * Register user-defined function.
+   * @param ident The identifier of user defined function.
+   * @param fn The user-defined function.
+   * @return The user-defined function.
+   */
+  def registerFunction(ident: Identifier, fn: UnboundFunction): UnboundFunction =
+    functions.put(ident, fn)
+
+  /**
+   * List the user-defined functions in jdbc dialect.
+   * @return a map from identifiers to user-defined functions.
+   */
+  def listFunctions(): util.Map[Identifier, UnboundFunction] = functions
+
+  /**
+   * Clear all the registered user-defined functions.
+   */
+  def clearFunctions(): Unit = functions.clear()
 
   /**
    * Create schema with an optional comment. Empty string means no comment.
