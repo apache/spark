@@ -2285,7 +2285,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def usingUntypedScalaUDFError(): Throwable = {
     new AnalysisException(
       errorClass = "UNTYPED_SCALA_UDF",
-      messageParameters = Array.empty)
+      messageParameters = Array(toSQLConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key)))
   }
 
   def aggregationFunctionAppliedOnNonNumericColumnError(colName: String): Throwable = {
