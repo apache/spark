@@ -45,6 +45,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config._
+import org.apache.spark.network.server.BlockPushNonFatalFailure
 import org.apache.spark.network.shuffle.{NoOpMergedShuffleFileManager, RemoteBlockPushResolver, ShuffleTestAccessor}
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -253,13 +254,13 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     ShuffleTestAccessor
       .getAppPathsInfo(app3Id.toString, mergeManager2) should be (Some(appPathsInfo3))
     ShuffleTestAccessor.getAppPathsInfo(app4Id.toString, mergeManager2) should be (None)
-    val partitionInfoReload3 = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
-      mergeManager2, partitionId3, 1, "3")
-    partitionInfoReload3.getDataFilePos() should be (20 * DUMMY_BLOCK_DATA.length - 1)
-    partitionInfoReload3.getMapTracker.getCardinality should be (50)
+
     val dataFileReload3 =
       ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager2, partitionId3, 1)
-    dataFileReload3.length() should be (partitionInfoReload3.getDataFilePos)
+    dataFileReload3.length() should be ((4 * 5 + 1) * DUMMY_BLOCK_DATA.length)
+
+    // Finalize shuffle merge for partitionId3
+    ShuffleTestAccessor.finalizeShuffleMerge(mergeManager2, partitionId3)
 
     // Act like the NM restarts one more time
     s2.stop()
@@ -284,13 +285,16 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     ShuffleTestAccessor
       .getAppPathsInfo(app3Id.toString, mergeManager3) should be (Some(appPathsInfo3))
     ShuffleTestAccessor.getAppPathsInfo(app4Id.toString, mergeManager3) should be (None)
-    val partitionInfoReload3Again = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
-      mergeManager3, partitionId3, 1, "3")
-    partitionInfoReload3Again.getDataFilePos should be (20 * DUMMY_BLOCK_DATA.length - 1)
-    partitionInfoReload3Again.getMapTracker.getCardinality should be (50)
+
+    val error = intercept[BlockPushNonFatalFailure] {
+      ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
+        mergeManager3, partitionId3, 2, "3")
+    }
+    assert(error.getMessage.contains("is finalized"))
+
     val dataFileReload3Again =
       ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager3, partitionId3, 1)
-    dataFileReload3Again.length() should be (partitionInfoReload3Again.getDataFilePos)
+    dataFileReload3Again.length() should be ((4 * 5 + 1) * DUMMY_BLOCK_DATA.length)
     s3.stop()
   }
 

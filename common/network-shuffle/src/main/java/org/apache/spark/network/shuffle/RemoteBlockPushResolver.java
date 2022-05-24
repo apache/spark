@@ -247,6 +247,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
       File metaFile =
         appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
+      // Make sure unuseful non-finalized merged data/index/meta files get cleaned up during service restart
+      if (dataFile.exists()) dataFile.delete();
+      if (indexFile.exists()) indexFile.delete();
+      if (metaFile.exists()) metaFile.delete();
       try {
         AppShufflePartitionInfo appShufflePartitionInfo =
             newAppShufflePartitionInfo(appShuffleInfo.appId, appShuffleInfo.attemptId,
@@ -611,7 +615,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           //  1. finalization of determinate stage
           //  2. finalization of indeterminate stage if the shuffleMergeId related to it is the one
           //  for which the message is received.
-          writeAppAttemptShuffleMergeInfo(msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId);
           shuffleMergePartitionsRef.set(mergePartitionsInfo.shuffleMergePartitions);
         }
       }
@@ -619,6 +622,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // sent to the driver will be empty. This can happen when the service didn't receive any
       // blocks for the shuffle yet and the driver didn't wait for enough time to finalize the
       // shuffle.
+      writeAppAttemptShuffleMergeInfo(msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId);
       return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
     });
     Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions = shuffleMergePartitionsRef.get();
@@ -839,11 +843,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           logger.debug("Reloading active application {}_{} merged shuffle files paths",
             appAttemptId.appId, appAttemptId.attemptId);
           appsShuffleInfo.compute(appAttemptId.appId,
-              (appId, existingAppShuffleInfo) ->
-                  (appAttemptId.attemptId > existingAppShuffleInfo.attemptId) ?
-                      new AppShuffleInfo(
-                          appAttemptId.appId, appAttemptId.attemptId, appPathsInfo) :
-                      existingAppShuffleInfo);
+              (appId, existingAppShuffleInfo) -> {
+                if (existingAppShuffleInfo == null ||
+                    existingAppShuffleInfo.attemptId < appAttemptId.attemptId) {
+                  return new AppShuffleInfo(
+                      appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
+                } else {
+                  return existingAppShuffleInfo;
+                }
+              });
         } catch (Exception exception) {
           logger.error("Parsing exception is {}", exception);
         }
@@ -865,13 +873,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           parseDbAppAttemptShufflePartitionKey(
             key, APP_ATTEMPT_SHUFFLE_FINALIZE_STATUS_KEY_PREFIX);
         AppShuffleInfo appShuffleInfo = appsShuffleInfo.get(partitionId.appId);
-        if (appShuffleInfo != null) {
+        if (appShuffleInfo != null && appShuffleInfo.attemptId == partitionId.attemptId) {
           appShuffleInfo.shuffles.compute(partitionId.shuffleId,
-              (shuffleId, existingMergePartitionInfo) ->
-                  (partitionId.shuffleMergeId > existingMergePartitionInfo.shuffleMergeId) ?
-                      new AppShuffleMergePartitionsInfo(partitionId.shuffleMergeId, true) :
-                      existingMergePartitionInfo);
-
+              (shuffleId, existingMergePartitionInfo) -> {
+                if (existingMergePartitionInfo == null ||
+                    existingMergePartitionInfo.shuffleMergeId < partitionId.shuffleMergeId) {
+                  return new AppShuffleMergePartitionsInfo(partitionId.shuffleMergeId, true);
+                } else {
+                  return existingMergePartitionInfo;
+                }
+              });
         } else {
           logger.warn("Removed dangling keys in DB: {}", key);
           db.delete(e.getKey());

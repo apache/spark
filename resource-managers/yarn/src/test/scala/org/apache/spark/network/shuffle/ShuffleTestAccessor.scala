@@ -27,7 +27,7 @@ import org.iq80.leveldb.{DB, Options}
 
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.network.shuffle.protocol.{ExecutorShuffleInfo, FinalizeShuffleMerge}
 import org.apache.spark.network.util.TransportConf
 
 /**
@@ -98,6 +98,15 @@ object ShuffleTestAccessor {
       mergeManager.appsShuffleInfo.get(appShufflePartitionId.appId),
       appShufflePartitionId.shuffleId, appShufflePartitionId.shuffleMergeId,
       reduceId, blockId)
+  }
+
+  def finalizeShuffleMerge(
+      mergeManager: RemoteBlockPushResolver,
+      appAttemptShuffleMergeId: AppAttemptShuffleMergeId): Unit = {
+    mergeManager.finalizeShuffleMerge(
+      new FinalizeShuffleMerge(
+        appAttemptShuffleMergeId.appId, appAttemptShuffleMergeId.attemptId,
+        appAttemptShuffleMergeId.shuffleId, appAttemptShuffleMergeId.shuffleMergeId))
   }
 
   def getMergedShuffleDataFile(
