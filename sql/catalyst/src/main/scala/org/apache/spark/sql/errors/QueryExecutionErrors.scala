@@ -575,8 +575,10 @@ object QueryExecutionErrors extends QueryErrorsBase {
         format,
         toSQLConf(config),
         toDSOption(option),
+        toSQLConfVal(SQLConf.LegacyBehaviorPolicy.LEGACY.toString),
         toSQLConf(config),
-        toDSOption(option)),
+        toDSOption(option),
+        toSQLConfVal(SQLConf.LegacyBehaviorPolicy.CORRECTED.toString)),
       cause = null
     )
   }
@@ -588,7 +590,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
         "WRITE_ANCIENT_DATETIME",
         format,
         toSQLConf(config),
-        toSQLConf(config)),
+        toSQLConfVal(SQLConf.LegacyBehaviorPolicy.LEGACY.toString),
+        toSQLConf(config),
+        toSQLConfVal(SQLConf.LegacyBehaviorPolicy.CORRECTED.toString)),
       cause = null
     )
   }
@@ -1025,7 +1029,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         "PARSE_DATETIME_BY_NEW_PARSER",
         toSQLValue(s, StringType),
-        toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
+        toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key),
+        toSQLConfVal(SQLConf.LegacyBehaviorPolicy.LEGACY.toString),
+        toSQLConfVal(SQLConf.LegacyBehaviorPolicy.CORRECTED.toString)),
       e)
   }
 
@@ -1036,7 +1042,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         "PARSE_DATETIME_BY_NEW_PARSER",
         toSQLValue(resultCandidate, StringType),
-        toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
+        toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key),
+        toSQLConfVal(SQLConf.LegacyBehaviorPolicy.LEGACY.toString),
+        toSQLConfVal(SQLConf.LegacyBehaviorPolicy.CORRECTED.toString)),
       e)
   }
 
@@ -1046,7 +1054,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         "DATETIME_PATTERN_RECOGNITION",
         toSQLValue(pattern, StringType),
-        toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
+        toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key),
+        toSQLConfVal(SQLConf.LegacyBehaviorPolicy.LEGACY.toString)),
       e)
   }
 
