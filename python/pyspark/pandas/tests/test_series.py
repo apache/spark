@@ -3011,6 +3011,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             ps.Series([]).argmin()
         with self.assertRaisesRegex(ValueError, "attempt to get argmax of an empty sequence"):
             ps.Series([]).argmax()
+        with self.assertRaisesRegex(ValueError, "axis can only be 0 or 'index'"):
+            psser.argmax(axis=1)
 
     def test_backfill(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})

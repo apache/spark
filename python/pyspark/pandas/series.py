@@ -6239,7 +6239,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: SF.lit(-1))]),
         )
 
-    def argmax(self, skipna: bool = True) -> int:
+    def argmax(self, axis: Axis = None, skipna: bool = True) -> int:
         """
         Return int position of the largest value in the Series.
 
@@ -6248,6 +6248,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
+        axis : {{None}}
+            Dummy argument for consistency with Series.
         skipna : bool, default True
             Exclude NA/null values. If the entire Series is NA, the result
             will be NA.
@@ -6277,6 +6279,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s.argmax(skipna=False)
         -1
         """
+        axis = validate_axis(axis, none_axis=0)
+        if axis == 1:
+            raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
         sdf = InternalFrame.attach_distributed_sequence_column(
