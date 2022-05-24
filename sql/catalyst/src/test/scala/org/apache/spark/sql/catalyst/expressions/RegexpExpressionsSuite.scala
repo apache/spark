@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Unit tests for regular expression (regexp) related SQL expressions.
@@ -298,6 +299,15 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s = 's.string.at(0)
     val p = 'p.string.at(1)
     val r = 'r.string.at(2)
+
+    val regReplaceStr = RegExpReplace(Literal("abc)"), Literal(")"), Literal("vv"))
+    assert(regReplaceStr.eval(null).equals(UTF8String.fromString("abcvv")))
+
+    val regReplaceStr2 = RegExpReplace(Literal("abc$"), Literal("$"), Literal("vv"))
+    assert(regReplaceStr2.eval(null).equals(UTF8String.fromString("abcvv")))
+
+    val regReplaceStr3 = RegExpReplace(Literal(""), Literal(""), Literal("vv"))
+    assert(regReplaceStr3.eval(null).equals(UTF8String.fromString("vv")))
 
     val expr = RegExpReplace(s, p, r)
     checkEvaluation(expr, "num-num", row1)
