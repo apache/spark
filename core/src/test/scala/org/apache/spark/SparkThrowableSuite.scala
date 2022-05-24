@@ -112,7 +112,9 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Message invariants") {
-    val messageSeq = errorClassToInfoMap.values.toSeq.map(_.message)
+    val messageSeq = errorClassToInfoMap.values.toSeq.flatMap { i =>
+      Seq(i.message) ++ i.subClass.getOrElse(Map.empty).values.toSeq.map(_.message)
+    }
     messageSeq.foreach { message =>
       message.foreach { msg =>
         assert(!msg.contains("\n"))
@@ -122,7 +124,9 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Message format invariants") {
-    val messageFormats = errorClassToInfoMap.values.toSeq.map(_.messageFormat)
+    val messageFormats = errorClassToInfoMap.values.toSeq.flatMap { i =>
+      Seq(i.messageFormat) ++ i.subClass.getOrElse(Map.empty).values.toSeq.map(_.messageFormat)
+    }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
   }
