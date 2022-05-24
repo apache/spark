@@ -1400,7 +1400,8 @@ private[spark] class DAGScheduler(
   }
 
   private def getAndSetShufflePushMergerLocations(stage: ShuffleMapStage): Seq[BlockManagerId] = {
-    val mergerLocs = {
+    if (stage.shuffleDep.getMergerLocs.isEmpty && !stage.shuffleDep.isShuffleMergeFinalizedMarked) {
+
       def findMergerLocs() = sc.schedulerBackend.getShufflePushMergerLocations(
         stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
 
@@ -1410,28 +1411,28 @@ private[spark] class DAGScheduler(
         // method is invoked only within the event loop thread, it's safe to find sibling
         // stages and set the merger locations accordingly in this way.
         val coPartitionedSiblingStages = findCoPartitionedSiblingMapStages(stage)
+        logInfo(s"How many sibling stages: ${coPartitionedSiblingStages.size}")
         val siblingMergerLocs = coPartitionedSiblingStages.collectFirst({
-          case s if s.shuffleDep.getMergerLocs.nonEmpty => s.shuffleDep.getMergerLocs
-        }).getOrElse(findMergerLocs())
+          case s if s.shuffleDep.getMergerLocs.nonEmpty => s.shuffleDep.getMergerLocs})
+          .getOrElse(findMergerLocs())
         if (siblingMergerLocs.nonEmpty) {
           // set merger locations for sibling stages
           coPartitionedSiblingStages.filter(_.shuffleDep.getMergerLocs.isEmpty)
-            .foreach(_.shuffleDep.setMergerLocs(siblingMergerLocs))
+            .foreach(stage => {
+              stage.shuffleDep.setMergerLocs(siblingMergerLocs)
+              logInfo(s"Set merger locations for sibling stage $stage with" +
+                s" shuffle ${stage.shuffleDep.shuffleId}," +
+                s" shuffle merge ${stage.shuffleDep.shuffleMergeId}, and" +
+                s" hosts ${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
+            })
         }
         siblingMergerLocs
       } else {
         findMergerLocs()
       }
+    } else {
+      stage.shuffleDep.getMergerLocs
     }
-
-    if (mergerLocs.nonEmpty) {
-      stage.shuffleDep.setMergerLocs(mergerLocs)
-    }
-
-    logDebug(s"Shuffle merge locations for shuffle ${stage.shuffleDep.shuffleId} with" +
-      s" shuffle merge ${stage.shuffleDep.shuffleMergeId} is" +
-      s" ${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
-    mergerLocs
   }
 
   /**
@@ -1444,19 +1445,20 @@ private[spark] class DAGScheduler(
    * stage can have better locality especially for join operations.
    */
   private def findCoPartitionedSiblingMapStages(
-      stage: ShuffleMapStage): Set[ShuffleMapStage] = {
+    stage: ShuffleMapStage): Set[ShuffleMapStage] = {
+    val numShufflePartitions = stage.shuffleDep.partitioner.numPartitions
     val siblingStages = new HashSet[ShuffleMapStage]
     siblingStages += stage
     var prevSize = 0
     val allStagesSoFar = waitingStages ++ runningStages ++ failedStages ++ succeededStages
     do {
       prevSize = siblingStages.size
-      siblingStages ++= allStagesSoFar
-        .filter(_.parents.toSet.intersect(siblingStages.toSet[Stage]).nonEmpty)
+      siblingStages ++= allStagesSoFar.filter(_.parents.intersect(siblingStages.toSeq).nonEmpty)
         .flatMap(_.parents).filter{ parentStage =>
+        parentStage.isInstanceOf[ShuffleMapStage] &&
           parentStage.asInstanceOf[ShuffleMapStage]
-            .shuffleDep.partitioner == stage.shuffleDep.partitioner
-        }.map(_.asInstanceOf[ShuffleMapStage])
+            .shuffleDep.partitioner.numPartitions == numShufflePartitions
+      }.map(_.asInstanceOf[ShuffleMapStage])
     } while (siblingStages.size > prevSize)
     // This filter will select only shuffle map stages that are/were push enabled. Notice that
     // when we retry a push-enabled shuffle map stage, we will disable push but the merge finalized
