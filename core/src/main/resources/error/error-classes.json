@@ -136,37 +136,37 @@
     "subClass" : {
       "DATETIME_PATTERN_RECOGNITION" : {
         "message" : [
-          " Spark >= 3.0: ",
+          "Spark >= 3.0:",
           "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"
         ]
       },
       "FORMAT_DATETIME_BY_NEW_PARSER" : {
         "message" : [
-          " Spark >= 3.0: ",
+          "Spark >= 3.0:",
           "Fail to format it to <resultCandidate> in the new formatter. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
         "message" : [
-          " Spark >= 3.0: ",
+          "Spark >= 3.0:",
           "Fail to parse <datetime> in the new parser. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
         ]
       },
       "READ_ANCIENT_DATETIME" : {
         "message" : [
-          " Spark >= 3.0: ",
-          "reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z from <format> files can be ambiguous, as the files may be written by Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic Gregorian calendar. ",
-          "See more details in SPARK-31404. ",
-          "You can set the SQL config <config> or the datasource option <option> to \"LEGACY\" to rebase the datetime values w.r.t. the calendar difference during reading. ",
+          "Spark >= 3.0:",
+          "Reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z from <format> files can be ambiguous, as the files may be written by Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic Gregorian calendar.",
+          "See more details in SPARK-31404.",
+          "You can set the SQL config <config> or the datasource option <option> to \"LEGACY\" to rebase the datetime values w.r.t. the calendar difference during reading.",
           "To read the datetime values as it is, set the SQL config <config> or the datasource option <option> to \"CORRECTED\"."
         ]
       },
       "WRITE_ANCIENT_DATETIME" : {
         "message" : [
-          " Spark >= 3.0: ",
-          "writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z into <format> files can be dangerous, as the files may be read by Spark 2.x or legacy versions of Hive later, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic Gregorian calendar. ",
-          "See more details in SPARK-31404. ",
-          "You can set <config> to \"LEGACY\" to rebase the datetime values w.r.t. the calendar difference during writing, to get maximum interoperability. ",
+          "Spark >= 3.0:",
+          "writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z into <format> files can be dangerous, as the files may be read by Spark 2.x or legacy versions of Hive later, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic Gregorian calendar.",
+          "See more details in SPARK-31404.",
+          "You can set <config> to \"LEGACY\" to rebase the datetime values w.r.t. the calendar difference during writing, to get maximum interoperability.",
           "Or set <config> to \"CORRECTED\" to write the datetime values as it is, if you are sure that the written files will only be read by Spark 3.0+ or other systems that use Proleptic Gregorian calendar."
         ]
       }
@@ -346,7 +346,7 @@
   },
   "UNSUPPORTED_DESERIALIZER" : {
     "message" : [
-      "The deserializer is not supported: "
+      "The deserializer is not supported:"
     ],
     "subClass" : {
       "DATA_TYPE_MISMATCH" : {
@@ -363,7 +363,7 @@
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
-      "The feature is not supported: "
+      "The feature is not supported:"
     ],
     "subClass" : {
       "AES_MODE" : {
@@ -486,7 +486,7 @@
   },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
-      "The save mode <saveMode> is not supported for: "
+      "The save mode <saveMode> is not supported for:"
     ],
     "subClass" : {
       "EXISTENT_PATH" : {
@@ -503,10 +503,10 @@
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
-      "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. ",
-      "To get rid of this error, you could: ",
-      "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)` ",
-      "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive ",
+      "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input.",
+      "To get rid of this error, you could:",
+      "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`",
+      "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution"
     ]
   },

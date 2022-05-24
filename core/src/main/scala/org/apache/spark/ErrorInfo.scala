@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
 private[spark] case class ErrorSubInfo(message: Seq[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageFormat: String = message.mkString("\n")
+  val messageFormat: String = message.mkString("\n ")
 }
 
 /**
@@ -85,7 +85,7 @@ private[spark] object SparkThrowableHelper {
       val errorSubInfo = subClass.getOrElse(subErrorClass,
         throw new IllegalArgumentException(s"Cannot find sub error class '$subErrorClass'"))
       (errorClass + "." + subErrorClass, messageParameters.tail,
-        errorInfo.messageFormat + errorSubInfo.messageFormat)
+        errorInfo.messageFormat + " " + errorSubInfo.messageFormat)
     }
     val displayMessage = String.format(
       displayFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),

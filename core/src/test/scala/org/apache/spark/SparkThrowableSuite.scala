@@ -112,9 +112,12 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Message invariants") {
-    val messages = errorClassToInfoMap.values.toSeq.map(_.message)
-    messages.foreach { msg =>
-      assert(!msg.contains("\n"))
+    val messageSeq = errorClassToInfoMap.values.toSeq.map(_.message)
+    messageSeq.foreach { message =>
+      message.foreach { msg =>
+        assert(!msg.contains("\n"))
+        assert(msg.trim == msg)
+      }
     }
   }
 
