@@ -35,7 +35,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
       """
         |CREATE TABLE store_sales(
         |  ss_item_sk INT,
-        |  ss_ext_sales_price DECIMAL(38,4)) USING parquet
+        |  ss_sales_price DECIMAL(38,4)) USING parquet
       """.stripMargin)
     sql(
       """
@@ -89,12 +89,13 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
             SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """
                 |SELECT
                 |  item.i_brand_id brand_id,
-                |  SUM(ss_ext_sales_price) sum_agg
+                |  SUM(ss_sales_price) sum_agg
                 |FROM store_sales, item
                 |WHERE store_sales.ss_item_sk = item.i_item_sk
                 |GROUP BY item.i_brand_id
@@ -127,12 +128,13 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
             SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """
                 |SELECT
                 |  item.i_brand_id brand_id,
-                |  count(ss_ext_sales_price) count_ss_ext_sales_price,
+                |  count(ss_sales_price) count_ss_sales_price,
                 |  count(*)
                 |FROM store_sales, item
                 |WHERE store_sales.ss_item_sk = item.i_item_sk
@@ -157,13 +159,14 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
             SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """
                 |SELECT
                 |  item.i_brand_id brand_id,
-                |  first(ss_ext_sales_price),
-                |  last(ss_ext_sales_price)
+                |  first(ss_sales_price),
+                |  last(ss_sales_price)
                 |FROM store_sales, item
                 |WHERE store_sales.ss_item_sk = item.i_item_sk
                 |GROUP BY item.i_brand_id
@@ -191,13 +194,14 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
             SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """
                 |SELECT
                 |  item.i_brand_id brand_id,
-                |  min(ss_ext_sales_price),
-                |  max(ss_ext_sales_price)
+                |  min(ss_sales_price),
+                |  max(ss_sales_price)
                 |FROM store_sales, item
                 |WHERE store_sales.ss_item_sk = item.i_item_sk
                 |GROUP BY item.i_brand_id
@@ -225,12 +229,13 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
           withSQLConf(
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
             SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
             SQLConf.ANSI_ENABLED.key -> s"$ansi") {
             val df = sql(
               """
                 |SELECT
                 |  item.i_brand_id brand_id,
-                |  avg(ss_ext_sales_price) avg_agg
+                |  avg(ss_sales_price) avg_agg
                 |FROM store_sales, item
                 |WHERE store_sales.ss_item_sk = item.i_item_sk
                 |GROUP BY item.i_brand_id

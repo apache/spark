@@ -844,6 +844,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO =
+    buildConf("spark.sql.optimizer.partialAggregationOptimization.benefitRatio")
+      .internal()
+      .doc("The reduction ratio lower than this config will introduce partial aggregations " +
+        "before join.")
+      .version("3.4.0")
+      .doubleConf
+      .checkValue(r => r >= 0 && r <= 1.0, "The benefit ratio must be positive number.")
+      .createWithDefault(0.1)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -4253,6 +4263,9 @@ class SQLConf extends Serializable with Logging {
 
   def partialAggregationOptimizationEnabled: Boolean =
     getConf(PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED)
+
+  def partialAggregationOptimizationBenefitRatio: Double =
+    getConf(PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 

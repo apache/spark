@@ -304,6 +304,11 @@ trait PredicateHelper extends AliasHelper with Logging {
     case _: MultiLikeBase => true
     case _ => false
   }
+
+  protected def isSimpleExpression(e: Expression): Boolean = {
+    !e.containsAnyPattern(PYTHON_UDF, SCALA_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY,
+      REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
+  }
 }
 
 @ExpressionDescription(

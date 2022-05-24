@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -29,6 +30,26 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.LEFT_SEMI_OR_ANTI_JOIN
  */
 object DeduplicateRightSideOfLeftSemiAntiJoin extends Rule[LogicalPlan] with JoinSelectionHelper {
 
+  /**
+   * It has benefit in the following cases:
+   * 1. can reduce shuffle data
+   * 2. user set spark.sql.optimizer.partialAggregationOptimization.benefitRatio to 1.0
+   */
+  def pushPartialAggHasBenefit(
+      join: Join,
+      groupingExpressions: Seq[Expression],
+      plan: LogicalPlan): Boolean = {
+    val benefitRatio = conf.partialAggregationOptimizationBenefitRatio
+    // To reduce shuffle data. For example: TPC-DS q14a, q14b
+    if (!canPlanAsBroadcastHashJoin(join, conf) &&
+      Aggregate(groupingExpressions, Nil, plan).stats.rowCount
+        .exists(_.toDouble / plan.stats.rowCount.getOrElse(BigInt(1)).toDouble <= benefitRatio)) {
+      true
+    } else {
+      1.0 <= benefitRatio
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.partialAggregationOptimizationEnabled) {
       plan
@@ -36,7 +57,8 @@ object DeduplicateRightSideOfLeftSemiAntiJoin extends Rule[LogicalPlan] with Joi
       plan.transformWithPruning(_.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
         case j @ Join(_, _: AggregateBase, _, _, _) =>
           j
-        case j @ Join(_, right, LeftSemiOrAnti(_), _, _) if !canPlanAsBroadcastHashJoin(j, conf) =>
+        case j @ Join(_, right, LeftSemiOrAnti(_), _, _)
+            if pushPartialAggHasBenefit(j, right.output, right) =>
           j.copy(right = PartialAggregate(right.output, right.output, right))
       }
     }

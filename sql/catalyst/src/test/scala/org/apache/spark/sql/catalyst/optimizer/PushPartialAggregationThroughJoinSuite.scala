@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflow, CheckOverflowInSum, Divide, Expression, PromotePrecision}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflow, CheckOverflowInSum, Divide, Expression, If, PromotePrecision}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Sum}
 import org.apache.spark.sql.catalyst.optimizer.customAnalyze._
 import org.apache.spark.sql.catalyst.plans._
@@ -77,11 +77,13 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
     SQLConf.get.setConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED, true)
+    SQLConf.get.setConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO, 1.0)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
     SQLConf.get.unsetConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED)
+    SQLConf.get.unsetConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO)
   }
 
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -121,7 +123,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'b), Seq(sum('c).as("_pushed_sum_c"), 'a, 'b),
-      testRelation1.select('b, 'c, 'a)).as("l")
+      testRelation1.select('a, 'b, 'c)).as("l")
     val correctRight = PartialAggregate(Seq('x), Seq(count(1).as("cnt"), 'x),
       testRelation2.select('x)).as("r")
 
@@ -142,7 +144,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'b), Seq('a, 'b, count(1).as("cnt")),
-      testRelation1.select('b, 'a)).as("l")
+      testRelation1.select('a, 'b)).as("l")
     val correctRight = PartialAggregate(Seq('x), Seq(count(1).as("cnt"), 'x),
       testRelation2.select('x)).as("r")
 
@@ -165,7 +167,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     val correctLeft = PartialAggregate(Seq('a, 'b),
       Seq(sumWithDataType('c, datatype = Some(DoubleType)).as("_pushed_sum_c"), 'a, 'b,
         count(1).as("cnt")),
-      testRelation1.select('b, 'c, 'a)).as("l")
+      testRelation1.select('a, 'b, 'c)).as("l")
     val correctRight = PartialAggregate(Seq('x),
       Seq(count(1).as("cnt"), 'x),
       testRelation2.select('x)).as("r")
@@ -193,7 +195,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
 
     val correctLeft = PartialAggregate(Seq('a, 'b),
       Seq(first('c).as("_pushed_first_c"), last('c).as("_pushed_last_c"), 'a, 'b),
-      testRelation1.select('b, 'c, 'a)).as("l")
+      testRelation1.select('a, 'b, 'c)).as("l")
     val correctRight = PartialAggregate(Seq('x), Seq('x), testRelation2.select('x)).as("r")
 
     val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
@@ -213,7 +215,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
 
     val correctLeft = PartialAggregate(Seq('a, 'b),
       Seq(max('c).as("_pushed_max_c"), min('c).as("_pushed_min_c"), 'a, 'b),
-      testRelation1.select('b, 'c, 'a)).as("l")
+      testRelation1.select('a, 'b, 'c)).as("l")
     val correctRight = PartialAggregate(Seq('x), Seq('x), testRelation2.select('x)).as("r")
 
     val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
@@ -238,39 +240,13 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
             testRelation1.select('a, 'b)).as("l")
           val correctRight = PartialAggregate(Seq('x, 'y), Seq('x, 'y),
             testRelation2.select('x, 'y)).as("r")
+          val correctAnswer = correctLeft.join(correctRight, joinType = joinType,
+            condition = Some('a === 'x))
+            .select('b, 'y)
+            .groupBy('b, 'y)('b, 'y)
+            .analyze
 
-          if (threshold < 0) {
-            val correctAnswer = correctLeft.join(correctRight, joinType = joinType,
-              condition = Some('a === 'x))
-              .select('b, 'y)
-              .groupBy('b, 'y)('b, 'y)
-              .analyze
-
-            comparePlans(Optimize.execute(originalQuery), correctAnswer)
-          } else {
-            val correctAnswer = joinType match {
-              case RightOuter =>
-                testRelation1.select('a, 'b).join(correctRight, joinType = joinType,
-                  condition = Some('a === 'x))
-                  .select('b, 'y)
-                  .groupBy('b, 'y)('b, 'y)
-                  .analyze
-              case FullOuter =>
-                correctLeft.join(correctRight, joinType = joinType,
-                  condition = Some('a === 'x))
-                  .select('b, 'y)
-                  .groupBy('b, 'y)('b, 'y)
-                  .analyze
-              case _ =>
-                correctLeft.join(testRelation2.select('x, 'y), joinType = joinType,
-                  condition = Some('a === 'x))
-                  .select('b, 'y)
-                  .groupBy('b, 'y)('b, 'y)
-                  .analyze
-            }
-
-            comparePlans(Optimize.execute(originalQuery), correctAnswer)
-          }
+          comparePlans(Optimize.execute(originalQuery), correctAnswer)
         }
       }
     }
@@ -284,7 +260,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
 
     val correctLeft = PartialAggregate(Seq('_pullout_add_a, 'b),
       Seq('_pullout_add_a, max('c).as("_pushed_max_c"), 'b),
-      testRelation1.select('b, 'c, ('a + 1).as("_pullout_add_a"))).as("l")
+      testRelation1.select(('a + 1).as("_pullout_add_a"), 'b, 'c)).as("l")
     val correctRight = PartialAggregate(Seq('_pullout_add_x), Seq('_pullout_add_x),
       testRelation2.select(('x + 2).as("_pullout_add_x"))).as("r")
 
@@ -305,7 +281,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
 
     val correctLeft = PartialAggregate(Seq('a, '_groupingexpression),
       Seq('_groupingexpression, max('c).as("_pushed_max_c"), 'a),
-      testRelation1.select('c, ('b + 1).as("_groupingexpression"), 'a)).as("l")
+      testRelation1.select(('b + 1).as("_groupingexpression"), 'a, 'c)).as("l")
     val correctRight = PartialAggregate(Seq('x), Seq('x),
       testRelation2.select('x)).as("r")
 
@@ -327,7 +303,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
 
     val correctLeft = PartialAggregate(Seq('a, 'a1),
       Seq(max('b).as("_pushed_max_b"), 'a, 'a1),
-      testRelation1.select(('a + 1).as("a1"), 'b, 'a)).as("l")
+      testRelation1.select('a, ('a + 1).as("a1"), 'b)).as("l")
     val correctRight = PartialAggregate(Seq('x), Seq('x),
       testRelation2.select('x)).as("r")
 
@@ -349,7 +325,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
           .analyze
 
         val correctLeft = PartialAggregate(Seq('a, 'b), Seq(sum('c).as("_pushed_sum_c"), 'a, 'b),
-          testRelation3.select('b, 'c, 'a)).as("l")
+          testRelation3.select('a, 'b, 'c)).as("l")
         val correctRight = PartialAggregate(Seq('x), Seq(count(1).as("cnt"), 'x),
           testRelation4.select('x)).as("r")
 
@@ -378,7 +354,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
 
         val correctLeft = PartialAggregate(Seq('a, 'b),
           Seq(count('c).as("_pushed_count_c"), 'a, 'b),
-          testRelation3.select('b, 'c, 'a)).as("l")
+          testRelation3.select('a, 'b, 'c)).as("l")
         val correctRight = PartialAggregate(Seq('x), Seq(count(1).as("cnt"), 'x),
           testRelation4.select('x)).as("r")
 
@@ -406,7 +382,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
         val correctLeft = PartialAggregate(Seq('a, 'b),
           Seq(sumWithDataType('c, ansiEnabled, Some(DecimalType(27, 2))).as("_pushed_sum_c"),
             'a, 'b, count(1).as("cnt")),
-          testRelation3.select('b, 'c, 'a)).as("l")
+          testRelation3.select('a, 'b, 'c)).as("l")
         val correctRight = PartialAggregate(Seq('x), Seq(count(1).as("cnt"), 'x),
           testRelation4.select('x)).as("r")
 
@@ -429,46 +405,6 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     }
   }
 
-  test("Push down partial aggregate") {
-    val originalQuery = PartialAggregate(Seq('a, 'y), Seq('a, 'y),
-      testRelation1.join(testRelation2, joinType = FullOuter, condition = Some('a === 'x)))
-      .analyze
-
-    val correctLeft = PartialAggregate(Seq('a), Seq('a),
-      testRelation1.select('a)).as("l")
-    val correctRight = PartialAggregate(Seq('x, 'y), Seq('x, 'y),
-      testRelation2.select('x, 'y)).as("r")
-
-    val correctAnswer =
-      correctLeft.join(correctRight,
-        joinType = FullOuter, condition = Some('a === 'x))
-        .select('a, 'y)
-        .analyzePlan
-
-    comparePlans(Optimize.execute(originalQuery), correctAnswer)
-  }
-
-  test("Push down partial aggregate through join") {
-    val originalQuery = testRelation1.as("t1")
-      .join(testRelation2.as("t2"), joinType = FullOuter, condition = Some($"t1.a" === 'x))
-      .join(testRelation1.as("t3"), joinType = Inner, condition = Some($"t3.b" === 'y))
-      .groupBy($"t1.c")(max($"t3.c").as("max_c"))
-      .analyze
-
-    val correctAnswer =
-      PartialAggregate(Seq('a, 'c), Seq('a, 'c), testRelation1.select('a, 'c)).as("t1")
-        .join(PartialAggregate(Seq('x, 'y), Seq('x, 'y), testRelation2.select('x, 'y)).as("t2"),
-          joinType = FullOuter, condition = Some('x === 'a))
-        .select('c, 'y)
-        .join(PartialAggregate(Seq('b), Seq(max('c).as("_pushed_max_c"), 'b),
-          testRelation1.select('c, 'b)).as("t3"), joinType = Inner, condition = Some('b === 'y))
-        .select('c, $"t3._pushed_max_c")
-        .groupBy($"t1.c")(max($"t3._pushed_max_c").as("max_c"))
-        .analyzePlan
-
-    comparePlans(Optimize.execute(originalQuery), correctAnswer)
-  }
-
   test("Add join condition references to split list") {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
@@ -476,7 +412,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'b), Seq(sum('c).as("_pushed_sum_c"), 'a, 'b),
-      testRelation1.select('b, 'c, 'a)).as("l")
+      testRelation1.select('a, 'b, 'c)).as("l")
     val correctRight = PartialAggregate(Seq('x), Seq(count(1).as("cnt"), 'x),
       testRelation2.select('x)).as("r")
 
@@ -505,16 +441,6 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .groupBy()(avg('y).as("avg_y"))
-      .analyze
-
-    comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
-  }
-
-  test("Do not push down there are too many aggregate expressions") {
-    val originalQuery = testRelation1
-      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
-      .groupBy('b)(first('c).as("first_c"), last('c).as("last_c"), max('c).as("max_c"),
-        min('c).as("min_c"), sum('c).as("max_c"))
       .analyze
 
     comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
@@ -590,7 +516,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
   test("Do not push down aggregate expressions if the aggregate leaves size exceeds 2") {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
-      .groupBy('b)(sum('y + 'z + ('y * 2)).as("sum_yz"))
+      .groupBy('b)(sum(If('y.likeAny("%a%"), 'z + 1, 'z + 2)).as("sum_z"))
       .analyze
 
     comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
