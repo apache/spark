@@ -90,7 +90,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
         toSQLValue(t, from),
         toSQLType(from),
         toSQLType(to),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)))
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        toSQLConfVal("false")))
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -104,7 +105,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
         value.toDebugString,
         decimalPrecision.toString,
         decimalScale.toString,
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        toSQLConfVal("false")),
       queryContext = context)
   }
 
@@ -119,7 +121,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
         toSQLValue(value, from),
         toSQLType(from),
         toSQLType(to),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        toSQLConfVal("false")),
       queryContext = errorContext)
   }
 
@@ -132,7 +135,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
         toSQLValue(s, StringType),
         toSQLType(StringType),
         toSQLType(BooleanType),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        toSQLConfVal("false")),
       queryContext = errorContext)
   }
 
@@ -146,7 +150,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
         toSQLValue(s, StringType),
         toSQLType(StringType),
         toSQLType(to),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        toSQLConfVal("false")),
       queryContext = errorContext)
   }
 
@@ -180,7 +185,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def divideByZeroError(context: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
-      messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key), toSQLConfVal("false")),
       queryContext = context)
   }
 
@@ -199,7 +204,10 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Array(
-        toSQLValue(index, IntegerType), toSQLValue(numElements, IntegerType), toSQLConf(key)))
+        toSQLValue(index, IntegerType),
+        toSQLValue(numElements, IntegerType),
+        toSQLConf(key),
+        toSQLConfVal("false")))
   }
 
   def invalidElementAtIndexError(
@@ -211,7 +219,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
         Array(
           toSQLValue(index, IntegerType),
           toSQLValue(numElements, IntegerType),
-          toSQLConf(SQLConf.ANSI_ENABLED.key)))
+          toSQLConf(SQLConf.ANSI_ENABLED.key),
+          toSQLConfVal("false")))
   }
 
   def mapKeyNotExistError(key: Any, dataType: DataType, context: String): NoSuchElementException = {
@@ -219,14 +228,15 @@ object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(
         toSQLValue(key, dataType),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        toSQLConfVal("false")),
       queryContext = context)
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
-      Array(toSQLConf(SQLConf.ANSI_ENABLED.key)))
+      Array(toSQLConf(SQLConf.ANSI_ENABLED.key), toSQLConfVal("false")))
   }
 
   def ansiDateTimeParseError(e: DateTimeParseException): DateTimeParseException = {

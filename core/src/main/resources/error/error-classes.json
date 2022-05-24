@@ -12,7 +12,7 @@
     "sqlState" : "22005"
   },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
-    "message" : [ "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error." ],
+    "message" : [ "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to <configVal> to bypass this error." ],
     "sqlState" : "22005"
   },
   "CANNOT_PARSE_DECIMAL" : {
@@ -23,11 +23,11 @@
     "message" : [ "Cannot up cast <value> from <sourceType> to <targetType>.\n<details>" ]
   },
   "CAST_INVALID_INPUT" : {
-    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error." ],
+    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. To return NULL instead, use `try_cast`. If necessary set <config> to <configVal> to bypass this error." ],
     "sqlState" : "42000"
   },
   "CAST_OVERFLOW" : {
-    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error." ],
+    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <config> to <configVal> to bypass this error." ],
     "sqlState" : "22005"
   },
   "CONCURRENT_QUERY" : {
@@ -38,7 +38,7 @@
     "sqlState" : "22008"
   },
   "DIVIDE_BY_ZERO" : {
-    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error." ],
+    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to <configVal> (except for ANSI interval type) to bypass this error." ],
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
@@ -110,10 +110,10 @@
     "message" : [ "<message>" ]
   },
   "INVALID_ARRAY_INDEX" : {
-    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to \"false\" to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to <configVal> to bypass this error." ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
-    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to <configVal> to bypass this error." ]
   },
   "INVALID_BUCKET_FILE" : {
     "message" : [ "Invalid bucket file: <path>" ]
@@ -123,7 +123,7 @@
     "sqlState" : "42000"
   },
   "INVALID_FRACTION_OF_SECOND" : {
-    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to \"false\" to bypass this error. " ],
+    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to <configVal> to bypass this error. " ],
     "sqlState" : "22023"
   },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
@@ -147,7 +147,7 @@
     "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key <keyValue> does not exist. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error." ]
+    "message" : [ "Key <keyValue> does not exist. To return NULL instead, use `try_element_at`. If necessary set <config> to <configVal> to bypass this error." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "Column '<columnName>' does not exist. Did you mean one of the following? [<proposal>]" ],
