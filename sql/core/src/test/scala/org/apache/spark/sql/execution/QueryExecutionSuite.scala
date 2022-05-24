@@ -20,6 +20,7 @@ import scala.io.Source
 
 import org.apache.spark.sql.{AnalysisException, FastOperator}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -260,6 +261,14 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
     val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
+  }
+
+  test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
+    val plan = spark.sql("SHOW FUNCTIONS").queryExecution.executedPlan
+    assert(plan.isInstanceOf[CommandResultExec])
+    plan.executeCollect().foreach { row => assert(row.isInstanceOf[UnsafeRow]) }
+    plan.executeTake(10).foreach { row => assert(row.isInstanceOf[UnsafeRow]) }
+    plan.executeTail(10).foreach { row => assert(row.isInstanceOf[UnsafeRow]) }
   }
 
   test("SPARK-38198: check specify maxFields when call toFile method") {
