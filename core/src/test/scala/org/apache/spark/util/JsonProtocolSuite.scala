@@ -21,7 +21,9 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.language.implicitConversions
 
+import com.fasterxml.jackson.databind.JsonNode
 import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -600,7 +602,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         |  "bar" : 123,
         |  "unknown" : "unknown"
         |}""".stripMargin
-    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
+    assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
   }
 
   test("SPARK-30936: backwards compatibility - set default values for missing fields") {
@@ -610,7 +612,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         |  "Event" : "org.apache.spark.util.TestListenerEvent",
         |  "foo" : "foo"
         |}""".stripMargin
-    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
+    assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
   }
 }
 
@@ -627,9 +629,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val nodeExcludedTime = 1421458952000L
   private val nodeUnexcludedTime = 1421458962000L
 
+  implicit def jValueToJsonNode(value: JValue): JsonNode = {
+    mapper.readTree(pretty(value))
+  }
+
   private def testEvent(event: SparkListenerEvent, jsonString: String): Unit = {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
-    val newEvent = JsonProtocol.sparkEventFromJson(parse(actualJsonString))
+    val newEvent = JsonProtocol.sparkEventFromJson(actualJsonString)
     assertJsonStringEquals(jsonString, actualJsonString, event.getClass.getSimpleName)
     assertEquals(event, newEvent)
   }
@@ -916,13 +922,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String): Unit = {
-    val expectedJson = parse(expected)
-    val actualJson = parse(actual)
+    val expectedJson = mapper.readTree(expected)
+    val actualJson = mapper.readTree(actual)
     if (expectedJson != actualJson) {
       // scalastyle:off
       // This prints something useful if the JSON strings don't match
-      println(s"=== EXPECTED ===\n${pretty(expectedJson)}\n")
-      println(s"=== ACTUAL ===\n${pretty(actualJson)}\n")
+      println(s"=== EXPECTED ===\n${expectedJson}\n")
+      println(s"=== ACTUAL ===\n${actualJson}\n")
       // scalastyle:on
       throw new TestFailedException(s"$metadata JSON did not equal", 1)
     }

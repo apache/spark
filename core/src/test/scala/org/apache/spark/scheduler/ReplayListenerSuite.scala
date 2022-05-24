@@ -226,9 +226,9 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     // Verify the same events are replayed in the same order
     assert(sc.eventLogger.isDefined)
     val originalEvents = sc.eventLogger.get.loggedEvents
-      .map(JsonProtocol.sparkEventFromJson(_))
+      .map(x => JsonProtocol.sparkEventFromJson(pretty(x)))
     val replayedEvents = eventMonster.loggedEvents
-      .map(JsonProtocol.sparkEventFromJson(_))
+      .map(x => JsonProtocol.sparkEventFromJson(pretty(x)))
     originalEvents.zip(replayedEvents).foreach { case (e1, e2) =>
       JsonProtocolSuite.assertEquals(e1, e1)
     }
