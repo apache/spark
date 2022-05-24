@@ -19,10 +19,11 @@ package org.apache.spark.resource
 
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.core.JsonGenerator
 import org.json4s.{DefaultFormats, Extraction, JValue}
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkException
+
 import org.apache.spark.annotation.Evolving
 
 /**
@@ -55,7 +56,11 @@ class ResourceInformation(
 
   override def hashCode(): Int = Seq(name, addresses.toSeq).hashCode()
 
-  def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
+  final def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
+
+  private[spark] def writeJson(g: JsonGenerator): Unit = {
+    g.writeObject(ResourceInformationJson(name, addresses))
+  }
 }
 
 private[spark] object ResourceInformation {

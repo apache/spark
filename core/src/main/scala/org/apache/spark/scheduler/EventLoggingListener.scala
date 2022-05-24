@@ -84,7 +84,7 @@ private[spark] class EventLoggingListener(
 
   private def initEventLog(): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
-    val eventJson = JsonProtocol.logStartToJsonString(metadata)
+    val eventJson = JsonProtocol.sparkEventToJsonString(metadata)
     logWriter.writeEvent(eventJson, flushLogger = true)
     if (testing && loggedEvents != null) {
       loggedEvents += eventJson

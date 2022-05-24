@@ -17,17 +17,16 @@
 
 package org.apache.spark.util
 
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
+import com.fasterxml.jackson.core.{JsonEncoding, JsonGenerator}
 import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.json4s.DefaultFormats
-import org.json4s.JsonAST._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -57,8 +56,6 @@ import org.apache.spark.util.Utils.weakIntern
 private[spark] object JsonProtocol {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
-  private implicit val format = DefaultFormats
-
   private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
@@ -67,296 +64,390 @@ private[spark] object JsonProtocol {
    * -------------------------------------------------- */
 
   def sparkEventToJsonString(event: SparkListenerEvent): String = {
-    compact(render(sparkEventToJson(event)))
-  }
-
-  def sparkEventToJson(event: SparkListenerEvent): JValue = {
-    event match {
-      case stageSubmitted: SparkListenerStageSubmitted =>
-        stageSubmittedToJson(stageSubmitted)
-      case stageCompleted: SparkListenerStageCompleted =>
-        stageCompletedToJson(stageCompleted)
-      case taskStart: SparkListenerTaskStart =>
-        taskStartToJson(taskStart)
-      case taskGettingResult: SparkListenerTaskGettingResult =>
-        taskGettingResultToJson(taskGettingResult)
-      case taskEnd: SparkListenerTaskEnd =>
-        taskEndToJson(taskEnd)
-      case jobStart: SparkListenerJobStart =>
-        jobStartToJson(jobStart)
-      case jobEnd: SparkListenerJobEnd =>
-        jobEndToJson(jobEnd)
-      case environmentUpdate: SparkListenerEnvironmentUpdate =>
-        environmentUpdateToJson(environmentUpdate)
-      case blockManagerAdded: SparkListenerBlockManagerAdded =>
-        blockManagerAddedToJson(blockManagerAdded)
-      case blockManagerRemoved: SparkListenerBlockManagerRemoved =>
-        blockManagerRemovedToJson(blockManagerRemoved)
-      case unpersistRDD: SparkListenerUnpersistRDD =>
-        unpersistRDDToJson(unpersistRDD)
-      case applicationStart: SparkListenerApplicationStart =>
-        applicationStartToJson(applicationStart)
-      case applicationEnd: SparkListenerApplicationEnd =>
-        applicationEndToJson(applicationEnd)
-      case executorAdded: SparkListenerExecutorAdded =>
-        executorAddedToJson(executorAdded)
-      case executorRemoved: SparkListenerExecutorRemoved =>
-        executorRemovedToJson(executorRemoved)
-      case logStart: SparkListenerLogStart =>
-        logStartToJson(logStart)
-      case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
-        executorMetricsUpdateToJson(metricsUpdate)
-      case stageExecutorMetrics: SparkListenerStageExecutorMetrics =>
-        stageExecutorMetricsToJson(stageExecutorMetrics)
-      case blockUpdate: SparkListenerBlockUpdated =>
-        blockUpdateToJson(blockUpdate)
-      case resourceProfileAdded: SparkListenerResourceProfileAdded =>
-        resourceProfileAddedToJson(resourceProfileAdded)
-      case _ => parse(mapper.writeValueAsString(event))
+    toJsonString { generator =>
+      writeSparkEventToJson(event, generator)
     }
   }
 
-  def stageSubmittedToJson(stageSubmitted: SparkListenerStageSubmitted): JValue = {
-    val stageInfo = stageInfoToJson(stageSubmitted.stageInfo)
-    val properties = propertiesToJson(stageSubmitted.properties)
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageSubmitted) ~
-    ("Stage Info" -> stageInfo) ~
-    ("Properties" -> properties)
+  def toJsonString(block: JsonGenerator => Unit): String = {
+    val baos = new ByteArrayOutputStream()
+    val generator = mapper.createGenerator(baos, JsonEncoding.UTF8)
+    block(generator)
+    generator.close()
+    new String(baos.toByteArray, StandardCharsets.UTF_8)
   }
 
-  def stageCompletedToJson(stageCompleted: SparkListenerStageCompleted): JValue = {
-    val stageInfo = stageInfoToJson(stageCompleted.stageInfo)
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageCompleted) ~
-    ("Stage Info" -> stageInfo)
+  def writeSparkEventToJson(event: SparkListenerEvent, g: JsonGenerator): Unit = {
+    event match {
+      case stageSubmitted: SparkListenerStageSubmitted =>
+        stageSubmittedToJson(stageSubmitted, g)
+      case stageCompleted: SparkListenerStageCompleted =>
+        stageCompletedToJson(stageCompleted, g)
+      case taskStart: SparkListenerTaskStart =>
+        taskStartToJson(taskStart, g)
+      case taskGettingResult: SparkListenerTaskGettingResult =>
+        taskGettingResultToJson(taskGettingResult, g)
+      case taskEnd: SparkListenerTaskEnd =>
+        taskEndToJson(taskEnd, g)
+      case jobStart: SparkListenerJobStart =>
+        jobStartToJson(jobStart, g)
+      case jobEnd: SparkListenerJobEnd =>
+        jobEndToJson(jobEnd, g)
+      case environmentUpdate: SparkListenerEnvironmentUpdate =>
+        environmentUpdateToJson(environmentUpdate, g)
+      case blockManagerAdded: SparkListenerBlockManagerAdded =>
+        blockManagerAddedToJson(blockManagerAdded, g)
+      case blockManagerRemoved: SparkListenerBlockManagerRemoved =>
+        blockManagerRemovedToJson(blockManagerRemoved, g)
+      case unpersistRDD: SparkListenerUnpersistRDD =>
+        unpersistRDDToJson(unpersistRDD, g)
+      case applicationStart: SparkListenerApplicationStart =>
+        applicationStartToJson(applicationStart, g)
+      case applicationEnd: SparkListenerApplicationEnd =>
+        applicationEndToJson(applicationEnd, g)
+      case executorAdded: SparkListenerExecutorAdded =>
+        executorAddedToJson(executorAdded, g)
+      case executorRemoved: SparkListenerExecutorRemoved =>
+        executorRemovedToJson(executorRemoved, g)
+      case logStart: SparkListenerLogStart =>
+        logStartToJson(logStart, g)
+      case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
+        executorMetricsUpdateToJson(metricsUpdate, g)
+      case stageExecutorMetrics: SparkListenerStageExecutorMetrics =>
+        stageExecutorMetricsToJson(stageExecutorMetrics, g)
+      case blockUpdate: SparkListenerBlockUpdated =>
+        blockUpdateToJson(blockUpdate, g)
+      case resourceProfileAdded: SparkListenerResourceProfileAdded =>
+        resourceProfileAddedToJson(resourceProfileAdded, g)
+      case _ =>
+        mapper.writeValue(g, event)
+    }
   }
 
-  def taskStartToJson(taskStart: SparkListenerTaskStart): JValue = {
-    val taskInfo = taskStart.taskInfo
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskStart) ~
-    ("Stage ID" -> taskStart.stageId) ~
-    ("Stage Attempt ID" -> taskStart.stageAttemptId) ~
-    ("Task Info" -> taskInfoToJson(taskInfo))
+  def stageSubmittedToJson(stageSubmitted: SparkListenerStageSubmitted, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageSubmitted)
+    g.writeFieldName("Stage Info")
+    stageInfoToJson(stageSubmitted.stageInfo, g)
+    g.writeFieldName("Properties")
+    propertiesToJson(stageSubmitted.properties, g)
+    g.writeEndObject()
   }
 
-  def taskGettingResultToJson(taskGettingResult: SparkListenerTaskGettingResult): JValue = {
+  def stageCompletedToJson(stageCompleted: SparkListenerStageCompleted, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageCompleted)
+    g.writeFieldName("Stage Info")
+    stageInfoToJson(stageCompleted.stageInfo, g)
+    g.writeEndObject()
+  }
+
+  def taskStartToJson(taskStart: SparkListenerTaskStart, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskStart)
+    g.writeNumberField("Stage ID", taskStart.stageId)
+    g.writeNumberField("Stage Attempt ID", taskStart.stageAttemptId)
+    g.writeFieldName("Task Info")
+    taskInfoToJson(taskStart.taskInfo, g)
+    g.writeEndObject()
+  }
+
+  def taskGettingResultToJson(
+      taskGettingResult: SparkListenerTaskGettingResult,
+      g: JsonGenerator): Unit = {
     val taskInfo = taskGettingResult.taskInfo
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskGettingResult) ~
-    ("Task Info" -> taskInfoToJson(taskInfo))
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskGettingResult)
+    g.writeFieldName("Task Info")
+    taskInfoToJson(taskInfo, g)
+    g.writeEndObject()
   }
 
-  def taskEndToJson(taskEnd: SparkListenerTaskEnd): JValue = {
-    val taskEndReason = taskEndReasonToJson(taskEnd.reason)
-    val taskInfo = taskEnd.taskInfo
-    val executorMetrics = taskEnd.taskExecutorMetrics
-    val taskMetrics = taskEnd.taskMetrics
-    val taskMetricsJson = if (taskMetrics != null) taskMetricsToJson(taskMetrics) else JNothing
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskEnd) ~
-    ("Stage ID" -> taskEnd.stageId) ~
-    ("Stage Attempt ID" -> taskEnd.stageAttemptId) ~
-    ("Task Type" -> taskEnd.taskType) ~
-    ("Task End Reason" -> taskEndReason) ~
-    ("Task Info" -> taskInfoToJson(taskInfo)) ~
-    ("Task Executor Metrics" -> executorMetricsToJson(executorMetrics)) ~
-    ("Task Metrics" -> taskMetricsJson)
+  def taskEndToJson(taskEnd: SparkListenerTaskEnd, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskEnd)
+    g.writeNumberField("Stage ID", taskEnd.stageId)
+    g.writeNumberField("Stage Attempt ID", taskEnd.stageAttemptId)
+    g.writeStringField("Task Type", taskEnd.taskType)
+    g.writeFieldName("Task End Reason")
+    taskEndReasonToJson(taskEnd.reason, g)
+    g.writeFieldName("Task Info")
+    taskInfoToJson(taskEnd.taskInfo, g)
+    g.writeFieldName("Task Executor Metrics")
+    executorMetricsToJson(taskEnd.taskExecutorMetrics, g)
+    g.writeFieldName("Task Metrics")
+    Option(taskEnd.taskMetrics).foreach { m =>
+      taskMetricsToJson(m, g)
+    }
+    g.writeEndObject()
   }
 
-  def jobStartToJson(jobStart: SparkListenerJobStart): JValue = {
-    val properties = propertiesToJson(jobStart.properties)
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.jobStart) ~
-    ("Job ID" -> jobStart.jobId) ~
-    ("Submission Time" -> jobStart.time) ~
-    ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~  // Added in Spark 1.2.0
-    ("Stage IDs" -> jobStart.stageIds) ~
-    ("Properties" -> properties)
+  def jobStartToJson(jobStart: SparkListenerJobStart, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.jobStart)
+    g.writeNumberField("Job ID", jobStart.jobId)
+    g.writeNumberField("Submission Time", jobStart.time)
+    g.writeArrayFieldStart("Stage Infos")  // Added in Spark 1.2.0
+    jobStart.stageInfos.foreach(stageInfoToJson(_, g))
+    g.writeEndArray()
+    g.writeArrayFieldStart("Stage IDs")
+    jobStart.stageIds.foreach(g.writeNumber)
+    g.writeEndArray()
+    g.writeFieldName("Properties")
+    propertiesToJson(jobStart.properties, g)
+    g.writeEndObject()
   }
 
-  def jobEndToJson(jobEnd: SparkListenerJobEnd): JValue = {
-    val jobResult = jobResultToJson(jobEnd.jobResult)
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.jobEnd) ~
-    ("Job ID" -> jobEnd.jobId) ~
-    ("Completion Time" -> jobEnd.time) ~
-    ("Job Result" -> jobResult)
+  def jobEndToJson(jobEnd: SparkListenerJobEnd, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.jobEnd)
+    g.writeNumberField("Job ID", jobEnd.jobId)
+    g.writeNumberField("Completion Time", jobEnd.time)
+    g.writeFieldName("Job Result")
+    jobResultToJson(jobEnd.jobResult, g)
+    g.writeEndObject()
   }
 
-  def environmentUpdateToJson(environmentUpdate: SparkListenerEnvironmentUpdate): JValue = {
+  def environmentUpdateToJson(
+      environmentUpdate: SparkListenerEnvironmentUpdate,
+      g: JsonGenerator): Unit = {
     val environmentDetails = environmentUpdate.environmentDetails
-    val jvmInformation = mapToJson(environmentDetails("JVM Information").toMap)
-    val sparkProperties = mapToJson(environmentDetails("Spark Properties").toMap)
-    val hadoopProperties = mapToJson(environmentDetails("Hadoop Properties").toMap)
-    val systemProperties = mapToJson(environmentDetails("System Properties").toMap)
-    val metricsProperties = mapToJson(environmentDetails("Metrics Properties").toMap)
-    val classpathEntries = mapToJson(environmentDetails("Classpath Entries").toMap)
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.environmentUpdate) ~
-    ("JVM Information" -> jvmInformation) ~
-    ("Spark Properties" -> sparkProperties) ~
-    ("Hadoop Properties" -> hadoopProperties) ~
-    ("System Properties" -> systemProperties) ~
-    ("Metrics Properties"-> metricsProperties) ~
-    ("Classpath Entries" -> classpathEntries)
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.environmentUpdate)
+    writeMapField("JVM Information", environmentDetails("JVM Information").toMap, g)
+    writeMapField("Spark Properties", environmentDetails("Spark Properties").toMap, g)
+    writeMapField("Hadoop Properties", environmentDetails("Hadoop Properties").toMap, g)
+    writeMapField("System Properties", environmentDetails("System Properties").toMap, g)
+    writeMapField("Metrics Properties", environmentDetails("Metrics Properties").toMap, g)
+    writeMapField("Classpath Entries", environmentDetails("Classpath Entries").toMap, g)
+    g.writeEndObject()
   }
 
-  def blockManagerAddedToJson(blockManagerAdded: SparkListenerBlockManagerAdded): JValue = {
-    val blockManagerId = blockManagerIdToJson(blockManagerAdded.blockManagerId)
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockManagerAdded) ~
-    ("Block Manager ID" -> blockManagerId) ~
-    ("Maximum Memory" -> blockManagerAdded.maxMem) ~
-    ("Timestamp" -> blockManagerAdded.time) ~
-    ("Maximum Onheap Memory" -> blockManagerAdded.maxOnHeapMem) ~
-    ("Maximum Offheap Memory" -> blockManagerAdded.maxOffHeapMem)
+  def blockManagerAddedToJson(
+      blockManagerAdded: SparkListenerBlockManagerAdded,
+      g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockManagerAdded)
+    g.writeFieldName("Block Manager ID")
+    blockManagerIdToJson(blockManagerAdded.blockManagerId, g)
+    g.writeNumberField("Maximum Memory", blockManagerAdded.maxMem)
+    g.writeNumberField("Timestamp", blockManagerAdded.time)
+    blockManagerAdded.maxOnHeapMem.foreach(g.writeNumberField("Maximum Onheap Memory", _))
+    blockManagerAdded.maxOffHeapMem.foreach(g.writeNumberField("Maximum Offheap Memory", _))
+    g.writeEndObject()
   }
 
-  def blockManagerRemovedToJson(blockManagerRemoved: SparkListenerBlockManagerRemoved): JValue = {
-    val blockManagerId = blockManagerIdToJson(blockManagerRemoved.blockManagerId)
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockManagerRemoved) ~
-    ("Block Manager ID" -> blockManagerId) ~
-    ("Timestamp" -> blockManagerRemoved.time)
+  def blockManagerRemovedToJson(
+      blockManagerRemoved: SparkListenerBlockManagerRemoved,
+      g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockManagerRemoved)
+    g.writeFieldName("Block Manager ID")
+    blockManagerIdToJson(blockManagerRemoved.blockManagerId, g)
+    g.writeNumberField("Timestamp", blockManagerRemoved.time)
+    g.writeEndObject()
   }
 
-  def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD): JValue = {
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.unpersistRDD) ~
-    ("RDD ID" -> unpersistRDD.rddId)
+  def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.unpersistRDD)
+    g.writeNumberField("RDD ID", unpersistRDD.rddId)
+    g.writeEndObject()
   }
 
-  def applicationStartToJson(applicationStart: SparkListenerApplicationStart): JValue = {
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.applicationStart) ~
-    ("App Name" -> applicationStart.appName) ~
-    ("App ID" -> applicationStart.appId.map(JString(_)).getOrElse(JNothing)) ~
-    ("Timestamp" -> applicationStart.time) ~
-    ("User" -> applicationStart.sparkUser) ~
-    ("App Attempt ID" -> applicationStart.appAttemptId.map(JString(_)).getOrElse(JNothing)) ~
-    ("Driver Logs" -> applicationStart.driverLogs.map(mapToJson).getOrElse(JNothing)) ~
-    ("Driver Attributes" -> applicationStart.driverAttributes.map(mapToJson).getOrElse(JNothing))
+  def applicationStartToJson(
+      applicationStart: SparkListenerApplicationStart,
+      g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.applicationStart)
+    g.writeStringField("App Name", applicationStart.appName)
+    applicationStart.appId.foreach(g.writeStringField("App ID", _))
+    g.writeNumberField("Timestamp", applicationStart.time)
+    g.writeStringField("User", applicationStart.sparkUser)
+    applicationStart.appAttemptId.foreach(g.writeStringField("App Attempt ID", _))
+    applicationStart.driverLogs.foreach(writeMapField("Driver Logs", _, g))
+    applicationStart.driverAttributes.foreach(writeMapField("Driver Attributes", _, g))
+    g.writeEndObject()
   }
 
-  def applicationEndToJson(applicationEnd: SparkListenerApplicationEnd): JValue = {
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.applicationEnd) ~
-    ("Timestamp" -> applicationEnd.time)
+  def applicationEndToJson(
+      applicationEnd: SparkListenerApplicationEnd,
+      g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.applicationEnd)
+    g.writeNumberField("Timestamp", applicationEnd.time)
+    g.writeEndObject()
   }
 
-  def resourceProfileAddedToJson(profileAdded: SparkListenerResourceProfileAdded): JValue = {
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.resourceProfileAdded) ~
-      ("Resource Profile Id" -> profileAdded.resourceProfile.id) ~
-      ("Executor Resource Requests" ->
-        executorResourceRequestMapToJson(profileAdded.resourceProfile.executorResources)) ~
-      ("Task Resource Requests" ->
-        taskResourceRequestMapToJson(profileAdded.resourceProfile.taskResources))
+  def resourceProfileAddedToJson(
+      profileAdded: SparkListenerResourceProfileAdded,
+      g: JsonGenerator
+    ): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.resourceProfileAdded)
+    g.writeNumberField("Resource Profile Id", profileAdded.resourceProfile.id)
+    g.writeFieldName("Executor Resource Requests")
+    executorResourceRequestMapToJson(profileAdded.resourceProfile.executorResources, g)
+    g.writeFieldName("Task Resource Requests")
+    taskResourceRequestMapToJson(profileAdded.resourceProfile.taskResources, g)
+    g.writeEndObject()
   }
 
-  def executorAddedToJson(executorAdded: SparkListenerExecutorAdded): JValue = {
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.executorAdded) ~
-    ("Timestamp" -> executorAdded.time) ~
-    ("Executor ID" -> executorAdded.executorId) ~
-    ("Executor Info" -> executorInfoToJson(executorAdded.executorInfo))
+  def executorAddedToJson(executorAdded: SparkListenerExecutorAdded, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.executorAdded)
+    g.writeNumberField("Timestamp", executorAdded.time)
+    g.writeStringField("Executor ID", executorAdded.executorId)
+    g.writeFieldName("Executor Info")
+    executorInfoToJson(executorAdded.executorInfo, g)
+    g.writeEndObject()
   }
 
-  def executorRemovedToJson(executorRemoved: SparkListenerExecutorRemoved): JValue = {
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.executorRemoved) ~
-    ("Timestamp" -> executorRemoved.time) ~
-    ("Executor ID" -> executorRemoved.executorId) ~
-    ("Removed Reason" -> executorRemoved.reason)
+  def executorRemovedToJson(
+      executorRemoved: SparkListenerExecutorRemoved,
+      g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.executorRemoved)
+    g.writeNumberField("Timestamp", executorRemoved.time)
+    g.writeStringField("Executor ID", executorRemoved.executorId)
+    g.writeStringField("Removed Reason", executorRemoved.reason)
+    g.writeEndObject()
   }
 
-  def logStartToJsonString(logStart: SparkListenerLogStart): String = {
-    compact(render(logStartToJson(logStart)))
+  def logStartToJson(logStart: SparkListenerLogStart, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.logStart)
+    g.writeStringField("Spark Version", SPARK_VERSION)
+    g.writeEndObject()
   }
 
-  def logStartToJson(logStart: SparkListenerLogStart): JValue = {
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.logStart) ~
-    ("Spark Version" -> SPARK_VERSION)
-  }
-
-  def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
+  def executorMetricsUpdateToJson(
+      metricsUpdate: SparkListenerExecutorMetricsUpdate,
+      g: JsonGenerator): Unit = {
     val execId = metricsUpdate.execId
     val accumUpdates = metricsUpdate.accumUpdates
     val executorUpdates = metricsUpdate.executorUpdates
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.metricsUpdate) ~
-    ("Executor ID" -> execId) ~
-    ("Metrics Updated" -> accumUpdates.map { case (taskId, stageId, stageAttemptId, updates) =>
-      ("Task ID" -> taskId) ~
-      ("Stage ID" -> stageId) ~
-      ("Stage Attempt ID" -> stageAttemptId) ~
-      ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
-    }) ~
-    ("Executor Metrics Updated" -> executorUpdates.map {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.metricsUpdate)
+    g.writeStringField("Executor ID", execId)
+    g.writeArrayFieldStart("Metrics Updated")
+    accumUpdates.foreach { case (taskId, stageId, stageAttemptId, updates) =>
+      g.writeStartObject()
+      g.writeNumberField("Task ID", taskId)
+      g.writeNumberField("Stage ID", stageId)
+      g.writeNumberField("Stage Attempt ID", stageAttemptId)
+      g.writeArrayFieldStart("Accumulator Updates")
+      updates.foreach(accumulableInfoToJson(_, g))
+      g.writeEndArray()
+      g.writeEndObject()
+    }
+    g.writeEndArray()
+    g.writeArrayFieldStart("Executor Metrics Updated")
+    executorUpdates.foreach {
       case ((stageId, stageAttemptId), metrics) =>
-        ("Stage ID" -> stageId) ~
-        ("Stage Attempt ID" -> stageAttemptId) ~
-        ("Executor Metrics" -> executorMetricsToJson(metrics))
-    })
+        g.writeStartObject()
+        g.writeNumberField("Stage ID", stageId)
+        g.writeNumberField("Stage Attempt ID", stageAttemptId)
+        g.writeFieldName("Executor Metrics")
+        executorMetricsToJson(metrics, g)
+        g.writeEndObject()
+    }
+    g.writeEndArray()
+    g.writeEndObject()
   }
 
-  def stageExecutorMetricsToJson(metrics: SparkListenerStageExecutorMetrics): JValue = {
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageExecutorMetrics) ~
-    ("Executor ID" -> metrics.execId) ~
-    ("Stage ID" -> metrics.stageId) ~
-    ("Stage Attempt ID" -> metrics.stageAttemptId) ~
-    ("Executor Metrics" -> executorMetricsToJson(metrics.executorMetrics))
+  def stageExecutorMetricsToJson(
+      metrics: SparkListenerStageExecutorMetrics,
+      g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageExecutorMetrics)
+    g.writeStringField("Executor ID", metrics.execId)
+    g.writeNumberField("Stage ID", metrics.stageId)
+    g.writeNumberField("Stage Attempt ID", metrics.stageAttemptId)
+    g.writeFieldName("Executor Metrics")
+    executorMetricsToJson(metrics.executorMetrics, g)
+    g.writeEndObject()
   }
 
-  def blockUpdateToJson(blockUpdate: SparkListenerBlockUpdated): JValue = {
-    val blockUpdatedInfo = blockUpdatedInfoToJson(blockUpdate.blockUpdatedInfo)
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockUpdate) ~
-    ("Block Updated Info" -> blockUpdatedInfo)
+  def blockUpdateToJson(blockUpdate: SparkListenerBlockUpdated, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockUpdate)
+    g.writeFieldName("Block Updated Info")
+    blockUpdatedInfoToJson(blockUpdate.blockUpdatedInfo, g)
+    g.writeEndObject()
   }
 
   /** ------------------------------------------------------------------- *
    * JSON serialization methods for classes SparkListenerEvents depend on |
    * -------------------------------------------------------------------- */
 
-  def stageInfoToJson(stageInfo: StageInfo): JValue = {
-    val rddInfo = JArray(stageInfo.rddInfos.map(rddInfoToJson).toList)
-    val parentIds = JArray(stageInfo.parentIds.map(JInt(_)).toList)
-    val submissionTime = stageInfo.submissionTime.map(JInt(_)).getOrElse(JNothing)
-    val completionTime = stageInfo.completionTime.map(JInt(_)).getOrElse(JNothing)
-    val failureReason = stageInfo.failureReason.map(JString(_)).getOrElse(JNothing)
-    ("Stage ID" -> stageInfo.stageId) ~
-    ("Stage Attempt ID" -> stageInfo.attemptNumber) ~
-    ("Stage Name" -> stageInfo.name) ~
-    ("Number of Tasks" -> stageInfo.numTasks) ~
-    ("RDD Info" -> rddInfo) ~
-    ("Parent IDs" -> parentIds) ~
-    ("Details" -> stageInfo.details) ~
-    ("Submission Time" -> submissionTime) ~
-    ("Completion Time" -> completionTime) ~
-    ("Failure Reason" -> failureReason) ~
-    ("Accumulables" -> accumulablesToJson(stageInfo.accumulables.values)) ~
-    ("Resource Profile Id" -> stageInfo.resourceProfileId)
+  def stageInfoToJson(stageInfo: StageInfo, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeNumberField("Stage ID", stageInfo.stageId)
+    g.writeNumberField("Stage Attempt ID", stageInfo.attemptNumber)
+    g.writeStringField("Stage Name", stageInfo.name)
+    g.writeNumberField ("Number of Tasks", stageInfo.numTasks)
+    g.writeArrayFieldStart("RDD Info")
+    stageInfo.rddInfos.foreach(rddInfoToJson(_, g))
+    g.writeEndArray()
+    g.writeArrayFieldStart("Parent IDs")
+    stageInfo.parentIds.foreach(g.writeNumber)
+    g.writeEndArray()
+    g.writeStringField("Details", stageInfo.details)
+    stageInfo.submissionTime.foreach(g.writeNumberField("Submission Time", _))
+    stageInfo.completionTime.foreach(g.writeNumberField("Completion Time", _))
+    stageInfo.failureReason.foreach(g.writeStringField("Failure Reason", _))
+    g.writeFieldName("Accumulables")
+    accumulablesToJson(stageInfo.accumulables.values, g)
+    g.writeNumberField("Resource Profile Id", stageInfo.resourceProfileId)
+    g.writeEndObject()
   }
 
-  def taskInfoToJson(taskInfo: TaskInfo): JValue = {
-    ("Task ID" -> taskInfo.taskId) ~
-    ("Index" -> taskInfo.index) ~
-    ("Attempt" -> taskInfo.attemptNumber) ~
-    ("Partition ID" -> taskInfo.partitionId) ~
-    ("Launch Time" -> taskInfo.launchTime) ~
-    ("Executor ID" -> taskInfo.executorId) ~
-    ("Host" -> taskInfo.host) ~
-    ("Locality" -> taskInfo.taskLocality.toString) ~
-    ("Speculative" -> taskInfo.speculative) ~
-    ("Getting Result Time" -> taskInfo.gettingResultTime) ~
-    ("Finish Time" -> taskInfo.finishTime) ~
-    ("Failed" -> taskInfo.failed) ~
-    ("Killed" -> taskInfo.killed) ~
-    ("Accumulables" -> accumulablesToJson(taskInfo.accumulables))
+  def taskInfoToJson(taskInfo: TaskInfo, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeNumberField("Task ID", taskInfo.taskId)
+    g.writeNumberField("Index", taskInfo.index)
+    g.writeNumberField("Attempt", taskInfo.attemptNumber)
+    g.writeNumberField("Partition ID", taskInfo.partitionId)
+    g.writeNumberField("Launch Time", taskInfo.launchTime)
+    g.writeStringField("Executor ID", taskInfo.executorId)
+    g.writeStringField("Host", taskInfo.host)
+    g.writeStringField("Locality", taskInfo.taskLocality.toString)
+    g.writeBooleanField("Speculative", taskInfo.speculative)
+    g.writeNumberField("Getting Result Time", taskInfo.gettingResultTime)
+    g.writeNumberField("Finish Time", taskInfo.finishTime)
+    g.writeBooleanField("Failed", taskInfo.failed)
+    g.writeBooleanField("Killed", taskInfo.killed)
+    g.writeFieldName("Accumulables")
+    accumulablesToJson(taskInfo.accumulables, g)
+    g.writeEndObject()
   }
 
   private lazy val accumulableExcludeList = Set("internal.metrics.updatedBlockStatuses")
 
-  def accumulablesToJson(accumulables: Iterable[AccumulableInfo]): JArray = {
-    JArray(accumulables
+  def accumulablesToJson(accumulables: Iterable[AccumulableInfo], g: JsonGenerator): Unit = {
+    g.writeStartArray()
+    accumulables
         .filterNot(_.name.exists(accumulableExcludeList.contains))
-        .toList.sortBy(_.id).map(accumulableInfoToJson))
+        .toList.sortBy(_.id).foreach(a => accumulableInfoToJson(a, g))
+    g.writeEndArray()
   }
 
-  def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
+  def accumulableInfoToJson(accumulableInfo: AccumulableInfo, g: JsonGenerator): Unit = {
     val name = accumulableInfo.name
-    ("ID" -> accumulableInfo.id) ~
-    ("Name" -> name) ~
-    ("Update" -> accumulableInfo.update.map { v => accumValueToJson(name, v) }) ~
-    ("Value" -> accumulableInfo.value.map { v => accumValueToJson(name, v) }) ~
-    ("Internal" -> accumulableInfo.internal) ~
-    ("Count Failed Values" -> accumulableInfo.countFailedValues) ~
-    ("Metadata" -> accumulableInfo.metadata)
+    g.writeStartObject()
+    g.writeNumberField("ID", accumulableInfo.id)
+    name.foreach(g.writeStringField("Name", _))
+    accumulableInfo.update.foreach { v =>
+      accumValueToJson(name, v, g, fieldName = Some("Update"))
+    }
+    accumulableInfo.value.foreach { v =>
+      accumValueToJson(name, v, g, fieldName = Some("Value"))
+    }
+    g.writeBooleanField("Internal", accumulableInfo.internal)
+    g.writeBooleanField("Count Failed Values", accumulableInfo.countFailedValues)
+    accumulableInfo.metadata.foreach(g.writeStringField("Metadata", _))
+    g.writeEndObject()
   }
 
   /**
@@ -368,255 +459,340 @@ private[spark] object JsonProtocol {
    *
    * The behavior here must match that of [[accumValueFromJson]]. Exposed for testing.
    */
-  private[util] def accumValueToJson(name: Option[String], value: Any): JValue = {
+  private[util] def accumValueToJson(
+      name: Option[String],
+      value: Any,
+      g: JsonGenerator,
+      fieldName: Option[String] = None): Unit = {
     if (name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))) {
       value match {
-        case v: Int => JInt(v)
-        case v: Long => JInt(v)
+        case v: Int =>
+          fieldName.foreach(g.writeFieldName)
+          g.writeNumber(v)
+        case v: Long =>
+          fieldName.foreach(g.writeFieldName)
+          g.writeNumber(v)
         // We only have 3 kind of internal accumulator types, so if it's not int or long, it must be
         // the blocks accumulator, whose type is `java.util.List[(BlockId, BlockStatus)]`
         case v: java.util.List[_] =>
-          JArray(v.asScala.toList.flatMap {
+          fieldName.foreach(g.writeFieldName)
+          g.writeStartArray()
+          v.asScala.foreach {
             case (id: BlockId, status: BlockStatus) =>
-              Some(
-                ("Block ID" -> id.toString) ~
-                ("Status" -> blockStatusToJson(status))
-              )
+              g.writeStartObject()
+              g.writeStringField("Block ID", id.toString)
+              g.writeFieldName("Status")
+              blockStatusToJson(status, g)
+              g.writeEndObject()
             case _ =>
               // Ignore unsupported types. A user may put `METRICS_PREFIX` in the name. We should
               // not crash.
-              None
-          })
+          }
+          g.writeEndArray()
         case _ =>
           // Ignore unsupported types. A user may put `METRICS_PREFIX` in the name. We should not
           // crash.
-          JNothing
       }
     } else {
       // For all external accumulators, just use strings
-      JString(value.toString)
+      fieldName.foreach(g.writeFieldName)
+      g.writeString(value.toString)
     }
   }
 
-  def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
-    val shuffleReadMetrics: JValue =
-      ("Remote Blocks Fetched" -> taskMetrics.shuffleReadMetrics.remoteBlocksFetched) ~
-        ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
-        ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
-        ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
-        ("Remote Bytes Read To Disk" -> taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk) ~
-        ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
-        ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
-    val shuffleWriteMetrics: JValue =
-      ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
-        ("Shuffle Write Time" -> taskMetrics.shuffleWriteMetrics.writeTime) ~
-        ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten)
-    val inputMetrics: JValue =
-      ("Bytes Read" -> taskMetrics.inputMetrics.bytesRead) ~
-        ("Records Read" -> taskMetrics.inputMetrics.recordsRead)
-    val outputMetrics: JValue =
-      ("Bytes Written" -> taskMetrics.outputMetrics.bytesWritten) ~
-        ("Records Written" -> taskMetrics.outputMetrics.recordsWritten)
-    val updatedBlocks =
-      JArray(taskMetrics.updatedBlockStatuses.toList.map { case (id, status) =>
-        ("Block ID" -> id.toString) ~
-          ("Status" -> blockStatusToJson(status))
-      })
-    ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
-    ("Executor Deserialize CPU Time" -> taskMetrics.executorDeserializeCpuTime) ~
-    ("Executor Run Time" -> taskMetrics.executorRunTime) ~
-    ("Executor CPU Time" -> taskMetrics.executorCpuTime) ~
-    ("Peak Execution Memory" -> taskMetrics.peakExecutionMemory) ~
-    ("Result Size" -> taskMetrics.resultSize) ~
-    ("JVM GC Time" -> taskMetrics.jvmGCTime) ~
-    ("Result Serialization Time" -> taskMetrics.resultSerializationTime) ~
-    ("Memory Bytes Spilled" -> taskMetrics.memoryBytesSpilled) ~
-    ("Disk Bytes Spilled" -> taskMetrics.diskBytesSpilled) ~
-    ("Shuffle Read Metrics" -> shuffleReadMetrics) ~
-    ("Shuffle Write Metrics" -> shuffleWriteMetrics) ~
-    ("Input Metrics" -> inputMetrics) ~
-    ("Output Metrics" -> outputMetrics) ~
-    ("Updated Blocks" -> updatedBlocks)
+  def taskMetricsToJson(taskMetrics: TaskMetrics, g: JsonGenerator): Unit = {
+    def writeShuffleReadMetrics(): Unit = {
+      g.writeStartObject()
+      g.writeNumberField(
+        "Remote Blocks Fetched", taskMetrics.shuffleReadMetrics.remoteBlocksFetched)
+      g.writeNumberField("Local Blocks Fetched", taskMetrics.shuffleReadMetrics.localBlocksFetched)
+      g.writeNumberField("Fetch Wait Time", taskMetrics.shuffleReadMetrics.fetchWaitTime)
+      g.writeNumberField("Remote Bytes Read", taskMetrics.shuffleReadMetrics.remoteBytesRead)
+      g.writeNumberField(
+        "Remote Bytes Read To Disk", taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk)
+      g.writeNumberField("Local Bytes Read", taskMetrics.shuffleReadMetrics.localBytesRead)
+      g.writeNumberField("Total Records Read", taskMetrics.shuffleReadMetrics.recordsRead)
+      g.writeEndObject()
+    }
+    def writeShuffleWriteMetrics(): Unit = {
+      g.writeStartObject()
+      g.writeNumberField("Shuffle Bytes Written", taskMetrics.shuffleWriteMetrics.bytesWritten)
+      g.writeNumberField("Shuffle Write Time", taskMetrics.shuffleWriteMetrics.writeTime)
+      g.writeNumberField("Shuffle Records Written", taskMetrics.shuffleWriteMetrics.recordsWritten)
+      g.writeEndObject()
+    }
+    def writeInputMetrics(): Unit = {
+      g.writeStartObject()
+      g.writeNumberField("Bytes Read", taskMetrics.inputMetrics.bytesRead)
+      g.writeNumberField("Records Read", taskMetrics.inputMetrics.recordsRead)
+      g.writeEndObject()
+    }
+    def writeOutputMetrics(): Unit = {
+      g.writeStartObject()
+      g.writeNumberField("Bytes Written", taskMetrics.outputMetrics.bytesWritten)
+      g.writeNumberField("Records Written", taskMetrics.outputMetrics.recordsWritten)
+      g.writeEndObject()
+    }
+    def writeUpdatedBlocks(): Unit = {
+      g.writeStartArray()
+      taskMetrics.updatedBlockStatuses.foreach { case (id, status) =>
+        g.writeStartObject()
+        g.writeStringField("Block ID", id.toString)
+        g.writeFieldName("Status")
+        blockStatusToJson(status, g)
+        g.writeEndObject()
+      }
+      g.writeEndArray()
+    }
+
+    g.writeStartObject()
+    g.writeNumberField("Executor Deserialize Time", taskMetrics.executorDeserializeTime)
+    g.writeNumberField("Executor Deserialize CPU Time", taskMetrics.executorDeserializeCpuTime)
+    g.writeNumberField("Executor Run Time", taskMetrics.executorRunTime)
+    g.writeNumberField("Executor CPU Time", taskMetrics.executorCpuTime)
+    g.writeNumberField("Peak Execution Memory", taskMetrics.peakExecutionMemory)
+    g.writeNumberField("Result Size", taskMetrics.resultSize)
+    g.writeNumberField("JVM GC Time", taskMetrics.jvmGCTime)
+    g.writeNumberField("Result Serialization Time", taskMetrics.resultSerializationTime)
+    g.writeNumberField("Memory Bytes Spilled", taskMetrics.memoryBytesSpilled)
+    g.writeNumberField("Disk Bytes Spilled", taskMetrics.diskBytesSpilled)
+    g.writeFieldName("Shuffle Read Metrics")
+    writeShuffleReadMetrics()
+    g.writeFieldName("Shuffle Write Metrics")
+    writeShuffleWriteMetrics()
+    g.writeFieldName("Input Metrics")
+    writeInputMetrics()
+    g.writeFieldName("Output Metrics")
+    writeOutputMetrics()
+    g.writeFieldName("Updated Blocks")
+    writeUpdatedBlocks()
+    g.writeEndObject()
   }
 
   /** Convert executor metrics to JSON. */
-  def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
-    val metrics = ExecutorMetricType.metricToOffset.map { case (m, _) =>
-      JField(m, executorMetrics.getMetricValue(m))
+  def executorMetricsToJson(executorMetrics: ExecutorMetrics, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    ExecutorMetricType.metricToOffset.foreach { case (m, _) =>
+      g.writeNumberField(m, executorMetrics.getMetricValue(m))
     }
-    JObject(metrics.toSeq: _*)
+    g.writeEndObject()
   }
 
-  def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
-    val reason = Utils.getFormattedClassName(taskEndReason)
-    val json: JObject = taskEndReason match {
+  def taskEndReasonToJson(taskEndReason: TaskEndReason, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Reason", Utils.getFormattedClassName(taskEndReason))
+    taskEndReason match {
       case fetchFailed: FetchFailed =>
-        val blockManagerAddress = Option(fetchFailed.bmAddress).
-          map(blockManagerIdToJson).getOrElse(JNothing)
-        ("Block Manager Address" -> blockManagerAddress) ~
-        ("Shuffle ID" -> fetchFailed.shuffleId) ~
-        ("Map ID" -> fetchFailed.mapId) ~
-        ("Map Index" -> fetchFailed.mapIndex) ~
-        ("Reduce ID" -> fetchFailed.reduceId) ~
-        ("Message" -> fetchFailed.message)
+        Option(fetchFailed.bmAddress).foreach { id =>
+          g.writeFieldName("Block Manager Address")
+          blockManagerIdToJson(id, g)
+        }
+        g.writeNumberField("Shuffle ID", fetchFailed.shuffleId)
+        g.writeNumberField("Map ID", fetchFailed.mapId)
+        g.writeNumberField("Map Index", fetchFailed.mapIndex)
+        g.writeNumberField("Reduce ID", fetchFailed.reduceId)
+        g.writeStringField("Message", fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
-        val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
-        val accumUpdates = accumulablesToJson(exceptionFailure.accumUpdates)
-        ("Class Name" -> exceptionFailure.className) ~
-        ("Description" -> exceptionFailure.description) ~
-        ("Stack Trace" -> stackTrace) ~
-        ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
-        ("Accumulator Updates" -> accumUpdates)
+        g.writeStringField("Class Name", exceptionFailure.className)
+        g.writeStringField("Description", exceptionFailure.description)
+        g.writeFieldName("Stack Trace")
+        stackTraceToJson(exceptionFailure.stackTrace, g)
+        g.writeStringField("Full Stack Trace", exceptionFailure.fullStackTrace)
+        g.writeFieldName("Accumulator Updates")
+        accumulablesToJson(exceptionFailure.accumUpdates, g)
       case taskCommitDenied: TaskCommitDenied =>
-        ("Job ID" -> taskCommitDenied.jobID) ~
-        ("Partition ID" -> taskCommitDenied.partitionID) ~
-        ("Attempt Number" -> taskCommitDenied.attemptNumber)
+        g.writeNumberField("Job ID", taskCommitDenied.jobID)
+        g.writeNumberField("Partition ID", taskCommitDenied.partitionID)
+        g.writeNumberField("Attempt Number", taskCommitDenied.attemptNumber)
       case ExecutorLostFailure(executorId, exitCausedByApp, reason) =>
-        ("Executor ID" -> executorId) ~
-        ("Exit Caused By App" -> exitCausedByApp) ~
-        ("Loss Reason" -> reason)
+        g.writeStringField("Executor ID", executorId)
+        g.writeBooleanField("Exit Caused By App", exitCausedByApp)
+        reason.foreach(g.writeStringField("Loss Reason", _))
       case taskKilled: TaskKilled =>
-        val accumUpdates = JArray(taskKilled.accumUpdates.map(accumulableInfoToJson).toList)
-        ("Kill Reason" -> taskKilled.reason) ~
-        ("Accumulator Updates" -> accumUpdates)
-      case _ => emptyJson
+        g.writeStringField("Kill Reason", taskKilled.reason)
+        g.writeArrayFieldStart("Accumulator Updates")
+        taskKilled.accumUpdates.foreach { info =>
+          accumulableInfoToJson(info, g)
+        }
+        g.writeEndArray()
+      case _ =>
+        // no extra fields to write
     }
-    ("Reason" -> reason) ~ json
+    g.writeEndObject()
   }
 
-  def blockManagerIdToJson(blockManagerId: BlockManagerId): JValue = {
-    ("Executor ID" -> blockManagerId.executorId) ~
-    ("Host" -> blockManagerId.host) ~
-    ("Port" -> blockManagerId.port)
+  def blockManagerIdToJson(blockManagerId: BlockManagerId, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Executor ID", blockManagerId.executorId)
+    g.writeStringField("Host", blockManagerId.host)
+    g.writeNumberField("Port", blockManagerId.port)
+    g.writeEndObject()
   }
 
-  def jobResultToJson(jobResult: JobResult): JValue = {
-    val result = Utils.getFormattedClassName(jobResult)
-    val json = jobResult match {
-      case JobSucceeded => emptyJson
+  def jobResultToJson(jobResult: JobResult, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Result", Utils.getFormattedClassName(jobResult))
+    jobResult match {
       case jobFailed: JobFailed =>
-        JObject("Exception" -> exceptionToJson(jobFailed.exception))
+        g.writeFieldName("Exception")
+        exceptionToJson(jobFailed.exception, g)
+      case JobSucceeded =>
+        // Nothing else to write in case of success
     }
-    ("Result" -> result) ~ json
+    g.writeEndObject()
   }
 
-  def rddInfoToJson(rddInfo: RDDInfo): JValue = {
-    val storageLevel = storageLevelToJson(rddInfo.storageLevel)
-    val parentIds = JArray(rddInfo.parentIds.map(JInt(_)).toList)
-    ("RDD ID" -> rddInfo.id) ~
-    ("Name" -> rddInfo.name) ~
-    ("Scope" -> rddInfo.scope.map(_.toJson)) ~
-    ("Callsite" -> rddInfo.callSite) ~
-    ("Parent IDs" -> parentIds) ~
-    ("Storage Level" -> storageLevel) ~
-    ("Barrier" -> rddInfo.isBarrier) ~
-    ("DeterministicLevel" -> rddInfo.outputDeterministicLevel.toString) ~
-    ("Number of Partitions" -> rddInfo.numPartitions) ~
-    ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
-    ("Memory Size" -> rddInfo.memSize) ~
-    ("Disk Size" -> rddInfo.diskSize)
+  def rddInfoToJson(rddInfo: RDDInfo, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeNumberField("RDD ID", rddInfo.id)
+    g.writeStringField("Name", rddInfo.name)
+    ("Scope", rddInfo.scope.map(_.toJson))
+    g.writeStringField("Callsite", rddInfo.callSite)
+    g.writeArrayFieldStart("Parent IDs")
+    rddInfo.parentIds.foreach(g.writeNumber)
+    g.writeEndArray()
+    g.writeFieldName("Storage Level")
+    storageLevelToJson(rddInfo.storageLevel, g)
+    g.writeBooleanField("Barrier", rddInfo.isBarrier)
+    g.writeStringField("DeterministicLevel", rddInfo.outputDeterministicLevel.toString)
+    g.writeNumberField("Number of Partitions", rddInfo.numPartitions)
+    g.writeNumberField("Number of Cached Partitions", rddInfo.numCachedPartitions)
+    g.writeNumberField("Memory Size", rddInfo.memSize)
+    g.writeNumberField("Disk Size", rddInfo.diskSize)
+    g.writeEndObject()
   }
 
-  def storageLevelToJson(storageLevel: StorageLevel): JValue = {
-    ("Use Disk" -> storageLevel.useDisk) ~
-    ("Use Memory" -> storageLevel.useMemory) ~
-    ("Deserialized" -> storageLevel.deserialized) ~
-    ("Replication" -> storageLevel.replication)
+  def storageLevelToJson(storageLevel: StorageLevel, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeBooleanField("Use Disk", storageLevel.useDisk)
+    g.writeBooleanField("Use Memory", storageLevel.useMemory)
+    g.writeBooleanField("Deserialized", storageLevel.deserialized)
+    g.writeNumberField("Replication", storageLevel.replication)
+    g.writeEndObject()
   }
 
-  def blockStatusToJson(blockStatus: BlockStatus): JValue = {
-    val storageLevel = storageLevelToJson(blockStatus.storageLevel)
-    ("Storage Level" -> storageLevel) ~
-    ("Memory Size" -> blockStatus.memSize) ~
-    ("Disk Size" -> blockStatus.diskSize)
+  def blockStatusToJson(blockStatus: BlockStatus, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeFieldName("Storage Level")
+    storageLevelToJson(blockStatus.storageLevel, g)
+    g.writeNumberField("Memory Size", blockStatus.memSize)
+    g.writeNumberField("Disk Size", blockStatus.diskSize)
+    g.writeEndObject()
   }
 
-  def executorInfoToJson(executorInfo: ExecutorInfo): JValue = {
-    ("Host" -> executorInfo.executorHost) ~
-    ("Total Cores" -> executorInfo.totalCores) ~
-    ("Log Urls" -> mapToJson(executorInfo.logUrlMap)) ~
-    ("Attributes" -> mapToJson(executorInfo.attributes)) ~
-    ("Resources" -> resourcesMapToJson(executorInfo.resourcesInfo)) ~
-    ("Resource Profile Id" -> executorInfo.resourceProfileId) ~
-    ("Registration Time" -> executorInfo.registrationTime) ~
-    ("Request Time" -> executorInfo.requestTime)
-  }
-
-  def resourcesMapToJson(m: Map[String, ResourceInformation]): JValue = {
-    val jsonFields = m.map {
-      case (k, v) => JField(k, v.toJson)
+  def executorInfoToJson(executorInfo: ExecutorInfo, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Host", executorInfo.executorHost)
+    g.writeNumberField("Total Cores", executorInfo.totalCores)
+    writeMapField("Log Urls", executorInfo.logUrlMap, g)
+    writeMapField("Attributes", executorInfo.attributes, g)
+    g.writeObjectFieldStart("Resources")
+    executorInfo.resourcesInfo.foreach { case (k, v) =>
+      g.writeFieldName(k)
+      v.writeJson(g)
     }
-    JObject(jsonFields.toList)
+    g.writeEndObject()
+    g.writeNumberField("Resource Profile Id", executorInfo.resourceProfileId)
+    executorInfo.registrationTime.foreach(g.writeNumberField("Registration Time", _))
+    executorInfo.requestTime.foreach(g.writeNumberField("Request Time", _))
+    g.writeEndObject()
   }
 
-  def blockUpdatedInfoToJson(blockUpdatedInfo: BlockUpdatedInfo): JValue = {
-    ("Block Manager ID" -> blockManagerIdToJson(blockUpdatedInfo.blockManagerId)) ~
-    ("Block ID" -> blockUpdatedInfo.blockId.toString) ~
-    ("Storage Level" -> storageLevelToJson(blockUpdatedInfo.storageLevel)) ~
-    ("Memory Size" -> blockUpdatedInfo.memSize) ~
-    ("Disk Size" -> blockUpdatedInfo.diskSize)
+  def blockUpdatedInfoToJson(blockUpdatedInfo: BlockUpdatedInfo, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeFieldName("Block Manager ID")
+    blockManagerIdToJson(blockUpdatedInfo.blockManagerId, g)
+    g.writeStringField("Block ID", blockUpdatedInfo.blockId.toString)
+    g.writeFieldName("Storage Level")
+    storageLevelToJson(blockUpdatedInfo.storageLevel, g)
+    g.writeNumberField("Memory Size", blockUpdatedInfo.memSize)
+    g.writeNumberField("Disk Size", blockUpdatedInfo.diskSize)
+    g.writeEndObject()
   }
 
-  def executorResourceRequestToJson(execReq: ExecutorResourceRequest): JValue = {
-    ("Resource Name" -> execReq.resourceName) ~
-    ("Amount" -> execReq.amount) ~
-    ("Discovery Script" -> execReq.discoveryScript) ~
-    ("Vendor" -> execReq.vendor)
+  def executorResourceRequestToJson(execReq: ExecutorResourceRequest, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Resource Name", execReq.resourceName)
+    g.writeNumberField("Amount", execReq.amount)
+    g.writeStringField("Discovery Script", execReq.discoveryScript)
+    g.writeStringField("Vendor", execReq.vendor)
+    g.writeEndObject()
   }
 
-  def executorResourceRequestMapToJson(m: Map[String, ExecutorResourceRequest]): JValue = {
-    val jsonFields = m.map {
-      case (k, execReq) =>
-        JField(k, executorResourceRequestToJson(execReq))
+  def executorResourceRequestMapToJson(
+      m: Map[String, ExecutorResourceRequest],
+      g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    m.foreach { case (k, execReq) =>
+      g.writeFieldName(k)
+      executorResourceRequestToJson(execReq, g)
     }
-    JObject(jsonFields.toList)
+    g.writeEndObject()
   }
 
-  def taskResourceRequestToJson(taskReq: TaskResourceRequest): JValue = {
-    ("Resource Name" -> taskReq.resourceName) ~
-    ("Amount" -> taskReq.amount)
+  def taskResourceRequestToJson(taskReq: TaskResourceRequest, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Resource Name", taskReq.resourceName)
+    g.writeNumberField("Amount", taskReq.amount)
+    g.writeEndObject()
   }
 
-  def taskResourceRequestMapToJson(m: Map[String, TaskResourceRequest]): JValue = {
-    val jsonFields = m.map {
-      case (k, taskReq) =>
-        JField(k, taskResourceRequestToJson(taskReq))
+  def taskResourceRequestMapToJson(m: Map[String, TaskResourceRequest], g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    m.foreach { case (k, taskReq) =>
+      g.writeFieldName(k)
+      taskResourceRequestToJson(taskReq, g)
     }
-    JObject(jsonFields.toList)
+    g.writeEndObject()
   }
 
   /** ------------------------------ *
    * Util JSON serialization methods |
    * ------------------------------- */
 
-  def mapToJson(m: Map[String, String]): JValue = {
-    val jsonFields = m.map { case (k, v) => JField(k, JString(v)) }
-    JObject(jsonFields.toList)
+  def writeMapField(name: String, m: Map[String, String], g: JsonGenerator): Unit = {
+    g.writeObjectFieldStart(name)
+    m.foreach { case (k, v) => g.writeStringField(k, v) }
+    g.writeEndObject()
   }
 
-  def propertiesToJson(properties: Properties): JValue = {
-    Option(properties).map { p =>
-      mapToJson(p.asScala)
-    }.getOrElse(JNothing)
+  def propertiesToJson(properties: Properties, g: JsonGenerator): Unit = {
+    Option(properties) match {
+      case Some(p) =>
+        g.writeStartObject()
+        p.asScala.foreach { case (k, v) => g.writeStringField(k, v) }
+        g.writeEndObject()
+      case None =>
+        g.writeNull()
+    }
   }
 
-  def UUIDToJson(id: UUID): JValue = {
-    ("Least Significant Bits" -> id.getLeastSignificantBits) ~
-    ("Most Significant Bits" -> id.getMostSignificantBits)
+  def UUIDToJson(id: UUID, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeNumberField("Least Significant Bits", id.getLeastSignificantBits)
+    g.writeNumberField("Most Significant Bits", id.getMostSignificantBits)
+    g.writeEndObject()
   }
 
-  def stackTraceToJson(stackTrace: Array[StackTraceElement]): JValue = {
-    JArray(stackTrace.map { case line =>
-      ("Declaring Class" -> line.getClassName) ~
-      ("Method Name" -> line.getMethodName) ~
-      ("File Name" -> line.getFileName) ~
-      ("Line Number" -> line.getLineNumber)
-    }.toList)
+  def stackTraceToJson(stackTrace: Array[StackTraceElement], g: JsonGenerator): Unit = {
+    g.writeStartArray()
+    stackTrace.foreach { line =>
+      g.writeStartObject()
+      g.writeStringField("Declaring Class", line.getClassName)
+      g.writeStringField("Method Name", line.getMethodName)
+      g.writeStringField("File Name", line.getFileName)
+      g.writeNumberField("Line Number", line.getLineNumber)
+      g.writeEndObject()
+    }
+    g.writeEndArray()
   }
 
-  def exceptionToJson(exception: Exception): JValue = {
-    ("Message" -> exception.getMessage) ~
-    ("Stack Trace" -> stackTraceToJson(exception.getStackTrace))
+  def exceptionToJson(exception: Exception, g: JsonGenerator): Unit = {
+    g.writeStartObject()
+    g.writeStringField("Message", exception.getMessage)
+    g.writeFieldName("Stack Trace")
+    stackTraceToJson(exception.getStackTrace, g)
+    g.writeEndObject()
   }
 
 
@@ -1309,7 +1485,4 @@ private[spark] object JsonProtocol {
       Some(json)
     }
   }
-
-  private def emptyJson: JObject = JObject(List[JField]())
-
 }
