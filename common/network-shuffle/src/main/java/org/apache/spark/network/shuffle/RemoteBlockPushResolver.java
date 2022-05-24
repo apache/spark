@@ -1338,6 +1338,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         && shuffleMergeId == that.shuffleMergeId;
     }
 
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(appId, attemptId, shuffleId, shuffleMergeId);
+    }
+
   }
 
   /** Metadata tracked for an actively merged shuffle partition */
