@@ -4,7 +4,7 @@
     "sqlState" : "42000"
   },
   "ARITHMETIC_OVERFLOW" : {
-    "message" : [ "<message>.<alternative> If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error." ],
+    "message" : [ "<message>.<alternative> If necessary set <config> to <configVal> (except for ANSI interval type) to bypass this error." ],
     "sqlState" : "22003"
   },
   "CANNOT_CAST_DATATYPE" : {

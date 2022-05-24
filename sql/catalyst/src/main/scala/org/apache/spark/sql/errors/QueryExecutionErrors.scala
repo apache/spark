@@ -490,7 +490,11 @@ object QueryExecutionErrors extends QueryErrorsBase {
     val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
-      messageParameters = Array(message, alternative, SQLConf.ANSI_ENABLED.key),
+      messageParameters = Array(
+        message,
+        alternative,
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        toSQLConfVal("false")),
       queryContext = errorContext)
   }
 
