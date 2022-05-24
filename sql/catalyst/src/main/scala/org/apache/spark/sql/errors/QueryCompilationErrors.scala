@@ -82,7 +82,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def nonLiteralPivotValError(pivotVal: Expression): Throwable = {
     new AnalysisException(
       errorClass = "NON_LITERAL_PIVOT_VALUES",
-      messageParameters = Array(pivotVal.toString))
+      messageParameters = Array(toSQLExpr(pivotVal)))
   }
 
   def pivotValDataTypeMismatchError(pivotVal: Expression, pivotCol: Expression): Throwable = {
@@ -2364,7 +2364,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FIELD_NAME",
-      messageParameters = Array(fieldName.quoted, path.quoted),
+      messageParameters = Array(toSQLId(fieldName), toSQLId(path)),
       origin = context)
   }
 

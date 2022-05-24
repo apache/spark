@@ -524,7 +524,7 @@ class QueryCompilationErrorsSuite
       checkErrorClass(
         exception = e,
         errorClass = "INVALID_FIELD_NAME",
-        msg = "Field name m.n is invalid: m is not a struct.; line 1 pos 27")
+        msg = "Field name `m`.`n` is invalid: `m` is not a struct.; line 1 pos 27")
     }
   }
 
@@ -544,8 +544,7 @@ class QueryCompilationErrorsSuite
           agg(sum($"earnings")).collect()
       },
       errorClass = "NON_LITERAL_PIVOT_VALUES",
-      msg = "Literal expressions required for pivot values, found 'earnings#\\w+'",
-      matchMsg = true)
+      msg = """Literal expressions required for pivot values, found "earnings".""")
   }
 
   test("UNSUPPORTED_DESERIALIZER: data type mismatch") {

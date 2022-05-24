@@ -1659,7 +1659,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
       permission: FsPermission,
       path: Path,
       e: Throwable): Throwable = {
-    new SparkSecurityException(errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+    new SparkSecurityException(errorClass = "RESET_PERMISSION_TO_ORIGINAL",
       Array(permission.toString, path.toString, e.getMessage))
   }
 

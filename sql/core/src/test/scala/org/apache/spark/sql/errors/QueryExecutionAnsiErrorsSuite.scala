@@ -131,7 +131,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "CAST_INVALID_INPUT",
       msg = """The value '111111111111xe23' of the type "STRING" cannot be cast to "DOUBLE" """ +
-        """because it is malformed. To return NULL instead, use `try_cast`. If necessary set """ +
+        "because it is malformed. Correct the value as per the syntax, " +
+        "or change its target type. To return NULL instead, use `try_cast`. If necessary set " +
         s"""$ansiConf to \"false\" to bypass this error.
           |== SQL(line 1, position 7) ==
           |select CAST('111111111111xe23' AS DOUBLE)

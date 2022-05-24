@@ -74,7 +74,7 @@ class QueryCompilationErrorsDSv2Suite
       checkErrorClass(
         exception = e,
         errorClass = "NON_PARTITION_COLUMN",
-        msg = "PARTITION clause cannot contain a non-partition column name: `id`")
+        msg = "PARTITION clause cannot contain the non-partition column: `id`.")
     }
   }
 
@@ -91,7 +91,7 @@ class QueryCompilationErrorsDSv2Suite
       checkErrorClass(
         exception = e,
         errorClass = "NON_PARTITION_COLUMN",
-        msg = "PARTITION clause cannot contain a non-partition column name: `data`")
+        msg = "PARTITION clause cannot contain the non-partition column: `data`.")
     }
   }
 }
