@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
@@ -43,8 +43,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       pushDownSample,
       pushDownFilters,
       pushDownAggregates,
-      pushDownOffsets,
       pushDownLimits,
+      pushDownOffsets,
       pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
@@ -436,25 +436,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
   }
 
   def pushDownOffsets(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case offset @ LimitAndOffset(limit, offsetValue, child) =>
-      val (newChild, isPushed) = pushDownOffset(child, offsetValue)
-      if (isPushed) {
-        // If we can push down offset, it indicates data source only have one partition.
-        // For `dataset.limit(m).offset(n)`, try to push down `LIMIT (m - n) OFFSET n`.
-        // For example, `dataset.limit(5).offset(3)`, we can push down `LIMIT 2 OFFSET 3`.
-        val (finalChild, canRemoveLimit) = pushDownLimit(newChild, limit - offsetValue)
-        if (canRemoveLimit) {
-          finalChild
-        } else {
-          // For `dataset.limit(m).offset(n)`, only `OFFSET n` be pushed.
-          // Spark will do `LIMIT (m - n)`.
-          offset.child.asInstanceOf[GlobalLimit]
-            .copy(limitExpr = Literal(limit - offsetValue)).withNewChildren(Seq(finalChild))
-        }
-      } else {
-        // If we can't push down offset, let `pushDownLimits` push down limit.
-        offset
-      }
+    case offset @ LimitAndOffset(_, _, _) =>
+      // Because `LIMIT` not pushed down completely, so not pushing down `OFFSET` here.
+      offset
     case globalLimit @ OffsetAndLimit(offset, limitValue, child) =>
       val (newChild, isPushed) = pushDownOffset(child, offset)
       if (isPushed) {

@@ -239,6 +239,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df2, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
     val df3 = spark.read
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .sort($"salary")
+      .offset(1)
+    checkOffsetRemoved(df3, false)
+    checkPushedInfo(df3,
+      "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], ReadSchema:")
+    checkAnswer(df3, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+
+    val df4 = spark.read
       .option("partitionColumn", "dept")
       .option("lowerBound", "0")
       .option("upperBound", "2")
@@ -246,30 +256,30 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .filter($"dept" > 1)
       .offset(1)
-    checkOffsetRemoved(df3, false)
-    checkPushedInfo(df3, "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], ReadSchema:")
-    checkAnswer(df3, Seq(Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
+    checkOffsetRemoved(df4, false)
+    checkPushedInfo(df4, "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], ReadSchema:")
+    checkAnswer(df4, Seq(Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
 
-    val df4 = spark.read
+    val df5 = spark.read
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .offset(1)
-    checkOffsetRemoved(df4, false)
-    checkPushedInfo(df4,
+    checkOffsetRemoved(df5, false)
+    checkPushedInfo(df5,
       "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
-    checkAnswer(df4, Seq(Row(2, 22000.00), Row(6, 12000.00)))
+    checkAnswer(df5, Seq(Row(2, 22000.00), Row(6, 12000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
     val sub = udf { (x: String) => x.substring(0, 3) }
-    val df5 = spark.read
+    val df6 = spark.read
       .table("h2.test.employee")
       .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
       .filter(name($"shortName"))
       .offset(1)
-    checkOffsetRemoved(df5, false)
+    checkOffsetRemoved(df6, false)
     // OFFSET is pushed down only if all the filters are pushed down
-    checkPushedInfo(df5, "PushedFilters: [], ")
-    checkAnswer(df5, Seq(Row(10000.00, 1300.0, "dav"), Row(9000.00, 1200.0, "cat")))
+    checkPushedInfo(df6, "PushedFilters: [], ")
+    checkAnswer(df6, Seq(Row(10000.00, 1300.0, "dav"), Row(9000.00, 1200.0, "cat")))
   }
 
   test("simple scan with LIMIT and OFFSET") {
@@ -281,7 +291,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkLimitRemoved(df1)
     checkOffsetRemoved(df1)
     checkPushedInfo(df1,
-      "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], PushedLimit: LIMIT 1, PushedOffset: OFFSET 1,")
+      "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], PushedLimit: LIMIT 2, PushedOffset: OFFSET 1,")
     checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
     val df2 = spark.read
@@ -291,9 +301,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .limit(2)
       .offset(1)
     checkLimitRemoved(df2, false)
-    checkOffsetRemoved(df2)
+    checkOffsetRemoved(df2, false)
     checkPushedInfo(df2,
-      "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], PushedOffset: OFFSET 1, ReadSchema:")
+      "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], ReadSchema:")
     checkAnswer(df2, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
     val df3 = spark.read
@@ -322,6 +332,56 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df4, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
     val df5 = spark.read
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .sort($"salary")
+      .limit(2)
+      .offset(1)
+    checkLimitRemoved(df5)
+    checkOffsetRemoved(df5)
+    checkPushedInfo(df5, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], PushedOffset: OFFSET 1," +
+      " PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 2,")
+    checkAnswer(df5, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+
+    val df6 = spark.read
+      .option("pushDownLimit", "false")
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .sort($"salary")
+      .limit(2)
+      .offset(1)
+    checkLimitRemoved(df6, false)
+    checkOffsetRemoved(df6, false)
+    checkPushedInfo(df6, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], ReadSchema:")
+    checkAnswer(df6, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+
+    val df7 = spark.read
+      .option("pushDownOffset", "false")
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .sort($"salary")
+      .limit(2)
+      .offset(1)
+    checkLimitRemoved(df7)
+    checkOffsetRemoved(df7, false)
+    checkPushedInfo(df7, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1]," +
+      " PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 2, ReadSchema:")
+    checkAnswer(df7, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+
+    val df8 = spark.read
+      .option("pushDownLimit", "false")
+      .option("pushDownOffset", "false")
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .sort($"salary")
+      .limit(2)
+      .offset(1)
+    checkLimitRemoved(df8, false)
+    checkOffsetRemoved(df8, false)
+    checkPushedInfo(df8, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], ReadSchema:")
+    checkAnswer(df8, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+
+    val df9 = spark.read
       .option("partitionColumn", "dept")
       .option("lowerBound", "0")
       .option("upperBound", "2")
@@ -330,35 +390,35 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter($"dept" > 1)
       .limit(2)
       .offset(1)
-    checkLimitRemoved(df5, false)
-    checkOffsetRemoved(df5, false)
-    checkPushedInfo(df5,
+    checkLimitRemoved(df9, false)
+    checkOffsetRemoved(df9, false)
+    checkPushedInfo(df9,
       "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], PushedLimit: LIMIT 2, ReadSchema:")
-    checkAnswer(df5, Seq(Row(2, "david", 10000.00, 1300.0, true)))
+    checkAnswer(df9, Seq(Row(2, "david", 10000.00, 1300.0, true)))
 
-    val df6 = spark.read
+    val df10 = spark.read
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .limit(2)
       .offset(1)
-    checkLimitRemoved(df6, false)
-    checkOffsetRemoved(df6, false)
-    checkPushedInfo(df6,
+    checkLimitRemoved(df10, false)
+    checkOffsetRemoved(df10, false)
+    checkPushedInfo(df10,
       "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
-    checkAnswer(df6, Seq(Row(2, 22000.00)))
+    checkAnswer(df10, Seq(Row(2, 22000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
     val sub = udf { (x: String) => x.substring(0, 3) }
-    val df7 = spark.read
+    val df11 = spark.read
       .table("h2.test.employee")
       .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
       .filter(name($"shortName"))
       .limit(2)
       .offset(1)
-    checkLimitRemoved(df7, false)
-    checkOffsetRemoved(df7, false)
-    checkPushedInfo(df7, "PushedFilters: [], ")
-    checkAnswer(df7, Seq(Row(9000.00, 1200.0, "cat")))
+    checkLimitRemoved(df11, false)
+    checkOffsetRemoved(df11, false)
+    checkPushedInfo(df11, "PushedFilters: [], ")
+    checkAnswer(df11, Seq(Row(9000.00, 1200.0, "cat")))
   }
 
   test("simple scan with OFFSET and LIMIT") {
@@ -411,6 +471,56 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df4, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
     val df5 = spark.read
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .sort($"salary")
+      .offset(1)
+      .limit(1)
+    checkLimitRemoved(df5, false)
+    checkOffsetRemoved(df5)
+    checkPushedInfo(df5, "[DEPT IS NOT NULL, DEPT = 1], PushedOffset: OFFSET 1," +
+      " PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 2,")
+    checkAnswer(df5, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+
+    val df6 = spark.read
+      .option("pushDownOffset", "false")
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .sort($"salary")
+      .offset(1)
+      .limit(1)
+    checkLimitRemoved(df6, false)
+    checkOffsetRemoved(df6, false)
+    checkPushedInfo(df6, "[DEPT IS NOT NULL, DEPT = 1]," +
+      " PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 2, ReadSchema:")
+    checkAnswer(df6, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+
+    val df7 = spark.read
+      .option("pushDownLimit", "false")
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .sort($"salary")
+      .offset(1)
+      .limit(1)
+    checkLimitRemoved(df7, false)
+    checkOffsetRemoved(df7, false)
+    checkPushedInfo(df7, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], ReadSchema:")
+    checkAnswer(df7, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+
+    val df8 = spark.read
+      .option("pushDownOffset", "false")
+      .option("pushDownLimit", "false")
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .sort($"salary")
+      .offset(1)
+      .limit(1)
+    checkLimitRemoved(df8, false)
+    checkOffsetRemoved(df8, false)
+    checkPushedInfo(df8, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], ReadSchema:")
+    checkAnswer(df8, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+
+    val df9 = spark.read
       .option("partitionColumn", "dept")
       .option("lowerBound", "0")
       .option("upperBound", "2")
@@ -419,31 +529,31 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter($"dept" > 1)
       .offset(1)
       .limit(1)
-    checkLimitRemoved(df5, false)
-    checkOffsetRemoved(df5, false)
-    checkPushedInfo(df5,
+    checkLimitRemoved(df9, false)
+    checkOffsetRemoved(df9, false)
+    checkPushedInfo(df9,
       "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], PushedLimit: LIMIT 2, ReadSchema:")
-    checkAnswer(df5, Seq(Row(2, "david", 10000.00, 1300.0, true)))
+    checkAnswer(df9, Seq(Row(2, "david", 10000.00, 1300.0, true)))
 
-    val df6 = sql("SELECT dept, sum(salary) FROM h2.test.employee group by dept LIMIT 1 OFFSET 1")
-    checkLimitRemoved(df6, false)
-    checkOffsetRemoved(df6, false)
-    checkPushedInfo(df6,
+    val df10 = sql("SELECT dept, sum(salary) FROM h2.test.employee group by dept LIMIT 1 OFFSET 1")
+    checkLimitRemoved(df10, false)
+    checkOffsetRemoved(df10, false)
+    checkPushedInfo(df10,
       "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
-    checkAnswer(df6, Seq(Row(2, 22000.00)))
+    checkAnswer(df10, Seq(Row(2, 22000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
     val sub = udf { (x: String) => x.substring(0, 3) }
-    val df7 = spark.read
+    val df11 = spark.read
       .table("h2.test.employee")
       .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
       .filter(name($"shortName"))
       .offset(1)
       .limit(1)
-    checkLimitRemoved(df7, false)
-    checkOffsetRemoved(df7, false)
-    checkPushedInfo(df7, "PushedFilters: [], ")
-    checkAnswer(df7, Seq(Row(9000.00, 1200.0, "cat")))
+    checkLimitRemoved(df11, false)
+    checkOffsetRemoved(df11, false)
+    checkPushedInfo(df11, "PushedFilters: [], ")
+    checkAnswer(df11, Seq(Row(9000.00, 1200.0, "cat")))
   }
 
   private def checkSortRemoved(df: DataFrame, removed: Boolean = true): Unit = {
