@@ -20,6 +20,7 @@ A wrapper class for Spark DataFrame to behave similar to pandas DataFrame.
 """
 from collections import defaultdict, namedtuple
 from collections.abc import Mapping
+from distutils.version import LooseVersion
 import re
 import warnings
 import inspect
@@ -491,20 +492,30 @@ class DataFrame(Frame, Generic[T]):
         return cast(InternalFrame, self._internal_frame)  # type: ignore[has-type]
 
     def _update_internal_frame(
-        self, internal: InternalFrame, requires_same_anchor: bool = True
+        self,
+        internal: InternalFrame,
+        requires_same_anchor: bool = True,
+        force_disconnect: bool = False,
     ) -> None:
         """
         Update InternalFrame with the given one.
 
-        If the column_label is changed or the new InternalFrame is not the same `anchor`,
-        disconnect the link to the Series and create a new one.
+        If the column_label is changed or the new InternalFrame is not the same `anchor` or the
+        `force_disconnect` flag is set to True, disconnect the link to the Series and create a new
+        one.
 
         If `requires_same_anchor` is `False`, checking whether or not the same anchor is ignored
         and force to update the InternalFrame, e.g., replacing the internal with the resolved_copy,
         updating the underlying Spark DataFrame which need to combine a different Spark DataFrame.
 
-        :param internal: the new InternalFrame
-        :param requires_same_anchor: whether checking the same anchor
+        Parameters
+        ----------
+        internal : InternalFrame
+            The new InternalFrame
+        requires_same_anchor : bool
+            Whether checking the same anchor
+        force_disconnect : bool
+            Force to disconnect the link to Series and create new one
         """
         from pyspark.pandas.series import Series
 
@@ -520,7 +531,7 @@ class DataFrame(Frame, Generic[T]):
                     renamed = old_label != new_label
                     not_same_anchor = requires_same_anchor and not same_anchor(internal, psser)
 
-                    if renamed or not_same_anchor:
+                    if renamed or not_same_anchor or force_disconnect:
                         psdf: DataFrame = DataFrame(self._internal.select_column(old_label))
                         psser._update_anchor(psdf)
                         psser = None
@@ -5659,7 +5670,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         inplace = validate_bool_kwarg(inplace, "inplace")
         if inplace:
-            self._update_internal_frame(psdf._internal, requires_same_anchor=False)
+            # Since Pandas 1.4, df.fillna generates a new dataframe instead of operating
+            # in-place. See also SPARK-38946. Currently, `bfill` and `ffill` still keep
+            # inplace operate behaviors.
+            force_disconnect = (method is None) and LooseVersion(pd.__version__) >= LooseVersion(
+                "1.4"
+            )
+            self._update_internal_frame(
+                psdf._internal, requires_same_anchor=False, force_disconnect=force_disconnect
+            )
             return None
         else:
             return psdf
@@ -8591,7 +8610,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             *HIDDEN_COLUMNS,
         )
         internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
-        self._update_internal_frame(internal, requires_same_anchor=False)
+        # Since Pandas 1.4, df.update generates a new dataframe instead of operating
+        # in-place. See also SPARK-38946.
+        force_disconnect = LooseVersion(pd.__version__) >= LooseVersion("1.4")
+        self._update_internal_frame(
+            internal, requires_same_anchor=False, force_disconnect=force_disconnect
+        )
 
     # TODO: ddof should be implemented.
     def cov(self, min_periods: Optional[int] = None) -> "DataFrame":
@@ -12153,7 +12177,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if inplace:
             # Here, the result is always a frame because the error is thrown during schema inference
             # from pandas.
-            self._update_internal_frame(result._internal, requires_same_anchor=False)
+            # Since Pandas 1.4, eval with inplace generates a new dataframe instead of operating
+            # in-place. See also SPARK-38946.
+            force_disconnect = LooseVersion(pd.__version__) >= LooseVersion("1.4")
+            self._update_internal_frame(
+                result._internal, requires_same_anchor=False, force_disconnect=force_disconnect
+            )
             return None
         elif should_return_series:
             return first_series(result).rename(series_name)
@@ -12883,7 +12912,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Same Series.
             psdf = self._assign({key: value})
 
-        self._update_internal_frame(psdf._internal)
+        # Since Pandas 1.4, df.update generates a new dataframe instead of operating
+        # in-place. See also SPARK-38946.
+        force_disconnect = LooseVersion(pd.__version__) >= LooseVersion("1.4")
+        self._update_internal_frame(psdf._internal, force_disconnect=force_disconnect)
 
     @staticmethod
     def _index_normalized_label(level: int, labels: Union[Name, Sequence[Name]]) -> List[Label]:
