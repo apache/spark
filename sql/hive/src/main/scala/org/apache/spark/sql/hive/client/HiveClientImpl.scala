@@ -520,12 +520,12 @@ private[hive] class HiveClientImpl(
       storage = CatalogStorageFormat(
         locationUri = shim.getDataLocation(h).map { location =>
           val tableUri = CatalogUtils.stringToURI(location)
-          val dbUri = if (!tableUri.isAbsolute) {
-            Some(CatalogUtils.stringToURI(client.getDatabase(h.getDbName).getLocationUri))
+          if (!tableUri.isAbsolute) {
+            val dbUri = CatalogUtils.stringToURI(client.getDatabase(h.getDbName).getLocationUri)
+            HiveExternalCatalog.toAbsoluteURI(tableUri, dbUri)
           } else {
-            None
+            tableUri
           }
-          HiveExternalCatalog.toAbsoluteURI(tableUri, dbUri)
         },
         // To avoid ClassNotFound exception, we try our best to not get the format class, but get
         // the class name directly. However, for non-native tables, there is no interface to get
@@ -1164,7 +1164,7 @@ private[hive] object HiveClientImpl extends Logging {
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
         locationUri = Option(HiveExternalCatalog.toAbsoluteURI(
-          CatalogUtils.stringToURI(apiPartition.getSd.getLocation), Some(table.location))),
+          CatalogUtils.stringToURI(apiPartition.getSd.getLocation), table.location)),
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
