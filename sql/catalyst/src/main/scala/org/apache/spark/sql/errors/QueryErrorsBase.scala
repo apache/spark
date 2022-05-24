@@ -19,8 +19,8 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL}
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
 /**
@@ -87,5 +87,9 @@ trait QueryErrorsBase {
 
   def toDSOption(option: String): String = {
     quoteByDefault(option)
+  }
+
+  def toSQLExpr(e: Expression): String = {
+    quoteByDefault(toPrettySQL(e))
   }
 }
