@@ -362,6 +362,11 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: ${{ matrix.java }}
+    # Remember to move this to GA images
+    - name: Install Pandas packages (Python 3.9, PyPy3)
+      run: |
+        python3.9 -m pip install 'pandas==1.4.2'
+        pypy3 -m pip install 'pandas==1.4.2'
     - name: List Python packages (Python 3.9, PyPy3)
       run: |
         python3.9 -m pip list
