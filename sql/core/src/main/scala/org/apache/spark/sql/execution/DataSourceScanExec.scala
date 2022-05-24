@@ -142,17 +142,23 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
-    val topNOrLimitInfo =
+    val limitOrOffsetInfo =
       if (pushedDownOperators.limit.isDefined && pushedDownOperators.sortValues.nonEmpty) {
-        val pushedTopN =
-          s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
-          s" LIMIT ${pushedDownOperators.limit.get}"
-        Some("PushedTopN" -> pushedTopN)
-    } else {
-      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
-    }
-
-    val pushedOffset = pushedDownOperators.offset.map(value => "PushedOffset" -> s"OFFSET $value")
+        if (pushedDownOperators.offset.isDefined) {
+          val pushedPaging =
+            s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
+              s" LIMIT ${pushedDownOperators.limit.get} OFFSET ${pushedDownOperators.offset.get}"
+          Map("PushedPaging" -> pushedPaging)
+        } else {
+          val pushedTopN =
+            s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
+              s" LIMIT ${pushedDownOperators.limit.get}"
+          Map("PushedTopN" -> pushedTopN)
+        }
+      } else {
+        pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value").toMap ++
+          pushedDownOperators.offset.map(value => "PushedOffset" -> s"OFFSET $value")
+      }
 
     val pushedFilters = if (pushedDownOperators.pushedPredicates.nonEmpty) {
       seqToString(pushedDownOperators.pushedPredicates.map(_.describe()))
@@ -165,8 +171,7 @@ case class RowDataSourceScanExec(
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
           "PushedGroupByExpressions" -> seqToString(v.groupByExpressions.map(_.describe())))} ++
-      topNOrLimitInfo ++
-      pushedOffset ++
+      limitOrOffsetInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )
