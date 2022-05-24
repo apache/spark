@@ -1177,7 +1177,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
-  test("ES-313446: nested subquery expressions deduplicate relations should be done bottom up") {
+  test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {
     val innerRelation = SubqueryAlias("src1", testRelation)
     val outerRelation = SubqueryAlias("src2", testRelation)
     val ref1 = testRelation.output.head
