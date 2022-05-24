@@ -101,16 +101,6 @@ object SparkHadoopMapRedUtil extends Logging {
 
         if (canCommit) {
           performCommit()
-          val commitSuccess = outputCommitCoordinator.commitSuccess(ctx.stageId(),
-            ctx.stageAttemptNumber(), splitId, ctx.attemptNumber())
-          if (!commitSuccess) {
-            val message = s"$mrTaskAttemptID: Update Commit Success status failed"
-            logInfo(message)
-            // We need to abort the task so that the driver can reschedule new attempts,
-            // if necessary
-            committer.abortTask(mrTaskContext)
-            throw new CommitDeniedException(message, ctx.stageId(), splitId, ctx.attemptNumber())
-          }
         } else {
           val message =
             s"$mrTaskAttemptID: Not committed because the driver did not authorize commit"
