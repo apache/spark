@@ -634,7 +634,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def testEvent(event: SparkListenerEvent, jsonString: String): Unit = {
-    val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
+    val actualJsonString = JsonProtocol.sparkEventToJsonString(event)
     val newEvent = JsonProtocol.sparkEventFromJson(actualJsonString)
     assertJsonStringEquals(jsonString, actualJsonString, event.getClass.getSimpleName)
     assertEquals(event, newEvent)

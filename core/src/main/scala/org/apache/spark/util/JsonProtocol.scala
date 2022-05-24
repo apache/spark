@@ -66,6 +66,10 @@ private[spark] object JsonProtocol {
    * JSON serialization methods for SparkListenerEvents |
    * -------------------------------------------------- */
 
+  def sparkEventToJsonString(event: SparkListenerEvent): String = {
+    compact(render(sparkEventToJson(event)))
+  }
+
   def sparkEventToJson(event: SparkListenerEvent): JValue = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
@@ -250,6 +254,10 @@ private[spark] object JsonProtocol {
     ("Timestamp" -> executorRemoved.time) ~
     ("Executor ID" -> executorRemoved.executorId) ~
     ("Removed Reason" -> executorRemoved.reason)
+  }
+
+  def logStartToJsonString(logStart: SparkListenerLogStart): String = {
+    compact(render(logStartToJson(logStart)))
   }
 
   def logStartToJson(logStart: SparkListenerLogStart): JValue = {
