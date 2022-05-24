@@ -139,7 +139,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             print_red("\nHad test failures in %s with %s; see logs." % (test_name, pyspark_python))
             # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
             # this code is invoked from a thread other than the main thread.
-            os._exit(-1)
     else:
         skipped_counts = 0
         try:
