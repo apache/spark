@@ -5669,6 +5669,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> "DataFrame":
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
@@ -5678,6 +5679,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             limit_direction not in ["forward", "backward", "both"]
         ):
             raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
+        if (limit_area is not None) and (limit_area not in ["inside", "outside"]):
+            raise ValueError("invalid limit_area: '{}'".format(limit_area))
 
         numeric_col_names = []
         for label in self._internal.column_labels:
@@ -5688,7 +5691,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf = self[numeric_col_names]
         return psdf._apply_series_op(
             lambda psser: psser._interpolate(
-                method=method, limit=limit, limit_direction=limit_direction
+                method=method, limit=limit, limit_direction=limit_direction, limit_area=limit_area
             ),
             should_resolve=True,
         )
