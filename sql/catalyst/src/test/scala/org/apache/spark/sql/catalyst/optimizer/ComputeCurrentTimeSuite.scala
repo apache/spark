@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.optimizer
 import java.time.{LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, Literal, LocalTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, InSubquery, ListQuery, Literal, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -101,5 +101,25 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(lits(0) >= min && lits(0) <= max)
     assert(lits(1) >= min && lits(1) <= max)
     assert(lits(0) == lits(1))
+  }
+
+  test("analyzer should use equal timestamps across subqueries") {
+    val timestampInSubQuery = Project(Seq(Alias(LocalTimestamp(), "timestamp1")()), LocalRelation())
+    val listSubQuery = ListQuery(timestampInSubQuery)
+    val valueSearchedInSubQuery = Seq(Alias(LocalTimestamp(), "timestamp2")())
+    val inFilterWithSubQuery = InSubquery(valueSearchedInSubQuery, listSubQuery)
+    val input = Project(Nil, Filter(inFilterWithSubQuery, LocalRelation()))
+
+    val plan = Optimize.execute(input.analyze).asInstanceOf[Project]
+
+    val literals = new scala.collection.mutable.ArrayBuffer[Long]
+    plan.transformDownWithSubqueries { case subQuery =>
+      subQuery.transformAllExpressions { case expression: Literal =>
+        literals += expression.value.asInstanceOf[Long]
+        expression
+      }
+    }
+    assert(literals.size == 3) // transformDownWithSubqueries covers the inner timestamp twice
+    assert(literals.toSet.size == 1)
   }
 }

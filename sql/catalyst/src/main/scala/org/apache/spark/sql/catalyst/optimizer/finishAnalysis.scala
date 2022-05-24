@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable
+import java.time.{Instant, LocalDateTime}
 
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, currentDate, instantToMicros, localDateTimeToMicros}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -72,29 +72,26 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
  * Computes the current date and time to make sure we return the same result in a single query.
  */
 object ComputeCurrentTime extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val currentDates = mutable.Map.empty[String, Literal]
-    val timeExpr = CurrentTimestamp()
-    val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
-    val currentTime = Literal.create(timestamp, timeExpr.dataType)
-    val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
-    val localTimestamps = mutable.Map.empty[String, Literal]
+  def apply(plan: LogicalPlan): LogicalPlan = applyWithTimestamp(plan, Instant.now())
 
-    plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
-      case currentDate @ CurrentDate(Some(timeZoneId)) =>
-        currentDates.getOrElseUpdate(timeZoneId, {
-          Literal.create(currentDate.eval().asInstanceOf[Int], DateType)
-        })
-      case CurrentTimestamp() | Now() => currentTime
-      case CurrentTimeZone() => timezone
-      case localTimestamp @ LocalTimestamp(Some(timeZoneId)) =>
-        localTimestamps.getOrElseUpdate(timeZoneId, {
-          Literal.create(localTimestamp.eval().asInstanceOf[Long], TimestampNTZType)
-        })
+  def applyWithTimestamp(plan: LogicalPlan, instant: Instant): LogicalPlan = {
+    val currentTimestamp = instantToMicros(instant)
+    val currentTime = Literal.create(currentTimestamp, TimestampType)
+    val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
+
+    plan.transformDownWithSubqueries {
+      case subQuery =>
+        subQuery.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+          case cd: CurrentDate => Literal.create(currentDate(cd.zoneId).asInstanceOf[Int], DateType)
+          case CurrentTimestamp() | Now() => currentTime
+          case CurrentTimeZone() => timezone
+          case localTimestamp: LocalTimestamp =>
+            val asDateTime = LocalDateTime.ofInstant(instant, localTimestamp.zoneId)
+            Literal.create(localDateTimeToMicros(asDateTime).asInstanceOf[Long], TimestampNTZType)
+        }
     }
   }
 }
-
 
 /**
  * Replaces the expression of CurrentDatabase with the current database name.
