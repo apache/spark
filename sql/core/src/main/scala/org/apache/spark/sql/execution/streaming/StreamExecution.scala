@@ -450,7 +450,7 @@ abstract class StreamExecution(
         // changed after notify. In this case, its safe to exit, since at-least the given
         // Offset has been reached and the equality condition might never be met.
         (localCommittedOffsets.get(source), newOffset) match {
-          case (Some(localOff: LongOffset), newOff: LongOffset) => localOff.offset < newOff.offset
+          case (Some(LongOffset(localOffVal)), LongOffset(newOffVal)) => localOffVal < newOffVal
           case (Some(localOff), newOff) => localOff != newOff
           case (None, newOff) => true
         }
