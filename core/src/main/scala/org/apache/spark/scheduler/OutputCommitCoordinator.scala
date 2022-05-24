@@ -19,7 +19,10 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
@@ -31,7 +34,8 @@ private case class AskPermissionToCommitOutput(
     stage: Int,
     stageAttempt: Int,
     partition: Int,
-    attemptNumber: Int)
+    attemptNumber: Int,
+    taskAttemptCommitPaths: Seq[Path])
 
 /**
  * Authority that decides whether tasks can commit output to HDFS. Uses a "first committer wins"
@@ -49,14 +53,20 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   // Initialized by SparkEnv
   var coordinatorRef: Option[RpcEndpointRef] = None
 
+  val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+
   // Class used to identify a committer. The task ID for a committer is implicitly defined by
   // the partition being processed, but the coordinator needs to keep track of both the stage
   // attempt and the task attempt, because in some situations the same task may be running
   // concurrently in two different attempts of the same stage.
   private case class TaskIdentifier(stageAttempt: Int, taskAttempt: Int)
 
+  private case class TaskAttemptInfo(
+    taskIdentifier: TaskIdentifier,
+    taskAttemptCommitPaths: Seq[Path])
+
   private case class StageState(numPartitions: Int) {
-    val authorizedCommitters = Array.fill[TaskIdentifier](numPartitions)(null)
+    val authorizedCommitters = Array.fill[TaskAttemptInfo](numPartitions)(null)
     val failures = mutable.Map[Int, mutable.Set[TaskIdentifier]]()
   }
 
@@ -96,8 +106,10 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       stage: Int,
       stageAttempt: Int,
       partition: Int,
-      attemptNumber: Int): Boolean = {
-    val msg = AskPermissionToCommitOutput(stage, stageAttempt, partition, attemptNumber)
+      attemptNumber: Int,
+      taskCommitPaths: Seq[Path] = Seq.empty): Boolean = {
+    val msg = AskPermissionToCommitOutput(stage, stageAttempt, partition,
+      attemptNumber, taskCommitPaths)
     coordinatorRef match {
       case Some(endpointRef) =>
         ThreadUtils.awaitResult(endpointRef.ask[Boolean](msg),
@@ -154,9 +166,18 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
         // Mark the attempt as failed to exclude from future commit protocol
         val taskId = TaskIdentifier(stageAttempt, attemptNumber)
         stageState.failures.getOrElseUpdate(partition, mutable.Set()) += taskId
-        if (stageState.authorizedCommitters(partition) == taskId) {
+        val taskAttemptInfo = stageState.authorizedCommitters(partition)
+        if (taskAttemptInfo != null && taskAttemptInfo.taskIdentifier == taskId) {
           logDebug(s"Authorized committer (attemptNumber=$attemptNumber, stage=$stage, " +
-            s"partition=$partition) failed; clearing lock")
+          s"partition=$partition) failed; clearing lock and clean ommitted files.")
+          taskAttemptInfo.taskAttemptCommitPaths.foreach { path =>
+            val fs = path.getFileSystem(hadoopConf)
+            if (fs.exists(path)) {
+              if (!fs.delete(path, true)) {
+                logWarning("Could not delete " + path)
+              }
+            }
+          }
           stageState.authorizedCommitters(partition) = null
         }
     }
@@ -175,7 +196,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       stage: Int,
       stageAttempt: Int,
       partition: Int,
-      attemptNumber: Int): Boolean = synchronized {
+      attemptNumber: Int,
+      taskAttemptCommitPaths: Seq[Path]): Boolean = synchronized {
     stageStates.get(stage) match {
       case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
         logInfo(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
@@ -186,7 +208,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
         if (existing == null) {
           logDebug(s"Commit allowed for stage=$stage.$stageAttempt, partition=$partition, " +
             s"task attempt $attemptNumber")
-          state.authorizedCommitters(partition) = TaskIdentifier(stageAttempt, attemptNumber)
+          state.authorizedCommitters(partition) =
+            TaskAttemptInfo(TaskIdentifier(stageAttempt, attemptNumber), taskAttemptCommitPaths)
           true
         } else {
           logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
@@ -226,10 +249,11 @@ private[spark] object OutputCommitCoordinator {
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case AskPermissionToCommitOutput(stage, stageAttempt, partition, attemptNumber) =>
+      case AskPermissionToCommitOutput(
+      stage, stageAttempt, partition, attemptNumber, taskAttemptCommitPaths) =>
         context.reply(
           outputCommitCoordinator.handleAskPermissionToCommit(stage, stageAttempt, partition,
-            attemptNumber))
+            attemptNumber, taskAttemptCommitPaths))
     }
   }
 }
