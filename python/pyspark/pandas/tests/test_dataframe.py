@@ -271,6 +271,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         self.assert_eq(psdf, pdf)
         self.assert_eq(psser, pser)
+        # SPARK-38946: Since Pandas 1.4, inplace set generate a new dataframe
+        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
+            with self.assertRaisesRegex(AssertionError, "Series are different"):
+                self.assert_eq(psser, psdf.a)
+        else:
+            self.assert_eq(psser, psdf.a)
 
     def test_assign_list(self):
         pdf, psdf = self.df_pair
@@ -1450,6 +1456,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf.fillna({"x": -1, "y": -2, "z": -5}, inplace=True)
         self.assert_eq(psdf, pdf)
         self.assert_eq(psser, pser)
+        # SPARK-38946: Since Pandas 1.4, fillna with inplace generate a new dataframe
+        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
+            with self.assertRaisesRegex(AssertionError, "Series are different"):
+                self.assert_eq(psser, psdf.z)
+        else:
+            self.assert_eq(psser, psdf.z)
 
         s_nan = pd.Series([-1, -2, -5], index=["x", "y", "z"], dtype=int)
         self.assert_eq(psdf.fillna(s_nan), pdf.fillna(s_nan))
@@ -2929,6 +2941,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         left_psdf.update(right_psdf)
         self.assert_eq(left_pdf.sort_values(by=["A", "B"]), left_psdf.sort_values(by=["A", "B"]))
         self.assert_eq(psser.sort_index(), pser.sort_index())
+        # SPARK-38946: Since Pandas 1.4, df.update generate a new dataframe
+        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
+            with self.assertRaisesRegex(AssertionError, "Series are different"):
+                self.assert_eq(psser, left_pdf.B)
+        else:
+            self.assert_eq(psser, left_pdf.B)
 
         left_psdf, left_pdf, right_psdf, right_pdf = get_data()
         left_pdf.update(right_pdf, overwrite=False)
@@ -5180,6 +5198,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf.eval("A = B + C", inplace=True)
         self.assert_eq(pdf, psdf)
         self.assert_eq(pser, psser)
+        # SPARK-38946: Since Pandas 1.4, eval with inplace generate a new dataframe
+        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
+            with self.assertRaisesRegex(AssertionError, "Series are different"):
+                self.assert_eq(psser, pdf.A)
+        else:
+            self.assert_eq(psser, psdf.A)
 
         # doesn't support for multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("y", "b"), ("z", "c")])
