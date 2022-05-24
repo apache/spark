@@ -99,7 +99,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("1SL", $"1SL")
 
     // Aliased star is allowed.
-    assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as Symbol("b"))
+    assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as "b")
   }
 
   test("binary logical expressions") {
@@ -406,7 +406,7 @@ class ExpressionParserSuite extends AnalysisTest {
     // Note that '(a)' will be interpreted as a nested expression.
     assertEqual("(a, b)", CreateStruct(Seq($"a", $"b")))
     assertEqual("(a, b, c)", CreateStruct(Seq($"a", $"b", $"c")))
-    assertEqual("(a as b, b as c)", CreateStruct(Seq($"a" as Symbol("b"), $"b" as Symbol("c"))))
+    assertEqual("(a as b, b as c)", CreateStruct(Seq($"a" as "b", $"b" as "c")))
   }
 
   test("scalar sub-query") {

@@ -151,7 +151,6 @@ package object dsl {
     def desc: SortOrder = SortOrder(expr, Descending)
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
-    def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
 
   trait ExpressionConversions {
@@ -461,8 +460,8 @@ package object dsl {
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
-      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
       def subquery(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
+      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
       def except(otherPlan: LogicalPlan, isAll: Boolean): LogicalPlan =
         Except(logicalPlan, otherPlan, isAll)
@@ -489,8 +488,6 @@ package object dsl {
           overwrite: Boolean = false,
           ifPartitionNotExists: Boolean = false): LogicalPlan =
         InsertIntoStatement(table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists)
-
-      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
       def coalesce(num: Integer): LogicalPlan =
         Repartition(num, shuffle = false, logicalPlan)
