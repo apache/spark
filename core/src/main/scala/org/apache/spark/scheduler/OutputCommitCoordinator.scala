@@ -37,6 +37,12 @@ private case class AskPermissionToCommitOutput(
     attemptNumber: Int,
     taskAttemptCommitPaths: Seq[Path])
 
+private case class CommitOutputSuccess(
+  stage: Int,
+  stateAttempt: Int,
+  partition: Int,
+  attemptNumber: Int)
+
 /**
  * Authority that decides whether tasks can commit output to HDFS. Uses a "first committer wins"
  * policy.
@@ -110,6 +116,35 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       taskCommitPaths: Seq[Path] = Seq.empty): Boolean = {
     val msg = AskPermissionToCommitOutput(stage, stageAttempt, partition,
       attemptNumber, taskCommitPaths)
+    coordinatorRef match {
+      case Some(endpointRef) =>
+        ThreadUtils.awaitResult(endpointRef.ask[Boolean](msg),
+          RpcUtils.askRpcTimeout(conf).duration)
+      case None =>
+        logError(
+          "canCommit called after coordinator was stopped (is SparkEnv shutdown in progress)?")
+        false
+    }
+  }
+
+  /**
+   * Called by tasks to update commit output success status.
+   *
+   * If a task attempt has been authorized to commit, after commit task success,
+   * task side should update commit status to true.
+   *
+   * @param stage the stage number
+   * @param partition the partition number
+   * @param attemptNumber how many times this task has been attempted
+   *                      (see [[TaskContext.attemptNumber()]])
+   * @return true if this task can update the commit output success status.
+   */
+  def commitSuccess(
+      stage: Int,
+      stageAttempt: Int,
+      partition: Int,
+      attemptNumber: Int): Boolean = {
+    val msg = CommitOutputSuccess(stage, stageAttempt, partition, attemptNumber)
     coordinatorRef match {
       case Some(endpointRef) =>
         ThreadUtils.awaitResult(endpointRef.ask[Boolean](msg),
@@ -213,12 +248,50 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
           true
         } else {
           logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
-            s"already committed by $existing")
+            s"already committed by ${existing.taskIdent}")
           false
         }
       case None =>
         logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
           "stage already marked as completed.")
+        false
+    }
+  }
+
+  private[scheduler] def handleCommitOutputSuccess(
+      stage: Int,
+      stageAttempt: Int,
+      partition: Int,
+      attemptNumber: Int): Boolean = synchronized {
+    stageStates.get(stage) match {
+      case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
+        logInfo(s"Committed should revert since stage=$stage.$stageAttempt, " +
+          s"partition=$partition: task attempt $attemptNumber already marked as failed.")
+        false
+      case Some(state) =>
+        val existing = state.authorizedCommitters(partition)
+        if (existing == null) {
+          logInfo(s"Committed output should revert since stage=$stage.$stageAttempt, " +
+            s"partition=$partition: task attempt $attemptNumber not in right status.")
+          false
+        } else {
+          val taskIdent = existing.taskIdent
+          if (taskIdent.stageAttempt == stageAttempt && taskIdent.taskAttempt == attemptNumber) {
+            logDebug(s"Commit success for stage=$stage.$stageAttempt, partition=$partition, " +
+              s"task attempt $attemptNumber")
+            state.authorizedCommitters(partition) =
+              CommitStatus(TaskIdentifier(stageAttempt, attemptNumber), true)
+            true
+          } else {
+            logInfo(s"Committed should revert since another commit for " +
+              s"stage=$stage.${taskIdent.stageAttempt}, partition=$partition: " +
+              s"task attempt ${taskIdent.taskAttempt} is allowed.")
+            false
+          }
+        }
+      case None =>
+        logDebug(s"Commit update status failed for stage=$stage.$stageAttempt, " +
+          s"partition=$partition: stage already marked as completed.")
         false
     }
   }
