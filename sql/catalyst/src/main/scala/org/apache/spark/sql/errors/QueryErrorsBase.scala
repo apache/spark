@@ -85,6 +85,10 @@ trait QueryErrorsBase {
     quoteByDefault(conf)
   }
 
+  def toSQLConfVal(v: String): String = {
+    quoteByDefault(v)
+  }
+
   def toDSOption(option: String): String = {
     quoteByDefault(option)
   }
