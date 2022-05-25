@@ -753,6 +753,101 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             bool_to_numeric=True,
         )
 
+
+    # TODO: 'axis', 'skipna', 'level' parameter should be implemented.
+    def mad(self) -> FrameLike:
+        """
+        Compute mean absolute deviation of groups, excluding missing values.
+
+        .. versionadded:: 3.4.0
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+
+        >>> df.groupby("A").mad()
+                  B         C
+        A
+        1  0.444444  0.444444
+        2  0.000000  0.000000
+
+        >>> df.B.groupby(df.A).mad()
+        A
+        1    0.444444
+        2    0.000000
+        Name: B, dtype: float64
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+        """
+
+        groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
+        groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
+
+        agg_columns = []
+        for psser in self._agg_columns:
+            if isinstance(psser.spark.data_type, BooleanType):
+                agg_columns.append(psser.astype(int))
+            elif isinstance(psser.spark.data_type, NumericType):
+                agg_columns.append(psser)
+
+        sdf = self._psdf._internal.spark_frame.select(
+            *groupkey_scols, *[psser.spark.column for psser in agg_columns]
+        )
+
+        internal = InternalFrame(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            index_names=[psser._column_label for psser in self._groupkeys],
+            index_fields=[
+                psser._internal.data_fields[0].copy(name=name)
+                for psser, name in zip(self._groupkeys, groupkey_names)
+            ],
+            data_spark_columns=[
+                scol_for(sdf, psser._internal.data_spark_column_names[0]) for psser in agg_columns
+            ],
+            column_labels=[psser._column_label for psser in agg_columns],
+            data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
+            column_label_names=self._psdf._internal.column_label_names,
+        )
+        psdf: DataFrame = DataFrame(internal)
+
+        if len(psdf._internal.column_labels) > 0:
+            window = Window.partitionBy(groupkey_names).rowsBetween(
+                Window.unboundedPreceding, Window.unboundedFollowing
+            )
+            new_agg_scols = {}
+            new_stat_scols = []
+            for agg_column in agg_columns:
+                agg_column_name = agg_column._internal.data_spark_column_names[0]
+                new_agg_column_name = "__tmp_agg_col_{}__".format(agg_column_name)
+                new_agg_scols[new_agg_column_name] = F.abs(
+                    F.col(agg_column_name) - F.avg(agg_column_name).over(window)
+                )
+                new_stat_scols.append(F.avg(F.col(new_agg_column_name)).alias(agg_column_name))
+
+            sdf = (
+                psdf._internal.spark_frame.withColumns(new_agg_scols)
+                    .groupby(groupkey_names)
+                    .agg(*new_stat_scols)
+            )
+        else:
+            sdf = sdf.select(*groupkey_names).distinct()
+
+        internal = internal.copy(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
+            data_fields=None,
+        )
+        psdf = DataFrame(internal)
+
+        return self._cleanup_and_return(psdf)
+
+
     def all(self, skipna: bool = True) -> FrameLike:
         """
         Returns True if all values in the group are truthful, else False.
