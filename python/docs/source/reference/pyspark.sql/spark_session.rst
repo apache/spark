@@ -31,7 +31,6 @@ See also :class:`SparkSession`.
 .. autosummary::
     :toctree: api/
 
-    SparkSession
     SparkSession.builder.appName
     SparkSession.builder.config
     SparkSession.builder.enableHiveSupport

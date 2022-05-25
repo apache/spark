@@ -24,7 +24,6 @@ Column
 .. autosummary::
     :toctree: api/
 
-    Column
     Column.alias
     Column.asc
     Column.asc_nulls_first

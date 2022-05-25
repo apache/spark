@@ -20,8 +20,7 @@
 Spark SQL
 =========
 
-Core Classes
-------------
+This page gives an overview of all public Spark SQL API.
 
 .. toctree::
     :maxdepth: 2

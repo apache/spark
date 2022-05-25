@@ -19,76 +19,96 @@
 =========
 Functions
 =========
-
 .. currentmodule:: pyspark.sql.functions
 
+Normal Functions
+----------------
 .. autosummary::
     :toctree: api/
 
+    col
+    column
+    create_map
+    lit
+    array
+    map_from_arrays
+    broadcast
+    coalesce
+    input_file_name
+    isnan
+    isnull
+    monotonically_increasing_id
+    nanvl
+    rand
+    randn
+    spark_partition_id
+    struct
+    when
+    bitwise_not
+    bitwiseNOT
+    expr
+    greatest
+    least
+
+
+Math Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    sqrt
     abs
     acos
     acosh
-    add_months
-    aggregate
-    approxCountDistinct
-    approx_count_distinct
-    array
-    array_contains
-    array_distinct
-    array_except
-    array_intersect
-    array_join
-    array_max
-    array_min
-    array_position
-    array_remove
-    array_repeat
-    array_sort
-    array_union
-    arrays_overlap
-    arrays_zip
-    asc
-    asc_nulls_first
-    asc_nulls_last
-    ascii
     asin
     asinh
-    assert_true
     atan
     atanh
     atan2
-    avg
-    base64
     bin
-    bit_length
-    bitwise_not
-    bitwiseNOT
-    broadcast
-    bround
-    bucket
     cbrt
     ceil
-    coalesce
-    col
-    collect_list
-    collect_set
-    column
-    concat
-    concat_ws
     conv
-    corr
     cos
     cosh
     cot
-    count
-    count_distinct
-    countDistinct
-    covar_pop
-    covar_samp
-    crc32
-    create_map
     csc
-    cume_dist
+    exp
+    expm1
+    factorial
+    floor
+    hex
+    unhex
+    hypot
+    log
+    log10
+    log1p
+    log2
+    pow
+    rint
+    round
+    bround
+    sec
+    shiftleft
+    shiftright
+    shiftrightunsigned
+    signum
+    sin
+    sinh
+    tan
+    tanh
+    toDegrees
+    degrees
+    toRadians
+    radians
+
+
+Datetime Functions
+------------------
+.. autosummary::
+    :toctree: api/
+
+    add_months
     current_date
     current_timestamp
     date_add
@@ -99,174 +119,225 @@ Functions
     dayofmonth
     dayofweek
     dayofyear
-    days
-    decode
-    degrees
-    dense_rank
-    desc
-    desc_nulls_first
-    desc_nulls_last
+    second
+    weekofyear
+    year
+    quarter
+    month
+    last_day
+    minute
+    months_between
+    next_day
+    hour
+    make_date
+    from_unixtime
+    unix_timestamp
+    to_timestamp
+    to_date
+    trunc
+    from_utc_timestamp
+    to_utc_timestamp
+    window
+    session_window
+    timestamp_seconds
+
+
+Collection Functions
+--------------------
+.. autosummary::
+    :toctree: api/
+
+    array_contains
+    arrays_overlap
+    slice
+    array_join
+    concat
+    array_position
     element_at
-    encode
+    array_sort
+    array_remove
+    array_distinct
+    array_intersect
+    array_union
+    array_except
+    transform
     exists
-    exp
+    forall
+    filter
+    aggregate
+    zip_with
+    transform_keys
+    transform_values
+    map_filter
+    map_zip_with
     explode
     explode_outer
-    expm1
-    expr
-    factorial
-    filter
-    first
-    flatten
-    floor
-    forall
-    format_number
-    format_string
-    from_csv
-    from_json
-    from_unixtime
-    from_utc_timestamp
+    posexplode
+    posexplode_outer
     get_json_object
-    greatest
-    grouping
-    grouping_id
-    hash
-    hex
-    hour
-    hours
-    hypot
-    initcap
-    input_file_name
-    instr
-    isnan
-    isnull
     json_tuple
-    kurtosis
-    lag
-    last
-    last_day
-    lead
-    least
-    length
-    levenshtein
-    lit
-    locate
-    log
-    log10
-    log1p
-    log2
-    lower
-    lpad
-    ltrim
-    make_date
-    map_concat
-    map_entries
-    map_filter
-    map_from_arrays
-    map_from_entries
+    from_json
+    schema_of_json
+    to_json
+    size
+    sort_array
+    array_max
+    array_min
+    shuffle
+    reverse
+    flatten
+    sequence
+    array_repeat
     map_keys
     map_values
-    map_zip_with
+    map_entries
+    map_from_entries
+    arrays_zip
+    map_concat
+    from_csv
+    schema_of_csv
+    to_csv
+
+
+Partition Transformation Functions
+----------------------------------
+.. autosummary::
+    :toctree: api/
+
+    years
+    months
+    days
+    hours
+    bucket
+
+
+Aggregate Functions
+-------------------
+.. autosummary::
+    :toctree: api/
+
+    approxCountDistinct
+    approx_count_distinct
+    avg
+    collect_list
+    collect_set
+    corr
+    count
+    count_distinct
+    countDistinct
+    covar_pop
+    covar_samp
+    first
+    grouping
+    grouping_id
+    kurtosis
+    last
     max
     max_by
-    md5
     mean
     min
     min_by
-    minute
-    monotonically_increasing_id
-    month
-    months
-    months_between
-    nanvl
-    next_day
-    nth_value
-    ntile
-    octet_length
-    overlay
-    pandas_udf
-    percent_rank
     percentile_approx
-    posexplode
-    posexplode_outer
-    pow
     product
-    quarter
-    radians
-    raise_error
-    rand
-    randn
-    rank
-    regexp_extract
-    regexp_replace
-    repeat
-    reverse
-    rint
-    round
-    row_number
-    rpad
-    rtrim
-    schema_of_csv
-    schema_of_json
-    sec
-    second
-    sentences
-    sequence
-    session_window
-    sha1
-    sha2
-    shiftleft
-    shiftright
-    shiftrightunsigned
-    shuffle
-    signum
-    sin
-    sinh
-    size
     skewness
-    slice
-    sort_array
-    soundex
-    spark_partition_id
-    split
-    sqrt
     stddev
     stddev_pop
     stddev_samp
-    struct
-    substring
-    substring_index
     sum
     sum_distinct
     sumDistinct
-    tan
-    tanh
-    timestamp_seconds
-    toDegrees
-    toRadians
-    to_csv
-    to_date
-    to_json
-    to_timestamp
-    to_utc_timestamp
-    transform
-    transform_keys
-    transform_values
-    translate
-    trim
-    trunc
-    udf
-    unbase64
-    unhex
-    unix_timestamp
-    upper
     var_pop
     var_samp
     variance
-    weekofyear
-    when
-    window
+
+
+Window Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    cume_dist
+    dense_rank
+    lag
+    lead
+    nth_value
+    ntile
+    percent_rank
+    rank
+    row_number
+
+
+Sort Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    asc
+    asc_nulls_first
+    asc_nulls_last
+    desc
+    desc_nulls_first
+    desc_nulls_last
+
+
+String Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    ascii
+    base64
+    bit_length
+    concat_ws
+    decode
+    encode
+    format_number
+    format_string
+    initcap
+    instr
+    length
+    lower
+    levenshtein
+    locate
+    lpad
+    ltrim
+    octet_length
+    regexp_extract
+    regexp_replace
+    unbase64
+    rpad
+    repeat
+    rtrim
+    soundex
+    split
+    substring
+    substring_index
+    overlay
+    sentences
+    translate
+    trim
+    upper
+
+
+UDF Functions
+-------------
+.. autosummary::
+    :toctree: api/
+
+    pandas_udf
+    udf
+
+Misc Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    md5
+    sha1
+    sha2
+    crc32
+    hash
     xxhash64
-    year
-    years
-    zip_with
+    assert_true
+    raise_error
+
