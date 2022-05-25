@@ -867,6 +867,12 @@ private[spark] class TaskSchedulerImpl(
     taskSetManager.handleTaskGettingResult(tid)
   }
 
+  def isFinishedTask(
+    taskSetManager: TaskSetManager,
+    tid: Long): Boolean = synchronized {
+    taskSetManager.taskInfos(tid).finished
+  }
+
   def handleSuccessfulTask(
       taskSetManager: TaskSetManager,
       tid: Long,

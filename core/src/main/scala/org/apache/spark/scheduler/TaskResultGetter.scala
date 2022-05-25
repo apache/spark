@@ -102,6 +102,10 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               (deserializedResult, size)
           }
 
+          // quickly return if the task has finished
+          if (scheduler.isFinishedTask(taskSetManager, tid)) {
+            return
+          }
           // Set the task result size in the accumulator updates received from the executors.
           // We need to do this here on the driver because if we did this on the executors then
           // we would have to serialize the result again after updating the size.
