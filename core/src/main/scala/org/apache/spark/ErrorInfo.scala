@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
 private[spark] case class ErrorSubInfo(message: Seq[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageFormat: String = message.mkString(" \n")
+  val messageFormat: String = message.mkString("\n")
 }
 
 /**
@@ -54,7 +54,7 @@ private[spark] case class ErrorInfo(message: Seq[String],
                                     sqlState: Option[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageFormat: String = message.mkString(" \n")
+  val messageFormat: String = message.mkString("\n")
 }
 
 /**

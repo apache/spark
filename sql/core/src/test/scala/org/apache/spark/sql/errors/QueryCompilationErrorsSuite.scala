@@ -44,8 +44,9 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e1,
       errorClass = "CANNOT_UP_CAST_DATATYPE",
-      msg = "Cannot up cast b from \"BIGINT\" to \"INT\". \n" +
+      msg =
         s"""
+           |Cannot up cast b from "BIGINT" to "INT".
            |The type path of the target object is:
            |- field (class: "scala.Int", name: "b")
            |- root class: "org.apache.spark.sql.errors.StringIntClass"
@@ -60,8 +61,9 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e2,
       errorClass = "CANNOT_UP_CAST_DATATYPE",
-      msg = "Cannot up cast b.`b` from \"DECIMAL(38,18)\" to \"BIGINT\". \n" +
+      msg =
         s"""
+           |Cannot up cast b.`b` from "DECIMAL(38,18)" to "BIGINT".
            |The type path of the target object is:
            |- field (class: "scala.Long", name: "b")
            |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
@@ -225,11 +227,11 @@ class QueryCompilationErrorsSuite
         "information. Spark may blindly pass null to the Scala closure with primitive-type " +
         "argument, and the closure will see the default value of the Java type for the null " +
         "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-        "To get rid of this error, you could: \n" +
-        "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)` \n" +
+        "To get rid of this error, you could:\n" +
+        "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
         "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
         "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
-        "if input types are all non primitive \n" +
+        "if input types are all non primitive\n" +
         s"""3. set "${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key}" to "true" and """ +
         s"use this API with caution")
   }
