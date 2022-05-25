@@ -22,7 +22,6 @@ import shutil
 import tempfile
 import time
 import unittest
-import uuid
 from typing import cast
 
 from pyspark.sql import SparkSession, Row
