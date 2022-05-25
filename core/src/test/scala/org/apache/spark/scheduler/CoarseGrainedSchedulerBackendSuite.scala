@@ -408,7 +408,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     sc.submitJob(
       rdd,
       (iter: Iterator[Int]) => iter.toArray,
-      0 until rdd.partitions.length,
+      rdd.partitions.indices,
       { case (_, _) => return }: (Int, Array[Int]) => Unit,
       { return }
     )

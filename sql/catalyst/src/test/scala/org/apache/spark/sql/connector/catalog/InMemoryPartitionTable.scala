@@ -102,7 +102,7 @@ class InMemoryPartitionTable(
     val dataTypes = names.map(schema(_).dataType)
     val currentRow = new GenericInternalRow(new Array[Any](names.length))
     memoryTablePartitions.keySet().asScala.filter { key =>
-      for (i <- 0 until names.length) {
+      for (i <- names.indices) {
         currentRow.values(i) = key.get(indexes(i), dataTypes(i))
       }
       currentRow == ident
