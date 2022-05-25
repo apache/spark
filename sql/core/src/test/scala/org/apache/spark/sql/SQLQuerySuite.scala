@@ -4431,6 +4431,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         ))
     }
   }
+
+  test("SPARK-39216: Don't collapse projects in CombineUnions if it hasCorrelatedSubquery") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT (SELECT IF(x, 1, 0)) AS a
+          |FROM (SELECT true) t(x)
+          |UNION
+          |SELECT 1 AS a
+        """.stripMargin),
+      Seq(Row(1)))
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT x + 1
+          |FROM   (SELECT id
+          |               + (SELECT Max(id)
+          |                  FROM   range(2)) AS x
+          |        FROM   range(1)) t
+          |UNION
+          |SELECT 1 AS a
+        """.stripMargin),
+      Seq(Row(2), Row(1)))
+  }
 }
 
 case class Foo(bar: Option[String])

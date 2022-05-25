@@ -96,8 +96,13 @@ class RateStreamProviderSuite extends StreamTest {
 
     // We have to use the lambda version of CheckAnswer because we don't know the right range
     // until we see the last offset.
+    // SPARK-39242 - its possible that the next output to sink has happened
+    // since the last query progress and the output rows reflect that.
+    // We just need to compare for the saved stream duration here and hence
+    // we only use those number of sorted elements from output rows.
     def expectedResultsFromDuration(rows: Seq[Row]): Unit = {
-      assert(rows.map(_.getLong(0)).sorted == (0 until (streamDuration * 10)))
+      assert(rows.map(_.getLong(0)).sorted.take(streamDuration * 10)
+        == (0 until (streamDuration * 10)))
     }
 
     testStream(input)(

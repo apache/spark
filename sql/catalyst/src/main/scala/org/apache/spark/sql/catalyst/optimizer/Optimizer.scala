@@ -1357,7 +1357,9 @@ object CombineUnions extends Rule[LogicalPlan] {
     while (stack.nonEmpty) {
       stack.pop() match {
         case p1 @ Project(_, p2: Project)
-            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) =>
+            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) &&
+              !p1.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) &&
+              !p2.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) =>
           val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
           stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
         case Distinct(Union(children, byName, allowMissingCol))

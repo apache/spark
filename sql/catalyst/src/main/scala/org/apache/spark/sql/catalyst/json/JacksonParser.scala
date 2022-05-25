@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -421,12 +422,14 @@ class JacksonParser(
     var skipRow = false
 
     structFilters.reset()
+    resetExistenceDefaultsBitmask(schema)
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
             row.update(index, fieldConverters(index).apply(parser))
             skipRow = structFilters.skipRow(row, index)
+            schema.existenceDefaultsBitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
             case NonFatal(e) if isRoot =>
@@ -437,10 +440,10 @@ class JacksonParser(
           parser.skipChildren()
       }
     }
-
     if (skipRow) {
       None
     } else if (badRecordException.isEmpty) {
+      applyExistenceDefaultValuesToRow(schema, row)
       Some(row)
     } else {
       throw PartialResultException(row, badRecordException.get)
