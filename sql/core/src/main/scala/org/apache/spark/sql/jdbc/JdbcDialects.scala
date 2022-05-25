@@ -77,7 +77,6 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  */
 @DeveloperApi
 abstract class JdbcDialect extends Serializable with Logging{
-
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
