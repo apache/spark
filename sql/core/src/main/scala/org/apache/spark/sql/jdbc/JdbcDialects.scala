@@ -20,7 +20,6 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Date, Driver, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
@@ -78,9 +77,6 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  */
 @DeveloperApi
 abstract class JdbcDialect extends Serializable with Logging{
-
-  private val functions: util.Map[Identifier, UnboundFunction] =
-    new ConcurrentHashMap[Identifier, UnboundFunction]()
 
   /**
    * Check if this dialect instance can handle a certain jdbc url.
@@ -330,24 +326,10 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
-   * Register user-defined function.
-   * @param ident The identifier of user defined function.
-   * @param fn The user-defined function.
-   * @return The user-defined function.
-   */
-  def registerFunction(ident: Identifier, fn: UnboundFunction): UnboundFunction =
-    functions.put(ident, fn)
-
-  /**
    * List the user-defined functions in jdbc dialect.
-   * @return a map from identifiers to user-defined functions.
+   * @return a sequence of tuple from identifier to user-defined function.
    */
-  def listFunctions(): util.Map[Identifier, UnboundFunction] = functions
-
-  /**
-   * Clear all the registered user-defined functions.
-   */
-  def clearFunctions(): Unit = functions.clear()
+  def functions: Seq[(Identifier, UnboundFunction)] = Nil
 
   /**
    * Create schema with an optional comment. Empty string means no comment.

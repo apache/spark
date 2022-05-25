@@ -23,7 +23,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, NoSuchNamespaceException}
+import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
@@ -32,7 +34,8 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging {
+class JDBCTableCatalog extends TableCatalog
+  with SupportsNamespaces with FunctionCatalog with Logging {
   private var catalogName: String = null
   private var options: JDBCOptions = _
   private var dialect: JdbcDialect = _
@@ -296,5 +299,22 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
   private def getTableName(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(dialect.quoteIdentifier).mkString(".")
+  }
+
+  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
+    if (namespace.isEmpty || namespaceExists(namespace)) {
+      dialect.functions.map(_._1).filter(_.namespace.sameElements(namespace)).toArray
+    } else {
+      throw new NoSuchNamespaceException(namespace)
+    }
+  }
+
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    dialect.functions.toMap.get(ident) match {
+      case Some(func) =>
+        func
+      case _ =>
+        throw new NoSuchFunctionException(ident)
+    }
   }
 }

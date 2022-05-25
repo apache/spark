@@ -35,6 +35,28 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+object IntegralAverage extends UnboundFunction {
+  override def name(): String = "iavg"
+
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.fields.length > 1) {
+      throw new UnsupportedOperationException("Too many arguments")
+    }
+
+    inputType.fields(0).dataType match {
+      case _: IntegerType => IntAverage
+      case _: LongType => LongAverage
+      case dataType =>
+        throw new UnsupportedOperationException(s"Unsupported non-integral type: $dataType")
+    }
+  }
+
+  override def description(): String =
+    """iavg: produces an average using integer division, ignoring nulls
+      |  iavg(int) -> int
+      |  iavg(bigint) -> bigint""".stripMargin
+}
+
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 
@@ -535,28 +557,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "bad_bound_func"
-  }
-
-  object IntegralAverage extends UnboundFunction {
-    override def name(): String = "iavg"
-
-    override def bind(inputType: StructType): BoundFunction = {
-      if (inputType.fields.length > 1) {
-        throw new UnsupportedOperationException("Too many arguments")
-      }
-
-      inputType.fields(0).dataType match {
-        case _: IntegerType => IntAverage
-        case _: LongType => LongAverage
-        case dataType =>
-          throw new UnsupportedOperationException(s"Unsupported non-integral type: $dataType")
-      }
-    }
-
-    override def description(): String =
-      """iavg: produces an average using integer division, ignoring nulls
-        |  iavg(int) -> int
-        |  iavg(bigint) -> bigint""".stripMargin
   }
 
   object IntAverage extends AggregateFunction[(Int, Int), Int] {

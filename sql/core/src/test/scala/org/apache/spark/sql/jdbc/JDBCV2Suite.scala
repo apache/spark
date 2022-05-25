@@ -24,6 +24,8 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Sort}
+import org.apache.spark.sql.connector.IntegralAverage
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, avg, ceil, coalesce, count, count_distinct, exp, floor, lit, log => ln, not, pow, sqrt, sum, udf, when}
@@ -1411,5 +1413,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         }
       }
     }
+  }
+
+  test("register dialect specific functions") {
+    H2Dialect.registerFunction(Identifier.of(Array("test"), "my_avg"), IntegralAverage)
+    val df = sql("SELECT h2.test.my_avg(id) FROM h2.test.people")
+    checkAggregateRemoved(df, false)
+    checkAnswer(df, Row(1) :: Nil)
   }
 }
