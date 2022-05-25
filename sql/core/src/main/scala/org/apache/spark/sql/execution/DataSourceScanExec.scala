@@ -144,16 +144,13 @@ case class RowDataSourceScanExec(
 
     val limitOrOffsetInfo =
       if (pushedDownOperators.limit.isDefined && pushedDownOperators.sortValues.nonEmpty) {
+        val topNStr =
+          s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
+          s" LIMIT ${pushedDownOperators.limit.get}"
         if (pushedDownOperators.offset.isDefined) {
-          val pushedPaging =
-            s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
-              s" LIMIT ${pushedDownOperators.limit.get} OFFSET ${pushedDownOperators.offset.get}"
-          Map("PushedPaging" -> pushedPaging)
+          Map("PushedPaging" -> s"$topNStr OFFSET ${pushedDownOperators.offset.get}")
         } else {
-          val pushedTopN =
-            s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
-              s" LIMIT ${pushedDownOperators.limit.get}"
-          Map("PushedTopN" -> pushedTopN)
+          Map("PushedTopN" -> topNStr)
         }
       } else {
         pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value").toMap ++

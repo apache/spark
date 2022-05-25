@@ -44,7 +44,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       pushDownFilters,
       pushDownAggregates,
       pushDownLimits,
-      pushDownOffsets,
+      pushDownLimitAndOffset,
       pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
@@ -435,7 +435,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
     case other => (other, false)
   }
 
-  def pushDownOffsets(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pushDownLimitAndOffset(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case offset @ Offset(IntegerLiteral(n), child) =>
+      // For `dataset.offset(n)`, try to push down `OFFSET n`.
+      val (newChild, isPushed) = pushDownOffset(child, n)
+      if (isPushed) {
+        newChild
+      } else {
+        offset
+      }
     case offset @ LimitAndOffset(_, _, _) =>
       // Because `LIMIT` not pushed down completely, so not pushing down `OFFSET` here.
       offset
@@ -463,14 +471,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           // If we can't push down offset and limit, return `GlobalLimit`.
           globalLimit
         }
-      }
-    case offset @ Offset(IntegerLiteral(n), child) =>
-      // For `dataset.offset(n)`, try to push down `OFFSET n`.
-      val (newChild, isPushed) = pushDownOffset(child, n)
-      if (isPushed) {
-        newChild
-      } else {
-        offset
       }
   }
 
