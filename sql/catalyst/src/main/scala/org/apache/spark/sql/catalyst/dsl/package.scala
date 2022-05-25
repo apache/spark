@@ -151,6 +151,9 @@ package object dsl {
     def desc: SortOrder = SortOrder(expr, Descending)
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
+    // TODO: Remove at Spark 4.0.0
+    @deprecated("Use as(alias: String)", "3.4.0")
+    def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
 
   trait ExpressionConversions {
@@ -460,6 +463,9 @@ package object dsl {
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
+      // TODO: Remove at Spark 4.0.0
+      @deprecated("Use subquery(alias: String)", "3.4.0")
+      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
       def subquery(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
