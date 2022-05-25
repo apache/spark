@@ -51,7 +51,7 @@ class ConsoleSinkProvider extends SimpleTableProvider
     val numRowsToShow = parameters.get("numRows").map(_.toInt).getOrElse(20)
 
     // Truncate the displayed data if it is too long, by default it is true
-    val isTruncated = parameters.get("truncate").map(_.toBoolean).getOrElse(true)
+    val isTruncated = parameters.get("truncate").forall(_.toBoolean)
     data.show(numRowsToShow, isTruncated)
 
     ConsoleRelation(sqlContext, data)

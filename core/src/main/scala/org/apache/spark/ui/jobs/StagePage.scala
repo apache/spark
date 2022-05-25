@@ -101,7 +101,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
       UIUtils.decodeURLParameter(sortColumn)
     }.getOrElse("Index")
-    val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
+    val taskSortDesc = Option(parameterTaskSortDesc).exists(_.toBoolean)
     val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
     val stageId = parameterId.toInt
     val stageAttemptId = parameterAttempt.toInt

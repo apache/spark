@@ -169,7 +169,7 @@ class CSVOptions(
   val timestampNTZFormatInWrite: String = parameters.getOrElse("timestampNTZFormat",
     s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
-  val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
+  val multiLine = parameters.get("multiLine").exists(_.toBoolean)
 
   val maxColumns = getInt("maxColumns", 20480)
 
