@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.execution.benchmark
 
 import org.apache.commons.lang3.RandomStringUtils
 
