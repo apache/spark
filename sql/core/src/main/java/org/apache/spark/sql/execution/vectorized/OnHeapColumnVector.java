@@ -44,9 +44,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   /**
+   * <b>This method assumes that all constant column are at the end of schema
+   * and `constantColumnLength` represents the number of constant column.<b/>
+   *
    * Allocates columns to store elements of each field of the schema,
-   * the constant column use `ConstantColumnVector` and others use `OnHeapColumnVector`,
-   * this method assumes that all constant column are at the end of schema.
+   * the constant column use `ConstantColumnVector` and others use `OnHeapColumnVector`.
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
    * in number of elements, not number of bytes.
    */
