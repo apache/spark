@@ -24,6 +24,7 @@ Input/Output
 .. autosummary::
     :toctree: api/
 
+    DataFrameReader
     DataFrameReader.csv
     DataFrameReader.format
     DataFrameReader.jdbc
@@ -36,6 +37,7 @@ Input/Output
     DataFrameReader.schema
     DataFrameReader.table
     DataFrameWriter.bucketBy
+    DataFrameWriter
     DataFrameWriter.csv
     DataFrameWriter.format
     DataFrameWriter.insertInto
