@@ -38,10 +38,10 @@ class AdaptiveHashAggregateExecSuite extends QueryTest
         val hashAggregate = agg.queryExecution.sparkPlan.asInstanceOf[HashAggregateExec]
         val partialHashAggregate = hashAggregate.child.asInstanceOf[HashAggregateExec]
 
-        assert(!hashAggregate.isPartialAgg)
+        assert(!hashAggregate.requiredChildDistributionExpressions.isEmpty)
         assert(!hashAggregate.isAdaptivePartialAggregationEnabled)
 
-        assert(partialHashAggregate.isPartialAgg)
+        assert(partialHashAggregate.requiredChildDistributionExpressions.isEmpty)
         if (partialAggThreshold > 0) {
           assert(partialHashAggregate.isAdaptivePartialAggregationEnabled)
         } else {
@@ -75,10 +75,10 @@ class AdaptiveHashAggregateExecSuite extends QueryTest
       val hashAggregate = agg.queryExecution.sparkPlan.asInstanceOf[HashAggregateExec]
       val partialHashAggregate = hashAggregate.child.asInstanceOf[HashAggregateExec]
 
-      assert(!hashAggregate.isPartialAgg)
+      assert(!hashAggregate.requiredChildDistributionExpressions.isEmpty)
       assert(!hashAggregate.isAdaptivePartialAggregationEnabled)
 
-      assert(partialHashAggregate.isPartialAgg)
+      assert(partialHashAggregate.requiredChildDistributionExpressions.isEmpty)
       assert(!partialHashAggregate.isAdaptivePartialAggregationEnabled)
     }
   }
