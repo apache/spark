@@ -104,6 +104,11 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       if (buf == null) {
         throw new IllegalStateException("Chunk was not found");
       }
+    } catch (StreamAlreadyClosedException e) {
+      logger.warn(String.format("Error opening block %s for request from %s since stream is " +
+        "closed", msg.streamChunkId, getRemoteAddress(channel)));
+      channel.close();
+      return;
     } catch (Exception e) {
       logger.error(String.format("Error opening block %s for request from %s",
         msg.streamChunkId, getRemoteAddress(channel)), e);

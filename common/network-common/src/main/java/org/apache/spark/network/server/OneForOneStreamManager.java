@@ -88,8 +88,7 @@ public class OneForOneStreamManager extends StreamManager {
   public ManagedBuffer getChunk(long streamId, int chunkIndex) {
     StreamState state = streams.get(streamId);
     if (state == null) {
-      throw new IllegalStateException(String.format(
-        "Requested chunk not available since streamId %s is closed", streamId));
+      throw new StreamAlreadyClosedException();
     } else if (chunkIndex != state.curChunk) {
       throw new IllegalStateException(String.format(
         "Received out-of-order chunk index %s (expected %s)", chunkIndex, state.curChunk));

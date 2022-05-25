@@ -138,6 +138,11 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     ManagedBuffer buf;
     try {
       buf = streamManager.openStream(req.streamId);
+    } catch (StreamAlreadyClosedException e) {
+      logger.warn(String.format("Error opening stream %s for request from %s since stream is " +
+        "closed", req.streamId, getRemoteAddress(channel)));
+      channel.close();
+      return;
     } catch (Exception e) {
       logger.error(String.format(
         "Error opening stream %s for request from %s", req.streamId, getRemoteAddress(channel)), e);
