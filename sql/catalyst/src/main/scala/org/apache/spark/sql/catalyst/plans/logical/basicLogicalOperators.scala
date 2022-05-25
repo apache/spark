@@ -1495,12 +1495,15 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 
 trait HasPartitionExpressions extends SQLConfHelper {
 
+  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+
   def partitionExpressions: Seq[Expression]
 
   def optNumPartitions: Option[Int]
 
   protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
-    RoundRobinPartitioning(optNumPartitions.getOrElse(conf.numShufflePartitions))
+    RoundRobinPartitioning(numPartitions)
   } else {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
     require(sortOrder.isEmpty || nonSortOrder.isEmpty,
@@ -1512,10 +1515,9 @@ trait HasPartitionExpressions extends SQLConfHelper {
            |NonSortOrder: $nonSortOrder
        """.stripMargin)
     if (sortOrder.nonEmpty) {
-      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]),
-        optNumPartitions.getOrElse(conf.numShufflePartitions))
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
     } else {
-      HashPartitioning(partitionExpressions, optNumPartitions.getOrElse(conf.numShufflePartitions))
+      HashPartitioning(partitionExpressions, numPartitions)
     }
   }
 }
@@ -1531,9 +1533,6 @@ case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
     optNumPartitions: Option[Int]) extends RepartitionOperation with HasPartitionExpressions {
-
-  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
-  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   override val partitioning: Partitioning = {
     if (numPartitions == 1) {
