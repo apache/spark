@@ -1886,9 +1886,8 @@ private[spark] class DAGScheduler(
                 unregisterMergeResult(shuffleId, reduceId, bmAddress, Option(mapIndex))
             }
           } else {
-            // Unregister the merge result of <shuffleId, reduceId> if
-            // there is a FetchFailed event and is not a
-            // MetaDataFetchException which is signified by bmAddress being null
+            // Unregister the merge result of <shuffleId, reduceId> if there is a FetchFailed event
+            // and is not a  MetaDataFetchException which is signified by bmAddress being null
             if (bmAddress != null) {
               assert(pushBasedShuffleEnabled, "Pushed based shuffle needs to " +
                 "be enabled so that merge results are present.")
@@ -2459,8 +2458,7 @@ private[spark] class DAGScheduler(
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
-    // Check if the execId is a shuffle push merger
-    // We do not remove the executor if it is,
+    // Check if the execId is a shuffle push merger. We do not remove the executor if it is,
     // and only remove the outputs on the host.
     val isShuffleMerger = execId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
     if ((!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch)

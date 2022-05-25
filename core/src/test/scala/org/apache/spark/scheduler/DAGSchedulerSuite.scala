@@ -4387,7 +4387,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-38987: All shuffle outputs for a shuffle push" +
-    " merger executor should be cleaned up on a fetch failure") {
+    " merger executor should be cleaned up on a fetch failure when" +
+    "spark.files.fetchFailure.unRegisterOutputOnHost is true") {
     conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
     conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
 
@@ -4421,10 +4422,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     verify(mapOutputTracker,
       times(1)).removeOutputsOnHost("hostA")
 
-    // Shuffle files for shuffle-push-merger executor should be lost
-    val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
+    // There should be no map statuses or merge statuses on the host
+    val shuffleStatuses = mapOutputTracker.shuffleStatuses(shuffleId)
+    val mapStatuses = shuffleStatuses.mapStatuses
+    val mergeStatuses = shuffleStatuses.mergeStatuses
     assert(mapStatuses.count(_ != null) === 1)
     assert(mapStatuses.count(s => s != null
+      && s.location.executorId == BlockManagerId.SHUFFLE_MERGER_IDENTIFIER) === 0)
+    assert(mergeStatuses.count(s => s != null
       && s.location.executorId == BlockManagerId.SHUFFLE_MERGER_IDENTIFIER) === 0)
     // hostB-exec should still have its shuffle files
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
