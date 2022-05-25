@@ -253,12 +253,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       constantColumnLength = partitionColumns.fields().length;
     }
 
-    ColumnVector[] vectors;
-    if (memMode == MemoryMode.OFF_HEAP) {
-      vectors = OffHeapColumnVector.allocateColumns(capacity, batchSchema, constantColumnLength);
-    } else {
-      vectors = OnHeapColumnVector.allocateColumns(capacity, batchSchema, constantColumnLength);
-    }
+    ColumnVector[] vectors = ColumnVectorUtils.allocateColumns(
+      capacity, batchSchema, memMode == MemoryMode.OFF_HEAP /* useOffHeap */, constantColumnLength);
+
     columnarBatch = new ColumnarBatch(vectors);
 
     columnVectors = new ParquetColumnVector[sparkSchema.fields().length];

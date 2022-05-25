@@ -22,7 +22,6 @@ import java.nio.ByteOrder;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.types.*;
-import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -41,29 +40,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
    */
   public static OffHeapColumnVector[] allocateColumns(int capacity, StructType schema) {
     return allocateColumns(capacity, schema.fields());
-  }
-
-  /**
-   * <b>This method assumes that all constant column are at the end of schema
-   * and `constantColumnLength` represents the number of constant column.</b>
-   *
-   * Allocates columns to store elements of each field of the schema,
-   * the constant column use `ConstantColumnVector` and others use `OffHeapColumnVector`.
-   * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
-   * in number of elements, not number of bytes.
-   */
-  public static ColumnVector[] allocateColumns(
-      int capacity, StructType schema, int constantColumnLength) {
-    StructField[] fields = schema.fields();
-    int fieldsLength = fields.length;
-    ColumnVector[] vectors = new ColumnVector[fieldsLength];
-    for (int i = 0; i < fieldsLength - constantColumnLength; i++) {
-      vectors[i] = new OffHeapColumnVector(capacity, fields[i].dataType());
-    }
-    for (int i = fieldsLength - constantColumnLength; i < fieldsLength; i++) {
-      vectors[i] = new ConstantColumnVector(capacity, fields[i].dataType());
-    }
-    return vectors;
   }
 
   /**
