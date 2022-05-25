@@ -102,6 +102,10 @@ public class V2ExpressionSQLBuilder {
         case "FLOOR":
         case "CEIL":
         case "WIDTH_BUCKET":
+        case "SUBSTRING":
+        case "UPPER":
+        case "LOWER":
+        case "TRANSLATE":
           return visitSQLFunction(name,
             Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "CASE_WHEN": {
@@ -109,6 +113,18 @@ public class V2ExpressionSQLBuilder {
             Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
           return visitCaseWhen(children.toArray(new String[e.children().length]));
         }
+        case "TRIM":
+          return visitTrim("BOTH",
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+        case "LTRIM":
+          return visitTrim("LEADING",
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+        case "RTRIM":
+          return visitTrim("TRAILING",
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+        case "OVERLAY":
+          return visitOverlay(
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         // TODO supports other expressions
         default:
           return visitUnexpectedExpr(expr);
@@ -227,5 +243,24 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
     throw new IllegalArgumentException("Unexpected V2 expression: " + expr);
+  }
+
+  protected String visitOverlay(String[] inputs) {
+    assert(inputs.length == 3 || inputs.length == 4);
+    if (inputs.length == 3) {
+      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] + ")";
+    } else {
+      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] +
+        " FOR " + inputs[3]+ ")";
+    }
+  }
+
+  protected String visitTrim(String direction, String[] inputs) {
+    assert(inputs.length == 1 || inputs.length == 2);
+    if (inputs.length == 1) {
+      return "TRIM(" + direction + " FROM " + inputs[0] + ")";
+    } else {
+      return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
+    }
   }
 }

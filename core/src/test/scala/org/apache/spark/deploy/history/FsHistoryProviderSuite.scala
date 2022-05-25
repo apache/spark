@@ -1529,6 +1529,56 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     }
   }
 
+  test("SPARK-39225: Support spark.history.fs.update.batchSize") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(UPDATE_BATCHSIZE, 1)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val provider = new FsHistoryProvider(conf)
+
+      // Create 1st application
+      val writer1 = new RollingEventLogFilesWriter("app1", None, dir.toURI, conf, hadoopConf)
+      writer1.start()
+      writeEventsToRollingWriter(writer1, Seq(
+        SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer1.stop()
+
+      // Create 2nd application
+      val writer2 = new RollingEventLogFilesWriter("app2", None, dir.toURI, conf, hadoopConf)
+      writer2.start()
+      writeEventsToRollingWriter(writer2, Seq(
+        SparkListenerApplicationStart("app2", Some("app2"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer2.stop()
+
+      // The 1st checkForLogs should scan/update app2 only since it is newer than app1
+      provider.checkForLogs()
+      assert(provider.getListing.length === 1)
+      assert(dir.listFiles().size === 2)
+      assert(provider.getListing().map(e => e.id).contains("app2"))
+      assert(!provider.getListing().map(e => e.id).contains("app1"))
+
+      // Create 3rd application
+      val writer3 = new RollingEventLogFilesWriter("app3", None, dir.toURI, conf, hadoopConf)
+      writer3.start()
+      writeEventsToRollingWriter(writer3, Seq(
+        SparkListenerApplicationStart("app3", Some("app3"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer3.stop()
+
+      // The 2nd checkForLogs should scan/update app3 only since it is newer than app1
+      provider.checkForLogs()
+      assert(provider.getListing.length === 2)
+      assert(dir.listFiles().size === 3)
+      assert(provider.getListing().map(e => e.id).contains("app3"))
+      assert(!provider.getListing().map(e => e.id).contains("app1"))
+
+      provider.stop()
+    }
+  }
+
   test("SPARK-36354: EventLogFileReader should skip rolling event log directories with no logs") {
     withTempDir { dir =>
       val conf = createTestConf(true)

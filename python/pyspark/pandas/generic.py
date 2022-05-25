@@ -1556,20 +1556,20 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan, 6], 'b': [0.1, 0.2, 0.3, np.nan, 0.8]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
 
         >>> df.kurtosis()
-        a   -1.5
-        b   -1.5
+        a    1.500000
+        b    2.703924
         dtype: float64
 
         On a Series:
 
         >>> df['a'].kurtosis()
-        -1.5
+        1.5
         """
         axis = validate_axis(axis)
 
@@ -1587,7 +1587,9 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.kurtosis(spark_column)
+
+            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            return Column(sql_utils.pandasKurtosis(spark_column._jc))
 
         return self._reduce_for_stat_function(
             kurtosis,
@@ -3365,12 +3367,13 @@ class Frame(object, metaclass=ABCMeta):
 
     pad = ffill
 
-    # TODO: add 'axis', 'inplace', 'limit_area', 'downcast'
+    # TODO: add 'axis', 'inplace', 'downcast'
     def interpolate(
         self: FrameLike,
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> FrameLike:
         """
         Fill NaN values using an interpolation method.
@@ -3397,6 +3400,13 @@ class Frame(object, metaclass=ABCMeta):
         limit_direction : str, default None
             Consecutive NaNs will be filled in this direction.
             One of {{'forward', 'backward', 'both'}}.
+
+        limit_area : str, default None
+            If limit is specified, consecutive NaNs will be filled with this restriction. One of:
+
+            * None: No fill restriction.
+            * 'inside': Only fill NaNs surrounded by valid values (interpolate).
+            * 'outside': Only fill NaNs outside valid values (extrapolate).
 
         Returns
         -------
@@ -3452,7 +3462,9 @@ class Frame(object, metaclass=ABCMeta):
         2  2.0  3.0 -3.0   9.0
         3  2.0  4.0 -4.0  16.0
         """
-        return self.interpolate(method=method, limit=limit, limit_direction=limit_direction)
+        return self.interpolate(
+            method=method, limit=limit, limit_direction=limit_direction, limit_area=limit_area
+        )
 
     @property
     def at(self) -> AtIndexer:
