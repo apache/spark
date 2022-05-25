@@ -414,10 +414,10 @@ object Cast {
         suggestionOnConversionFunctions(from, to, "function UNIX_DATE")
 
       // scalastyle:off line.size.limit
-      case _ if fallbackConfKey.isDefined && fallbackConfValue.isDefined && Cast.canCast(from, to) =>
+      case _ if fallbackConf.isDefined && Cast.canCast(from, to) =>
         s"""
            | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
-           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set ${fallbackConfKey.get} as ${fallbackConfValue.get}.
+           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set ${fallbackConf.get._1} as ${fallbackConf.get._2}.
            |""".stripMargin
       // scalastyle:on line.size.limit
 
