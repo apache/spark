@@ -19,8 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import java.time.{LocalDateTime, ZoneId}
 
+import scala.collection.JavaConverters.mapAsScalaMap
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, InSubquery, ListQuery, Literal, LocalTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimeZone, CurrentTimestamp, InSubquery, ListQuery, Literal, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -121,5 +124,21 @@ class ComputeCurrentTimeSuite extends PlanTest {
     }
     assert(literals.size == 3) // transformDownWithSubqueries covers the inner timestamp twice
     assert(literals.toSet.size == 1)
+  }
+
+  test("analyzer should use consistent timestamps for different timezones") {
+    val localTimestamps = mapAsScalaMap(ZoneId.SHORT_IDS)
+      .map { case (zoneId, _) => Alias(LocalTimestamp(Some(zoneId)), zoneId)() }.toSeq
+    val input = Project(localTimestamps, LocalRelation())
+
+    val plan = Optimize.execute(input).asInstanceOf[Project]
+
+    val literals = new scala.collection.mutable.ArrayBuffer[Long]
+    plan.transformAllExpressions { case e: Literal =>
+      literals += e.value.asInstanceOf[Long]
+      e
+    }
+
+    assert(literals.size === localTimestamps.size)
   }
 }
