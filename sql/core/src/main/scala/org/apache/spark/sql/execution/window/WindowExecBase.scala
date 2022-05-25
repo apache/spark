@@ -97,7 +97,7 @@ trait WindowExecBase extends UnaryExecNode {
         RowBoundOrdering(offset)
 
       case (RowFrame, _) =>
-        sys.error(s"Unhandled bound in windows expressions: $bound")
+        throw new IllegalStateException(s"Unhandled bound in windows expressions: $bound")
 
       case (RangeFrame, CurrentRow) =>
         val ordering = RowOrdering.create(orderSpec, child.output)
@@ -139,7 +139,7 @@ trait WindowExecBase extends UnaryExecNode {
         RangeBoundOrdering(ordering, current, bound)
 
       case (RangeFrame, _) =>
-        sys.error("Non-Zero range offsets are not supported for windows " +
+        throw new IllegalStateException("Non-Zero range offsets are not supported for windows " +
           "with multiple order expressions.")
     }
   }
@@ -189,7 +189,7 @@ trait WindowExecBase extends UnaryExecNode {
               }
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)
-            case f => sys.error(s"Unsupported window function: $f")
+            case f => throw new IllegalStateException(s"Unsupported window function: $f")
           }
         case _ =>
       }
@@ -296,7 +296,7 @@ trait WindowExecBase extends UnaryExecNode {
             }
 
           case _ =>
-            sys.error(s"Unsupported factory: $key")
+            throw new IllegalStateException(s"Unsupported factory: $key")
         }
 
         // Keep track of the number of expressions. This is a side-effect in a map...

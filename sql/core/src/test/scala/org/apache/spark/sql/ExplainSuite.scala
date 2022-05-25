@@ -528,6 +528,21 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         "== Analyzed Logical Plan ==\nCreateViewCommand")
     }
   }
+
+  test("SPARK-39112: UnsupportedOperationException if explain cost command using v2 command") {
+    withTempDir { dir =>
+      sql("EXPLAIN COST CREATE DATABASE tmp")
+      sql("EXPLAIN COST DESC DATABASE tmp")
+      sql(s"EXPLAIN COST ALTER DATABASE tmp SET LOCATION '${dir.toURI.toString}'")
+      sql("EXPLAIN COST USE tmp")
+      sql("EXPLAIN COST CREATE TABLE t(c1 int) USING PARQUET")
+      sql("EXPLAIN COST SHOW TABLES")
+      sql("EXPLAIN COST SHOW CREATE TABLE t")
+      sql("EXPLAIN COST SHOW TBLPROPERTIES t")
+      sql("EXPLAIN COST DROP TABLE t")
+      sql("EXPLAIN COST DROP DATABASE tmp")
+    }
+  }
 }
 
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {

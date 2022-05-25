@@ -1356,6 +1356,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
 
   test("SPARK-38684: outer join works correctly even if processing input rows and " +
     "evicting state rows for same grouping key happens in the same micro-batch") {
+    assume(!Utils.isMacOnAppleSilicon)
 
     // The test is to demonstrate the correctness issue in outer join before SPARK-38684.
     withSQLConf(

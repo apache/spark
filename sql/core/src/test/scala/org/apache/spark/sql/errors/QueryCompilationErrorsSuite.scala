@@ -37,7 +37,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg1 ===
       s"""
-         |Cannot up cast b from bigint to int.
+         |Cannot up cast b from "BIGINT" to "INT".
          |The type path of the target object is:
          |- field (class: "scala.Int", name: "b")
          |- root class: "org.apache.spark.sql.errors.StringIntClass"
@@ -51,7 +51,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg2 ===
       s"""
-         |Cannot up cast b.`b` from decimal(38,18) to bigint.
+         |Cannot up cast b.`b` from "DECIMAL(38,18)" to "BIGINT".
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
@@ -94,19 +94,20 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("ILLEGAL_SUBSTRING: the argument_index of string format is invalid") {
+  test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
     withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
       val e = intercept[AnalysisException] {
         sql("select format_string('%0$s', 'Hello')")
       }
-      assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
-      assert(e.message ===
-        "The argument_index of string format cannot contain position 0$.")
+      assert(e.errorClass === Some("INVALID_PARAMETER_VALUE"))
+      assert(e.message === "The value of parameter(s) 'strfmt' in `format_string` is invalid: " +
+        "expects %1$, %2$ and so on, but got %0$.")
     }
   }
 
   test("CANNOT_USE_MIXTURE: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -148,11 +149,12 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.getSqlState === "0A000")
     assert(e.message ===
       "The feature is not supported: " +
-      "Using PythonUDF in join condition of join type LeftOuter is not supported")
+      "Using PythonUDF in join condition of join type LEFT OUTER is not supported.")
   }
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),

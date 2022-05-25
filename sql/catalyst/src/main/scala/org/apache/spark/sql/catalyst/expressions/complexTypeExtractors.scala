@@ -339,9 +339,8 @@ trait GetArrayItemUtil {
 /**
  * Common trait for [[GetMapValue]] and [[ElementAt]].
  */
-trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
-
-  protected val isElementAtFunction: Boolean = false
+trait GetMapValueUtil
+  extends BinaryExpression with ImplicitCastInputTypes with SupportQueryContext {
 
   // todo: current search is O(n), improve it.
   def getValueEval(
@@ -367,7 +366,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
     if (!found) {
       if (failOnError) {
-        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, isElementAtFunction, origin.context)
+        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, keyType, queryContext)
       } else {
         null
       }
@@ -400,11 +399,11 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
-    lazy val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+    val keyDt = ctx.addReferenceObj("keyType", keyType, keyType.getClass.getName)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.mapKeyNotExistError(" +
-          s"$eval2, $isElementAtFunction, $errorContext);"
+        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2, $keyDt, $errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -490,4 +489,10 @@ case class GetMapValue(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetMapValue =
     copy(child = newLeft, key = newRight)
+
+  override def initQueryContext(): String = if (failOnError) {
+    origin.context
+  } else {
+    ""
+  }
 }

@@ -224,10 +224,11 @@ public interface TableChange {
    * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to delete
+   * @param ifExists   silence the error if column doesn't exist during drop
    * @return a TableChange for the delete
    */
-  static TableChange deleteColumn(String[] fieldNames) {
-    return new DeleteColumn(fieldNames);
+  static TableChange deleteColumn(String[] fieldNames, Boolean ifExists) {
+    return new DeleteColumn(fieldNames, ifExists);
   }
 
   /**
@@ -651,9 +652,11 @@ public interface TableChange {
    */
   final class DeleteColumn implements ColumnChange {
     private final String[] fieldNames;
+    private final Boolean ifExists;
 
-    private DeleteColumn(String[] fieldNames) {
+    private DeleteColumn(String[] fieldNames, Boolean ifExists) {
       this.fieldNames = fieldNames;
+      this.ifExists = ifExists;
     }
 
     @Override
@@ -661,12 +664,14 @@ public interface TableChange {
       return fieldNames;
     }
 
+    public Boolean ifExists() { return ifExists; }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       DeleteColumn that = (DeleteColumn) o;
-      return Arrays.equals(fieldNames, that.fieldNames);
+      return Arrays.equals(fieldNames, that.fieldNames) && that.ifExists() == this.ifExists();
     }
 
     @Override

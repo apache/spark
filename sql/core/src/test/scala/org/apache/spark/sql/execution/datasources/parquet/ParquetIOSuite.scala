@@ -376,23 +376,27 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("vectorized reader: missing array") {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
-      val data = Seq(
-        Tuple1(null),
-        Tuple1(Seq()),
-        Tuple1(Seq("a", "b", "c")),
-        Tuple1(Seq(null))
-      )
-
-      val readSchema = new StructType().add("_2", new ArrayType(
-        new StructType().add("a", LongType, nullable = true),
-        containsNull = true)
-      )
-
-      withParquetFile(data) { file =>
-        checkAnswer(spark.read.schema(readSchema).parquet(file),
-          Row(null) :: Row(null) :: Row(null) :: Row(null) :: Nil
+    Seq(true, false).foreach { offheapEnabled =>
+      withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+        val data = Seq(
+          Tuple1(null),
+          Tuple1(Seq()),
+          Tuple1(Seq("a", "b", "c")),
+          Tuple1(Seq(null))
         )
+
+        val readSchema = new StructType().add("_2", new ArrayType(
+          new StructType().add("a", LongType, nullable = true),
+          containsNull = true)
+        )
+
+        withParquetFile(data) { file =>
+          checkAnswer(spark.read.schema(readSchema).parquet(file),
+            Row(null) :: Row(null) :: Row(null) :: Row(null) :: Nil
+          )
+        }
       }
     }
   }
@@ -666,45 +670,53 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("vectorized reader: missing all struct fields") {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
-      val data = Seq(
-        Tuple1((1, "a")),
-        Tuple1((2, null)),
-        Tuple1(null)
-      )
-
-      val readSchema = new StructType().add("_1",
-        new StructType()
-            .add("_3", IntegerType, nullable = true)
-            .add("_4", LongType, nullable = true),
-        nullable = true)
-
-      withParquetFile(data) { file =>
-        checkAnswer(spark.read.schema(readSchema).parquet(file),
-          Row(null) :: Row(null) :: Row(null) :: Nil
+    Seq(true, false).foreach { offheapEnabled =>
+      withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+        val data = Seq(
+          Tuple1((1, "a")),
+          Tuple1((2, null)),
+          Tuple1(null)
         )
+
+        val readSchema = new StructType().add("_1",
+          new StructType()
+              .add("_3", IntegerType, nullable = true)
+              .add("_4", LongType, nullable = true),
+          nullable = true)
+
+        withParquetFile(data) { file =>
+          checkAnswer(spark.read.schema(readSchema).parquet(file),
+            Row(null) :: Row(null) :: Row(null) :: Nil
+          )
+        }
       }
     }
   }
 
   test("vectorized reader: missing some struct fields") {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
-      val data = Seq(
-        Tuple1((1, "a")),
-        Tuple1((2, null)),
-        Tuple1(null)
-      )
-
-      val readSchema = new StructType().add("_1",
-        new StructType()
-            .add("_1", IntegerType, nullable = true)
-            .add("_3", LongType, nullable = true),
-        nullable = true)
-
-      withParquetFile(data) { file =>
-        checkAnswer(spark.read.schema(readSchema).parquet(file),
-          Row(null) :: Row(Row(1, null)) :: Row(Row(2, null)) :: Nil
+    Seq(true, false).foreach { offheapEnabled =>
+      withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+        val data = Seq(
+          Tuple1((1, "a")),
+          Tuple1((2, null)),
+          Tuple1(null)
         )
+
+        val readSchema = new StructType().add("_1",
+          new StructType()
+              .add("_1", IntegerType, nullable = true)
+              .add("_3", LongType, nullable = true),
+          nullable = true)
+
+        withParquetFile(data) { file =>
+          checkAnswer(spark.read.schema(readSchema).parquet(file),
+            Row(null) :: Row(Row(1, null)) :: Row(Row(2, null)) :: Nil
+          )
+        }
       }
     }
   }

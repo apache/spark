@@ -110,10 +110,11 @@ statement
         RENAME COLUMN
         from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS)
+        DROP (COLUMN | COLUMNS) (IF EXISTS)?
         LEFT_PAREN columns=multipartIdentifierList RIGHT_PAREN         #dropTableColumns
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS) columns=multipartIdentifierList        #dropTableColumns
+        DROP (COLUMN | COLUMNS) (IF EXISTS)?
+        columns=multipartIdentifierList                                #dropTableColumns
     | ALTER (TABLE | VIEW) from=multipartIdentifier
         RENAME TO to=multipartIdentifier                               #renameTable
     | ALTER (TABLE | VIEW) multipartIdentifier
@@ -844,8 +845,8 @@ primaryExpression
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
-    | PERCENTILE_CONT LEFT_PAREN percentage=valueExpression RIGHT_PAREN
-      WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN                                    #percentile
+    | name=(PERCENTILE_CONT | PERCENTILE_DISC) LEFT_PAREN percentage=valueExpression RIGHT_PAREN
+      WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN ( OVER windowSpec)?                #percentile
     ;
 
 constant
@@ -1449,6 +1450,7 @@ nonReserved
     | PARTITIONED
     | PARTITIONS
     | PERCENTILE_CONT
+    | PERCENTILE_DISC
     | PERCENTLIT
     | PIVOT
     | PLACING

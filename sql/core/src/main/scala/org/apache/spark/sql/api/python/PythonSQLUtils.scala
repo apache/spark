@@ -55,6 +55,9 @@ private[sql] object PythonSQLUtils extends Logging {
     listAllSQLConfigs().filter(p => SQLConf.isStaticConfigKey(p._1)).toArray
   }
 
+  def isTimestampNTZPreferred: Boolean =
+    SQLConf.get.timestampType == org.apache.spark.sql.types.TimestampNTZType
+
   /**
    * Python callable function to read a file in Arrow stream format and create a [[RDD]]
    * using each serialized ArrowRecordBatch as a partition.

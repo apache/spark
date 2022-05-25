@@ -71,7 +71,10 @@ private[spark] object SparkThrowableHelper {
     mapper.readValue(errorClassesUrl, new TypeReference[SortedMap[String, ErrorInfo]]() {})
   }
 
-  def getMessage(errorClass: String, messageParameters: Array[String]): String = {
+  def getMessage(
+      errorClass: String,
+      messageParameters: Array[String],
+      queryContext: String = ""): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
     if (errorInfo.subClass.isDefined) {

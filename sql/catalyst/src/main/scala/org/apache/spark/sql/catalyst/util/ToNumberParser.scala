@@ -49,33 +49,56 @@ object ToNumberParser {
   final val WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_END = 'R'
 
   // This class represents one or more characters that we expect to be present in the input string
-  // based on the format string.
+  // based on the format string. The toString method returns a representation of each token suitable
+  // for use in error messages.
   abstract class InputToken()
   // Represents some number of digits (0-9).
   abstract class Digits extends InputToken
   // Represents exactly 'num' digits (0-9).
-  case class ExactlyAsManyDigits(num: Int) extends Digits
+  case class ExactlyAsManyDigits(num: Int) extends Digits {
+    override def toString: String = "digit sequence"
+  }
   // Represents at most 'num' digits (0-9).
-  case class AtMostAsManyDigits(num: Int) extends Digits
+  case class AtMostAsManyDigits(num: Int) extends Digits {
+    override def toString: String = "digit sequence"
+  }
   // Represents one decimal point (.).
-  case class DecimalPoint() extends InputToken
+  case class DecimalPoint() extends InputToken {
+    override def toString: String = ". or D"
+  }
   // Represents one thousands separator (,).
-  case class ThousandsSeparator() extends InputToken
+  case class ThousandsSeparator() extends InputToken {
+    override def toString: String = ", or G"
+  }
   // Represents one or more groups of Digits (0-9) with ThousandsSeparators (,) between each group.
   // The 'tokens' are the Digits and ThousandsSeparators in order; the 'digits' are just the Digits.
-  case class DigitGroups(tokens: Seq[InputToken], digits: Seq[Digits]) extends InputToken
+  case class DigitGroups(tokens: Seq[InputToken], digits: Seq[Digits]) extends InputToken {
+    override def toString: String = "digit sequence"
+  }
   // Represents one dollar sign ($).
-  case class DollarSign() extends InputToken
+  case class DollarSign() extends InputToken {
+    override def toString: String = "$"
+  }
   // Represents one optional plus sign (+) or minus sign (-).
-  case class OptionalPlusOrMinusSign() extends InputToken
+  case class OptionalPlusOrMinusSign() extends InputToken {
+    override def toString: String = "S"
+  }
   // Represents one optional minus sign (-).
-  case class OptionalMinusSign() extends InputToken
+  case class OptionalMinusSign() extends InputToken {
+    override def toString: String = "MI"
+  }
   // Represents one opening angle bracket (<).
-  case class OpeningAngleBracket() extends InputToken
+  case class OpeningAngleBracket() extends InputToken {
+    override def toString: String = "PR"
+  }
   // Represents one closing angle bracket (>).
-  case class ClosingAngleBracket() extends InputToken
+  case class ClosingAngleBracket() extends InputToken {
+    override def toString: String = "PR"
+  }
   // Represents any unrecognized character other than the above.
-  case class InvalidUnrecognizedCharacter(char: Char) extends InputToken
+  case class InvalidUnrecognizedCharacter(char: Char) extends InputToken {
+    override def toString: String = s"character '$char''"
+  }
 }
 
 /**
@@ -241,16 +264,6 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    * This implementation of the [[check]] method returns any error, or the empty string on success.
    */
   private def validateFormatString: String = {
-    def multipleSignInNumberFormatError(message: String) = {
-      s"At most one $message is allowed in the number format: '$numberFormat'"
-    }
-
-    def notAtEndOfNumberFormatError(message: String) = {
-      s"$message must be at the end of the number format: '$numberFormat'"
-    }
-
-    val inputTokenCounts = formatTokens.groupBy(identity).mapValues(_.size)
-
     val firstDollarSignIndex: Int = formatTokens.indexOf(DollarSign())
     val firstDigitIndex: Int = formatTokens.indexWhere {
       case _: DigitGroups => true
@@ -276,58 +289,25 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
 
     // Make sure the format string contains at least one token.
     if (numberFormat.isEmpty) {
-      "The format string cannot be empty"
-    }
-    // Make sure the format string does not contain any unrecognized characters.
-    else if (formatTokens.exists(_.isInstanceOf[InvalidUnrecognizedCharacter])) {
-      val unrecognizedChars =
-        formatTokens.filter {
-          _.isInstanceOf[InvalidUnrecognizedCharacter]
-        }.map {
-          case i: InvalidUnrecognizedCharacter => i.char
-        }
-      val char: Char = unrecognizedChars.head
-      s"Encountered invalid character $char in the number format: '$numberFormat'"
+      return "The format string cannot be empty"
     }
     // Make sure the format string contains at least one digit.
-    else if (!formatTokens.exists(
+    if (!formatTokens.exists(
       token => token.isInstanceOf[DigitGroups])) {
-      "The format string requires at least one number digit"
-    }
-    // Make sure the format string contains at most one decimal point.
-    else if (inputTokenCounts.getOrElse(DecimalPoint(), 0) > 1) {
-      multipleSignInNumberFormatError(s"'$POINT_LETTER' or '$POINT_SIGN'")
-    }
-    // Make sure the format string contains at most one plus or minus sign.
-    else if (inputTokenCounts.getOrElse(OptionalPlusOrMinusSign(), 0) > 1) {
-      multipleSignInNumberFormatError(s"'$OPTIONAL_PLUS_OR_MINUS_LETTER'")
-    }
-    // Make sure the format string contains at most one dollar sign.
-    else if (inputTokenCounts.getOrElse(DollarSign(), 0) > 1) {
-      multipleSignInNumberFormatError(s"'$DOLLAR_SIGN'")
-    }
-    // Make sure the format string contains at most one "MI" sequence.
-    else if (inputTokenCounts.getOrElse(OptionalMinusSign(), 0) > 1) {
-      multipleSignInNumberFormatError(s"'$OPTIONAL_MINUS_STRING'")
-    }
-    // Make sure the format string contains at most one closing angle bracket at the end.
-    else if (inputTokenCounts.getOrElse(ClosingAngleBracket(), 0) > 1 ||
-      (inputTokenCounts.getOrElse(ClosingAngleBracket(), 0) == 1 &&
-        formatTokens.last != ClosingAngleBracket())) {
-      notAtEndOfNumberFormatError(s"'$WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER'")
+      return "The format string requires at least one number digit"
     }
     // Make sure that any dollar sign in the format string occurs before any digits.
-    else if (firstDigitIndex < firstDollarSignIndex) {
-      s"Currency characters must appear before digits in the number format: '$numberFormat'"
+    if (firstDigitIndex < firstDollarSignIndex) {
+      return s"Currency characters must appear before digits in the number format: '$numberFormat'"
     }
     // Make sure that any dollar sign in the format string occurs before any decimal point.
-    else if (firstDecimalPointIndex != -1 &&
+    if (firstDecimalPointIndex != -1 &&
       firstDecimalPointIndex < firstDollarSignIndex) {
-      "Currency characters must appear before any decimal point in the " +
+      return "Currency characters must appear before any decimal point in the " +
         s"number format: '$numberFormat'"
     }
     // Make sure that any thousands separators in the format string have digits before and after.
-    else if (digitGroupsBeforeDecimalPoint.exists {
+    if (digitGroupsBeforeDecimalPoint.exists {
       case DigitGroups(tokens, _) =>
         tokens.zipWithIndex.exists({
           case (_: ThousandsSeparator, j: Int) if j == 0 || j == tokens.length - 1 =>
@@ -340,21 +320,64 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
             false
         })
     }) {
-      "Thousands separators (,) must have digits in between them " +
+      return "Thousands separators (,) must have digits in between them " +
         s"in the number format: '$numberFormat'"
     }
-    // Thousands separators are not allowed after the decimal point, if any.
-    else if (digitGroupsAfterDecimalPoint.exists {
+    // Make sure that thousands separators does not appear after the decimal point, if any.
+    if (digitGroupsAfterDecimalPoint.exists {
       case DigitGroups(tokens, digits) =>
         tokens.length > digits.length
     }) {
-      "Thousands separators (,) may not appear after the decimal point " +
+      return "Thousands separators (,) may not appear after the decimal point " +
         s"in the number format: '$numberFormat'"
     }
-    // Validation of the format string finished successfully.
-    else {
-      ""
+    // Make sure that the format string does not contain any prohibited duplicate tokens.
+    val inputTokenCounts = formatTokens.groupBy(identity).mapValues(_.size)
+    Seq(DecimalPoint(),
+      OptionalPlusOrMinusSign(),
+      OptionalMinusSign(),
+      DollarSign(),
+      ClosingAngleBracket()).foreach {
+      token => if (inputTokenCounts.getOrElse(token, 0) > 1) {
+        return s"At most one ${token.toString} is allowed in the number format: '$numberFormat'"
+      }
     }
+    // Enforce the ordering of tokens in the format string according to this specification:
+    // [ MI | S ] [ $ ]
+    // [ 0 | 9 | G | , ] [...]
+    // [ . | D ]
+    // [ 0 | 9 ] [...]
+    // [ $ ] [ PR | MI | S ]
+    val allowedFormatTokens: Seq[Seq[InputToken]] = Seq(
+      Seq(OpeningAngleBracket()),
+      Seq(OptionalMinusSign(), OptionalPlusOrMinusSign()),
+      Seq(DollarSign()),
+      Seq(DigitGroups(Seq(), Seq())),
+      Seq(DecimalPoint()),
+      Seq(DigitGroups(Seq(), Seq())),
+      Seq(DollarSign()),
+      Seq(OptionalMinusSign(), OptionalPlusOrMinusSign(), ClosingAngleBracket())
+    )
+    var formatTokenIndex = 0
+    for (allowedTokens: Seq[InputToken] <- allowedFormatTokens) {
+      def tokensMatch(lhs: InputToken, rhs: InputToken): Boolean = {
+        lhs match {
+          case _: DigitGroups => rhs.isInstanceOf[DigitGroups]
+          case _ => lhs == rhs
+        }
+      }
+      if (formatTokenIndex < formatTokens.length &&
+        allowedTokens.exists(tokensMatch(_, formatTokens(formatTokenIndex)))) {
+        formatTokenIndex += 1
+      }
+    }
+    if (formatTokenIndex < formatTokens.length) {
+      return s"Unexpected ${formatTokens(formatTokenIndex).toString} found in the format string " +
+        s"'$numberFormat'; the structure of the format string must match: " +
+        "[MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
+    }
+    // Validation of the format string finished successfully.
+    ""
   }
 
   /**

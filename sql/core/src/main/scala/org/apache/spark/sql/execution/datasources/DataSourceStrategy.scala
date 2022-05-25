@@ -759,14 +759,13 @@ object DataSourceStrategy
   protected[sql] def translateAggregation(
       aggregates: Seq[AggregateExpression], groupBy: Seq[Expression]): Option[Aggregation] = {
 
-    def columnAsString(e: Expression): Option[FieldReference] = e match {
-      case PushableColumnWithoutNestedColumn(name) =>
-        Some(FieldReference.column(name).asInstanceOf[FieldReference])
+    def translateGroupBy(e: Expression): Option[V2Expression] = e match {
+      case PushableExpression(expr) => Some(expr)
       case _ => None
     }
 
     val translatedAggregates = aggregates.flatMap(translateAggregate)
-    val translatedGroupBys = groupBy.flatMap(columnAsString)
+    val translatedGroupBys = groupBy.flatMap(translateGroupBy)
 
     if (translatedAggregates.length != aggregates.length ||
       translatedGroupBys.length != groupBy.length) {

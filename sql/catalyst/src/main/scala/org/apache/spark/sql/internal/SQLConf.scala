@@ -974,9 +974,10 @@ object SQLConf {
       .createWithDefault(10)
 
   val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
-    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
-      " down to Parquet for optimization. MAX/MIN/COUNT for complex types and timestamp" +
-      " can't be pushed down")
+    .doc("If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX " +
+      "and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
+      "type. For COUNT, support all data types. If statistics is missing from any Parquet file " +
+      "footer, exception would be thrown.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -1110,7 +1111,8 @@ object SQLConf {
   val ORC_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.aggregatePushdown")
     .doc("If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and " +
       "COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
-      "type. For COUNT, support all data types.")
+      "type. For COUNT, support all data types. If statistics is missing from any ORC file " +
+      "footer, exception would be thrown.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -2855,6 +2857,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
+    .internal()
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
       "operator will throw an exception if array index is out of bound, or map key does not " +
       "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
@@ -2979,6 +2982,17 @@ object SQLConf {
     .version("3.0.3")
     .intConf
     .createOptional
+
+  val LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION =
+    buildConf("spark.sql.legacy.respectNullabilityInTextDatasetConversion")
+      .internal()
+      .doc("When true, the nullability in the user-specified schema for " +
+        "`DataFrameReader.schema(schema).json(jsonDataset)` and " +
+        "`DataFrameReader.schema(schema).csv(csvDataset)` is respected. Otherwise, they are " +
+        "turned to a nullable schema forcibly.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
@@ -3720,6 +3734,16 @@ object SQLConf {
         "is the zero byte. " +
         "When set to true, it restores the legacy behavior of always returning string types " +
         "even for binary inputs.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV =
+    buildConf("spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv")
+      .internal()
+      .doc("When set to false, nulls are written as unquoted empty strings in CSV data source. " +
+        "If set to true, it restores the legacy behavior that nulls were written as quoted " +
+        "empty strings, `\"\"`.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)

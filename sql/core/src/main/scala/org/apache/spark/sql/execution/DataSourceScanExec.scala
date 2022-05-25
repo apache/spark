@@ -163,7 +163,7 @@ case class RowDataSourceScanExec(
       "PushedFilters" -> pushedFilters) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
-          "PushedGroupByColumns" -> seqToString(v.groupByColumns.map(_.describe())))} ++
+          "PushedGroupByExpressions" -> seqToString(v.groupByExpressions.map(_.describe())))} ++
       topNOrLimitInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
@@ -592,6 +592,7 @@ case class FileSourceScanExec(
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(new Path(f.filePath).getName)
+          // TODO(SPARK-39163): Throw an exception w/ error class for an invalid bucket file
           .getOrElse(throw new IllegalStateException(s"Invalid bucket file ${f.filePath}"))
       }
 

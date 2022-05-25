@@ -60,6 +60,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
   override protected val excludedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
+      "RewriteSubquery",
       "Extract Python UDFs")
 
   protected def fixedPoint =
@@ -128,7 +129,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
-        CombineConcats) ++
+        CombineConcats,
+        PushdownPredicatesAndPruneColumnsForCTEDef) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
@@ -147,22 +149,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
-    // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
-    // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
-    // However, because we also use the analyzer to canonicalized queries (for view definition),
-    // we do not eliminate subqueries or compute current time in the analyzer.
-    Batch("Finish Analysis", Once,
-      EliminateResolvedHint,
-      EliminateSubqueryAliases,
-      EliminateView,
-      InlineCTE,
-      ReplaceExpressions,
-      RewriteNonCorrelatedExists,
-      PullOutGroupingExpressions,
-      ComputeCurrentTime,
-      ReplaceCurrentLike(catalogManager),
-      SpecialDatetimeValues,
-      RewriteAsOfJoin) ::
+    Batch("Finish Analysis", Once, FinishAnalysis) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -171,6 +158,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
+    Batch("Inline CTE", Once,
+      InlineCTE()) ::
     Batch("Union", Once,
       RemoveNoopOperators,
       CombineUnions,
@@ -207,6 +196,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
+    Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo) :+
     // This batch rewrites plans after the operator optimization and
     // before any batches that depend on stats.
     Batch("Pre CBO Rules", Once, preCBORules: _*) :+
@@ -265,14 +255,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * (defaultBatches - (excludedRules - nonExcludableRules)).
    */
   def nonExcludableRules: Seq[String] =
-    EliminateDistinct.ruleName ::
-      EliminateResolvedHint.ruleName ::
-      EliminateSubqueryAliases.ruleName ::
-      EliminateView.ruleName ::
-      ReplaceExpressions.ruleName ::
-      ComputeCurrentTime.ruleName ::
-      SpecialDatetimeValues.ruleName ::
-      ReplaceCurrentLike(catalogManager).ruleName ::
+    FinishAnalysis.ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::
@@ -286,9 +269,37 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
-      PullOutGroupingExpressions.ruleName ::
-      RewriteAsOfJoin.ruleName ::
       RewriteLateralSubquery.ruleName :: Nil
+
+  /**
+   * Apply finish-analysis rules for the entire plan including all subqueries.
+   */
+  object FinishAnalysis extends Rule[LogicalPlan] {
+    // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
+    // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
+    // However, because we also use the analyzer to canonicalized queries (for view definition),
+    // we do not eliminate subqueries or compute current time in the analyzer.
+    private val rules = Seq(
+      EliminateResolvedHint,
+      EliminateSubqueryAliases,
+      EliminateView,
+      ReplaceExpressions,
+      RewriteNonCorrelatedExists,
+      PullOutGroupingExpressions,
+      ComputeCurrentTime,
+      ReplaceCurrentLike(catalogManager),
+      SpecialDatetimeValues,
+      RewriteAsOfJoin)
+
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+        .transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+          case s: SubqueryExpression =>
+            val Subquery(newPlan, _) = apply(Subquery.fromExpression(s))
+            s.withNewPlan(newPlan)
+        }
+    }
+  }
 
   /**
    * Optimize all the subqueries inside expression.
@@ -980,18 +991,22 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           val producer = producerMap.getOrElse(reference, reference)
           producer.deterministic && (count == 1 || alwaysInline || {
             val relatedConsumers = consumers.filter(_.references.contains(reference))
-            val extractOnly = relatedConsumers.forall(isExtractOnly(_, reference))
+            // It's still exactly-only if there is only one reference in non-extract expressions,
+            // as we won't duplicate the expensive CreateStruct-like expressions.
+            val extractOnly = relatedConsumers.map(refCountInNonExtract(_, reference)).sum <= 1
             shouldInline(producer, extractOnly)
           })
       }
   }
 
-  @scala.annotation.tailrec
-  private def isExtractOnly(expr: Expression, ref: Attribute): Boolean = expr match {
-    case a: Alias => isExtractOnly(a.child, ref)
-    case e: ExtractValue => isExtractOnly(e.children.head, ref)
-    case a: Attribute => a.semanticEquals(ref)
-    case _ => false
+  private def refCountInNonExtract(expr: Expression, ref: Attribute): Int = {
+    def refCount(e: Expression): Int = e match {
+      case a: Attribute if a.semanticEquals(ref) => 1
+      // The first child of `ExtractValue` is the complex type to be extracted.
+      case e: ExtractValue if e.children.head.semanticEquals(ref) => 0
+      case _ => e.children.map(refCount).sum
+    }
+    refCount(expr)
   }
 
   /**
@@ -1325,7 +1340,9 @@ object CombineUnions extends Rule[LogicalPlan] {
     while (stack.nonEmpty) {
       stack.pop() match {
         case p1 @ Project(_, p2: Project)
-            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) =>
+            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) &&
+              !p1.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) &&
+              !p2.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) =>
           val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
           stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
         case Distinct(Union(children, byName, allowMissingCol))

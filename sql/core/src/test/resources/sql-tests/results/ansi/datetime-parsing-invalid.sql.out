@@ -241,8 +241,11 @@ select cast("Unparseable" as timestamp)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Cannot cast Unparseable to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+The value 'Unparseable' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 7) ==
+select cast("Unparseable" as timestamp)
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -250,5 +253,8 @@ select cast("Unparseable" as date)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Cannot cast Unparseable to DateType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+The value 'Unparseable' of the type "STRING" cannot be cast to "DATE" because it is malformed. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 7) ==
+select cast("Unparseable" as date)
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^

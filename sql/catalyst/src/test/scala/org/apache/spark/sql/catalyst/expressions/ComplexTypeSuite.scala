@@ -70,12 +70,12 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         if (ansiEnabled) {
           checkExceptionInExpression[Exception](
             GetArrayItem(array, Literal(5)),
-            "Invalid index: 5, numElements: 2"
+            "The index 5 is out of bounds. The array has 2 elements."
           )
 
           checkExceptionInExpression[Exception](
             GetArrayItem(array, Literal(-1)),
-            "Invalid index: -1, numElements: 2"
+            "The index -1 is out of bounds. The array has 2 elements."
           )
         } else {
           checkEvaluation(GetArrayItem(array, Literal(5)), null)

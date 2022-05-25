@@ -408,6 +408,8 @@ object OrcUtils extends Logging {
    * (Max/Min/Count) result using the statistics information from ORC file footer, and then
    * construct an InternalRow from these aggregate results.
    *
+   * NOTE: if statistics is missing from ORC file footer, exception would be thrown.
+   *
    * @return Aggregate results in the format of InternalRow
    */
   def createAggInternalRowFromFooter(
@@ -517,7 +519,7 @@ object OrcUtils extends Logging {
     val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
       (0 until schemaWithoutGroupBy.length).toArray)
     val resultRow = orcValuesDeserializer.deserializeFromValues(aggORCValues)
-    if (aggregation.groupByColumns.nonEmpty) {
+    if (aggregation.groupByExpressions.nonEmpty) {
       val reOrderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
         partitionSchema, aggregation, partitionValues)
       new JoinedRow(reOrderedPartitionValues, resultRow)

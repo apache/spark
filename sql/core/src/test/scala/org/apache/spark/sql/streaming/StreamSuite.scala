@@ -1175,8 +1175,18 @@ class StreamSuite extends StreamTest {
     new ClosedByInterruptException,
     new UncheckedIOException("test", new ClosedByInterruptException),
     new ExecutionException("test", new InterruptedException),
-    new UncheckedExecutionException("test", new InterruptedException))) {
-    test(s"view ${e.getClass.getSimpleName} as a normal query stop") {
+    new UncheckedExecutionException("test", new InterruptedException)) ++
+    Seq(
+      classOf[InterruptedException].getName,
+      classOf[InterruptedIOException].getName,
+      classOf[ClosedByInterruptException].getName).map { s =>
+    new py4j.Py4JException(
+      s"""
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o44.count.
+        |: $s
+        |""".stripMargin)
+    }) {
+    test(s"view ${e.getClass.getSimpleName} [${e.getMessage}] as a normal query stop") {
       ThrowingExceptionInCreateSource.createSourceLatch = new CountDownLatch(1)
       ThrowingExceptionInCreateSource.exception = e
       val query = spark

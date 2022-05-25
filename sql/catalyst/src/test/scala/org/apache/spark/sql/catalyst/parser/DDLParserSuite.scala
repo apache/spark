@@ -1017,7 +1017,15 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
       DropColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c")))))
+        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
+        ifExists = false))
+
+    comparePlans(
+      parsePlan("ALTER TABLE table_name DROP COLUMN IF EXISTS a.b.c"),
+      DropColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
+        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
+        ifExists = true))
   }
 
   test("alter table: drop multiple columns") {
@@ -1029,7 +1037,20 @@ class DDLParserSuite extends AnalysisTest {
           UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
           Seq(UnresolvedFieldName(Seq("x")),
             UnresolvedFieldName(Seq("y")),
-            UnresolvedFieldName(Seq("a", "b", "c")))))
+            UnresolvedFieldName(Seq("a", "b", "c"))),
+          ifExists = false))
+    }
+
+    val sqlIfExists = "ALTER TABLE table_name DROP COLUMN IF EXISTS x, y, a.b.c"
+    Seq(sqlIfExists, sqlIfExists.replace("COLUMN", "COLUMNS")).foreach { drop =>
+      comparePlans(
+        parsePlan(drop),
+        DropColumns(
+          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
+          Seq(UnresolvedFieldName(Seq("x")),
+            UnresolvedFieldName(Seq("y")),
+            UnresolvedFieldName(Seq("a", "b", "c"))),
+          ifExists = true))
     }
   }
 
@@ -2048,12 +2069,11 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW FUNCTIONS IN db LIKE 'funct*'"),
       ShowFunctions(UnresolvedNamespace(Seq("db")), true, true, Some("funct*")))
-    val sql = "SHOW other FUNCTIONS"
-    intercept(sql, s"$sql not supported")
+    intercept("SHOW other FUNCTIONS", "SHOW other FUNCTIONS not supported")
     intercept("SHOW FUNCTIONS IN db f1",
-      "Invalid pattern in SHOW FUNCTIONS: f1")
+      "Invalid pattern in SHOW FUNCTIONS: `f1`")
     intercept("SHOW FUNCTIONS IN db LIKE f1",
-      "Invalid pattern in SHOW FUNCTIONS: f1")
+      "Invalid pattern in SHOW FUNCTIONS: `f1`")
 
     // The legacy syntax.
     comparePlans(

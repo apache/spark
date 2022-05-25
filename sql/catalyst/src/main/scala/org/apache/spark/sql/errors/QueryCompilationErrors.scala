@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-object QueryCompilationErrors {
+object QueryCompilationErrors extends QueryErrorsBase {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -66,16 +66,17 @@ object QueryCompilationErrors {
       messageParameters = Array(sizeLimit.toString))
   }
 
-  def illegalSubstringError(subject: String, illegalContent: String): Throwable = {
+  def zeroArgumentIndexError(): Throwable = {
     new AnalysisException(
-      errorClass = "ILLEGAL_SUBSTRING",
-      messageParameters = Array(subject, illegalContent))
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "strfmt", toSQLId("format_string"), "expects %1$, %2$ and so on, but got %0$."))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      messageParameters = Array(pivotCol.toString))
+      messageParameters = Array(toSQLId(pivotCol.sql)))
   }
 
   def nonLiteralPivotValError(pivotVal: Expression): Throwable = {
@@ -94,13 +95,15 @@ object QueryCompilationErrors {
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO."))
+      messageParameters = Array(
+        s"${toSQLStmt("IF NOT EXISTS")} for the table ${toSQLId(tableName)} " +
+        s"by ${toSQLStmt("INSERT INTO")}."))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
       errorClass = "NON_PARTITION_COLUMN",
-      messageParameters = Array(partitionName))
+      messageParameters = Array(toSQLId(partitionName)))
   }
 
   def missingStaticPartitionColumn(staticName: String): Throwable = {
@@ -161,8 +164,8 @@ object QueryCompilationErrors {
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       messageParameters = Array(
         fromStr,
-        from.dataType.catalogString,
-        to.catalogString,
+        toSQLType(from.dataType),
+        toSQLType(to),
         s"The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
           "You can either add an explicit cast to the input data or choose a higher precision " +
           "type of the field in the target object"
@@ -330,6 +333,21 @@ object QueryCompilationErrors {
   def nonDeterministicFilterInAggregateError(): Throwable = {
     new AnalysisException("FILTER expression is non-deterministic, " +
       "it cannot be used in aggregate functions")
+  }
+
+  def nonBooleanFilterInAggregateError(): Throwable = {
+    new AnalysisException("FILTER expression is not of type boolean. " +
+      "It cannot be used in an aggregate function")
+  }
+
+  def aggregateInAggregateFilterError(): Throwable = {
+    new AnalysisException("FILTER expression contains aggregate. " +
+      "It cannot be used in an aggregate function")
+  }
+
+  def windowFunctionInAggregateFilterError(): Throwable = {
+    new AnalysisException("FILTER expression contains window function. " +
+      "It cannot be used in an aggregate function")
   }
 
   def aliasNumberNotMatchColumnNumberError(
@@ -1576,7 +1594,8 @@ object QueryCompilationErrors {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
-        s"Using PythonUDF in join condition of join type $joinType is not supported"))
+        "Using PythonUDF in join condition of join type " +
+        s"${toSQLStmt(joinType.sql)} is not supported."))
   }
 
   def conflictingAttributesInJoinConditionError(
@@ -2358,8 +2377,8 @@ object QueryCompilationErrors {
 
   def invalidJsonSchema(schema: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
-      messageParameters = Array(schema.toString))
+      errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
+      messageParameters = Array(toSQLType(schema)))
   }
 
   def tableIndexNotSupportedError(errorMessage: String): Throwable = {
@@ -2391,9 +2410,5 @@ object QueryCompilationErrors {
   def writeDistributionAndOrderingNotSupportedInContinuousExecution(): Throwable = {
     new AnalysisException(
       "Sinks cannot request distribution and ordering in continuous execution mode")
-  }
-
-  def noSuchFunctionError(database: String, funcInfo: String): Throwable = {
-    new AnalysisException(s"$database does not support function: $funcInfo")
   }
 }

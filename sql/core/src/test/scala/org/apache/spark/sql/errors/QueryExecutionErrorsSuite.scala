@@ -59,8 +59,8 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage.matches(
-        "The value of parameter\\(s\\) 'key' in the aes_encrypt/aes_decrypt function is invalid: " +
-        "expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes."))
+        "The value of parameter\\(s\\) 'key' in the `aes_encrypt`/`aes_decrypt` function " +
+        "is invalid: expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes."))
     }
 
     // Encryption failure - invalid key length
@@ -93,7 +93,7 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage ===
-        "The value of parameter(s) 'expr, key' in the aes_encrypt/aes_decrypt function " +
+        "The value of parameter(s) 'expr, key' in the `aes_encrypt`/`aes_decrypt` function " +
         "is invalid: Detail message: " +
         "Given final block not properly padded. " +
         "Such issues can arise if a bad key is used during decryption.")
@@ -111,7 +111,7 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
       assert(e.getSqlState === "0A000")
       assert(e.getMessage.matches("""The feature is not supported: AES-\w+ with the padding \w+""" +
-        " by the aes_encrypt/aes_decrypt function."))
+        " by the `aes_encrypt`/`aes_decrypt` function."))
     }
 
     // Unsupported AES mode and padding in encrypt
@@ -142,7 +142,7 @@ class QueryExecutionErrorsSuite extends QueryTest
         .collect()
     }
     assert(e2.getMessage === "The feature is not supported: pivoting by the value" +
-      """ '[dotnet,Dummies]' of the column data type 'struct<col1:string,training:string>'.""")
+      """ '[dotnet,Dummies]' of the column data type "STRUCT<col1: STRING, training: STRING>".""")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported pivot operations") {
@@ -156,7 +156,7 @@ class QueryExecutionErrorsSuite extends QueryTest
     }
     assert(e1.getErrorClass === "UNSUPPORTED_FEATURE")
     assert(e1.getSqlState === "0A000")
-    assert(e1.getMessage === "The feature is not supported: Repeated pivots.")
+    assert(e1.getMessage === """The feature is not supported: Repeated PIVOTs.""")
 
     val e2 = intercept[SparkUnsupportedOperationException] {
       trainingSales
@@ -167,7 +167,7 @@ class QueryExecutionErrorsSuite extends QueryTest
     }
     assert(e2.getErrorClass === "UNSUPPORTED_FEATURE")
     assert(e2.getSqlState === "0A000")
-    assert(e2.getMessage === "The feature is not supported: Pivot not after a groupBy.")
+    assert(e2.getMessage === """The feature is not supported: PIVOT not after a GROUP BY.""")
   }
 
   test("INCONSISTENT_BEHAVIOR_CROSS_VERSION: " +
@@ -182,22 +182,22 @@ class QueryExecutionErrorsSuite extends QueryTest
       }.getCause.asInstanceOf[SparkUpgradeException]
 
       val format = "Parquet"
-      val config = SQLConf.PARQUET_REBASE_MODE_IN_READ.key
-      val option = "datetimeRebaseMode"
+      val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_READ.key + "\""
+      val option = "\"" + "datetimeRebaseMode" + "\""
       assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
       assert(e.getMessage ===
         "You may get a different result due to the upgrading to Spark >= 3.0: " +
-          s"""
-             |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
-             |from $format files can be ambiguous, as the files may be written by
-             |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
-             |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
-             |See more details in SPARK-31404. You can set the SQL config '$config' or
-             |the datasource option '$option' to 'LEGACY' to rebase the datetime values
-             |w.r.t. the calendar difference during reading. To read the datetime values
-             |as it is, set the SQL config '$config' or the datasource option '$option'
-             |to 'CORRECTED'.
-             |""".stripMargin)
+        s"""
+          |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+          |from $format files can be ambiguous, as the files may be written by
+          |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
+          |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
+          |See more details in SPARK-31404. You can set the SQL config $config or
+          |the datasource option $option to "LEGACY" to rebase the datetime values
+          |w.r.t. the calendar difference during reading. To read the datetime values
+          |as it is, set the SQL config $config or the datasource option $option
+          |to "CORRECTED".
+          |""".stripMargin)
     }
 
     // Fail to write ancient datetime values.
@@ -209,34 +209,23 @@ class QueryExecutionErrorsSuite extends QueryTest
         }.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException]
 
         val format = "Parquet"
-        val config = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
+        val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
         assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
         assert(e.getMessage ===
           "You may get a different result due to the upgrading to Spark >= 3.0: " +
-            s"""
-               |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
-               |into $format files can be dangerous, as the files may be read by Spark 2.x
-               |or legacy versions of Hive later, which uses a legacy hybrid calendar that
-               |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
-               |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
-               |datetime values w.r.t. the calendar difference during writing, to get maximum
-               |interoperability. Or set $config to 'CORRECTED' to write the datetime values
-               |as it is, if you are 100% sure that the written files will only be read by
-               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
-               |""".stripMargin)
+          s"""
+            |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+            |into $format files can be dangerous, as the files may be read by Spark 2.x
+            |or legacy versions of Hive later, which uses a legacy hybrid calendar that
+            |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
+            |details in SPARK-31404. You can set $config to "LEGACY" to rebase the
+            |datetime values w.r.t. the calendar difference during writing, to get maximum
+            |interoperability. Or set $config to "CORRECTED" to write the datetime
+            |values as it is, if you are 100% sure that the written files will only be read by
+            |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
+            |""".stripMargin)
       }
     }
-  }
-
-  test("UNSUPPORTED_OPERATION: timeZoneId not specified while converting TimestampType to Arrow") {
-    val schema = new StructType().add("value", TimestampType)
-    val e = intercept[SparkUnsupportedOperationException] {
-      ArrowUtils.toArrowSchema(schema, null)
-    }
-
-    assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
-    assert(e.getMessage === "The operation is not supported: " +
-      "timestamp must supply timeZoneId parameter while converting to ArrowType")
   }
 
   test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
@@ -249,7 +238,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
         assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
         assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+          "Unable to convert \"TIMESTAMP\" of Orc to data type \"TIMESTAMP_NTZ\".")
       }
     }
   }
@@ -264,7 +253,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
         assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
         assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'")
+          "Unable to convert \"TIMESTAMP_NTZ\" of Orc to data type \"TIMESTAMP\".")
       }
     }
   }

@@ -172,7 +172,7 @@ Data source options of JSON can be set via:
     <td>Allows a mode for dealing with corrupt records during parsing.<br>
     <ul>
       <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To keep corrupt records, an user can set a string type field named <code>columnNameOfCorruptRecord</code> in an user-defined schema. If a schema does not have the field, it drops corrupt records during parsing. When inferring a schema, it implicitly adds a <code>columnNameOfCorruptRecord</code> field in an output schema.</li>
-      <li><code>DROPMALFORMED</code>: ignores the whole corrupted records.</li>
+      <li><code>DROPMALFORMED</code>: ignores the whole corrupted records. This mode is unsupported in the JSON built-in functions.</li>
       <li><code>FAILFAST</code>: throws an exception when it meets corrupted records.</li>
     </ul>
     </td>
@@ -205,7 +205,7 @@ Data source options of JSON can be set via:
   <tr>
     <td><code>multiLine</code></td>
     <td><code>false</code></td>
-    <td>Parse one record, which may span multiple lines, per file.</td>
+    <td>Parse one record, which may span multiple lines, per file. JSON built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -217,13 +217,13 @@ Data source options of JSON can be set via:
   <tr>
     <td><code>encoding</code></td>
     <td>Detected automatically when <code>multiLine</code> is set to <code>true</code> (for reading), <code>UTF-8</code> (for writing)</td>
-    <td>For reading, allows to forcibly set one of standard basic or extended encoding for the JSON files. For example UTF-16BE, UTF-32LE. For writing, Specifies encoding (charset) of saved json files.</td>
+    <td>For reading, allows to forcibly set one of standard basic or extended encoding for the JSON files. For example UTF-16BE, UTF-32LE. For writing, Specifies encoding (charset) of saved json files. JSON built-in functions ignore this option.</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>lineSep</code></td>
     <td><code>\r</code>, <code>\r\n</code>, <code>\n</code> (for reading), <code>\n</code> (for writing)</td>
-    <td>Defines the line separator that should be used for parsing.</td>
+    <td>Defines the line separator that should be used for parsing. JSON built-in functions ignore this option.</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -259,7 +259,7 @@ Data source options of JSON can be set via:
   <tr>
     <td><code>compression</code></td>
     <td>(none)</td>
-    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and deflate).</td>
+    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and deflate). JSON built-in functions ignore this option.</td>
     <td>write</td>
   </tr>
   <tr>

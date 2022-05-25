@@ -1716,6 +1716,8 @@ def when(condition: Column, value: Any) -> Column:
     value :
         a literal value, or a :class:`~pyspark.sql.Column` expression.
 
+    Examples
+    --------
     >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
     [Row(age=3), Row(age=4)]
 

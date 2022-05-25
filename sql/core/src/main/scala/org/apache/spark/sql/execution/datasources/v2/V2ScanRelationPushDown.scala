@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, And, Attribute, AttributeReference, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -184,9 +183,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                   // scalastyle:on
                   val newOutput = scan.readSchema().toAttributes
                   assert(newOutput.length == groupingExpressions.length + finalAggregates.length)
-                  val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
-                    case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
-                    case (_, b) => b
+                  val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
+                  val groupAttrs = normalizedGroupingExpressions.zip(newOutput).zipWithIndex.map {
+                    case ((a: Attribute, b: Attribute), _) => b.withExprId(a.exprId)
+                    case ((expr, attr), ordinal) =>
+                      if (!groupByExprToOutputOrdinal.contains(expr.canonicalized)) {
+                        groupByExprToOutputOrdinal(expr.canonicalized) = ordinal
+                      }
+                      attr
                   }
                   val aggOutput = newOutput.drop(groupAttrs.length)
                   val output = groupAttrs ++ aggOutput
@@ -197,7 +201,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                        |Pushed Aggregate Functions:
                        | ${pushedAggregates.get.aggregateExpressions.mkString(", ")}
                        |Pushed Group by:
-                       | ${pushedAggregates.get.groupByColumns.mkString(", ")}
+                       | ${pushedAggregates.get.groupByExpressions.mkString(", ")}
                        |Output: ${output.mkString(", ")}
                       """.stripMargin)
 
@@ -206,14 +210,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                     DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
                   if (r.supportCompletePushDown(pushedAggregates.get)) {
                     val projectExpressions = finalResultExpressions.map { expr =>
-                      // TODO At present, only push down group by attribute is supported.
-                      // In future, more attribute conversion is extended here. e.g. GetStructField
-                      expr.transform {
+                      expr.transformDown {
                         case agg: AggregateExpression =>
                           val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
                           val child =
                             addCastIfNeeded(aggOutput(ordinal), agg.resultAttribute.dataType)
                           Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
+                        case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
+                          val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
+                          addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
                       }
                     }.asInstanceOf[Seq[NamedExpression]]
                     Project(projectExpressions, scanRelation)
@@ -256,6 +261,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                             case other => other
                           }
                         agg.copy(aggregateFunction = aggFunction)
+                      case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
+                        val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
+                        addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
                     }
                   }
                 }
@@ -286,7 +294,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
     // We don't know the agg buffer of `GeneralAggregateFunc`, so can't do partial agg push down.
     // If `Sum`, `Count`, `Avg` with distinct, can't do partial agg push down.
-    agg.aggregateExpressions().exists {
+    agg.aggregateExpressions().isEmpty || agg.aggregateExpressions().exists {
       case sum: Sum => !sum.isDistinct
       case count: Count => !count.isDistinct
       case avg: Avg => !avg.isDistinct
@@ -320,7 +328,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
 
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
 
-      val projectionOverSchema = ProjectionOverSchema(output.toStructType)
+      val projectionOverSchema =
+        ProjectionOverSchema(output.toStructType, AttributeSet(output))
       val projectionFunc = (expr: Expression) => expr transformDown {
         case projectionOverSchema(newExpr) => newExpr
       }

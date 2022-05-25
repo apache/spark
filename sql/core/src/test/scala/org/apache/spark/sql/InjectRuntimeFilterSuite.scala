@@ -19,13 +19,17 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
+import org.apache.spark.sql.catalyst.optimizer.MergeScalarSubqueries
 import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan}
+import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSparkSession {
+class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -201,9 +205,16 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     sql("analyze table bf4 compute statistics for columns a4, b4, c4, d4, e4, f4")
     sql("analyze table bf5part compute statistics for columns a5, b5, c5, d5, e5, f5")
     sql("analyze table bf5filtered compute statistics for columns a5, b5, c5, d5, e5, f5")
+
+    // `MergeScalarSubqueries` can duplicate subqueries in the optimized plan and would make testing
+    // complicated.
+    conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, MergeScalarSubqueries.ruleName)
   }
 
   protected override def afterAll(): Unit = try {
+    conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.defaultValueString)
+
     sql("DROP TABLE IF EXISTS bf1")
     sql("DROP TABLE IF EXISTS bf2")
     sql("DROP TABLE IF EXISTS bf3")
@@ -537,6 +548,32 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
           |JOIN   (SELECT * FROM bf2 WHERE bf2.a2 = 62) tmp
           |ON     bf1.c1 = tmp.c2
         """.stripMargin)
+    }
+  }
+
+  test("Merge runtime bloom filters") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000",
+      SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
+      SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
+      // Re-enable `MergeScalarSubqueries`
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "",
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
+
+      val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
+        "bf1.b1 = bf2.b2 where bf2.a2 = 62"
+      val df = sql(query)
+      df.collect()
+      val plan = df.queryExecution.executedPlan
+
+      val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+      val reusedSubqueryIds = collectWithSubqueries(plan) {
+        case rs: ReusedSubqueryExec => rs.child.id
+      }
+
+      assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+      assert(reusedSubqueryIds.size == 1,
+        "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }
 }
