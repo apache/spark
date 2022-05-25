@@ -2474,7 +2474,9 @@ private[spark] class DAGScheduler(
       clearCacheLocs()
     }
     if (fileLost) {
-      val remove = if (ignoreShuffleFileLostEpoch || isShuffleMerger) {
+      // When the fetch failure is for a merged shuffle chunk, ignoreShuffleFileLostEpoch is true
+      // and so all the files will be removed.
+      val remove = if (ignoreShuffleFileLostEpoch) {
         true
       } else if (!shuffleFileLostEpoch.contains(execId) ||
         shuffleFileLostEpoch(execId) < currentEpoch) {
