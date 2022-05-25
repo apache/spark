@@ -83,7 +83,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 42) ==
+== SQL(line 1, position 43) ==
 ...t("abcd", -2), left("abcd", 0), left("abcd", 'a')
                                    ^^^^^^^^^^^^^^^^^
 
@@ -111,7 +111,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 44) ==
+== SQL(line 1, position 45) ==
 ...("abcd", -2), right("abcd", 0), right("abcd", 'a')
                                    ^^^^^^^^^^^^^^^^^^
 
@@ -420,7 +420,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'invalid_length' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 SELECT lpad('hi', 'invalid_length')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -432,7 +432,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'invalid_length' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 SELECT rpad('hi', 'invalid_length')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
