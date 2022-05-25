@@ -714,8 +714,8 @@ private[spark] object SparkConf extends Logging {
     KERBEROS_RELOGIN_PERIOD.key -> Seq(
       AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0")),
     KERBEROS_FILESYSTEMS_TO_ACCESS.key -> Seq(
-      AlternateConfig("spark.yarn.access.namenodes", "2.2"),
-      AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0")),
+      AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0"),
+      AlternateConfig("spark.yarn.access.namenodes", "2.2")),
     "spark.kafka.consumer.cache.capacity" -> Seq(
       AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0"))
   )

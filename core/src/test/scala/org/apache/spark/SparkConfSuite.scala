@@ -277,8 +277,11 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set("spark.yarn.access.namenodes", "testNode")
     assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode"))
 
-    conf.set("spark.yarn.access.hadoopFileSystems", "testNode")
-    assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode"))
+    conf.set("spark.yarn.access.hadoopFileSystems", "testNode2")
+    assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode2"))
+
+    conf.set("spark.yarn.access.namenodes", "testNode3")
+    assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode2"))
   }
 
   test("akka deprecated configs") {
