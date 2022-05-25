@@ -21,7 +21,7 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Sort}
 import org.apache.spark.sql.connector.IntegralAverage
@@ -1420,5 +1420,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = sql("SELECT h2.test.my_avg(id) FROM h2.test.people")
     checkAggregateRemoved(df, false)
     checkAnswer(df, Row(1) :: Nil)
+    H2Dialect.clearFunctions()
+    val e = intercept[AnalysisException] {
+      checkAnswer(sql("SELECT h2.test.my_avg(id) FROM h2.test.people"), Seq.empty)
+    }
+    assert(e.getMessage.contains("Undefined function: h2.test.my_avg"))
   }
 }
