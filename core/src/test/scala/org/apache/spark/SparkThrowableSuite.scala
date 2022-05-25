@@ -40,7 +40,8 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   /* Used to regenerate the error class file. Run:
    {{{
-      SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "core/testOnly *SparkThrowableSuite"
+      SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
+        "core/testOnly *SparkThrowableSuite -- -t \"Error classes are correctly formatted\""
    }}}
    */
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
