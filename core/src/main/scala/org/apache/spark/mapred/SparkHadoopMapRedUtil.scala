@@ -73,10 +73,11 @@ object SparkHadoopMapRedUtil extends Logging {
       if (shouldCoordinateWithDriver) {
         val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
         val ctx = TaskContext.get()
+        // We only to coordinate task outputs when the executor will be killed by other reasons.
         val shouldCoordinateWithTaskAttemptOutputs =
           SparkEnv.get.conf.getBoolean(
-            "spark.hadoop.coordinateTaskCommitOutputs.enabled", defaultValue = true)
-        val taskAttemptCommitPaths: Seq[Path] = if (shouldCoordinateWithTaskAttemptOutputs) {
+            "spark.hadoop.coordinateTaskCommitOutputs.enabled", defaultValue = false)
+        val taskAttemptOutputs: Seq[Path] = if (shouldCoordinateWithTaskAttemptOutputs) {
           committer match {
             case f: FileOutputCommitter =>
               val taskAttemptPath = f.getTaskAttemptPath(mrTaskContext)
@@ -119,7 +120,7 @@ object SparkHadoopMapRedUtil extends Logging {
           Seq.empty
         }
         val canCommit = outputCommitCoordinator.canCommit(ctx.stageId(), ctx.stageAttemptNumber(),
-          splitId, ctx.attemptNumber(), taskAttemptCommitPaths)
+          splitId, ctx.attemptNumber(), taskAttemptOutputs)
 
         if (canCommit) {
           performCommit()
