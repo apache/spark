@@ -270,6 +270,17 @@ abstract class JdbcDialect extends Serializable with Logging{
           s"${this.getClass.getSimpleName} does not support function: TRIM")
       }
     }
+
+    override def visitExtract(field: String, source: String): String = {
+      if (isSupportedFunction(field)) {
+        super.visitExtract(field, source)
+      } else {
+        // The framework will catch the error and give up the push-down.
+        // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: EXTRACT")
+      }
+    }
   }
 
   /**

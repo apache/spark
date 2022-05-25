@@ -22,10 +22,12 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
@@ -38,7 +40,9 @@ private[sql] object H2Dialect extends JdbcDialect {
     Set("ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LOG", "LOG10", "LN", "EXP",
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
-      "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM")
+      "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "SECOND", "MINUTE",
+      "HOUR", "MONTH", "QUARTER", "YEAR", "DAY", "DOY", "DAY_OF_WEEK", "WEEK_DAY",
+      "WEEK", "YEAR_OF_WEEK")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -122,5 +126,27 @@ private[sql] object H2Dialect extends JdbcDialect {
       case _ => // do nothing
     }
     super.classifyException(message, e)
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val jdbcSQLBuilder = new H2JDBCSQLBuilder()
+    try {
+      Some(jdbcSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  class H2JDBCSQLBuilder extends JDBCSQLBuilder {
+
+    override def visitExtract(field: String, source: String): String = {
+      field match {
+        case "WEEK" => s"EXTRACT(ISO_WEEK FROM $source)"
+        case "YEAR_OF_WEEK" => s"EXTRACT(ISO_WEEK_YEAR FROM $source)"
+        case _ => super.visitExtract(field, source)
+      }
+    }
   }
 }
