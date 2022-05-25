@@ -17,9 +17,9 @@
 
 package org.apache.spark.mapred
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
 import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
@@ -73,28 +73,50 @@ object SparkHadoopMapRedUtil extends Logging {
       if (shouldCoordinateWithDriver) {
         val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
         val ctx = TaskContext.get()
-        val taskAttemptCommitPaths: Seq[Path] = committer match {
-          case f: FileOutputCommitter =>
-            val taskAttemptPath = f.getTaskAttemptPath(mrTaskContext)
-            if (f.isCommitJobRepeatable(mrTaskContext)) {
-              // if algorithmVersion is 2, Spark should pass final output path
-              def listTargets(fs: FileSystem, from: Path, to: Path): Seq[Path] = {
-                val statuses = fs.listStatus(from)
-                statuses.flatMap { status =>
-                  if (status.isFile) {
-                    Seq(new Path(to, status.getPath.getName))
+        val shouldCoordinateWithTaskAttemptOutputs =
+          SparkEnv.get.conf.getBoolean(
+            "spark.hadoop.coordinateTaskCommitOutputs.enabled", defaultValue = true)
+        val taskAttemptCommitPaths: Seq[Path] = if (shouldCoordinateWithTaskAttemptOutputs) {
+          committer match {
+            case f: FileOutputCommitter =>
+              val taskAttemptPath = f.getTaskAttemptPath(mrTaskContext)
+              if (f.isCommitJobRepeatable(mrTaskContext)) {
+                // If algorithmVersion is 2, Spark should get file under final output path.
+                def getTaskAttemptCommittedPaths(
+                  fs: FileSystem,
+                  from: FileStatus,
+                  to: Path): Seq[Path] = {
+                  if (from.isFile) {
+                    Seq(new Path(to, from.getPath.getName))
                   } else {
-                    listTargets(fs, status.getPath, new Path(to, status.getPath.getName))
+                    try {
+                      fs.listStatus(from.getPath).flatMap { status =>
+                        getTaskAttemptCommittedPaths(
+                          fs, status, new Path(to, status.getPath.getName))
+                      }
+                    } catch {
+                      case _: FileNotFoundException | _: IOException =>
+                        Seq.empty
+                    }
                   }
                 }
-              }
 
-              val fs: FileSystem = taskAttemptPath.getFileSystem(mrTaskContext.getConfiguration)
-              listTargets(fs, taskAttemptPath, f.getOutputPath)
-            } else {
-              Seq(taskAttemptPath)
-            }
-          case _ => Seq.empty
+                val fs: FileSystem = taskAttemptPath.getFileSystem(mrTaskContext.getConfiguration)
+                try {
+                  val taskAttemptDirStatus = fs.getFileStatus(taskAttemptPath)
+                  getTaskAttemptCommittedPaths(fs, taskAttemptDirStatus, f.getOutputPath)
+                } catch {
+                  case _: FileNotFoundException | _: IOException =>
+                    Seq.empty
+                }
+              } else {
+                // If algorithmVersion is 1, task commit final path is `taskAttemptPath`.
+                Seq(taskAttemptPath)
+              }
+            case _ => Seq.empty
+          }
+        } else {
+          Seq.empty
         }
         val canCommit = outputCommitCoordinator.canCommit(ctx.stageId(), ctx.stageAttemptNumber(),
           splitId, ctx.attemptNumber(), taskAttemptCommitPaths)
