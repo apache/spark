@@ -306,8 +306,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val semaphore = new Semaphore(0)
     val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
     s1.setShuffleMergeManager(
-      ShuffleTestAccessor.createMergeShuffleFileManagerForTest(
-        transportConf, s1.initRecoveryDb(YarnShuffleService.MERGE_MANAGER_FILE_NAME), semaphore))
+      ShuffleTestAccessor.createMergeShuffleFileManagerForTest(transportConf,
+        s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME), semaphore))
     s1.init(yarnConfig)
     val secretsFile = s1.secretsFile
     secretsFile should be (null)

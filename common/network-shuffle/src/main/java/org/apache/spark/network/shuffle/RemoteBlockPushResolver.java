@@ -824,7 +824,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   @VisibleForTesting
   void reloadAppShuffleInfo(DB db) throws IOException {
-    logger.debug("Reload applications merged shuffle information from DB");
+    logger.info("Reload applications merged shuffle information from DB");
     reloadActiveAppAttemptsPathInfo(db);
     reloadFinalizedAppAttemptsShuffleMergeInfo(db);
   }
@@ -842,8 +842,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         AppAttemptId appAttemptId = parseDbAppAttemptPathsKey(key);
         try{
           AppPathsInfo appPathsInfo = mapper.readValue(e.getValue(), AppPathsInfo.class);
-          logger.debug("Reloading active application {}_{} merged shuffle files paths",
-            appAttemptId.appId, appAttemptId.attemptId);
+          logger.info("Reloading active application {}_{} merged shuffle files paths",
+              appAttemptId.appId, appAttemptId.attemptId);
           appsShuffleInfo.compute(appAttemptId.appId,
               (appId, existingAppShuffleInfo) -> {
                 if (existingAppShuffleInfo == null ||
@@ -874,6 +874,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         AppAttemptShuffleMergeId partitionId =
           parseDbAppAttemptShufflePartitionKey(
             key, APP_ATTEMPT_SHUFFLE_FINALIZE_STATUS_KEY_PREFIX);
+        logger.info("Reloading finalized shuffle info for partitionId {}",
+            partitionId.toString());
         AppShuffleInfo appShuffleInfo = appsShuffleInfo.get(partitionId.appId);
         if (appShuffleInfo != null && appShuffleInfo.attemptId == partitionId.attemptId) {
           appShuffleInfo.shuffles.compute(partitionId.shuffleId,

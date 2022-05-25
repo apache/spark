@@ -121,7 +121,7 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
   private static final String SECRETS_RECOVERY_FILE_NAME = "sparkShuffleRecovery.ldb";
   @VisibleForTesting
-  static final String MERGE_MANAGER_FILE_NAME = "mergeManager.ldb";
+  static final String SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME = "sparkShuffleMergeRecovery.ldb";
 
   // Whether failure during service initialization should stop the NM.
   @VisibleForTesting
@@ -241,7 +241,7 @@ public class YarnShuffleService extends AuxiliaryService {
       // when it comes back
       if (_recoveryPath != null) {
         registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME);
-        mergeManagerFile = initRecoveryDb(MERGE_MANAGER_FILE_NAME);
+        mergeManagerFile = initRecoveryDb(SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME);
       }
 
       TransportConf transportConf = new TransportConf("shuffle",new HadoopConfigProvider(_conf));
@@ -320,7 +320,7 @@ public class YarnShuffleService extends AuxiliaryService {
         .newInstance(conf, mergeManagerFile);
     } catch (Exception e) {
       defaultLogger.error("Unable to create an instance of {}", mergeManagerImplClassName);
-      return new NoOpMergedShuffleFileManager(conf);
+      return new NoOpMergedShuffleFileManager(conf, mergeManagerFile);
     }
   }
 
