@@ -64,7 +64,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "INVALID_FRACTION_OF_SECOND",
       msg = "The fraction of sec must be zero. Valid range is [0, 60]. " +
-        s"""If necessary set $ansiConf to $ansiConfVal to bypass this error. """,
+        s"""If necessary set $ansiConf to $ansiConfVal to bypass this error.""",
       sqlState = Some("22023"))
   }
 
