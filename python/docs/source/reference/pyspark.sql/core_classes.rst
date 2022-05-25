@@ -35,3 +35,5 @@ Core Classes
     DataFrameNaFunctions
     DataFrameStatFunctions
     Window
+    DataFrameReader
+    DataFrameWriter

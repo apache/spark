@@ -319,8 +319,8 @@ String Functions
     upper
 
 
-UDF Functions
--------------
+UDF
+---
 .. autosummary::
     :toctree: api/
 
