@@ -259,7 +259,7 @@ trait InsertIntoSQLOnlyTests
 
         verifyTable(t1, spark.emptyDataFrame)
         assert(exc.getMessage.contains(
-          "PARTITION clause cannot contain a non-partition column name"))
+          "PARTITION clause cannot contain the non-partition column"))
         assert(exc.getMessage.contains("id"))
         assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
       }
@@ -276,7 +276,7 @@ trait InsertIntoSQLOnlyTests
 
         verifyTable(t1, spark.emptyDataFrame)
         assert(exc.getMessage.contains(
-          "PARTITION clause cannot contain a non-partition column name"))
+          "PARTITION clause cannot contain the non-partition column"))
         assert(exc.getMessage.contains("data"))
         assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
       }
