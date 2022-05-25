@@ -106,6 +106,7 @@ DataFrame
     DataFrame.toJSON
     DataFrame.toLocalIterator
     DataFrame.toPandas
+    DataFrame.to_pandas_on_spark
     DataFrame.transform
     DataFrame.union
     DataFrame.unionAll
@@ -113,7 +114,9 @@ DataFrame
     DataFrame.unpersist
     DataFrame.where
     DataFrame.withColumn
+    DataFrame.withColumns
     DataFrame.withColumnRenamed
+    DataFrame.withMetadata
     DataFrame.withWatermark
     DataFrame.write
     DataFrame.writeStream
