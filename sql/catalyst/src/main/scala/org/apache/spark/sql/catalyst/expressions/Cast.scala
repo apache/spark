@@ -146,7 +146,7 @@ object Cast {
   /**
    * A tag to identify if a CAST added by the table insertion resolver.
    */
-  val BY_TABLE_INSERTION = TreeNodeTag[Unit]("tableInsertionResolver")
+  val BY_TABLE_INSERTION = TreeNodeTag[Unit]("by_table_insertion")
 
   /**
    * A tag to decide if a CAST is specified by user.
@@ -398,8 +398,7 @@ object Cast {
   def typeCheckFailureMessage(
       from: DataType,
       to: DataType,
-      fallbackConfKey: Option[String],
-      fallbackConfValue: Option[String]): String =
+      fallbackConf: Option[(String, String)]): String =
     (from, to) match {
       case (_: NumericType, TimestampType) =>
         suggestionOnConversionFunctions(from, to,
@@ -2295,11 +2294,10 @@ case class Cast(
   override def typeCheckFailureMessage: String = if (ansiEnabled) {
     if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
       Cast.typeCheckFailureMessage(child.dataType, dataType,
-        Some(SQLConf.STORE_ASSIGNMENT_POLICY.key),
-        Some(SQLConf.StoreAssignmentPolicy.LEGACY.toString))
+        Some(SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString))
     } else {
       Cast.typeCheckFailureMessage(child.dataType, dataType,
-        Some(SQLConf.ANSI_ENABLED.key), Some("false"))
+        Some(SQLConf.ANSI_ENABLED.key -> "false"))
     }
   } else {
     s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"

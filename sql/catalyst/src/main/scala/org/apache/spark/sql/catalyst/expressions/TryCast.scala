@@ -109,7 +109,7 @@ case class TryCast(child: Expression, dataType: DataType, timeZoneId: Option[Str
   }
 
   override def typeCheckFailureMessage: String =
-    Cast.typeCheckFailureMessage(child.dataType, dataType, None, None)
+    Cast.typeCheckFailureMessage(child.dataType, dataType, None)
 
   override protected def withNewChildInternal(newChild: Expression): TryCast =
     copy(child = newChild)

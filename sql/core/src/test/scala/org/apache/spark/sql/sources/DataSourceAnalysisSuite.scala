@@ -63,7 +63,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
     def cast(e: Expression, dt: DataType): Expression = {
       SQLConf.get.storeAssignmentPolicy match {
         case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
-          val cast = Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone), true)
+          val cast = Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone), ansiEnabled = true)
           cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
           cast
         case _ =>

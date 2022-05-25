@@ -123,7 +123,7 @@ abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       caseSensitive: Boolean = true): Unit = {
     val expectedPlanWithAnsiCast = expectedPlan transformAllExpressions {
       case c: Cast =>
-        val cast = Cast(c.child, c.dataType, c.timeZoneId, true)
+        val cast = Cast(c.child, c.dataType, c.timeZoneId, ansiEnabled = true)
         cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
         cast
       case other => other
