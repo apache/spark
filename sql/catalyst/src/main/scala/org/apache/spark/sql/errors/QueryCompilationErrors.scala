@@ -2186,7 +2186,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {
-    val fullName = ident.mkString(".")
+    val fullName = ident.quoted
     new AnalysisException(s"Table or view '$fullName' not found")
   }
 

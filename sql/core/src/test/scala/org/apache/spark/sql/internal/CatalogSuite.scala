@@ -275,8 +275,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("Table.toString") {
-    assert(new Table("volley", Array("databasa"), "one", "world", isTemporary = true).toString ==
-      "Table[name='volley', database='databasa', description='one', " +
+    assert(new Table("volley", null, Array("databasa"), "one", "world", isTemporary = true).toString
+      == "Table[name='volley', database='databasa', description='one', " +
         "tableType='world', isTemporary='true']")
     assert(new Table("volley", null, null, "world", isTemporary = true).toString ==
       "Table[name='volley', tableType='world', isTemporary='true']")
@@ -304,7 +304,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
   test("catalog classes format in Dataset.show") {
     val db = new Database("nama", "descripta", "locata")
-    val table = new Table("nama", Array("databasa"), "descripta", "typa", isTemporary = false)
+    val table = new Table("nama", "databasa", "descripta", "typa", isTemporary = false)
     val function = new Function("nama", "databasa", "descripta", "classa", isTemporary = false)
     val column = new Column(
       "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
@@ -572,7 +572,6 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("three layer namespace compatibility - create managed table") {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
     val catalogName = "testcat"
     val dbName = "my_db"
     val tableName = "my_table"
@@ -650,7 +649,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       assert(tables.size == 2)
 
       val expectedTable1 =
-        new Table(tableName, Array(dbName), description, CatalogTableType.MANAGED.name, false)
+        new Table(tableName, catalogName, Array(dbName), description,
+          CatalogTableType.MANAGED.name, false)
       assert(tables.exists(t =>
         expectedTable1.name.equals(t.name) && expectedTable1.database.equals(t.database) &&
         expectedTable1.description.equals(t.description) &&
@@ -658,7 +658,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
         expectedTable1.isTemporary == t.isTemporary))
 
       val expectedTable2 =
-        new Table(tableName2, Array(dbName), description2, CatalogTableType.EXTERNAL.name, false)
+        new Table(tableName2, catalogName, Array(dbName), description2,
+          CatalogTableType.EXTERNAL.name, false)
       assert(tables.exists(t =>
         expectedTable2.name.equals(t.name) && expectedTable2.database.equals(t.database) &&
         expectedTable2.description.equals(t.description) &&

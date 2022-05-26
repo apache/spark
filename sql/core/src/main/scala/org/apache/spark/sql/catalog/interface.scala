@@ -64,11 +64,17 @@ class Database(
 @Stable
 class Table(
     val name: String,
+    @Nullable catalog: String,
     @Nullable val qualifier: Array[String],
     @Nullable val description: String,
     val tableType: String,
     val isTemporary: Boolean)
   extends DefinedByConstructorParams {
+
+  def this(
+    name: String, database: String, description: String, tableType: String, isTemporary: Boolean) {
+    this(name, null, Array(database), description, tableType, isTemporary)
+  }
 
   def database: String = parseQualifier
 

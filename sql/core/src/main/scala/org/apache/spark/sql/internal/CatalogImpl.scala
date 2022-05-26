@@ -132,7 +132,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       Array(metadata.map(_.identifier.database).getOrElse(tableIdent.database).orNull)
     new Table(
       name = tableIdent.table,
-      qualifier = qualifier,
+      database = tableIdent.database.getOrElse(null),
       description = metadata.map(_.comment.orNull).orNull,
       tableType = if (isTemp) "TEMPORARY" else metadata.map(_.tableType.name).orNull,
       isTemporary = isTemp)
@@ -147,6 +147,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           TableCatalog.PROP_EXTERNAL, "false").equals("true")
         new Table(
           name = t.identifier.name(),
+          catalog = t.catalog.name(),
           qualifier = t.identifier.namespace(),
           description = t.table.properties().get("comment"),
           tableType =
@@ -156,8 +157,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case v: ResolvedView =>
         new Table(
           name = v.identifier.name(),
+          catalog = null,
           qualifier = v.identifier.namespace(),
-          description = "",
+          description = null,
           tableType = if (v.isTemp) "TEMPORARY" else "VIEW",
           isTemporary = v.isTemp)
       case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
