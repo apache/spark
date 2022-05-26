@@ -463,7 +463,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'NaN' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 3, position 12) ==
+== SQL(line 3, position 13) ==
 window w as (order by f_numeric range between
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
              1.1 preceding and 'NaN' following)
