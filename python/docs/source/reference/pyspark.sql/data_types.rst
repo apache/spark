@@ -16,22 +16,31 @@
     under the License.
 
 
-=============
-API Reference
-=============
+==========
+Data Types
+==========
+.. currentmodule:: pyspark.sql.types
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. autosummary::
+    :template: autosummary/class_with_docs.rst
+    :toctree: api/
 
-Pandas API on Spark follows the API specifications of latest pandas release.
-
-.. toctree::
-   :maxdepth: 2
-
-   pyspark.sql/index
-   pyspark.pandas/index
-   pyspark.ss
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
+    ArrayType
+    BinaryType
+    BooleanType
+    ByteType
+    DataType
+    DateType
+    DecimalType
+    DoubleType
+    FloatType
+    IntegerType
+    LongType
+    MapType
+    NullType
+    ShortType
+    StringType
+    StructField
+    StructType
+    TimestampType
+    DayTimeIntervalType

@@ -17,7 +17,7 @@ select to_timestamp('1', 'yy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to parse '1' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
 
 
@@ -36,7 +36,7 @@ select to_timestamp('123', 'yy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to parse '123' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
 
 
@@ -46,7 +46,7 @@ select to_timestamp('1', 'yyy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to parse '1' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
 
 
@@ -56,7 +56,7 @@ select to_timestamp('1234567', 'yyyyyyy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to recognize 'yyyyyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
@@ -75,7 +75,7 @@ select to_timestamp('9', 'DD')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to parse '9' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
 
 
@@ -85,7 +85,7 @@ select to_timestamp('9', 'DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to parse '9' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
 
 
@@ -95,7 +95,7 @@ select to_timestamp('99', 'DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to parse '99' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
 
 
@@ -168,7 +168,7 @@ select from_csv('2018-366', 'date Date', map('dateFormat', 'yyyy-DDD'))
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to parse '2018-366' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
 
 
@@ -251,7 +251,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 [CAST_INVALID_INPUT] The value 'Unparseable' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 select cast("Unparseable" as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -263,6 +263,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 [CAST_INVALID_INPUT] The value 'Unparseable' of the type "STRING" cannot be cast to "DATE" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 select cast("Unparseable" as date)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^

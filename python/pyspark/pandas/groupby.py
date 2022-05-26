@@ -54,7 +54,6 @@ else:
 
     _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
 
-from pyspark import SparkContext
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -748,13 +747,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
-
-        def skew(scol: Column) -> Column:
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-            return Column(sql_utils.pandasSkewness(scol._jc))
-
         return self._reduce_for_stat_function(
-            skew,
+            SF.skew,
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
         )

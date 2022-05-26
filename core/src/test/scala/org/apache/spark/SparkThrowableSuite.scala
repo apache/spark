@@ -18,15 +18,17 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.IllegalFormatException
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
 import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.core.util.{DefaultIndenter, DefaultPrettyPrinter}
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.apache.commons.io.IOUtils
+import org.apache.commons.io.{FileUtils, IOUtils}
 
 import org.apache.spark.SparkThrowableHelper._
 import org.apache.spark.util.Utils
@@ -35,6 +37,16 @@ import org.apache.spark.util.Utils
  * Test suite for Spark Throwables.
  */
 class SparkThrowableSuite extends SparkFunSuite {
+
+  /* Used to regenerate the error class file. Run:
+   {{{
+      SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
+        "core/testOnly *SparkThrowableSuite -- -t \"Error classes are correctly formatted\""
+   }}}
+   */
+  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+  private val errorClassDir = getWorkspaceFilePath(
+    "core", "src", "main", "resources", "error").toFile
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -66,10 +78,23 @@ class SparkThrowableSuite extends SparkFunSuite {
       .addModule(DefaultScalaModule)
       .enable(SerializationFeature.INDENT_OUTPUT)
       .build()
+    val prettyPrinter = new DefaultPrettyPrinter()
+      .withArrayIndenter(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE)
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
       .setSerializationInclusion(Include.NON_ABSENT)
+      .writer(prettyPrinter)
       .writeValueAsString(errorClassToInfoMap)
-    assert(rewrittenString.trim == errorClassFileContents.trim)
+
+    if (regenerateGoldenFiles) {
+      if (rewrittenString.trim != errorClassFileContents.trim) {
+        val errorClassesFile = new File(errorClassDir, new File(errorClassesUrl.getPath).getName)
+        logInfo(s"Regenerating error class file $errorClassesFile")
+        FileUtils.delete(errorClassesFile)
+        FileUtils.writeStringToFile(errorClassesFile, rewrittenString, StandardCharsets.UTF_8)
+      }
+    } else {
+      assert(rewrittenString.trim == errorClassFileContents.trim)
+    }
   }
 
   test("SQLSTATE invariants") {
@@ -87,8 +112,22 @@ class SparkThrowableSuite extends SparkFunSuite {
     checkCondition(sqlStates, s => validSqlStates.contains(s))
   }
 
+  test("Message invariants") {
+    val messageSeq = errorClassToInfoMap.values.toSeq.flatMap { i =>
+      Seq(i.message) ++ i.subClass.getOrElse(Map.empty).values.toSeq.map(_.message)
+    }
+    messageSeq.foreach { message =>
+      message.foreach { msg =>
+        assert(!msg.contains("\n"))
+        assert(msg.trim == msg)
+      }
+    }
+  }
+
   test("Message format invariants") {
-    val messageFormats = errorClassToInfoMap.values.toSeq.map(_.messageFormat)
+    val messageFormats = errorClassToInfoMap.values.toSeq.flatMap { i =>
+      Seq(i.messageFormat) ++ i.subClass.getOrElse(Map.empty).values.toSeq.map(_.messageFormat)
+    }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
   }

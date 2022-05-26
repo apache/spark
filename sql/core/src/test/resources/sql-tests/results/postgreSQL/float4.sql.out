@@ -97,7 +97,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'N A N' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 SELECT float('N A N')
        ^^^^^^^^^^^^^^
 
@@ -109,7 +109,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'NaN x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 SELECT float('NaN x')
        ^^^^^^^^^^^^^^
 
@@ -121,7 +121,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value ' INFINITY    x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 SELECT float(' INFINITY    x')
        ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -157,7 +157,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'nan' of the type "STRING" cannot be cast to "DECIMAL(10,0)" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 13) ==
+== SQL(line 1, position 14) ==
 SELECT float(decimal('nan'))
              ^^^^^^^^^^^^^^
 
