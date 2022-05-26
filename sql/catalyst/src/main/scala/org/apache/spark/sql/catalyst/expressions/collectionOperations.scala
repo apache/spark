@@ -3060,12 +3060,19 @@ object Sequence {
 
         val stepSign = if (intervalStepInMicros > 0) +1 else -1
         val exclusiveItem = stopMicros + stepSign
-        val arr = new Array[T](maxEstimatedArrayLength)
+        var arr = new Array[T](maxEstimatedArrayLength)
         var t = startMicros
         var i = 0
 
         while (t < exclusiveItem ^ stepSign < 0) {
           val result = fromMicros(t, scale)
+          if (i == arr.length) {
+            print(s"Growing array from ${maxEstimatedArrayLength} to " +
+              s"${maxEstimatedArrayLength + 1}\n")
+            val newArr = new Array[T](maxEstimatedArrayLength + 1)
+            arr.copyToArray(newArr, 0)
+            arr = newArr
+          }
           arr(i) = fromLong(result)
           i += 1
           t = addInterval(startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
@@ -3173,6 +3180,11 @@ object Sequence {
          |  int $i = 0;
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
+         |    if ($i == $arr.length) {
+         |      System.out.printf("cg: Growing array from %d to %d\\n",
+         |        $i, $i + 1);
+         |      $arr = java.util.Arrays.copyOf($arr, $i + 1);
+         |    }
          |    $arr[$i] = $fromMicrosCode;
          |    $i += 1;
          |    $t = $addIntervalCode(
