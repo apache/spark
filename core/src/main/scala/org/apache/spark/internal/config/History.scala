@@ -41,6 +41,16 @@ private[spark] object History {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("10s")
 
+  val UPDATE_BATCHSIZE = ConfigBuilder("spark.history.fs.update.batchSize")
+    .doc("Specifies the batch size for updating new eventlog files. " +
+      "This controls each scan process to be completed within a reasonable time, and such " +
+      "prevent the initial scan from running too long and blocking new eventlog files to " +
+      "be scanned in time in large environments.")
+    .version("3.4.0")
+    .intConf
+    .checkValue(v => v > 0, "The update batchSize should be a positive integer.")
+    .createWithDefault(Int.MaxValue)
+
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
     .version("1.4.0")
     .booleanConf

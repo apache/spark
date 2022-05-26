@@ -162,7 +162,7 @@ private[kafka010] class KafkaSource(
   }
 
   override def reportLatestOffset(): streaming.Offset = {
-    latestPartitionOffsets.map(KafkaSourceOffset(_)).getOrElse(null)
+    latestPartitionOffsets.map(KafkaSourceOffset(_)).orNull
   }
 
   override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {

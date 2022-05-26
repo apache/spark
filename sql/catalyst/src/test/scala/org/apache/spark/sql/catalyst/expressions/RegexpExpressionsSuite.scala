@@ -293,6 +293,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row4 = create_row(null, "(\\d+)", "###")
     val row5 = create_row("100-200", null, "###")
     val row6 = create_row("100-200", "(-)", null)
+    val row7 = create_row("", "^$", "<empty string>")
 
     val s = $"s".string.at(0)
     val p = $"p".string.at(1)
@@ -305,6 +306,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(expr, null, row4)
     checkEvaluation(expr, null, row5)
     checkEvaluation(expr, null, row6)
+    checkEvaluation(expr, "<empty string>", row7)
     // test position
     val exprWithPos = RegExpReplace(s, p, r, 4)
     checkEvaluation(exprWithPos, "100-num", row1)
@@ -313,6 +315,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(exprWithPos, null, row4)
     checkEvaluation(exprWithPos, null, row5)
     checkEvaluation(exprWithPos, null, row6)
+    checkEvaluation(exprWithPos, "", row7)
     val exprWithLargePos = RegExpReplace(s, p, r, 7)
     checkEvaluation(exprWithLargePos, "100-20num", row1)
     checkEvaluation(exprWithLargePos, "100-20###", row2)

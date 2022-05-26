@@ -1816,7 +1816,7 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   @Since("3.1.0")
-  def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
+  def getResourceProfile(): ResourceProfile = resourceProfile.orNull
 
   // =======================================================================
   // Other internal methods and fields

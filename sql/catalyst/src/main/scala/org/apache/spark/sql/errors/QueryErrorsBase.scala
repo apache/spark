@@ -17,18 +17,41 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.catalyst.expressions.Literal
+import java.util.Locale
+
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL}
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
+/**
+ * The trait exposes util methods for preparing error messages such as quoting of error elements.
+ * All classes that extent `QueryErrorsBase` shall follow the rules:
+ * 1. Any values shall be outputted in the SQL standard style by using `toSQLValue()`.
+ *   For example: 'a string value', 1, NULL.
+ * 2. SQL types shall be double quoted and outputted in the upper case using `toSQLType()`.
+ *   For example: "INT", "DECIMAL(10,0)".
+ * 3. Elements of identifiers shall be wrapped by backticks by using `toSQLId()`.
+ *   For example: `namespaceA`.`funcB`, `tableC`.
+ * 4. SQL statements shall be in the upper case prepared by using `toSQLStmt`.
+ *   For example: DESC PARTITION, DROP TEMPORARY FUNCTION.
+ * 5. SQL configs and datasource options shall be wrapped by double quotes by using
+ *   `toSQLConf()`/`toDSOption()`.
+ *   For example: "spark.sql.ansi.enabled".
+ * 6. Any values of datasource options or SQL configs shall be double quoted.
+ *   For example: "true", "CORRECTED".
+ * 7. SQL expressions shall be wrapped by double quotes.
+ *   For example: "earnings + 1".
+ */
 trait QueryErrorsBase {
-  private def litToErrorValue(l: Literal): String = l match {
+  // Converts an error class parameter to its SQL representation
+  def toSQLValue(v: Any, t: DataType): String = Literal.create(v, t) match {
     case Literal(null, _) => "NULL"
     case Literal(v: Float, FloatType) =>
       if (v.isNaN) "NaN"
       else if (v.isPosInfinity) "Infinity"
       else if (v.isNegInfinity) "-Infinity"
       else v.toString
-    case Literal(v: Double, DoubleType) =>
+    case l @ Literal(v: Double, DoubleType) =>
       if (v.isNaN) "NaN"
       else if (v.isPosInfinity) "Infinity"
       else if (v.isNegInfinity) "-Infinity"
@@ -36,12 +59,39 @@ trait QueryErrorsBase {
     case l => l.sql
   }
 
-  // Converts an error class parameter to its SQL representation
-  def toSQLValue(v: Any): String = {
-    litToErrorValue(Literal(v))
+  private def quoteByDefault(elem: String): String = {
+    "\"" + elem + "\""
   }
 
-  def toSQLValue(v: Any, t: DataType): String = {
-    litToErrorValue(Literal.create(v, t))
+  def toSQLStmt(text: String): String = {
+    text.toUpperCase(Locale.ROOT)
+  }
+
+  def toSQLId(parts: Seq[String]): String = {
+    parts.map(quoteIdentifier).mkString(".")
+  }
+
+  def toSQLId(parts: String): String = {
+    toSQLId(parts.split("\\."))
+  }
+
+  def toSQLType(t: DataType): String = {
+    quoteByDefault(t.sql)
+  }
+
+  def toSQLType(text: String): String = {
+    quoteByDefault(text.toUpperCase(Locale.ROOT))
+  }
+
+  def toSQLConf(conf: String): String = {
+    quoteByDefault(conf)
+  }
+
+  def toDSOption(option: String): String = {
+    quoteByDefault(option)
+  }
+
+  def toSQLExpr(e: Expression): String = {
+    quoteByDefault(toPrettySQL(e))
   }
 }

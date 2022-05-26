@@ -27,9 +27,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -721,13 +720,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue1)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting ${outOfRangeValue1}L to int causes overflow"))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue1}L of the type "BIGINT" cannot be cast to "INT""""))
 
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
         msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue2)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting ${outOfRangeValue2}L to int causes overflow"))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue2}L of the type "BIGINT" cannot be cast to "INT""""))
       }
     }
   }
@@ -741,13 +742,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting ${outOfRangeValue1}D to bigint causes overflow"))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue1}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting ${outOfRangeValue2}D to bigint causes overflow"))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue2}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
       }
     }
   }
@@ -857,7 +860,34 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("INSERT INTO statements with tables with default columns: positive tests") {
+  test("Allow user to insert specified columns into insertable view") {
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(i, null))
+      )
+
+      sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(i, null))
+      )
+
+      sql("INSERT OVERWRITE TABLE jsonTable(b) SELECT b FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(null, s"str$i"))
+      )
+    }
+
+    val message = intercept[AnalysisException] {
+      sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
+    }.getMessage
+    assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+  }
+
+  test("SPARK-38336 INSERT INTO statements with tables with default columns: positive tests") {
     // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is enabled, and no
     // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
     // values than expected, NULL values are appended in their place.
@@ -980,22 +1010,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t2 select j, default, default from t1 where j = 3")
         sql("insert into t2 select j, s from t1 where j = 4")
         sql("insert into t2 select j, s, default from t1 where j = 5")
-        val resultSchema = new StructType()
-          .add("s", LongType, false)
-          .add("x", LongType, false)
         checkAnswer(
-          sql("select j, s, x from t2 order by j, s, x"),
-          Seq(
-            new GenericRowWithSchema(Array(1, 42L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(2, 42L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(3, 42L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(4, 44L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(5, 44L, 43L), resultSchema)))
+          spark.table("t2"),
+          Row(1, 42L, 43L) ::
+          Row(2, 42L, 43L) ::
+          Row(3, 42L, 43L) ::
+          Row(4, 44L, 43L) ::
+          Row(5, 44L, 43L) :: Nil)
       }
     }
   }
 
-  test("INSERT INTO statements with tables with default columns: negative tests") {
+  test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
       val COLUMN_DEFAULT_NOT_FOUND = "Column 'default' does not exist"
@@ -1036,14 +1062,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t values(false, default + 1)")
-      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
+          .getMessage))
     }
     // Explicit default values may not participate in complex expressions in the SELECT query.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t select false, default + 1")
-      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
+          .getMessage))
     }
     // Explicit default values have a reasonable error path if the table is not found.
     withTable("t") {
@@ -1105,7 +1135,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("INSERT INTO with user specified columns and defaults: positive tests") {
+  test("SPARK-38795 INSERT INTO with user specified columns and defaults: positive tests") {
     Seq(
       "insert into t (i, s) values (true, default)",
       "insert into t (s, i) values (default, true)",
@@ -1174,7 +1204,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("INSERT INTO with user specified columns and defaults: negative tests") {
+  test("SPARK- 38795 INSERT INTO with user specified columns and defaults: negative tests") {
     val addOneColButExpectedTwo = "target table has 2 column(s) but the inserted data has 1 col"
     val addTwoColButExpectedThree = "target table has 3 column(s) but the inserted data has 2 col"
     // The missing columns in these INSERT INTO commands do not have explicit default values.
@@ -1252,6 +1282,331 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("insert into t (I) select true from (select 1)")
         }.getMessage.contains("Cannot resolve column name I"))
       }
+    }
+  }
+
+  test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Positive tests") {
+    // There is a complex expression in the default value.
+    val createTableBooleanCol = "create table t(i boolean) using parquet"
+    val createTableIntCol = "create table t(i int) using parquet"
+    withTable("t") {
+      sql(createTableBooleanCol)
+      sql("alter table t add column s string default concat('abc', 'def')")
+      sql("insert into t values(true, default)")
+      checkAnswer(spark.table("t"), Row(true, "abcdef"))
+    }
+    // There are two trailing default values referenced implicitly by the INSERT INTO statement.
+    withTable("t") {
+      sql(createTableIntCol)
+      sql("alter table t add column s bigint default 42")
+      sql("alter table t add column x bigint default 43")
+      sql("insert into t values(1)")
+      checkAnswer(spark.table("t"), Row(1, 42, 43))
+    }
+    // There are two trailing default values referenced implicitly by the INSERT INTO statement.
+    withTable("t") {
+      sql(createTableIntCol)
+      sql("alter table t add columns s bigint default 42, x bigint default 43")
+      sql("insert into t values(1)")
+      checkAnswer(spark.table("t"), Row(1, 42, 43))
+    }
+    // The table has a partitioning column and a default value is injected.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint) using parquet partitioned by (i)")
+      sql("alter table t add column q int default 42")
+      sql("insert into t partition(i='true') values(5, default)")
+      checkAnswer(spark.table("t"), Row(5, 42, true))
+    }
+    // The default value parses correctly as a constant but non-literal expression.
+    withTable("t") {
+      sql(createTableBooleanCol)
+      sql("alter table t add column s bigint default 41 + 1")
+      sql("insert into t values(false, default)")
+      checkAnswer(spark.table("t"), Row(false, 42))
+    }
+    // Explicit defaults may appear in different positions within the inline table provided as input
+    // to the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i boolean default false) using parquet")
+      sql("alter table t add column s bigint default 42")
+      sql("insert into t values(false, default), (default, 42)")
+      checkAnswer(spark.table("t"), Seq(Row(false, 42), Row(false, 42)))
+    }
+    // There is an explicit default value provided in the INSERT INTO statement in the VALUES,
+    // with an alias over the VALUES.
+    withTable("t") {
+      sql(createTableBooleanCol)
+      sql("alter table t add column s bigint default 42")
+      sql("insert into t select * from values (false, default) as tab(col, other)")
+      checkAnswer(spark.table("t"), Row(false, 42))
+    }
+    // The explicit default value is provided in the wrong order (first instead of second), but
+    // this is OK because the provided default value evaluates to literal NULL.
+    withTable("t") {
+      sql(createTableBooleanCol)
+      sql("alter table t add column s bigint default 42")
+      sql("insert into t values (default, 43)")
+      checkAnswer(spark.table("t"), Row(null, 43))
+    }
+    // There is an explicit default value provided in the INSERT INTO statement as a SELECT.
+    // This is supported.
+    withTable("t") {
+      sql(createTableBooleanCol)
+      sql("alter table t add column s bigint default 42")
+      sql("insert into t select false, default")
+      checkAnswer(spark.table("t"), Row(false, 42))
+    }
+    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i boolean default false) using parquet")
+      sql("alter table t add column s bigint default 42")
+      sql("insert into t select col, count(*) from values (default, default) " +
+        "as tab(col, other) group by 1")
+      checkAnswer(spark.table("t"), Row(false, 1))
+    }
+    // There are three column types exercising various combinations of implicit and explicit
+    // default column value references in the 'insert into' statements. Note these tests depend on
+    // enabling the configuration to use NULLs for missing DEFAULT column values.
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      withTable("t1", "t2") {
+        sql("create table t1(j int) using parquet")
+        sql("alter table t1 add column s bigint default 42")
+        sql("alter table t1 add column x bigint default 43")
+        sql("insert into t1 values(1)")
+        sql("insert into t1 values(2, default)")
+        sql("insert into t1 values(3, default, default)")
+        sql("insert into t1 values(4, 44)")
+        sql("insert into t1 values(5, 44, 45)")
+        sql("create table t2(j int) using parquet")
+        sql("alter table t2 add columns s bigint default 42, x bigint default 43")
+        sql("insert into t2 select j from t1 where j = 1")
+        sql("insert into t2 select j, default from t1 where j = 2")
+        sql("insert into t2 select j, default, default from t1 where j = 3")
+        sql("insert into t2 select j, s from t1 where j = 4")
+        sql("insert into t2 select j, s, default from t1 where j = 5")
+        checkAnswer(
+          spark.table("t2"),
+          Row(1, 42L, 43L) ::
+          Row(2, 42L, 43L) ::
+          Row(3, 42L, 43L) ::
+          Row(4, 44L, 43L) ::
+          Row(5, 44L, 43L) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Negative tests") {
+    object Errors {
+      val COMMON_SUBSTRING = " has a DEFAULT value"
+    }
+    // The default value fails to analyze.
+    withTable("t") {
+      sql("create table t(i boolean) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("alter table t add column s bigint default badvalue")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+    }
+    // The default value analyzes to a table not in the catalog.
+    withTable("t") {
+      sql("create table t(i boolean) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("alter table t add column s bigint default (select min(x) from badtable)")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+    }
+    // The default value parses but refers to a table from the catalog.
+    withTable("t", "other") {
+      sql("create table other(x string) using parquet")
+      sql("create table t(i boolean) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("alter table t add column s bigint default (select min(x) from other)")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+    }
+    // The default value parses but the type is not coercible.
+    withTable("t") {
+      sql("create table t(i boolean) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("alter table t add column s bigint default false")
+      }.getMessage.contains("provided a value of incompatible type"))
+    }
+    // The default value is disabled per configuration.
+    withTable("t") {
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        sql("create table t(i boolean) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("alter table t add column s bigint default 42L")
+        }.getMessage.contains("Support for DEFAULT column values is not allowed"))
+      }
+    }
+    // There is one trailing default value referenced implicitly by the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i int) using parquet")
+      sql("alter table t add column s bigint default 42")
+      sql("alter table t add column x bigint")
+      assert(intercept[AnalysisException] {
+        sql("insert into t values(1)")
+      }.getMessage.contains("expected 3 columns but found"))
+    }
+  }
+
+  test("SPARK-38838 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: positive tests") {
+    withTable("t") {
+      sql("create table t(i boolean, s string, k bigint) using parquet")
+      // The default value for the DEFAULT keyword is the NULL literal.
+      sql("insert into t values(true, default, default)")
+      // There is a complex expression in the default value.
+      sql("alter table t alter column s set default concat('abc', 'def')")
+      sql("insert into t values(true, default, default)")
+      // The default value parses correctly and the provided value type is different but coercible.
+      sql("alter table t alter column k set default 42")
+      sql("insert into t values(true, default, default)")
+      // After dropping the default, inserting more values should add NULLs.
+      sql("alter table t alter column k drop default")
+      sql("insert into t values(true, default, default)")
+      checkAnswer(spark.table("t"),
+        Seq(
+          Row(true, null, null),
+          Row(true, "abcdef", null),
+          Row(true, "abcdef", 42),
+          Row(true, "abcdef", null)
+        ))
+    }
+  }
+
+  test("SPARK-38838 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
+    object Errors {
+      val COMMON_SUBSTRING = " has a DEFAULT value"
+      val BAD_SUBQUERY =
+        "cannot evaluate expression CAST(scalarsubquery() AS BIGINT) in inline table definition"
+    }
+    val createTable = "create table t(i boolean, s bigint) using parquet"
+    val insertDefaults = "insert into t values (default, default)"
+    withTable("t") {
+      sql(createTable)
+      // The default value fails to analyze.
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column s set default badvalue")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      // The default value analyzes to a table not in the catalog.
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column s set default (select min(x) from badtable)")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
+      // list at the INSERT INTO time.
+      sql("alter table t alter column s set default (select 42 as alias)")
+      assert(intercept[AnalysisException] {
+        sql(insertDefaults)
+      }.getMessage.contains(Errors.BAD_SUBQUERY))
+      // The default value parses but the type is not coercible.
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column s set default false")
+      }.getMessage.contains("provided a value of incompatible type"))
+      // The default value is disabled per configuration.
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        assert(intercept[ParseException] {
+          sql("alter table t alter column s set default 41 + 1")
+        }.getMessage.contains("Support for DEFAULT column values is not allowed"))
+      }
+    }
+    // Attempting to set a default value for a partitioning column is not allowed.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint, q int default 42) using parquet partitioned by (i)")
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column i set default false")
+      }.getMessage.contains("Can't find column `i` given table data columns [`s`, `q`]"))
+    }
+  }
+
+  test("INSERT rows, ALTER TABLE ADD COLUMNS with DEFAULTs, then SELECT them: Positive tests") {
+    def runTest(dataSource: String): Unit = {
+      val createTableIntCol = s"create table t(a string, i int) using $dataSource"
+      // Adding a column with a valid default value into a table containing existing data works
+      // successfully. Querying data from the altered table returns the new value.
+      withTable("t") {
+        sql(createTableIntCol)
+        sql("insert into t values('xyz', 42)")
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef"))
+        checkAnswer(sql("select i, s from t"), Row(42, "abcdef"))
+      }
+      // Same as above, but a following command alters the column to change the default value.
+      // This returns the previous value, not the new value, since the behavior semantics are
+      // the same as if the first command had performed a backfill of the new default value in
+      // the existing rows.
+      withTable("t") {
+        sql(createTableIntCol)
+        sql("insert into t values('xyz', 42)")
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        sql("alter table t alter column s set default concat('ghi', 'jkl')")
+        checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef"))
+        checkAnswer(sql("select i, s from t"), Row(42, "abcdef"))
+      }
+      // Adding a column with a default value and then inserting explicit NULL values works.
+      // Querying data back from the table differentiates between the explicit NULL values and
+      // default values.
+      withTable("t") {
+        sql(createTableIntCol)
+        sql("insert into t values('xyz', 42)")
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        sql("insert into t values(null, null, null)")
+        sql("alter table t add column (x boolean default true)")
+        checkAnswer(spark.table("t"),
+          Seq(
+            Row("xyz", 42, "abcdef", true),
+            Row(null, null, null, true)))
+        checkAnswer(sql("select i, s, x from t"),
+          Seq(
+            Row(42, "abcdef", true),
+            Row(null, null, true)))
+      }
+      // Adding two columns where only the first has a valid default value works successfully.
+      // Querying data from the altered table returns the default value as well as NULL for the
+      // second column.
+      withTable("t") {
+        sql(createTableIntCol)
+        sql("insert into t values('xyz', 42)")
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        sql("alter table t add column (x string)")
+        checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef", null))
+        checkAnswer(sql("select i, s, x from t"), Row(42, "abcdef", null))
+      }
+    }
+
+    // This represents one test configuration over a data source.
+    case class Config(
+      dataSource: String,
+      sqlConf: Seq[Option[(String, String)]] = Seq())
+    // Run the test several times using each configuration.
+    Seq(
+      Config(dataSource = "json",
+        Seq(
+          Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false"))),
+      Config(dataSource = "csv",
+        Seq(
+          None,
+          Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))
+    ).foreach { config: Config =>
+      config.sqlConf.foreach {
+        _.map { kv: (String, String) =>
+          withSQLConf(kv) {
+            // Run the test with the pair of custom SQLConf values.
+            runTest(config.dataSource)
+          }
+        }.getOrElse {
+          // Run the test with default settings.
+          runTest(config.dataSource)
+        }
+      }
+    }
+  }
+
+  test("SPARK-39211 INSERT into JSON table, ADD COLUMNS with DEFAULTs, then SELECT them") {
+    // By default, INSERT commands into JSON tables do not store NULL values. Therefore, if such
+    // destination table columns have DEFAULT values, SELECTing out the same columns will return the
+    // default values (instead of NULL) since nothing is present in storage.
+    withTable("t") {
+      sql("create table t(a string default 'abc') using json")
+      sql("insert into t values(null)")
+      checkAnswer(spark.table("t"), Row("abc"))
     }
   }
 
@@ -1471,6 +1826,24 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
       sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
       checkAnswer(spark.table("t"), Row(1, 2, 3))
+    }
+  }
+
+  test("SELECT clause with star wildcard") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(c1 int, c2 string) using parquet")
+      sql("INSERT INTO TABLE t1 select * from jt where a=1")
+      checkAnswer(spark.table("t1"), Row(1, "str1"))
+    }
+
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      withTable("t1") {
+        sql("CREATE TABLE t1(c1 int, c2 string, c3 int) using parquet")
+        sql("INSERT INTO TABLE t1 select * from jt where a=1")
+        checkAnswer(spark.table("t1"), Row(1, "str1", null))
+        sql("INSERT INTO TABLE t1 select *, 2 from jt where a=2")
+        checkAnswer(spark.table("t1"), Seq(Row(1, "str1", null), Row(2, "str2", 2)))
+      }
     }
   }
 

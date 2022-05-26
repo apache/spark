@@ -1261,12 +1261,14 @@ class DataFrameAggregateSuite extends QueryTest
     val error = intercept[SparkException] {
       checkAnswer(df2.select(sum($"year-month")), Nil)
     }
-    assert(error.toString contains "SparkArithmeticException: integer overflow")
+    assert(error.toString contains
+      "SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow")
 
     val error2 = intercept[SparkException] {
       checkAnswer(df2.select(sum($"day")), Nil)
     }
-    assert(error2.toString contains "SparkArithmeticException: long overflow")
+    assert(error2.toString contains
+      "SparkArithmeticException: [ARITHMETIC_OVERFLOW] long overflow")
   }
 
   test("SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`") {
@@ -1395,12 +1397,14 @@ class DataFrameAggregateSuite extends QueryTest
     val error = intercept[SparkException] {
       checkAnswer(df2.select(avg($"year-month")), Nil)
     }
-    assert(error.toString contains "SparkArithmeticException: integer overflow")
+    assert(error.toString contains
+      "SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow")
 
     val error2 = intercept[SparkException] {
       checkAnswer(df2.select(avg($"day")), Nil)
     }
-    assert(error2.toString contains "SparkArithmeticException: long overflow")
+    assert(error2.toString contains
+      "SparkArithmeticException: [ARITHMETIC_OVERFLOW] long overflow")
 
     val df3 = intervalData.filter($"class" > 4)
     val avgDF3 = df3.select(avg($"year-month"), avg($"day"))

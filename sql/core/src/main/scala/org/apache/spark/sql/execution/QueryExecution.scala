@@ -21,8 +21,6 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
@@ -32,7 +30,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, CTERelationDef, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -63,17 +61,6 @@ class QueryExecution(
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
-
-  // The CTE map for the planner shared by the main query and all subqueries.
-  private val cteMap = mutable.HashMap.empty[Long, CTERelationDef]
-
-  def withCteMap[T](f: => T): T = {
-    val old = QueryExecution.currentCteMap.get()
-    QueryExecution.currentCteMap.set(cteMap)
-    try f finally {
-      QueryExecution.currentCteMap.set(old)
-    }
-  }
 
   def assertAnalyzed(): Unit = analyzed
 
@@ -147,7 +134,7 @@ class QueryExecution(
 
   private def assertOptimized(): Unit = optimizedPlan
 
-  lazy val sparkPlan: SparkPlan = withCteMap {
+  lazy val sparkPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
     // the planning phase
     assertOptimized()
@@ -160,7 +147,7 @@ class QueryExecution(
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = withCteMap {
+  lazy val executedPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
     assertOptimized()
@@ -499,8 +486,4 @@ object QueryExecution {
     val preparationRules = preparations(session, Option(InsertAdaptiveSparkPlan(context)), true)
     prepareForExecution(preparationRules, sparkPlan.clone())
   }
-
-  private val currentCteMap = new ThreadLocal[mutable.HashMap[Long, CTERelationDef]]()
-
-  def cteMap: mutable.HashMap[Long, CTERelationDef] = currentCteMap.get()
 }

@@ -849,6 +849,18 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
     comparePlans(optimized, expected)
   }
+
+  test("SPARK-38529: GeneratorNestedColumnAliasing does not pushdown for non-Explode") {
+    val employer = StructType.fromDDL("id int, company struct<name:string, address:string>")
+    val input = LocalRelation(
+      'col1.int,
+      'col2.array(ArrayType(StructType.fromDDL("field1 struct<col1: int, col2: int>, field2 int")))
+    )
+    val plan = input.generate(Inline('col2)).select('field1.getField("col1")).analyze
+    val optimized = GeneratorNestedColumnAliasing.unapply(plan)
+    // The plan is expected to be unchanged.
+    comparePlans(plan, RemoveNoopOperators.apply(optimized.get))
+  }
 }
 
 object NestedColumnAliasingSuite {

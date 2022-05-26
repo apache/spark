@@ -64,6 +64,7 @@ Computations / Descriptive Stats
    GroupBy.cummin
    GroupBy.cumprod
    GroupBy.cumsum
+   GroupBy.ewm
    GroupBy.filter
    GroupBy.first
    GroupBy.last

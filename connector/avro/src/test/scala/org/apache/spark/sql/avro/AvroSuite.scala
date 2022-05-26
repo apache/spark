@@ -550,8 +550,8 @@ abstract class AvroSuite
     val fixed = spark.read.format("avro").load(testAvro).select("fixed3").collect()
     assert(fixed.map(_(0).asInstanceOf[Array[Byte]]).exists(p => p(1) == 3))
 
-    val enum = spark.read.format("avro").load(testAvro).select("enum").collect()
-    assert(enum.map(_(0)).toSet == Set("SPADES", "CLUBS", "DIAMONDS"))
+    val enums = spark.read.format("avro").load(testAvro).select("enum").collect()
+    assert(enums.map(_(0)).toSet == Set("SPADES", "CLUBS", "DIAMONDS"))
 
     val record = spark.read.format("avro").load(testAvro).select("record").collect()
     assert(record(0)(0).getClass.toString.contains("Row"))

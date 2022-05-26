@@ -94,7 +94,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           SetCommand(Some("-v" -> None))
         case s if s.isEmpty =>
           SetCommand(None)
-        case _ => throw QueryParsingErrors.unexpectedFomatForSetConfigurationError(ctx)
+        case _ => throw QueryParsingErrors.unexpectedFormatForSetConfigurationError(ctx)
       }
     }
   }
@@ -563,7 +563,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       if (functionIdentifier.length > 2) {
-        throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier.quoted, ctx)
+        throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
       } else if (functionIdentifier.length == 2) {
         // Temporary function names should not contain database prefix like "database.function"
         throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)

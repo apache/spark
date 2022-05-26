@@ -73,15 +73,16 @@ def _unsupported_property_exponential_moving(property_name, deprecated=False, re
 
 
 class MissingPandasLikeExpanding:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+
     agg = _unsupported_function_expanding("agg")
     aggregate = _unsupported_function_expanding("aggregate")
     apply = _unsupported_function_expanding("apply")
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
-    kurt = _unsupported_function_expanding("kurt")
     median = _unsupported_function_expanding("median")
     quantile = _unsupported_function_expanding("quantile")
-    skew = _unsupported_function_expanding("skew")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -91,15 +92,16 @@ class MissingPandasLikeExpanding:
 
 
 class MissingPandasLikeRolling:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+
     agg = _unsupported_function_rolling("agg")
     aggregate = _unsupported_function_rolling("aggregate")
     apply = _unsupported_function_rolling("apply")
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
-    kurt = _unsupported_function_rolling("kurt")
     median = _unsupported_function_rolling("median")
     quantile = _unsupported_function_rolling("quantile")
-    skew = _unsupported_function_rolling("skew")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")
@@ -109,15 +111,16 @@ class MissingPandasLikeRolling:
 
 
 class MissingPandasLikeExpandingGroupby:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+
     agg = _unsupported_function_expanding("agg")
     aggregate = _unsupported_function_expanding("aggregate")
     apply = _unsupported_function_expanding("apply")
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
-    kurt = _unsupported_function_expanding("kurt")
     median = _unsupported_function_expanding("median")
     quantile = _unsupported_function_expanding("quantile")
-    skew = _unsupported_function_expanding("skew")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -127,15 +130,16 @@ class MissingPandasLikeExpandingGroupby:
 
 
 class MissingPandasLikeRollingGroupby:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+
     agg = _unsupported_function_rolling("agg")
     aggregate = _unsupported_function_rolling("aggregate")
     apply = _unsupported_function_rolling("apply")
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
-    kurt = _unsupported_function_rolling("kurt")
     median = _unsupported_function_rolling("median")
     quantile = _unsupported_function_rolling("quantile")
-    skew = _unsupported_function_rolling("skew")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")
@@ -152,6 +156,17 @@ class MissingPandasLikeExponentialMoving:
     corr = _unsupported_function_exponential_moving("corr")
 
     adjust = _unsupported_property_exponential_moving("adjust")
-    ignore_na = _unsupported_property_exponential_moving("ignore_na")
+    axis = _unsupported_property_exponential_moving("axis")
+    method = _unsupported_property_exponential_moving("method")
+
+
+class MissingPandasLikeExponentialMovingGroupby:
+    sum = _unsupported_function_exponential_moving("sum")
+    var = _unsupported_function_exponential_moving("var")
+    std = _unsupported_function_exponential_moving("std")
+    cov = _unsupported_function_exponential_moving("cov")
+    corr = _unsupported_function_exponential_moving("corr")
+
+    adjust = _unsupported_property_exponential_moving("adjust")
     axis = _unsupported_property_exponential_moving("axis")
     method = _unsupported_property_exponential_moving("method")

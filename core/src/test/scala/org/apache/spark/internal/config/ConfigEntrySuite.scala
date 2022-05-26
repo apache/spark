@@ -169,20 +169,21 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: valid values check") {
     val conf = new SparkConf()
-    val enum = ConfigBuilder(testKey("enum"))
+    val enumConf = ConfigBuilder(testKey("enum"))
       .stringConf
       .checkValues(Set("a", "b", "c"))
       .createWithDefault("a")
-    assert(conf.get(enum) === "a")
+    assert(conf.get(enumConf) === "a")
 
-    conf.set(enum, "b")
-    assert(conf.get(enum) === "b")
+    conf.set(enumConf, "b")
+    assert(conf.get(enumConf) === "b")
 
-    conf.set(enum, "d")
+    conf.set(enumConf, "d")
     val enumError = intercept[IllegalArgumentException] {
-      conf.get(enum)
+      conf.get(enumConf)
     }
-    assert(enumError.getMessage === s"The value of ${enum.key} should be one of a, b, c, but was d")
+    assert(enumError.getMessage ===
+      s"The value of ${enumConf.key} should be one of a, b, c, but was d")
   }
 
   test("conf entry: conversion error") {

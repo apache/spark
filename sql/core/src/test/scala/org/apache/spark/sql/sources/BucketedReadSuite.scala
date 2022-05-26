@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.File
-import java.net.URI
-
 import scala.util.Random
 
 import org.apache.spark.sql._
@@ -36,7 +33,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 class BucketedReadWithoutHiveSupportSuite
@@ -829,23 +825,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
                 |ON a.i = c.i
               """.stripMargin))
       }
-    }
-  }
-
-  test("error if there exists any malformed bucket files") {
-    withTable("bucketed_table") {
-      df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
-      val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
-      val tableDir = new File(warehouseFilePath, "bucketed_table")
-      Utils.deleteRecursively(tableDir)
-      df1.write.parquet(tableDir.getAbsolutePath)
-
-      val aggregated = spark.table("bucketed_table").groupBy("i").count()
-      val error = intercept[Exception] {
-        aggregated.count()
-      }
-
-      assert(error.toString contains "Invalid bucket file")
     }
   }
 

@@ -1,16 +1,16 @@
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Avro writer benchmark:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Output Single Int Column                           2495           2503          11          6.3         158.6       1.0X
-Output Single Double Column                        2709           2784         106          5.8         172.2       0.9X
-Output Int and String Column                       5062           5107          64          3.1         321.8       0.5X
-Output Partitions                                  4966           4973          10          3.2         315.7       0.5X
-Output Buckets                                     6326           6569         343          2.5         402.2       0.4X
+Output Single Int Column                           2797           2886         126          5.6         177.8       1.0X
+Output Single Double Column                        3142           3208          93          5.0         199.8       0.9X
+Output Int and String Column                       6463           6468           6          2.4         410.9       0.4X
+Output Partitions                                  5546           5569          33          2.8         352.6       0.5X
+Output Buckets                                     7608           7684         107          2.1         483.7       0.4X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write wide rows into 20 files:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Write wide rows                                   40358          40374          23          0.0       80715.3       1.0X
+Write wide rows                                   48900          48975         106          0.0       97800.1       1.0X
 
