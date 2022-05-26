@@ -16,26 +16,13 @@
     under the License.
 
 
-=========
-Spark SQL
-=========
+====
+Avro
+====
+.. currentmodule:: pyspark.sql.avro.functions
 
-This page gives an overview of all public Spark SQL API.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-    :maxdepth: 2
-
-    core_classes
-    spark_session
-    configuration
-    io
-    dataframe
-    column
-    data_types
-    row
-    functions
-    window
-    grouping
-    catalog
-    avro
-    observation
+    from_avro
+    to_avro

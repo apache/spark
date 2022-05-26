@@ -16,26 +16,12 @@
     under the License.
 
 
-=========
-Spark SQL
-=========
+===========
+Observation
+===========
+.. currentmodule:: pyspark.sql
 
-This page gives an overview of all public Spark SQL API.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-    :maxdepth: 2
-
-    core_classes
-    spark_session
-    configuration
-    io
-    dataframe
-    column
-    data_types
-    row
-    functions
-    window
-    grouping
-    catalog
-    avro
-    observation
+    Observation.get
