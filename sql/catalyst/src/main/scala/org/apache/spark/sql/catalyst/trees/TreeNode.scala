@@ -79,7 +79,9 @@ case class Origin(
       ""
     } else {
       val positionContext = if (line.isDefined && startPosition.isDefined) {
-        s"(line ${line.get}, position ${startPosition.get})"
+        // Note that the line number starts from 1, while the start position starts from 0.
+        // Here we increase the start position by 1 for consistency.
+        s"(line ${line.get}, position ${startPosition.get + 1})"
       } else {
         ""
       }
