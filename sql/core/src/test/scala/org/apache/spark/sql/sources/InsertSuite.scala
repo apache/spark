@@ -1609,6 +1609,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Config(
             Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")))),
       TestCase(
+        dataSource = "orc",
+        Seq(
+          Config(
+            None))),
+      TestCase(
         dataSource = "parquet",
         Seq(
           Config(

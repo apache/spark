@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.orc;
 
 import java.io.IOException;
+import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
@@ -164,6 +165,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     // Just wrap the ORC column vector instead of copying it to Spark column vector.
     orcVectorWrappers = new org.apache.spark.sql.vectorized.ColumnVector[resultSchema.length()];
 
+    StructType requiredSchema = new StructType(requiredFields);
     for (int i = 0; i < requiredFields.length; i++) {
       DataType dt = requiredFields[i].dataType();
       if (requestedPartitionColIds[i] != -1) {
@@ -176,7 +178,18 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         // Initialize the missing columns once.
         if (colId == -1) {
           OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
-          missingCol.putNulls(0, capacity);
+          // Check if the missing column has an associated default value in the schema metadata.
+          // If so, fill the corresponding column vector with the value. Otherwise, assign NULL.
+          boolean hasDefaultValue = false;
+          if (requiredFields[i].getExistenceDefaultValue().isDefined()) {
+            Object defaultValue = requiredSchema.existenceDefaultValues()[i];
+            if (missingCol.appendObjects(capacity, defaultValue).isPresent()) {
+              hasDefaultValue = true;
+            }
+          }
+          if (!hasDefaultValue) {
+            missingCol.putNulls(0, capacity);
+          }
           missingCol.setIsConstant();
           orcVectorWrappers[i] = missingCol;
         } else {
