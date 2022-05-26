@@ -640,7 +640,7 @@ select to_date('26/October/2015', 'dd/MMMMM/yyyy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
@@ -650,7 +650,7 @@ select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMM
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
@@ -660,7 +660,7 @@ select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0: 
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
 Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
