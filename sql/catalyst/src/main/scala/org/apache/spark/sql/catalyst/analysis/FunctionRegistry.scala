@@ -744,6 +744,7 @@ object FunctionRegistry {
 
     // comparison operators
     expression[EqualNullSafe]("<=>"),
+    expression[EqualNullSafe]("equal_null", true, Some("3.4.0")),
     expression[EqualTo]("="),
     expression[EqualTo]("=="),
     expression[GreaterThan](">"),
