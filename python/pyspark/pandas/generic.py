@@ -1518,8 +1518,7 @@ class Frame(object, metaclass=ABCMeta):
                     )
                 )
 
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-            return Column(sql_utils.pandasSkewness(spark_column._jc))
+            return SF.skew(spark_column)
 
         return self._reduce_for_stat_function(
             skew,
@@ -1588,8 +1587,7 @@ class Frame(object, metaclass=ABCMeta):
                     )
                 )
 
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-            return Column(sql_utils.pandasKurtosis(spark_column._jc))
+            return SF.kurt(spark_column)
 
         return self._reduce_for_stat_function(
             kurtosis,
