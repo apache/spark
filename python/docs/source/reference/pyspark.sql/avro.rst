@@ -16,9 +16,9 @@
     under the License.
 
 
-=========
-Functions
-=========
+====
+Avro
+====
 .. currentmodule:: pyspark.sql.avro.functions
 
 .. autosummary::
