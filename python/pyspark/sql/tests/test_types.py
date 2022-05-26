@@ -48,7 +48,7 @@ from pyspark.sql.types import (
     BooleanType,
     NullType,
 )
-from pyspark.sql.types import (  # type: ignore
+from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,
@@ -118,8 +118,14 @@ class TypesTests(ReusedSQLTestCase):
 
         with self.tempView("test"):
             df.createOrReplaceTempView("test")
-            result = self.spark.sql("SELECT l[0].a from test where d['key'].d = '2'")
-            self.assertEqual(1, result.head()[0])
+            result = self.spark.sql("SELECT l from test")
+            self.assertEqual([], result.head()[0])
+            # We set `spark.sql.ansi.enabled` to False for this case
+            # since it occurs an error in ANSI mode if there is a list index
+            # or key that does not exist.
+            with self.sql_conf({"spark.sql.ansi.enabled": False}):
+                result = self.spark.sql("SELECT l[0].a from test where d['key'].d = '2'")
+                self.assertEqual(1, result.head()[0])
 
         df2 = self.spark.createDataFrame(rdd, samplingRatio=1.0)
         self.assertEqual(df.schema, df2.schema)
@@ -128,8 +134,14 @@ class TypesTests(ReusedSQLTestCase):
 
         with self.tempView("test2"):
             df2.createOrReplaceTempView("test2")
-            result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
-            self.assertEqual(1, result.head()[0])
+            result = self.spark.sql("SELECT l from test2")
+            self.assertEqual([], result.head()[0])
+            # We set `spark.sql.ansi.enabled` to False for this case
+            # since it occurs an error in ANSI mode if there is a list index
+            # or key that does not exist.
+            with self.sql_conf({"spark.sql.ansi.enabled": False}):
+                result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
+                self.assertEqual(1, result.head()[0])
 
     def test_infer_schema_specification(self):
         from decimal import Decimal
@@ -272,6 +284,81 @@ class TypesTests(ReusedSQLTestCase):
 
             df = self.spark.createDataFrame(data)
             self.assertEqual(Row(f1=[Row(payment=200.5, name="A")], f2=[1, 2]), df.first())
+
+    def test_infer_array_merge_element_types(self):
+        # SPARK-39168: Test inferring array element type from all values in array
+        ArrayRow = Row("f1", "f2")
+
+        data = [ArrayRow([1, None], [None, 2])]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
+
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
+
+        # Test legacy behavior inferring only from the first element
+        with self.sql_conf(
+            {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
+        ):
+            # Legacy: f2 schema inferred as an array of nulls, should raise error
+            self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data))
+
+        # an array with only null values should raise an error
+        data2 = [ArrayRow([1], [None])]
+        self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data2))
+
+        # an array with no values should raise an error
+        data3 = [ArrayRow([1], [])]
+        self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data3))
+
+        # an array with conflicting types should raise an error
+        data4 = [ArrayRow([1, "1"], [None])]
+        self.assertRaises(TypeError, lambda: self.spark.createDataFrame(data4))
+
+    def test_infer_array_element_type_empty(self):
+        # SPARK-39168: Test inferring array element type from all rows
+        ArrayRow = Row("f1")
+
+        data = [ArrayRow([]), ArrayRow([None]), ArrayRow([1])]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        rows = df.collect()
+        self.assertEqual(Row(f1=[]), rows[0])
+        self.assertEqual(Row(f1=[None]), rows[1])
+        self.assertEqual(Row(f1=[1]), rows[2])
+
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(Row(f1=[]), rows[0])
+        self.assertEqual(Row(f1=[None]), rows[1])
+        self.assertEqual(Row(f1=[1]), rows[2])
+
+    def test_infer_array_element_type_with_struct(self):
+        # SPARK-39168: Test inferring array of struct type from all struct values
+        NestedRow = Row("f1")
+
+        with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
+            data = [NestedRow([{"payment": 200.5}, {"name": "A"}])]
+
+            nestedRdd = self.sc.parallelize(data)
+            df = self.spark.createDataFrame(nestedRdd)
+            self.assertEqual(
+                Row(f1=[Row(payment=200.5, name=None), Row(payment=None, name="A")]), df.first()
+            )
+
+            df = self.spark.createDataFrame(data)
+            self.assertEqual(
+                Row(f1=[Row(payment=200.5, name=None), Row(payment=None, name="A")]), df.first()
+            )
+
+            # Test legacy behavior inferring only from the first element; excludes "name" field
+            with self.sql_conf(
+                {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
+            ):
+                df = self.spark.createDataFrame(data)
+                self.assertEqual(Row(f1=[Row(payment=200.5), Row(payment=None)]), df.first())
 
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
@@ -936,6 +1023,29 @@ class TypesTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
+
+    def test_repr(self):
+        instances = [
+            NullType(),
+            StringType(),
+            BinaryType(),
+            BooleanType(),
+            DateType(),
+            TimestampType(),
+            DecimalType(),
+            DoubleType(),
+            FloatType(),
+            ByteType(),
+            IntegerType(),
+            LongType(),
+            ShortType(),
+            ArrayType(StringType()),
+            MapType(StringType(), IntegerType()),
+            StructField("f1", StringType(), True),
+            StructType([StructField("f1", StringType(), True)]),
+        ]
+        for instance in instances:
+            self.assertEqual(eval(repr(instance)), instance)
 
     def test_daytime_interval_type_constructor(self):
         # SPARK-37277: Test constructors in day time interval.

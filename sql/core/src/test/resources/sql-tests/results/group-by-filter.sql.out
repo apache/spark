@@ -788,24 +788,14 @@ SELECT emp.dept_id,
 FROM emp
 GROUP BY dept_id
 -- !query schema
-struct<>
+struct<dept_id:int,avg(salary):double,avg(salary) FILTER (WHERE exists(dept_id)):double>
 -- !query output
-org.apache.spark.sql.AnalysisException
-IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x) FILTER (WHERE exists#x [dept_id#x]) AS avg(salary) FILTER (WHERE exists(dept_id))#x]
-:  +- Project [state#x]
-:     +- Filter (dept_id#x = outer(dept_id#x))
-:        +- SubqueryAlias dept
-:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
-:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
-:                 +- Project [dept_id#x, dept_name#x, state#x]
-:                    +- SubqueryAlias DEPT
-:                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
-+- SubqueryAlias emp
-   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
-         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-            +- SubqueryAlias EMP
-               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+10	133.33333333333334	133.33333333333334
+100	400.0	NULL
+20	300.0	300.0
+30	400.0	400.0
+70	150.0	150.0
+NULL	400.0	NULL
 
 
 -- !query
@@ -817,24 +807,14 @@ SELECT emp.dept_id,
 FROM emp 
 GROUP BY dept_id
 -- !query schema
-struct<>
+struct<dept_id:int,sum(salary):double,sum(salary) FILTER (WHERE (NOT exists(dept_id))):double>
 -- !query output
-org.apache.spark.sql.AnalysisException
-IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, sum(salary#x) AS sum(salary)#x, sum(salary#x) FILTER (WHERE NOT exists#x [dept_id#x]) AS sum(salary) FILTER (WHERE (NOT exists(dept_id)))#x]
-:  +- Project [state#x]
-:     +- Filter (dept_id#x = outer(dept_id#x))
-:        +- SubqueryAlias dept
-:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
-:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
-:                 +- Project [dept_id#x, dept_name#x, state#x]
-:                    +- SubqueryAlias DEPT
-:                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
-+- SubqueryAlias emp
-   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
-         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-            +- SubqueryAlias EMP
-               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+10	400.0	NULL
+100	800.0	800.0
+20	300.0	NULL
+30	400.0	NULL
+70	150.0	NULL
+NULL	400.0	400.0
 
 
 -- !query
@@ -845,24 +825,14 @@ SELECT emp.dept_id,
 FROM emp 
 GROUP BY dept_id
 -- !query schema
-struct<>
+struct<dept_id:int,avg(salary):double,avg(salary) FILTER (WHERE (dept_id IN (listquery()))):double>
 -- !query output
-org.apache.spark.sql.AnalysisException
-IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x) FILTER (WHERE dept_id#x IN (list#x [])) AS avg(salary) FILTER (WHERE (dept_id IN (listquery())))#x]
-:  +- Distinct
-:     +- Project [dept_id#x]
-:        +- SubqueryAlias dept
-:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
-:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
-:                 +- Project [dept_id#x, dept_name#x, state#x]
-:                    +- SubqueryAlias DEPT
-:                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
-+- SubqueryAlias emp
-   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
-         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-            +- SubqueryAlias EMP
-               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+10	133.33333333333334	133.33333333333334
+100	400.0	NULL
+20	300.0	300.0
+30	400.0	400.0
+70	150.0	150.0
+NULL	400.0	NULL
 
 
 -- !query
@@ -873,24 +843,14 @@ SELECT emp.dept_id,
 FROM emp 
 GROUP BY dept_id
 -- !query schema
-struct<>
+struct<dept_id:int,sum(salary):double,sum(salary) FILTER (WHERE (NOT (dept_id IN (listquery())))):double>
 -- !query output
-org.apache.spark.sql.AnalysisException
-IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few commands: Aggregate [dept_id#x], [dept_id#x, sum(salary#x) AS sum(salary)#x, sum(salary#x) FILTER (WHERE NOT dept_id#x IN (list#x [])) AS sum(salary) FILTER (WHERE (NOT (dept_id IN (listquery()))))#x]
-:  +- Distinct
-:     +- Project [dept_id#x]
-:        +- SubqueryAlias dept
-:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
-:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
-:                 +- Project [dept_id#x, dept_name#x, state#x]
-:                    +- SubqueryAlias DEPT
-:                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
-+- SubqueryAlias emp
-   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
-         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-            +- SubqueryAlias EMP
-               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+10	400.0	NULL
+100	800.0	800.0
+20	300.0	NULL
+30	400.0	NULL
+70	150.0	NULL
+NULL	400.0	NULL
 
 
 -- !query

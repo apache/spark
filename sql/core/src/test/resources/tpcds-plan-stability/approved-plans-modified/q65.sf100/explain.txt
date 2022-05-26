@@ -158,7 +158,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (24) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [ss_store_sk#2]
 Right keys [1]: [ss_store_sk#13]
-Join condition: (cast(revenue#11 as decimal(23,7)) <= CheckOverflow((0.100000 * promote_precision(ave#28)), DecimalType(23,7), true))
+Join condition: (cast(revenue#11 as decimal(23,7)) <= CheckOverflow((0.100000 * promote_precision(ave#28)), DecimalType(23,7)))
 
 (25) Project [codegen id : 7]
 Output [3]: [ss_store_sk#2, ss_item_sk#1, revenue#11]

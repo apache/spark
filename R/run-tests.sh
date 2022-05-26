@@ -23,7 +23,7 @@ FAILED=0
 LOGFILE=$FWDIR/unit-tests.out
 rm -f $LOGFILE
 
-SPARK_AVRO_JAR_PATH=$(find $FWDIR/../external/avro/ -name "spark-avro*jar" -print | egrep -v "tests.jar|test-sources.jar|sources.jar|javadoc.jar")
+SPARK_AVRO_JAR_PATH=$(find $FWDIR/../connector/avro/ -name "spark-avro*jar" -print | egrep -v "tests.jar|test-sources.jar|sources.jar|javadoc.jar")
 
 if [[ $(echo $SPARK_AVRO_JAR_PATH | wc -l) -eq 1 ]]; then
   SPARK_JARS=$SPARK_AVRO_JAR_PATH

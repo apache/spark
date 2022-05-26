@@ -386,7 +386,6 @@ private[spark] object ResourceUtils extends Logging {
     val resourcePlugins = Utils.loadExtensions(classOf[ResourceDiscoveryPlugin], pluginClasses,
       sparkConf)
     // apply each plugin until one of them returns the information for this resource
-    var riOption: Optional[ResourceInformation] = Optional.empty()
     resourcePlugins.foreach { plugin =>
       val riOption = plugin.discoverResource(resourceRequest, sparkConf)
       if (riOption.isPresent()) {

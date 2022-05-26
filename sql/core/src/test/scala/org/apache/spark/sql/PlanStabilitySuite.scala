@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
 
 // scalastyle:off line.size.limit
@@ -82,8 +83,18 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
   def goldenFilePath: String
 
+  private val approvedAnsiPlans: Seq[String] = Seq(
+    "q83",
+    "q83.sf100"
+  )
+
   private def getDirForTest(name: String): File = {
-    new File(goldenFilePath, name)
+    val goldenFileName = if (SQLConf.get.ansiEnabled && approvedAnsiPlans.contains(name)) {
+      name + ".ansi"
+    } else {
+      name
+    }
+    new File(goldenFilePath, goldenFileName)
   }
 
   private def isApproved(

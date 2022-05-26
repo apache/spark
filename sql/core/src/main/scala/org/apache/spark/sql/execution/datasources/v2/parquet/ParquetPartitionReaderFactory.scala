@@ -56,7 +56,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param partitionSchema Schema of partitions.
  * @param filters Filters to be pushed down in the batch scan.
  * @param aggregation Aggregation to be pushed down in the batch scan.
- * @param parquetOptions The options of Parquet datasource that are set for the read.
+ * @param options The options of Parquet datasource that are set for the read.
  */
 case class ParquetPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -66,12 +66,12 @@ case class ParquetPartitionReaderFactory(
     partitionSchema: StructType,
     filters: Array[Filter],
     aggregation: Option[Aggregation],
-    parquetOptions: ParquetOptions) extends FilePartitionReaderFactory with Logging {
+    options: ParquetOptions) extends FilePartitionReaderFactory with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val resultSchema = StructType(partitionSchema.fields ++ readDataSchema.fields)
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
-  private val enableVectorizedReader: Boolean = sqlConf.parquetVectorizedReaderEnabled &&
-    resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
+  private val enableVectorizedReader: Boolean =
+    ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema)
   private val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
   private val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
   private val capacity = sqlConf.parquetVectorizedReaderBatchSize
@@ -79,10 +79,10 @@ case class ParquetPartitionReaderFactory(
   private val pushDownDate = sqlConf.parquetFilterPushDownDate
   private val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
   private val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
-  private val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+  private val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
-  private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
-  private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
+  private val datetimeRebaseModeInRead = options.datetimeRebaseModeInRead
+  private val int96RebaseModeInRead = options.int96RebaseModeInRead
 
   private def getFooter(file: PartitionedFile): ParquetMetadata = {
     val conf = broadcastedConf.value.value
@@ -202,7 +202,7 @@ case class ParquetPartitionReaderFactory(
   private def buildReaderBase[T](
       file: PartitionedFile,
       buildReaderFunc: (
-        FileSplit, InternalRow, TaskAttemptContextImpl,
+        InternalRow,
           Option[FilterPredicate], Option[ZoneId],
           RebaseSpec,
           RebaseSpec) => RecordReader[Void, T]): RecordReader[Void, T] = {
@@ -221,7 +221,7 @@ case class ParquetPartitionReaderFactory(
         pushDownDate,
         pushDownTimestamp,
         pushDownDecimal,
-        pushDownStringStartWith,
+        pushDownStringPredicate,
         pushDownInFilterThreshold,
         isCaseSensitive,
         datetimeRebaseSpec)
@@ -261,9 +261,7 @@ case class ParquetPartitionReaderFactory(
       footerFileMetaData.getKeyValueMetaData.get,
       int96RebaseModeInRead)
     val reader = buildReaderFunc(
-      split,
       file.partitionValues,
-      hadoopAttemptContext,
       pushed,
       convertTz,
       datetimeRebaseSpec,
@@ -277,9 +275,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createRowBaseParquetReader(
-      split: FileSplit,
       partitionValues: InternalRow,
-      hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
       convertTz: Option[ZoneId],
       datetimeRebaseSpec: RebaseSpec,
@@ -312,9 +308,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createParquetVectorizedReader(
-      split: FileSplit,
       partitionValues: InternalRow,
-      hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
       convertTz: Option[ZoneId],
       datetimeRebaseSpec: RebaseSpec,

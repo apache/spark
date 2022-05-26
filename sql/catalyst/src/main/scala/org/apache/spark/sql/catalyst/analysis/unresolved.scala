@@ -591,7 +591,7 @@ case class GetViewColumnByNameAndOrdinal(
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
-  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).toIterator
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
 }
 
 /**
@@ -645,4 +645,5 @@ case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
+  override def sql: String = child.sql
 }

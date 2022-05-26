@@ -17,25 +17,29 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, Driver, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -98,6 +102,29 @@ abstract class JdbcDialect extends Serializable with Logging{
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Returns a factory for creating connections to the given JDBC URL.
+   * In general, creating a connection has nothing to do with JDBC partition id.
+   * But sometimes it is needed, such as a database with multiple shard nodes.
+   * @param options - JDBC options that contains url, table and other information.
+   * @return The factory method for creating JDBC connections with the RDD partition ID. -1 means
+             the connection is being created at the driver side.
+   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
+   */
+  @Since("3.3.0")
+  def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+    val driverClass: String = options.driverClass
+    (partitionId: Int) => {
+      DriverRegistry.register(driverClass)
+      val driver: Driver = DriverRegistry.get(driverClass)
+      val connection =
+        ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
+      require(connection != null,
+        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+      connection
+    }
+  }
 
   /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column
@@ -194,6 +221,81 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
+  class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    override def visitLiteral(literal: Literal[_]): String = {
+      compileValue(
+        CatalystTypeConverters.convertToScala(literal.value(), literal.dataType())).toString
+    }
+
+    override def visitNamedReference(namedRef: NamedReference): String = {
+      if (namedRef.fieldNames().length > 1) {
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+          "Filter push down", namedRef.toString)
+      }
+      quoteIdentifier(namedRef.fieldNames.head)
+    }
+
+    override def visitCast(l: String, dataType: DataType): String = {
+      val databaseTypeDefinition =
+        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+      s"CAST($l AS $databaseTypeDefinition)"
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        s"""$funcName(${inputs.mkString(", ")})"""
+      } else {
+        // The framework will catch the error and give up the push-down.
+        // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: $funcName")
+      }
+    }
+
+    override def visitOverlay(inputs: Array[String]): String = {
+      if (isSupportedFunction("OVERLAY")) {
+        super.visitOverlay(inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+      }
+    }
+
+    override def visitTrim(direction: String, inputs: Array[String]): String = {
+      if (isSupportedFunction("TRIM")) {
+        super.visitTrim(direction, inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: TRIM")
+      }
+    }
+  }
+
+  /**
+   * Returns whether the database supports function.
+   * @param funcName Upper-cased function name
+   * @return True if the database supports function.
+   */
+  @Since("3.3.0")
+  def isSupportedFunction(funcName: String): Boolean = false
+
+  /**
+   * Converts V2 expression to String representing a SQL expression.
+   * @param expr The V2 expression to be converted.
+   * @return Converted value.
+   */
+  @Since("3.3.0")
+  def compileExpression(expr: Expression): Option[String] = {
+    val jdbcSQLBuilder = new JDBCSQLBuilder()
+    try {
+      Some(jdbcSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
   /**
    * Converts aggregate function to String representing a SQL expression.
    * @param aggFunction The aggregate function to be converted.
@@ -203,30 +305,61 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
-        if (min.column.fieldNames.length != 1) return None
-        Some(s"MIN(${quoteIdentifier(min.column.fieldNames.head)})")
+        compileExpression(min.column).map(v => s"MIN($v)")
       case max: Max =>
-        if (max.column.fieldNames.length != 1) return None
-        Some(s"MAX(${quoteIdentifier(max.column.fieldNames.head)})")
+        compileExpression(max.column).map(v => s"MAX($v)")
       case count: Count =>
-        if (count.column.fieldNames.length != 1) return None
         val distinct = if (count.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(count.column.fieldNames.head)
-        Some(s"COUNT($distinct$column)")
+        compileExpression(count.column).map(v => s"COUNT($distinct$v)")
       case sum: Sum =>
-        if (sum.column.fieldNames.length != 1) return None
         val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(sum.column.fieldNames.head)
-        Some(s"SUM($distinct$column)")
+        compileExpression(sum.column).map(v => s"SUM($distinct$v)")
       case _: CountStar =>
         Some("COUNT(*)")
       case avg: Avg =>
-        if (avg.column.fieldNames.length != 1) return None
         val distinct = if (avg.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(avg.column.fieldNames.head)
-        Some(s"AVG($distinct$column)")
+        compileExpression(avg.column).map(v => s"AVG($distinct$v)")
       case _ => None
     }
+  }
+
+  /**
+   * Create schema with an optional comment. Empty string means no comment.
+   */
+  def createSchema(statement: Statement, schema: String, comment: String): Unit = {
+    val schemaCommentQuery = if (comment.nonEmpty) {
+      // We generate comment query here so that it can fail earlier without creating the schema.
+      getSchemaCommentQuery(schema, comment)
+    } else {
+      comment
+    }
+    statement.executeUpdate(s"CREATE SCHEMA ${quoteIdentifier(schema)}")
+    if (comment.nonEmpty) {
+      statement.executeUpdate(schemaCommentQuery)
+    }
+  }
+
+  /**
+   * Check schema exists or not.
+   */
+  def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    val rs = conn.getMetaData.getSchemas(null, schema)
+    while (rs.next()) {
+      if (rs.getString(1) == schema) return true;
+    }
+    false
+  }
+
+  /**
+   * Lists all the schemas in this table.
+   */
+  def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val schemaBuilder = ArrayBuilder.make[Array[String]]
+    val rs = conn.getMetaData.getSchemas()
+    while (rs.next()) {
+      schemaBuilder += Array(rs.getString(1))
+    }
+    schemaBuilder.result
   }
 
   /**

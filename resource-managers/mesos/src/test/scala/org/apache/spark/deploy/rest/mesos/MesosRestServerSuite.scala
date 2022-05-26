@@ -35,8 +35,14 @@ class MesosRestServerSuite extends SparkFunSuite
     testOverheadMemory(new SparkConf(), "2000M", 2384)
   }
 
-  test("test driver overhead memory with overhead factor") {
+  test("test driver overhead memory with default overhead factor") {
     testOverheadMemory(new SparkConf(), "5000M", 5500)
+  }
+
+  test("test driver overhead memory with overhead factor") {
+    val conf = new SparkConf()
+    conf.set(config.DRIVER_MEMORY_OVERHEAD_FACTOR.key, "0.2")
+    testOverheadMemory(conf, "5000M", 6000)
   }
 
   test("test configured driver overhead memory") {

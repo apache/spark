@@ -36,6 +36,8 @@ abstract class PodBuilderSuite extends SparkFunSuite {
 
   protected def templateFileConf: ConfigEntry[_]
 
+  protected def roleSpecificSchedulerNameConf: ConfigEntry[_]
+
   protected def userFeatureStepsConf: ConfigEntry[_]
 
   protected def userFeatureStepWithExpectedAnnotation: (String, String)
@@ -51,6 +53,20 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     val client = mock(classOf[KubernetesClient])
     buildPod(baseConf.clone(), client)
     verify(client, never()).pods()
+  }
+
+  test("SPARK-36059: set custom scheduler") {
+    val client = mockKubernetesClient()
+    val conf1 = baseConf.clone().set(templateFileConf.key, "template-file.yaml")
+      .set(Config.KUBERNETES_SCHEDULER_NAME.key, "custom")
+    val pod1 = buildPod(conf1, client)
+    assert(pod1.pod.getSpec.getSchedulerName === "custom")
+
+    val conf2 = baseConf.clone().set(templateFileConf.key, "template-file.yaml")
+      .set(Config.KUBERNETES_SCHEDULER_NAME.key, "custom")
+      .set(roleSpecificSchedulerNameConf.key, "rolescheduler")
+    val pod2 = buildPod(conf2, client)
+    assert(pod2.pod.getSpec.getSchedulerName === "rolescheduler")
   }
 
   test("load pod template if specified") {

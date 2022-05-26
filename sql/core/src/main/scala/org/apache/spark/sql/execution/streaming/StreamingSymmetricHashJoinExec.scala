@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
@@ -174,7 +175,13 @@ case class StreamingSymmetricHashJoinExec(
     joinType == Inner || joinType == LeftOuter || joinType == RightOuter || joinType == FullOuter ||
     joinType == LeftSemi,
     errorMessageForJoinType)
-  require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType))
+
+  // The assertion against join keys is same as hash join for batch query.
+  require(leftKeys.length == rightKeys.length &&
+    leftKeys.map(_.dataType)
+      .zip(rightKeys.map(_.dataType))
+      .forall(types => types._1.sameType(types._2)),
+    "Join keys from two sides should have same length and types")
 
   private val storeConf = new StateStoreConf(conf)
   private val hadoopConfBcast = sparkContext.broadcast(
@@ -244,6 +251,11 @@ case class StreamingSymmetricHashJoinExec(
     val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
     val stateMemory = longMetric("stateMemory")
+    val skippedNullValueCount = if (storeConf.skipNullsForStreamStreamJoins) {
+      Some(longMetric("skippedNullValueCount"))
+    } else {
+      None
+    }
 
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
@@ -254,10 +266,12 @@ case class StreamingSymmetricHashJoinExec(
       Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
-      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId)
+      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
+      skippedNullValueCount)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
-      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId)
+      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
+      skippedNullValueCount)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -318,17 +332,22 @@ case class StreamingSymmetricHashJoinExec(
           }
         }
 
+        val initIterFn = { () =>
+          val removedRowIter = leftSideJoiner.removeOldState()
+          removedRowIter.filterNot { kv =>
+            stateFormatVersion match {
+              case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
+              case 2 => kv.matched
+              case _ => throwBadStateFormatVersionException()
+            }
+          }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+        }
+
         // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
-        // elements in `innerOutputIter`, because evaluation of `innerOutputIter` may update
-        // the match flag which the logic for outer join is relying on.
-        val removedRowIter = leftSideJoiner.removeOldState()
-        val outerOutputIter = removedRowIter.filterNot { kv =>
-          stateFormatVersion match {
-            case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
-            case 2 => kv.matched
-            case _ => throwBadStateFormatVersionException()
-          }
-        }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+        // elements in `hashJoinOutputIter`, otherwise it may lead to out of sync according to
+        // the interface contract on StateStore.iterator and end up with correctness issue.
+        // Please refer SPARK-38684 for more details.
+        val outerOutputIter = new LazilyInitializingJoinedRowIterator(initIterFn)
 
         hashJoinOutputIter ++ outerOutputIter
       case RightOuter =>
@@ -338,14 +357,23 @@ case class StreamingSymmetricHashJoinExec(
             postJoinFilter(joinedRow.withLeft(leftValue).withRight(rightKeyValue.value))
           }
         }
-        val removedRowIter = rightSideJoiner.removeOldState()
-        val outerOutputIter = removedRowIter.filterNot { kv =>
-          stateFormatVersion match {
-            case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
-            case 2 => kv.matched
-            case _ => throwBadStateFormatVersionException()
-          }
-        }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+
+        val initIterFn = { () =>
+          val removedRowIter = rightSideJoiner.removeOldState()
+          removedRowIter.filterNot { kv =>
+            stateFormatVersion match {
+              case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
+              case 2 => kv.matched
+              case _ => throwBadStateFormatVersionException()
+            }
+          }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+        }
+
+        // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
+        // elements in `hashJoinOutputIter`, otherwise it may lead to out of sync according to
+        // the interface contract on StateStore.iterator and end up with correctness issue.
+        // Please refer SPARK-38684 for more details.
+        val outerOutputIter = new LazilyInitializingJoinedRowIterator(initIterFn)
 
         hashJoinOutputIter ++ outerOutputIter
       case FullOuter =>
@@ -354,10 +382,25 @@ case class StreamingSymmetricHashJoinExec(
             case 2 => kv.matched
             case _ => throwBadStateFormatVersionException()
           }
-        val leftSideOutputIter = leftSideJoiner.removeOldState().filterNot(
-          isKeyToValuePairMatched).map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
-        val rightSideOutputIter = rightSideJoiner.removeOldState().filterNot(
-          isKeyToValuePairMatched).map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+
+        val leftSideInitIterFn = { () =>
+          val removedRowIter = leftSideJoiner.removeOldState()
+          removedRowIter.filterNot(isKeyToValuePairMatched)
+            .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+        }
+
+        val rightSideInitIterFn = { () =>
+          val removedRowIter = rightSideJoiner.removeOldState()
+          removedRowIter.filterNot(isKeyToValuePairMatched)
+            .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+        }
+
+        // NOTE: we need to make sure both `leftSideOutputIter` and `rightSideOutputIter` are
+        // evaluated "after" exhausting all of elements in `hashJoinOutputIter`, otherwise it may
+        // lead to out of sync according to the interface contract on StateStore.iterator and
+        // end up with correctness issue. Please refer SPARK-38684 for more details.
+        val leftSideOutputIter = new LazilyInitializingJoinedRowIterator(leftSideInitIterFn)
+        val rightSideOutputIter = new LazilyInitializingJoinedRowIterator(rightSideInitIterFn)
 
         hashJoinOutputIter ++ leftSideOutputIter ++ rightSideOutputIter
       case _ => throwBadJoinTypeException()
@@ -468,7 +511,8 @@ case class StreamingSymmetricHashJoinExec(
       preJoinFilterExpr: Option[Expression],
       postJoinFilter: (InternalRow) => Boolean,
       stateWatermarkPredicate: Option[JoinStateWatermarkPredicate],
-      partitionId: Int) {
+      partitionId: Int,
+      skippedNullValueCount: Option[SQLMetric]) {
 
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
@@ -476,7 +520,7 @@ case class StreamingSymmetricHashJoinExec(
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
       joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value,
-      partitionId, stateFormatVersion)
+      partitionId, stateFormatVersion, skippedNullValueCount)
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
@@ -632,4 +676,22 @@ case class StreamingSymmetricHashJoinExec(
   override protected def withNewChildrenInternal(
       newLeft: SparkPlan, newRight: SparkPlan): StreamingSymmetricHashJoinExec =
     copy(left = newLeft, right = newRight)
+
+  private class LazilyInitializingJoinedRowIterator(
+      initFn: () => Iterator[JoinedRow]) extends Iterator[JoinedRow] {
+    private lazy val iter: Iterator[JoinedRow] = initFn()
+
+    override def hasNext: Boolean = iter.hasNext
+    override def next(): JoinedRow = iter.next()
+  }
+
+  // If `STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS` is enabled, counting the number
+  // of skipped null values as custom metric of stream join operator.
+  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] =
+    if (storeConf.skipNullsForStreamStreamJoins) {
+      Seq(StatefulOperatorCustomSumMetric("skippedNullValueCount",
+        "number of skipped null values"))
+    } else {
+      Nil
+    }
 }

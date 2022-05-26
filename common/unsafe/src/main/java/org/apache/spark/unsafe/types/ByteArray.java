@@ -178,7 +178,7 @@ public final class ByteArray {
     for (int pos = firstPos; pos < beyondPos; pos += pad.length) {
       final int jMax = Math.min(pad.length, beyondPos - pos);
       for (int j = 0; j < jMax; ++j) {
-        result[pos + j] = (byte) pad[j];
+        result[pos + j] = pad[j];
       }
     }
   }

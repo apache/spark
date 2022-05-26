@@ -25,6 +25,45 @@ import org.apache.spark.deploy.k8s.KubernetesDriverConf
  * A base interface to help user extend custom feature step in driver side.
  * Note: If your custom feature step would be used only in driver or both in driver and executor,
  * please use this.
+ *
+ * Example of driver feature step:
+ *
+ * {{{
+ *   class DriverExampleFeatureStep extends KubernetesDriverCustomFeatureConfigStep {
+ *     private var driverConf: KubernetesDriverConf = _
+ *
+ *     override def init(conf: KubernetesDriverConf): Unit = {
+ *       driverConf = conf
+ *     }
+ *
+ *     // Implements methods of `KubernetesFeatureConfigStep`, such as `configurePod`
+ *     override def configurePod(pod: SparkPod): SparkPod = {
+ *       // Apply modifications on the given pod in accordance to this feature.
+ *     }
+ *   }
+ * }}}
+ *
+ * Example of feature step for both driver and executor:
+ *
+ * {{{
+ *   class DriverAndExecutorExampleFeatureStep extends KubernetesDriverCustomFeatureConfigStep
+ *     with KubernetesExecutorCustomFeatureConfigStep {
+ *     private var kubernetesConf: KubernetesConf = _
+ *
+ *     override def init(conf: KubernetesDriverConf): Unit = {
+ *       kubernetesConf = conf
+ *     }
+ *
+ *     override def init(conf: KubernetesExecutorConf): Unit = {
+ *       kubernetesConf = conf
+ *     }
+ *
+ *     // Implements methods of `KubernetesFeatureConfigStep`, such as `configurePod`
+ *     override def configurePod(pod: SparkPod): SparkPod = {
+ *       // Apply modifications on the given pod in accordance to this feature.
+ *     }
+ *   }
+ * }}}
  */
 @Unstable
 @DeveloperApi

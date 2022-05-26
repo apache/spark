@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.PullOutNondeterministic
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 
@@ -47,15 +47,19 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       } else {
         newAggregate
       }
+
+    case agg @ Aggregate(groupingExps, _, child)
+        if agg.groupOnly && child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
+      Project(agg.aggregateExpressions, child)
   }
 
   private def isLowerRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
     val upperHasNoDuplicateSensitiveAgg = upper
       .aggregateExpressions
-      .forall(expr => expr.find {
+      .forall(expr => !expr.exists {
         case ae: AggregateExpression => isDuplicateSensitive(ae)
         case e => AggregateExpression.isAggregate(e)
-      }.isEmpty)
+      })
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower

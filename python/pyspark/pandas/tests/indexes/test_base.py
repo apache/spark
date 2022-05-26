@@ -368,17 +368,42 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         pidx = pd.Index([4, 2, 4, 1, 4, 3])
         psidx = ps.from_pandas(pidx)
 
-        self.assert_eq(psidx.drop_duplicates().sort_values(), pidx.drop_duplicates().sort_values())
-        self.assert_eq(
-            (psidx + 1).drop_duplicates().sort_values(), (pidx + 1).drop_duplicates().sort_values()
-        )
+        self.assert_eq(psidx.drop_duplicates(), pidx.drop_duplicates())
+        self.assert_eq((psidx + 1).drop_duplicates(), (pidx + 1).drop_duplicates())
+
+        self.assert_eq(psidx.drop_duplicates(keep="first"), pidx.drop_duplicates(keep="first"))
+        self.assert_eq(psidx.drop_duplicates(keep="last"), pidx.drop_duplicates(keep="last"))
+        self.assert_eq(psidx.drop_duplicates(keep=False), pidx.drop_duplicates(keep=False))
+
+        arrays = [[1, 2, 3, 1, 2], ["red", "blue", "black", "red", "blue"]]
+        pmidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        psmidx = ps.from_pandas(pmidx)
+        self.assert_eq(psmidx.drop_duplicates(), pmidx.drop_duplicates())
+        self.assert_eq(psmidx.drop_duplicates(keep="first"), pmidx.drop_duplicates(keep="first"))
+        self.assert_eq(psmidx.drop_duplicates(keep="last"), pmidx.drop_duplicates(keep="last"))
+        self.assert_eq(psmidx.drop_duplicates(keep=False), pmidx.drop_duplicates(keep=False))
 
     def test_dropna(self):
-        pidx = pd.Index([np.nan, 2, 4, 1, np.nan, 3])
+        pidx = pd.Index([np.nan, 2, 4, 1, None, 3])
         psidx = ps.from_pandas(pidx)
 
         self.assert_eq(psidx.dropna(), pidx.dropna())
         self.assert_eq((psidx + 1).dropna(), (pidx + 1).dropna())
+
+        self.assert_eq(psidx.dropna(how="any"), pidx.dropna(how="any"))
+        self.assert_eq(psidx.dropna(how="all"), pidx.dropna(how="all"))
+
+        pmidx = pd.MultiIndex.from_tuples(
+            [(np.nan, 1.0), (2.0, 2.0), (np.nan, None), (3.0, np.nan)]
+        )
+        psmidx = ps.from_pandas(pmidx)
+        self.assert_eq(psmidx.dropna(), pmidx.dropna())
+        self.assert_eq(psmidx.dropna(how="any"), pmidx.dropna(how="any"))
+        self.assert_eq(psmidx.dropna(how="all"), pmidx.dropna(how="all"))
+
+        invalid_how = "none"
+        with self.assertRaisesRegex(ValueError, "invalid how option: %s" % invalid_how):
+            psmidx.dropna(invalid_how)
 
     def test_index_symmetric_difference(self):
         pidx1 = pd.Index([1, 2, 3, 4])
@@ -777,18 +802,38 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psidx.names = ["lv", "lv"]
         self.assertRaises(ValueError, lambda: psidx.drop(["x", "y"], level="lv"))
 
+    def _test_sort_values(self, pidx, psidx):
+        self.assert_eq(pidx.sort_values(), psidx.sort_values())
+        # Parameter ascending
+        self.assert_eq(pidx.sort_values(ascending=False), psidx.sort_values(ascending=False))
+        # Parameter return_indexer
+        p_sorted, p_indexer = pidx.sort_values(return_indexer=True)
+        ps_sorted, ps_indexer = psidx.sort_values(return_indexer=True)
+        self.assert_eq(p_sorted, ps_sorted)
+        self.assert_eq(p_indexer, ps_indexer.to_list())
+        self.assert_eq(
+            pidx.sort_values(return_indexer=False), psidx.sort_values(return_indexer=False)
+        )
+        # Parameter return_indexer and ascending
+        p_sorted, p_indexer = pidx.sort_values(return_indexer=True, ascending=False)
+        ps_sorted, ps_indexer = psidx.sort_values(return_indexer=True, ascending=False)
+        self.assert_eq(p_sorted, ps_sorted)
+        self.assert_eq(p_indexer, ps_indexer.to_list())
+        self.assert_eq(
+            pidx.sort_values(return_indexer=False, ascending=False),
+            psidx.sort_values(return_indexer=False, ascending=False),
+        )
+
     def test_sort_values(self):
         pidx = pd.Index([-10, -100, 200, 100])
         psidx = ps.from_pandas(pidx)
 
-        self.assert_eq(pidx.sort_values(), psidx.sort_values())
-        self.assert_eq(pidx.sort_values(ascending=False), psidx.sort_values(ascending=False))
+        self._test_sort_values(pidx, psidx)
 
         pidx.name = "koalas"
         psidx.name = "koalas"
 
-        self.assert_eq(pidx.sort_values(), psidx.sort_values())
-        self.assert_eq(pidx.sort_values(ascending=False), psidx.sort_values(ascending=False))
+        self._test_sort_values(pidx, psidx)
 
         pidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
         psidx = ps.from_pandas(pidx)
@@ -796,8 +841,7 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         pidx.names = ["hello", "koalas", "goodbye"]
         psidx.names = ["hello", "koalas", "goodbye"]
 
-        self.assert_eq(pidx.sort_values(), psidx.sort_values())
-        self.assert_eq(pidx.sort_values(ascending=False), psidx.sort_values(ascending=False))
+        self._test_sort_values(pidx, psidx)
 
     def test_index_drop_duplicates(self):
         pidx = pd.Index([1, 1, 2])
@@ -2166,32 +2210,48 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx.insert(1, 100), psidx.insert(1, 100))
         self.assert_eq(pidx.insert(-1, 100), psidx.insert(-1, 100))
-        self.assert_eq(pidx.insert(100, 100), psidx.insert(100, 100))
-        self.assert_eq(pidx.insert(-100, 100), psidx.insert(-100, 100))
+        err_msg = "index 100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(100, 100)
+        err_msg = "index -100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(-100, 100)
 
         # Floating
         pidx = pd.Index([1.0, 2.0, 3.0], name="Koalas")
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx.insert(1, 100.0), psidx.insert(1, 100.0))
         self.assert_eq(pidx.insert(-1, 100.0), psidx.insert(-1, 100.0))
-        self.assert_eq(pidx.insert(100, 100.0), psidx.insert(100, 100.0))
-        self.assert_eq(pidx.insert(-100, 100.0), psidx.insert(-100, 100.0))
+        err_msg = "index 100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(100, 100)
+        err_msg = "index -100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(-100, 100)
 
         # String
         pidx = pd.Index(["a", "b", "c"], name="Koalas")
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx.insert(1, "x"), psidx.insert(1, "x"))
         self.assert_eq(pidx.insert(-1, "x"), psidx.insert(-1, "x"))
-        self.assert_eq(pidx.insert(100, "x"), psidx.insert(100, "x"))
-        self.assert_eq(pidx.insert(-100, "x"), psidx.insert(-100, "x"))
+        err_msg = "index 100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(100, "x")
+        err_msg = "index -100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(-100, "x")
 
         # Boolean
         pidx = pd.Index([True, False, True, False], name="Koalas")
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx.insert(1, True), psidx.insert(1, True))
         self.assert_eq(pidx.insert(-1, True), psidx.insert(-1, True))
-        self.assert_eq(pidx.insert(100, True), psidx.insert(100, True))
-        self.assert_eq(pidx.insert(-100, True), psidx.insert(-100, True))
+        err_msg = "index 100 is out of bounds for axis 0 with size 4"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(100, True)
+        err_msg = "index -100 is out of bounds for axis 0 with size 4"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(-100, True)
 
         # MultiIndex
         pmidx = pd.MultiIndex.from_tuples(

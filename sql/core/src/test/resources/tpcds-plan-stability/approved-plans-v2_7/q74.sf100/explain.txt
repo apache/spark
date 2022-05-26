@@ -428,7 +428,7 @@ Arguments: [customer_id#69 ASC NULLS FIRST], false, 0
 (77) SortMergeJoin [codegen id : 35]
 Left keys [1]: [customer_id#17]
 Right keys [1]: [customer_id#69]
-Join condition: (CASE WHEN (year_total#54 > 0.00) THEN CheckOverflow((promote_precision(year_total#70) / promote_precision(year_total#54)), DecimalType(37,20), true) END > CASE WHEN (year_total#18 > 0.00) THEN CheckOverflow((promote_precision(year_total#37) / promote_precision(year_total#18)), DecimalType(37,20), true) END)
+Join condition: (CASE WHEN (year_total#54 > 0.00) THEN CheckOverflow((promote_precision(year_total#70) / promote_precision(year_total#54)), DecimalType(37,20)) END > CASE WHEN (year_total#18 > 0.00) THEN CheckOverflow((promote_precision(year_total#37) / promote_precision(year_total#18)), DecimalType(37,20)) END)
 
 (78) Project [codegen id : 35]
 Output [3]: [customer_id#34, customer_first_name#35, customer_last_name#36]

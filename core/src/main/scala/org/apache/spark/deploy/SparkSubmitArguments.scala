@@ -327,7 +327,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |
     |Spark properties used, including those specified through
     | --conf and those from the properties file $propertiesFile:
-    |${Utils.redact(sparkProperties).mkString("  ", "\n  ", "\n")}
+    |${Utils.redact(sparkProperties).sorted.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
 

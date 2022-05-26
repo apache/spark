@@ -424,7 +424,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       ("N", Integer.valueOf(3), null)).toDF("a", "b", "c")
 
     val udf1 = udf((a: String, b: Int, c: Any) => a + b + c)
-    val df = input.select(udf1('a, 'b, 'c))
+    val df = input.select(udf1($"a", $"b", $"c"))
     checkAnswer(df, Seq(Row("null1x"), Row(null), Row("N3null")))
 
     // test Java UDF. Java UDF can't have primitive inputs, as it's generic typed.
@@ -433,7 +433,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         t1 + t2 + t3
       }
     }, StringType)
-    val df2 = input.select(udf2('a, 'b, 'c))
+    val df2 = input.select(udf2($"a", $"b", $"c"))
     checkAnswer(df2, Seq(Row("null1x"), Row("Mnully"), Row("N3null")))
   }
 
@@ -469,11 +469,6 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         Row(1.1) :: Row(0.0) :: Nil)
     }
 
-  }
-
-  test("use untyped Scala UDF should fail by default") {
-    val e = intercept[AnalysisException](udf((x: Int) => x, IntegerType))
-    assert(e.getMessage.contains("You're using untyped Scala UDF"))
   }
 
   test("SPARK-26308: udf with decimal") {
@@ -527,7 +522,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .format(dtf)
     val plusSec = udf((i: java.time.Instant) => i.plusSeconds(1))
     val df = spark.sql("SELECT TIMESTAMP '2019-02-26 23:59:59Z' as t")
-      .select(plusSec('t).cast(StringType))
+      .select(plusSec($"t").cast(StringType))
     checkAnswer(df, Row(expected) :: Nil)
   }
 
@@ -535,7 +530,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val expected = java.time.LocalDate.parse("2019-02-27").toString
     val plusDay = udf((i: java.time.LocalDate) => i.plusDays(1))
     val df = spark.sql("SELECT DATE '2019-02-26' as d")
-      .select(plusDay('d).cast(StringType))
+      .select(plusDay($"d").cast(StringType))
     checkAnswer(df, Row(expected) :: Nil)
   }
 
@@ -554,7 +549,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     spark.udf.register("buildLocalDateInstantType",
       udf((d: LocalDate, i: Instant) => LocalDateInstantType(d, i)))
     checkAnswer(df.selectExpr(s"buildLocalDateInstantType(d, i) as di")
-      .select('di.cast(StringType)),
+      .select($"di".cast(StringType)),
       Row(s"{$expectedDate, $expectedInstant}") :: Nil)
 
     // test null cases
@@ -584,7 +579,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     spark.udf.register("buildTimestampInstantType",
       udf((t: Timestamp, i: Instant) => TimestampInstantType(t, i)))
     checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
-      .select('ti.cast(StringType)),
+      .select($"ti".cast(StringType)),
       Row(s"{$expectedTimestamp, $expectedInstant}"))
 
     // test null cases
@@ -603,11 +598,11 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     // without explicit type
     val udf1 = udf((i: String) => null)
     assert(udf1.asInstanceOf[SparkUserDefinedFunction] .dataType === NullType)
-    checkAnswer(Seq("1").toDF("a").select(udf1('a)), Row(null) :: Nil)
+    checkAnswer(Seq("1").toDF("a").select(udf1($"a")), Row(null) :: Nil)
     // with explicit type
     val udf2 = udf((i: String) => null.asInstanceOf[String])
     assert(udf2.asInstanceOf[SparkUserDefinedFunction].dataType === StringType)
-    checkAnswer(Seq("1").toDF("a").select(udf1('a)), Row(null) :: Nil)
+    checkAnswer(Seq("1").toDF("a").select(udf1($"a")), Row(null) :: Nil)
   }
 
   test("SPARK-28321 0-args Java UDF should not be called only once") {

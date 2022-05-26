@@ -59,6 +59,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class ObjectHashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
+    isStreaming: Boolean,
+    numShufflePartitions: Option[Int],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
@@ -140,13 +142,4 @@ case class ObjectHashAggregateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): ObjectHashAggregateExec =
     copy(child = newChild)
-}
-
-object ObjectHashAggregateExec {
-  def supportsAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
-    aggregateExpressions.map(_.aggregateFunction).exists {
-      case _: TypedImperativeAggregate[_] => true
-      case _ => false
-    }
-  }
 }

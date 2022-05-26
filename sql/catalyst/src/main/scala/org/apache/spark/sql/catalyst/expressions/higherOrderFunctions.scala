@@ -388,18 +388,13 @@ case class ArraySort(
     checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
         argument.dataType match {
-          case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+          case ArrayType(_, _) =>
             if (function.dataType == IntegerType) {
               TypeCheckResult.TypeCheckSuccess
             } else {
               TypeCheckResult.TypeCheckFailure("Return type of the given function has to be " +
                 "IntegerType")
             }
-          case ArrayType(dt, _) =>
-            val dtSimple = dt.catalogString
-            TypeCheckResult.TypeCheckFailure(
-              s"$prettyName does not support sorting array of type $dtSimple which is not " +
-                "orderable")
           case _ =>
             TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
         }
@@ -452,6 +447,8 @@ object ArraySort {
         If(LessThan(left, right), litm1, If(GreaterThan(left, right), lit1, lit0)))))
   }
 
+  // Default Comparator only works for orderable types.
+  // This is validated by the underlying LessTan and GreaterThan
   val defaultComparator: LambdaFunction = {
     val left = UnresolvedNamedLambdaVariable(Seq("left"))
     val right = UnresolvedNamedLambdaVariable(Seq("right"))
@@ -829,7 +826,7 @@ case class ArrayAggregate(
       var i = 0
       while (i < arr.numElements()) {
         elementVar.value.set(arr.get(i, elementVar.dataType))
-        accForMergeVar.value.set(mergeForEval.eval(input))
+        accForMergeVar.value.set(InternalRow.copyValue(mergeForEval.eval(input)))
         i += 1
       }
       accForFinishVar.value.set(accForMergeVar.value.get)
@@ -1126,8 +1123,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     val valueData2 = mapData2.valueArray()
     var i = 0
     for ((key, Array(index1, index2)) <- keysWithIndexes) {
-      val v1 = index1.map(valueData1.get(_, leftValueType)).getOrElse(null)
-      val v2 = index2.map(valueData2.get(_, rightValueType)).getOrElse(null)
+      val v1 = index1.map(valueData1.get(_, leftValueType)).orNull
+      val v2 = index2.map(valueData2.get(_, rightValueType)).orNull
       keyVar.value.set(key)
       value1Var.value.set(v1)
       value2Var.value.set(v2)

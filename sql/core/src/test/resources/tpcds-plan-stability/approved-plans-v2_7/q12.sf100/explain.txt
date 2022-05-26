@@ -121,7 +121,7 @@ Input [8]: [i_item_id#7, i_item_desc#8, i_category#11, i_class#10, i_current_pri
 Arguments: [sum(_w1#20) windowspecdefinition(i_class#10, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#22], [i_class#10]
 
 (22) Project [codegen id : 9]
-Output [7]: [i_item_id#7, i_item_desc#8, i_category#11, i_class#10, i_current_price#9, itemrevenue#18, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#19) * 100.00), DecimalType(21,2), true) as decimal(27,2))) / promote_precision(_we0#22)), DecimalType(38,17), true) AS revenueratio#23]
+Output [7]: [i_item_id#7, i_item_desc#8, i_category#11, i_class#10, i_current_price#9, itemrevenue#18, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#19) * 100.00), DecimalType(21,2)) as decimal(27,2))) / promote_precision(_we0#22)), DecimalType(38,17)) AS revenueratio#23]
 Input [9]: [i_item_id#7, i_item_desc#8, i_category#11, i_class#10, i_current_price#9, itemrevenue#18, _w0#19, _w1#20, _we0#22]
 
 (23) TakeOrderedAndProject

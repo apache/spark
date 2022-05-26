@@ -177,12 +177,28 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("windows") {
-    val windows = plan.window(Seq(min(attribute).as('sum_attr)), Seq(attribute), Nil)
+    val windows = plan.window(Seq(min(attribute).as(Symbol("sum_attr"))), Seq(attribute), Nil)
     val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
     checkStats(
       windows,
       expectedStatsCboOn = windowsStats,
       expectedStatsCboOff = windowsStats)
+  }
+
+  test("offset estimation: offset < child's rowCount") {
+    val offset = Offset(Literal(2), plan)
+    checkStats(offset, Statistics(sizeInBytes = 96, rowCount = Some(8)))
+  }
+
+  test("offset estimation: offset > child's rowCount") {
+    val offset = Offset(Literal(20), plan)
+    checkStats(offset, Statistics(sizeInBytes = 1, rowCount = Some(0)))
+  }
+
+  test("offset estimation: offset = 0") {
+    val offset = Offset(Literal(0), plan)
+    // Offset is equal to zero, so Offset's stats is equal to its child's stats.
+    checkStats(offset, plan.stats.copy(attributeStats = AttributeMap(Nil)))
   }
 
   test("limit estimation: limit < child's rowCount") {

@@ -3,7 +3,7 @@ WholeStageCodegen (8)
     InputAdapter
       Exchange [revenue] #1
         WholeStageCodegen (7)
-          HashAggregate [n_name,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(l_extendedprice as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true)),revenue,sum,isEmpty]
+          HashAggregate [n_name,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(l_extendedprice as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0))),revenue,sum,isEmpty]
             InputAdapter
               Exchange [n_name] #2
                 WholeStageCodegen (6)

@@ -25,7 +25,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
+import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
@@ -52,8 +52,6 @@ private[deploy] class Master(
 
   private val forwardMessageThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
-
-  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
   // For application IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
@@ -94,11 +92,6 @@ private[deploy] class Master(
 
   // After onStart, webUi will be set
   private var webUi: MasterWebUI = null
-
-  private val masterPublicAddress = {
-    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
-    if (envVar != null) envVar else address.host
-  }
 
   private val masterUrl = address.toSparkURL
   private var masterWebUiUrl: String = _

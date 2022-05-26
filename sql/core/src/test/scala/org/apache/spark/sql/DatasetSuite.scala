@@ -48,10 +48,12 @@ object TestForTypeAlias {
   type TwoInt = (Int, Int)
   type ThreeInt = (TwoInt, Int)
   type SeqOfTwoInt = Seq[TwoInt]
+  type IntArray = Array[Int]
 
   def tupleTypeAlias: TwoInt = (1, 1)
   def nestedTupleTypeAlias: ThreeInt = ((1, 1), 2)
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
+  def aliasedArrayInTuple: (Int, IntArray) = (1, Array(1))
 }
 
 class DatasetSuite extends QueryTest
@@ -1000,24 +1002,6 @@ class DatasetSuite extends QueryTest
     checkDataset(cogrouped, "a13", "b24")
   }
 
-  test("give nice error message when the real number of fields doesn't match encoder schema") {
-    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
-
-    val message = intercept[AnalysisException] {
-      ds.as[(String, Int, Long)]
-    }.message
-    assert(message ==
-      "Try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.")
-
-    val message2 = intercept[AnalysisException] {
-      ds.as[Tuple1[String]]
-    }.message
-    assert(message2 ==
-      "Try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.")
-  }
-
   test("SPARK-13440: Resolving option fields") {
     val df = Seq(1, 2, 3).toDS()
     val ds = df.as[Option[Int]]
@@ -1647,6 +1631,12 @@ class DatasetSuite extends QueryTest
       ("", Seq((1, 1), (2, 2))))
   }
 
+  test("SPARK-38042: Dataset should work with a product containing an aliased array type") {
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.aliasedArrayInTuple)),
+      ("", (1, Array(1))))
+  }
+
   test("Check RelationalGroupedDataset toString: Single data") {
     val kvDataset = (1 to 3).toDF("id").groupBy("id")
     val expected = "RelationalGroupedDataset: [" +
@@ -1943,7 +1933,7 @@ class DatasetSuite extends QueryTest
         .map(b => b - 1)
         .collect()
     }
-    assert(thrownException.message.contains("Cannot up cast id from bigint to tinyint"))
+    assert(thrownException.message.contains("""Cannot up cast id from "BIGINT" to "TINYINT""""))
   }
 
   test("SPARK-26690: checkpoints should be executed with an execution id") {

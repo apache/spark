@@ -29,7 +29,7 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
     val errMsg = intercept[ParseException] {
       parsePlan("ALTER TABLE RECOVER PARTITIONS")
     }.getMessage
-    assert(errMsg.contains("no viable alternative at input 'ALTER TABLE RECOVER PARTITIONS'"))
+    assert(errMsg.contains("Syntax error at or near 'PARTITIONS'"))
   }
 
   test("recover partitions of a table") {

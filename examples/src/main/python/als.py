@@ -32,12 +32,12 @@ LAMBDA = 0.01   # regularization
 np.random.seed(42)
 
 
-def rmse(R, ms, us):
+def rmse(R: np.ndarray, ms: np.ndarray, us: np.ndarray) -> np.float64:
     diff = R - ms * us.T
     return np.sqrt(np.sum(np.power(diff, 2)) / (M * U))
 
 
-def update(i, mat, ratings):
+def update(i: int, mat: np.ndarray, ratings: np.ndarray) -> np.ndarray:
     uu = mat.shape[0]
     ff = mat.shape[1]
 

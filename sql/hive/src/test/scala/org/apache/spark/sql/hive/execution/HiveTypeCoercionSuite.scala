@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowHiveTest
 
 /**
@@ -27,13 +28,21 @@ import org.apache.spark.tags.SlowHiveTest
  */
 @SlowHiveTest
 class HiveTypeCoercionSuite extends HiveComparisonTest {
-  val baseTypes = Seq(
+  val baseTypes = if (SQLConf.get.ansiEnabled) {
+    Seq(
     ("1", "1"),
     ("1.0", "CAST(1.0 AS DOUBLE)"),
-    ("1L", "1L"),
     ("1S", "1S"),
-    ("1Y", "1Y"),
-    ("'1'", "'1'"))
+    ("1Y", "1Y"))
+  } else {
+    Seq(
+      ("1", "1"),
+      ("1.0", "CAST(1.0 AS DOUBLE)"),
+      ("1L", "1L"),
+      ("1S", "1S"),
+      ("1Y", "1Y"),
+      ("'1'", "'1'"))
+  }
 
   baseTypes.foreach { case (ni, si) =>
     baseTypes.foreach { case (nj, sj) =>

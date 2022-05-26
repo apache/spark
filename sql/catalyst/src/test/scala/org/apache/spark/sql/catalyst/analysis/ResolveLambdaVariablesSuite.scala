@@ -35,9 +35,9 @@ class ResolveLambdaVariablesSuite extends PlanTest {
     val batches = Batch("Resolution", FixedPoint(4), ResolveLambdaVariables) :: Nil
   }
 
-  private val key = 'key.int
-  private val values1 = 'values1.array(IntegerType)
-  private val values2 = 'values2.array(ArrayType(ArrayType(IntegerType)))
+  private val key = $"key".int
+  private val values1 = $"values1".array(IntegerType)
+  private val values2 = $"values2".array(ArrayType(ArrayType(IntegerType)))
   private val data = LocalRelation(Seq(key, values1, values2))
   private val lvInt = NamedLambdaVariable("x", IntegerType, nullable = true)
   private val lvHiddenInt = NamedLambdaVariable("col0", IntegerType, nullable = true)
@@ -56,14 +56,15 @@ class ResolveLambdaVariablesSuite extends PlanTest {
   }
 
   test("resolution - simple") {
-    val in = ArrayTransform(values1, LambdaFunction(lv('x) + 1, lv('x) :: Nil))
+    val in = ArrayTransform(values1, LambdaFunction(lv(Symbol("x")) + 1, lv(Symbol("x")) :: Nil))
     val out = ArrayTransform(values1, LambdaFunction(lvInt + 1, lvInt :: Nil))
     checkExpression(in, out)
   }
 
   test("resolution - nested") {
     val in = ArrayTransform(values2, LambdaFunction(
-      ArrayTransform(lv('x), LambdaFunction(lv('x) + 1, lv('x) :: Nil)), lv('x) :: Nil))
+      ArrayTransform(lv(Symbol("x")), LambdaFunction(lv(Symbol("x")) + 1, lv(Symbol("x")) :: Nil)),
+      lv(Symbol("x")) :: Nil))
     val out = ArrayTransform(values2, LambdaFunction(
       ArrayTransform(lvArray, LambdaFunction(lvInt + 1, lvInt :: Nil)), lvArray :: Nil))
     checkExpression(in, out)
@@ -77,14 +78,15 @@ class ResolveLambdaVariablesSuite extends PlanTest {
 
   test("fail - name collisions") {
     val p = plan(ArrayTransform(values1,
-      LambdaFunction(lv('x) + lv('X), lv('x) :: lv('X) :: Nil)))
+      LambdaFunction(lv(Symbol("x")) + lv(Symbol("X")), lv(Symbol("x")) :: lv(Symbol("X")) :: Nil)))
     val msg = intercept[AnalysisException](Analyzer.execute(p)).getMessage
     assert(msg.contains("arguments should not have names that are semantically the same"))
   }
 
   test("fail - lambda arguments") {
     val p = plan(ArrayTransform(values1,
-      LambdaFunction(lv('x) + lv('y) + lv('z), lv('x) :: lv('y) :: lv('z) :: Nil)))
+      LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")) + lv(Symbol("z")),
+        lv(Symbol("x")) :: lv(Symbol("y")) :: lv(Symbol("z")) :: Nil)))
     val msg = intercept[AnalysisException](Analyzer.execute(p)).getMessage
     assert(msg.contains("does not match the number of arguments expected"))
   }

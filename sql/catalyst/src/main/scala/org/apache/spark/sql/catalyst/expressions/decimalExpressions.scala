@@ -128,7 +128,7 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
 case class CheckOverflow(
     child: Expression,
     dataType: DecimalType,
-    nullOnOverflow: Boolean) extends UnaryExpression {
+    nullOnOverflow: Boolean) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
@@ -137,54 +137,77 @@ case class CheckOverflow(
       dataType.precision,
       dataType.scale,
       Decimal.ROUND_HALF_UP,
-      nullOnOverflow)
+      nullOnOverflow,
+      queryContext)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val errorContextCode = if (nullOnOverflow) {
+      "\"\""
+    } else {
+      ctx.addReferenceObj("errCtx", queryContext)
+    }
     nullSafeCodeGen(ctx, ev, eval => {
+      // scalastyle:off line.size.limit
       s"""
          |${ev.value} = $eval.toPrecision(
-         |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow);
+         |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
          |${ev.isNull} = ${ev.value} == null;
        """.stripMargin
+      // scalastyle:on line.size.limit
     })
   }
 
-  override def toString: String = s"CheckOverflow($child, $dataType, $nullOnOverflow)"
+  override def toString: String = s"CheckOverflow($child, $dataType)"
 
   override def sql: String = child.sql
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
+
+  override def initQueryContext(): String = if (nullOnOverflow) {
+    ""
+  } else {
+    origin.context
+  }
 }
 
 // A variant `CheckOverflow`, which treats null as overflow. This is necessary in `Sum`.
 case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
-    nullOnOverflow: Boolean) extends UnaryExpression {
+    nullOnOverflow: Boolean,
+    queryContext: String = "") extends UnaryExpression {
 
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
-      if (nullOnOverflow) null else throw QueryExecutionErrors.overflowInSumOfDecimalError
+      if (nullOnOverflow) null
+      else throw QueryExecutionErrors.overflowInSumOfDecimalError(queryContext)
     } else {
       value.asInstanceOf[Decimal].toPrecision(
         dataType.precision,
         dataType.scale,
         Decimal.ROUND_HALF_UP,
-        nullOnOverflow)
+        nullOnOverflow,
+        queryContext)
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
+    val errorContextCode = if (nullOnOverflow) {
+      "\"\""
+    } else {
+      ctx.addReferenceObj("errCtx", queryContext)
+    }
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
-      s"throw QueryExecutionErrors.overflowInSumOfDecimalError();"
+      s"throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode);"
     }
+    // scalastyle:off line.size.limit
     val code = code"""
        |${childGen.code}
        |boolean ${ev.isNull} = ${childGen.isNull};
@@ -193,10 +216,11 @@ case class CheckOverflowInSum(
        |  $nullHandling
        |} else {
        |  ${ev.value} = ${childGen.value}.toPrecision(
-       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow);
+       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
        |  ${ev.isNull} = ${ev.value} == null;
        |}
        |""".stripMargin
+    // scalastyle:on line.size.limit
 
     ev.copy(code = code)
   }

@@ -244,7 +244,6 @@ class NewHadoopRDD[K, V](
       }
 
       private var havePair = false
-      private var recordsSinceMetricsUpdate = 0
 
       override def hasNext: Boolean = {
         if (!finished && !havePair) {

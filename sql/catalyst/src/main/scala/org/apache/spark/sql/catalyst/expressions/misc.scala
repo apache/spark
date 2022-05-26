@@ -126,8 +126,8 @@ object RaiseError {
   """,
   since = "2.0.0",
   group = "misc_funcs")
-case class AssertTrue(left: Expression, right: Expression, child: Expression)
-  extends RuntimeReplaceable {
+case class AssertTrue(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   override def prettyName: String = "assert_true"
 
@@ -139,11 +139,10 @@ case class AssertTrue(left: Expression, right: Expression, child: Expression)
     this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
   override protected def withNewChildInternal(newChild: Expression): AssertTrue =
-    copy(child = newChild)
+    copy(replacement = newChild)
 }
 
 object AssertTrue {
@@ -341,31 +340,31 @@ case class AesEncrypt(
     input: Expression,
     key: Expression,
     mode: Expression,
-    padding: Expression,
-    child: Expression)
-  extends RuntimeReplaceable {
+    padding: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
 
-  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) = {
-    this(
-      input,
-      key,
-      mode,
-      padding,
-      StaticInvoke(
-        classOf[ExpressionImplUtils],
-        BinaryType,
-        "aesEncrypt",
-        Seq(input, key, mode, padding),
-        Seq(BinaryType, BinaryType, StringType, StringType)))
-  }
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    BinaryType,
+    "aesEncrypt",
+    Seq(input, key, mode, padding),
+    inputTypes)
+
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
     this(input, key, Literal("GCM"))
 
-  def exprsReplaced: Seq[Expression] = Seq(input, key, mode, padding)
-  protected def withNewChildInternal(newChild: Expression): AesEncrypt =
-    copy(child = newChild)
+  override def prettyName: String = "aes_encrypt"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, StringType, StringType)
+
+  override def children: Seq[Expression] = Seq(input, key, mode, padding)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+  }
 }
 
 /**
@@ -405,30 +404,32 @@ case class AesDecrypt(
     input: Expression,
     key: Expression,
     mode: Expression,
-    padding: Expression,
-    child: Expression)
-  extends RuntimeReplaceable {
+    padding: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
 
-  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) = {
-    this(
-      input,
-      key,
-      mode,
-      padding,
-      StaticInvoke(
-        classOf[ExpressionImplUtils],
-        BinaryType,
-        "aesDecrypt",
-        Seq(input, key, mode, padding),
-        Seq(BinaryType, BinaryType, StringType, StringType)))
-  }
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    BinaryType,
+    "aesDecrypt",
+    Seq(input, key, mode, padding),
+    inputTypes)
+
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
     this(input, key, Literal("GCM"))
 
-  def exprsReplaced: Seq[Expression] = Seq(input, key)
-  protected def withNewChildInternal(newChild: Expression): AesDecrypt =
-    copy(child = newChild)
+  override def inputTypes: Seq[AbstractDataType] = {
+    Seq(BinaryType, BinaryType, StringType, StringType)
+  }
+
+  override def prettyName: String = "aes_decrypt"
+
+  override def children: Seq[Expression] = Seq(input, key, mode, padding)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+  }
 }
 // scalastyle:on line.size.limit

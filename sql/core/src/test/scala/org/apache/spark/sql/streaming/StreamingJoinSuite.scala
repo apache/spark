@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.lang.{Integer => JInteger}
 import java.sql.Timestamp
 import java.util.{Locale, UUID}
 
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -55,9 +56,9 @@ abstract class StreamingJoinSuite
     val input = MemoryStream[Int]
     val df = input.toDF
       .select(
-        'value as "key",
+        $"value" as "key",
         timestamp_seconds($"value")  as s"${prefix}Time",
-        ('value * multiplier) as s"${prefix}Value")
+        ($"value" * multiplier) as s"${prefix}Value")
       .withWatermark(s"${prefix}Time", "10 seconds")
 
     (input, df)
@@ -68,13 +69,16 @@ abstract class StreamingJoinSuite
 
     val (input1, df1) = setupStream("left", 2)
     val (input2, df2) = setupStream("right", 3)
-    val windowed1 = df1.select('key, window('leftTime, "10 second"), 'leftValue)
-    val windowed2 = df2.select('key, window('rightTime, "10 second"), 'rightValue)
+    val windowed1 = df1
+      .select($"key", window($"leftTime", "10 second"), $"leftValue")
+    val windowed2 = df2
+      .select($"key", window($"rightTime", "10 second"), $"rightValue")
     val joined = windowed1.join(windowed2, Seq("key", "window"), joinType)
     val select = if (joinType == "left_semi") {
-      joined.select('key, $"window.end".cast("long"), 'leftValue)
+      joined.select($"key", $"window.end".cast("long"), $"leftValue")
     } else {
-      joined.select('key, $"window.end".cast("long"), 'leftValue, 'rightValue)
+      joined.select($"key", $"window.end".cast("long"), $"leftValue",
+        $"rightValue")
     }
 
     (input1, input2, select)
@@ -86,25 +90,29 @@ abstract class StreamingJoinSuite
     val (leftInput, df1) = setupStream("left", 2)
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
-    val left = df1.select('key, window('leftTime, "10 second"), 'leftValue)
-    val right = df2.select('key, window('rightTime, "10 second"), 'rightValue.cast("string"))
+    val left = df1.select($"key", window($"leftTime", "10 second"),
+      $"leftValue")
+    val right = df2.select($"key", window($"rightTime", "10 second"),
+      $"rightValue".cast("string"))
 
     val joined = left.join(
       right,
       left("key") === right("key")
         && left("window") === right("window")
-        && 'leftValue > 4,
+        && $"leftValue" > 4,
       joinType)
 
     val select = if (joinType == "left_semi") {
-      joined.select(left("key"), left("window.end").cast("long"), 'leftValue)
+      joined.select(left("key"), left("window.end").cast("long"), $"leftValue")
     } else if (joinType == "left_outer") {
-      joined.select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+      joined.select(left("key"), left("window.end").cast("long"), $"leftValue",
+        $"rightValue")
     } else if (joinType == "right_outer") {
-      joined.select(right("key"), right("window.end").cast("long"), 'leftValue, 'rightValue)
+      joined.select(right("key"), right("window.end").cast("long"), $"leftValue",
+        $"rightValue")
     } else {
-      joined.select(left("key"), left("window.end").cast("long"), 'leftValue,
-        right("key"), right("window.end").cast("long"), 'rightValue)
+      joined.select(left("key"), left("window.end").cast("long"), $"leftValue",
+        right("key"), right("window.end").cast("long"), $"rightValue")
     }
 
     (leftInput, rightInput, select)
@@ -116,25 +124,29 @@ abstract class StreamingJoinSuite
     val (leftInput, df1) = setupStream("left", 2)
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
-    val left = df1.select('key, window('leftTime, "10 second"), 'leftValue)
-    val right = df2.select('key, window('rightTime, "10 second"), 'rightValue.cast("string"))
+    val left = df1.select($"key", window($"leftTime", "10 second"),
+      $"leftValue")
+    val right = df2.select($"key", window($"rightTime", "10 second"),
+      $"rightValue".cast("string"))
 
     val joined = left.join(
       right,
       left("key") === right("key")
         && left("window") === right("window")
-        && 'rightValue.cast("int") > 7,
+        && $"rightValue".cast("int") > 7,
       joinType)
 
     val select = if (joinType == "left_semi") {
-      joined.select(left("key"), left("window.end").cast("long"), 'leftValue)
+      joined.select(left("key"), left("window.end").cast("long"), $"leftValue")
     } else if (joinType == "left_outer") {
-      joined.select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+      joined.select(left("key"), left("window.end").cast("long"), $"leftValue",
+        $"rightValue")
     } else if (joinType == "right_outer") {
-      joined.select(right("key"), right("window.end").cast("long"), 'leftValue, 'rightValue)
+      joined.select(right("key"), right("window.end").cast("long"), $"leftValue",
+        $"rightValue")
     } else {
-      joined.select(left("key"), left("window.end").cast("long"), 'leftValue,
-        right("key"), right("window.end").cast("long"), 'rightValue)
+      joined.select(left("key"), left("window.end").cast("long"), $"leftValue",
+        right("key"), right("window.end").cast("long"), $"rightValue")
     }
 
     (leftInput, rightInput, select)
@@ -151,12 +163,13 @@ abstract class StreamingJoinSuite
     val rightInput = MemoryStream[(Int, Int)]
 
     val df1 = leftInput.toDF.toDF("leftKey", "time")
-      .select('leftKey, timestamp_seconds($"time") as "leftTime", ('leftKey * 2) as "leftValue")
+      .select($"leftKey", timestamp_seconds($"time") as "leftTime",
+        ($"leftKey" * 2) as "leftValue")
       .withWatermark("leftTime", watermark)
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
-      .select('rightKey, timestamp_seconds($"time") as "rightTime",
-        ('rightKey * 3) as "rightValue")
+      .select($"rightKey", timestamp_seconds($"time") as "rightTime",
+        ($"rightKey" * 3) as "rightValue")
       .withWatermark("rightTime", watermark)
 
     val joined =
@@ -167,9 +180,10 @@ abstract class StreamingJoinSuite
         joinType)
 
     val select = if (joinType == "left_semi") {
-      joined.select('leftKey, 'leftTime.cast("int"))
+      joined.select($"leftKey", $"leftTime".cast("int"))
     } else {
-      joined.select('leftKey, 'rightKey, 'leftTime.cast("int"), 'rightTime.cast("int"))
+      joined.select($"leftKey", $"rightKey", $"leftTime".cast("int"),
+        $"rightTime".cast("int"))
     }
 
     (leftInput, rightInput, select)
@@ -216,8 +230,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
-    val df1 = input1.toDF.select('value as "key", ('value * 2) as "leftValue")
-    val df2 = input2.toDF.select('value as "key", ('value * 3) as "rightValue")
+    val df1 = input1.toDF.select($"value" as "key", ($"value" * 2) as "leftValue")
+    val df2 = input2.toDF.select($"value" as "key", ($"value" * 3) as "rightValue")
     val joined = df1.join(df2, "key")
 
     testStream(joined)(
@@ -246,17 +260,17 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val input2 = MemoryStream[Int]
 
     val df1 = input1.toDF
-      .select('value as "key", timestamp_seconds($"value") as "timestamp",
-        ('value * 2) as "leftValue")
-      .select('key, window('timestamp, "10 second"), 'leftValue)
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 2) as "leftValue")
+      .select($"key", window($"timestamp", "10 second"), $"leftValue")
 
     val df2 = input2.toDF
-      .select('value as "key", timestamp_seconds($"value") as "timestamp",
-        ('value * 3) as "rightValue")
-      .select('key, window('timestamp, "10 second"), 'rightValue)
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 3) as "rightValue")
+      .select($"key", window($"timestamp", "10 second"), $"rightValue")
 
     val joined = df1.join(df2, Seq("key", "window"))
-      .select('key, $"window.end".cast("long"), 'leftValue, 'rightValue)
+      .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
 
     testStream(joined)(
       AddData(input1, 1),
@@ -287,18 +301,18 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val input2 = MemoryStream[Int]
 
     val df1 = input1.toDF
-      .select('value as "key", timestamp_seconds($"value") as "timestamp",
-        ('value * 2) as "leftValue")
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 2) as "leftValue")
       .withWatermark("timestamp", "10 seconds")
-      .select('key, window('timestamp, "10 second"), 'leftValue)
+      .select($"key", window($"timestamp", "10 second"), $"leftValue")
 
     val df2 = input2.toDF
-      .select('value as "key", timestamp_seconds($"value") as "timestamp",
-        ('value * 3) as "rightValue")
-      .select('key, window('timestamp, "10 second"), 'rightValue)
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 3) as "rightValue")
+      .select($"key", window($"timestamp", "10 second"), $"rightValue")
 
     val joined = df1.join(df2, Seq("key", "window"))
-      .select('key, $"window.end".cast("long"), 'leftValue, 'rightValue)
+      .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
 
     testStream(joined)(
       AddData(input1, 1),
@@ -338,17 +352,18 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val rightInput = MemoryStream[(Int, Int)]
 
     val df1 = leftInput.toDF.toDF("leftKey", "time")
-      .select('leftKey, timestamp_seconds($"time") as "leftTime", ('leftKey * 2) as "leftValue")
+      .select($"leftKey", timestamp_seconds($"time") as "leftTime",
+        ($"leftKey" * 2) as "leftValue")
       .withWatermark("leftTime", "10 seconds")
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
-      .select('rightKey, timestamp_seconds($"time") as "rightTime",
-        ('rightKey * 3) as "rightValue")
+      .select($"rightKey", timestamp_seconds($"time") as "rightTime",
+        ($"rightKey" * 3) as "rightValue")
       .withWatermark("rightTime", "10 seconds")
 
     val joined =
       df1.join(df2, expr("leftKey = rightKey AND leftTime < rightTime - interval 5 seconds"))
-        .select('leftKey, 'leftTime.cast("int"), 'rightTime.cast("int"))
+        .select($"leftKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
 
     testStream(joined)(
       AddData(leftInput, (1, 5)),
@@ -397,12 +412,13 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val rightInput = MemoryStream[(Int, Int)]
 
     val df1 = leftInput.toDF.toDF("leftKey", "time")
-      .select('leftKey, timestamp_seconds($"time") as "leftTime", ('leftKey * 2) as "leftValue")
+      .select($"leftKey", timestamp_seconds($"time") as "leftTime",
+        ($"leftKey" * 2) as "leftValue")
       .withWatermark("leftTime", "20 seconds")
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
-      .select('rightKey, timestamp_seconds($"time") as "rightTime",
-        ('rightKey * 3) as "rightValue")
+      .select($"rightKey", timestamp_seconds($"time") as "rightTime",
+        ($"rightKey" * 3) as "rightValue")
       .withWatermark("rightTime", "30 seconds")
 
     val condition = expr(
@@ -431,7 +447,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     //     drop state where rightTime < eventTime - 5
 
     val joined =
-      df1.join(df2, condition).select('leftKey, 'leftTime.cast("int"), 'rightTime.cast("int"))
+      df1.join(df2, condition).select($"leftKey", $"leftTime".cast("int"),
+        $"rightTime".cast("int"))
 
     testStream(joined)(
       // If leftTime = 20, then it match only with rightTime = [15, 30]
@@ -478,8 +495,10 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
-    val df1 = input1.toDF.select('value as "leftKey", ('value * 2) as "leftValue")
-    val df2 = input2.toDF.select('value as "rightKey", ('value * 3) as "rightValue")
+    val df1 = input1.toDF
+      .select($"value" as "leftKey", ($"value" * 2) as "leftValue")
+    val df2 = input2.toDF
+      .select($"value" as "rightKey", ($"value" * 3) as "rightValue")
     val joined = df1.join(df2, expr("leftKey < rightKey"))
     val e = intercept[Exception] {
       val q = joined.writeStream.format("memory").queryName("test").start()
@@ -493,8 +512,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val input = MemoryStream[Int]
     val df = input.toDF
     val join =
-      df.select('value % 5 as "key", 'value).join(
-        df.select('value % 5 as "key", 'value), "key")
+      df.select($"value" % 5 as "key", $"value").join(
+        df.select($"value" % 5 as "key", $"value"), "key")
 
     testStream(join)(
       AddData(input, 1, 2),
@@ -558,9 +577,11 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val input2 = MemoryStream[Int]
     val input3 = MemoryStream[Int]
 
-    val df1 = input1.toDF.select('value as "leftKey", ('value * 2) as "leftValue")
-    val df2 = input2.toDF.select('value as "middleKey", ('value * 3) as "middleValue")
-    val df3 = input3.toDF.select('value as "rightKey", ('value * 5) as "rightValue")
+    val df1 = input1.toDF.select($"value" as "leftKey", ($"value" * 2) as "leftValue")
+    val df2 = input2.toDF
+      .select($"value" as "middleKey", ($"value" * 3) as "middleValue")
+    val df3 = input3.toDF
+      .select($"value" as "rightKey", ($"value" * 5) as "rightValue")
 
     val joined = df1.join(df2, expr("leftKey = middleKey")).join(df3, expr("rightKey = middleKey"))
 
@@ -575,9 +596,12 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
-    val df1 = input1.toDF.select('value as 'a, 'value * 2 as 'b)
-    val df2 = input2.toDF.select('value as 'a, 'value * 2 as 'b).repartition('b)
-    val joined = df1.join(df2, Seq("a", "b")).select('a)
+    val df1 = input1.toDF
+      .select($"value" as Symbol("a"), $"value" * 2 as Symbol("b"))
+    val df2 = input2.toDF
+      .select($"value" as Symbol("a"), $"value" * 2 as Symbol("b"))
+      .repartition($"b")
+    val joined = df1.join(df2, Seq("a", "b")).select($"a")
 
     testStream(joined)(
       AddData(input1, 1.to(1000): _*),
@@ -666,18 +690,18 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val input2 = MemoryStream[Int]
 
     val df1 = input1.toDF
-      .select('value as "key", timestamp_seconds($"value") as "timestamp",
-        ('value * 2) as "leftValue")
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 2) as "leftValue")
       .withWatermark("timestamp", "10 seconds")
-      .select('key, window('timestamp, "10 second"), 'leftValue)
+      .select($"key", window($"timestamp", "10 second"), $"leftValue")
 
     val df2 = input2.toDF
-      .select('value as "key", timestamp_seconds($"value") as "timestamp",
-        ('value * 3) as "rightValue")
-      .select('key, window('timestamp, "10 second"), 'rightValue)
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 3) as "rightValue")
+      .select($"key", window($"timestamp", "10 second"), $"rightValue")
 
     val joined = df1.join(df2, Seq("key", "window"))
-      .select('key, $"window.end".cast("long"), 'leftValue, 'rightValue)
+      .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
 
     testStream(joined)(
       StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
@@ -701,6 +725,53 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       assertNumStateRows(
         total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(0)))
     )
+  }
+
+  test("joining non-nullable left join key with nullable right join key") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[JInteger]
+
+    val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
+    testStream(joined)(
+      AddData(input1, 1, 5),
+      AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
+      CheckNewAnswer(Row(1, 1, 2, 3), Row(5, 5, 10, 15))
+    )
+  }
+
+  test("joining nullable left join key with non-nullable right join key") {
+    val input1 = MemoryStream[JInteger]
+    val input2 = MemoryStream[Int]
+
+    val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
+    testStream(joined)(
+      AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
+      AddData(input2, 1, 5),
+      CheckNewAnswer(Row(1, 1, 2, 3), Row(5, 5, 10, 15))
+    )
+  }
+
+  test("joining nullable left join key with nullable right join key") {
+    val input1 = MemoryStream[JInteger]
+    val input2 = MemoryStream[JInteger]
+
+    val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
+    testStream(joined)(
+      AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
+      AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), null),
+      CheckNewAnswer(
+        Row(JInteger.valueOf(1), JInteger.valueOf(1), JInteger.valueOf(2), JInteger.valueOf(3)),
+        Row(JInteger.valueOf(5), JInteger.valueOf(5), JInteger.valueOf(10), JInteger.valueOf(15)),
+        Row(null, null, null, null))
+    )
+  }
+
+  private def testForJoinKeyNullability(left: DataFrame, right: DataFrame): DataFrame = {
+    val df1 = left.selectExpr("value as leftKey", "value * 2 as leftValue")
+    val df2 = right.selectExpr("value as rightKey", "value * 3 as rightValue")
+
+    df1.join(df2, expr("leftKey <=> rightKey"))
+      .select("leftKey", "rightKey", "leftValue", "rightValue")
   }
 }
 
@@ -876,15 +947,19 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     val (leftInput, simpleLeftDf) = setupStream("left", 2)
     val (rightInput, simpleRightDf) = setupStream("right", 3)
 
-    val left = simpleLeftDf.select('key, window('leftTime, "10 second"), 'leftValue)
-    val right = simpleRightDf.select('key, window('rightTime, "10 second"), 'rightValue)
+    val left = simpleLeftDf
+      .select($"key", window($"leftTime", "10 second"), $"leftValue")
+    val right = simpleRightDf
+      .select($"key", window($"rightTime", "10 second"), $"rightValue")
 
     val joined = left.join(
         right,
         left("key") === right("key") && left("window") === right("window") &&
-            'leftValue > 10 && ('rightValue < 300 || 'rightValue > 1000),
+          $"leftValue" > 10 &&
+          ($"rightValue" < 300 || $"rightValue" > 1000),
         "left_outer")
-      .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+      .select(left("key"), left("window.end").cast("long"), $"leftValue",
+        $"rightValue")
 
     testStream(joined)(
       // leftValue <= 10 should generate outer join rows even though it matches right keys
@@ -1075,9 +1150,9 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
       val input1 = MemoryStream[Int](desiredPartitionsForInput1)
       val df1 = input1.toDF
         .select(
-          'value as "key",
-          'value as "leftValue",
-          'value as "rightValue")
+          $"value" as "key",
+          $"value" as "leftValue",
+          $"value" as "rightValue")
       val (input2, df2) = setupStream("left", 2)
       val (input3, df3) = setupStream("right", 3)
 
@@ -1085,7 +1160,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
         .join(df3,
           df2("key") === df3("key") && df2("leftTime") === df3("rightTime"),
           "inner")
-        .select(df2("key"), 'leftValue, 'rightValue)
+        .select(df2("key"), $"leftValue", $"rightValue")
 
       (input1, input2, input3, df1.union(joined))
     }
@@ -1167,6 +1242,177 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
       MultiAddData((input1, inputDataForInput1), (input2, inputDataForInput2)),
       CheckNewAnswer(expectedOutput.head, expectedOutput.tail: _*)
     )
+  }
+
+  test("left-outer: joining non-nullable left join key with nullable right join key") {
+    val input1 = MemoryStream[(Int, Int)]
+    val input2 = MemoryStream[(JInteger, Int)]
+
+    val joined = testForLeftOuterJoinKeyNullability(input1.toDF(), input2.toDF())
+
+    testStream(joined)(
+      AddData(input1, (1, 1), (1, 2), (1, 3), (1, 4), (1, 5)),
+      AddData(input2,
+        (JInteger.valueOf(1), 3),
+        (JInteger.valueOf(1), 4),
+        (JInteger.valueOf(1), 5),
+        (JInteger.valueOf(1), 6)
+      ),
+      CheckNewAnswer(
+        Row(1, 1, 3, 3, 10, 6, 9),
+        Row(1, 1, 4, 4, 10, 8, 12),
+        Row(1, 1, 5, 5, 10, 10, 15)),
+      AddData(input1, (1, 21)),
+      // right-null join
+      AddData(input2, (JInteger.valueOf(1), 22)), // watermark = 11, no-data-batch computes nulls
+      CheckNewAnswer(
+        Row(1, null, 1, null, 10, 2, null),
+        Row(1, null, 2, null, 10, 4, null)
+      )
+    )
+  }
+
+  test("left-outer: joining nullable left join key with non-nullable right join key") {
+    val input1 = MemoryStream[(JInteger, Int)]
+    val input2 = MemoryStream[(Int, Int)]
+
+    val joined = testForLeftOuterJoinKeyNullability(input1.toDF(), input2.toDF())
+
+    testStream(joined)(
+      AddData(input1,
+        (JInteger.valueOf(1), 1),
+        (null, 2),
+        (JInteger.valueOf(1), 3),
+        (JInteger.valueOf(1), 4),
+        (JInteger.valueOf(1), 5)),
+      AddData(input2, (1, 3), (1, 4), (1, 5), (1, 6)),
+      CheckNewAnswer(
+        Row(1, 1, 3, 3, 10, 6, 9),
+        Row(1, 1, 4, 4, 10, 8, 12),
+        Row(1, 1, 5, 5, 10, 10, 15)),
+      // right-null join
+      AddData(input1, (JInteger.valueOf(1), 21)),
+      AddData(input2, (1, 22)), // watermark = 11, no-data-batch computes nulls
+      CheckNewAnswer(
+        Row(1, null, 1, null, 10, 2, null),
+        Row(null, null, 2, null, 10, 4, null)
+      )
+    )
+  }
+
+  test("left-outer: joining nullable left join key with nullable right join key") {
+    val input1 = MemoryStream[(JInteger, Int)]
+    val input2 = MemoryStream[(JInteger, Int)]
+
+    val joined = testForLeftOuterJoinKeyNullability(input1.toDF(), input2.toDF())
+
+    testStream(joined)(
+      AddData(input1,
+        (JInteger.valueOf(1), 1),
+        (null, 2),
+        (JInteger.valueOf(1), 3),
+        (null, 4),
+        (JInteger.valueOf(1), 5)),
+      AddData(input2,
+        (JInteger.valueOf(1), 3),
+        (null, 4),
+        (JInteger.valueOf(1), 5),
+        (JInteger.valueOf(1), 6)),
+      CheckNewAnswer(
+        Row(1, 1, 3, 3, 10, 6, 9),
+        Row(null, null, 4, 4, 10, 8, 12),
+        Row(1, 1, 5, 5, 10, 10, 15)),
+      // right-null join
+      AddData(input1, (JInteger.valueOf(1), 21)),
+      AddData(input2, (JInteger.valueOf(1), 22)), // watermark = 11, no-data-batch computes nulls
+      CheckNewAnswer(
+        Row(1, null, 1, null, 10, 2, null),
+        Row(null, null, 2, null, 10, 4, null)
+      )
+    )
+  }
+
+  private def testForLeftOuterJoinKeyNullability(left: DataFrame, right: DataFrame): DataFrame = {
+    val df1 = left
+      .selectExpr("_1 as leftKey1", "_2 as leftKey2", "timestamp_seconds(_2) as leftTime",
+        "_2 * 2 as leftValue")
+      .withWatermark("leftTime", "10 seconds")
+    val df2 = right
+      .selectExpr(
+        "_1 as rightKey1", "_2 as rightKey2", "timestamp_seconds(_2) as rightTime",
+        "_2 * 3 as rightValue")
+      .withWatermark("rightTime", "10 seconds")
+
+    val windowed1 = df1.select($"leftKey1", $"leftKey2",
+      window($"leftTime", "10 second").as(Symbol("leftWindow")), $"leftValue")
+    val windowed2 = df2.select($"rightKey1", $"rightKey2",
+      window($"rightTime", "10 second").as(Symbol("rightWindow")), $"rightValue")
+    windowed1.join(windowed2,
+      expr("leftKey1 <=> rightKey1 AND leftKey2 = rightKey2 AND leftWindow = rightWindow"),
+      "left_outer"
+    ).select($"leftKey1", $"rightKey1", $"leftKey2", $"rightKey2",
+      $"leftWindow.end".cast("long"), $"leftValue", $"rightValue")
+  }
+
+  test("SPARK-38684: outer join works correctly even if processing input rows and " +
+    "evicting state rows for same grouping key happens in the same micro-batch") {
+
+    // The test is to demonstrate the correctness issue in outer join before SPARK-38684.
+    withSQLConf(
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+
+      val input1 = MemoryStream[(Timestamp, String, String)]
+      val df1 = input1.toDF
+        .selectExpr("_1 as eventTime", "_2 as id", "_3 as comment")
+        .withWatermark("eventTime", "0 second")
+
+      val input2 = MemoryStream[(Timestamp, String, String)]
+      val df2 = input2.toDF
+        .selectExpr("_1 as eventTime", "_2 as id", "_3 as comment")
+        .withWatermark("eventTime", "0 second")
+
+      val joined = df1.as("left")
+        .join(df2.as("right"),
+          expr("""
+                 |left.id = right.id AND left.eventTime BETWEEN
+                 |  right.eventTime - INTERVAL 30 seconds AND
+                 |  right.eventTime + INTERVAL 30 seconds
+             """.stripMargin),
+          joinType = "leftOuter")
+
+      testStream(joined)(
+        MultiAddData(
+          (input1, Seq((Timestamp.valueOf("2020-01-02 00:00:00"), "abc", "left in batch 1"))),
+          (input2, Seq((Timestamp.valueOf("2020-01-02 00:01:00"), "abc", "right in batch 1")))
+        ),
+        CheckNewAnswer(),
+        MultiAddData(
+          (input1, Seq((Timestamp.valueOf("2020-01-02 01:00:00"), "abc", "left in batch 2"))),
+          (input2, Seq((Timestamp.valueOf("2020-01-02 01:01:00"), "abc", "right in batch 2")))
+        ),
+        // watermark advanced to "2020-01-02 00:00:00"
+        CheckNewAnswer(),
+        AddData(input1, (Timestamp.valueOf("2020-01-02 01:30:00"), "abc", "left in batch 3")),
+        // watermark advanced to "2020-01-02 01:00:00"
+        CheckNewAnswer(
+          (Timestamp.valueOf("2020-01-02 00:00:00"), "abc", "left in batch 1", null, null, null)
+        ),
+        // left side state should still contain "left in batch 2" and "left in batch 3"
+        // we should see both rows in the left side since
+        // - "left in batch 2" is going to be evicted in this batch
+        // - "left in batch 3" is going to be matched with new row in right side
+        AddData(input2,
+          (Timestamp.valueOf("2020-01-02 01:30:10"), "abc", "match with left in batch 3")),
+        // watermark advanced to "2020-01-02 01:01:00"
+        CheckNewAnswer(
+          (Timestamp.valueOf("2020-01-02 01:00:00"), "abc", "left in batch 2",
+            null, null, null),
+          (Timestamp.valueOf("2020-01-02 01:30:00"), "abc", "left in batch 3",
+            Timestamp.valueOf("2020-01-02 01:30:10"), "abc", "match with left in batch 3")
+        )
+      )
+    }
   }
 }
 

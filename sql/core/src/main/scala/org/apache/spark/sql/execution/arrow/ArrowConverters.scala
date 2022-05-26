@@ -31,7 +31,7 @@ import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, IpcOption, Message
 import org.apache.spark.TaskContext
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
@@ -195,27 +195,27 @@ private[sql] object ArrowConverters {
   private[sql] def toDataFrame(
       arrowBatchRDD: JavaRDD[Array[Byte]],
       schemaString: String,
-      sqlContext: SQLContext): DataFrame = {
+      session: SparkSession): DataFrame = {
     val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
-    val timeZoneId = sqlContext.sessionState.conf.sessionLocalTimeZone
+    val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
     val rdd = arrowBatchRDD.rdd.mapPartitions { iter =>
       val context = TaskContext.get()
       ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, context)
     }
-    sqlContext.internalCreateDataFrame(rdd.setName("arrow"), schema)
+    session.internalCreateDataFrame(rdd.setName("arrow"), schema)
   }
 
   /**
    * Read a file as an Arrow stream and parallelize as an RDD of serialized ArrowRecordBatches.
    */
   private[sql] def readArrowStreamFromFile(
-      sqlContext: SQLContext,
+      session: SparkSession,
       filename: String): JavaRDD[Array[Byte]] = {
     Utils.tryWithResource(new FileInputStream(filename)) { fileStream =>
       // Create array to consume iterator so that we can safely close the file
       val batches = getBatchesFromStream(fileStream.getChannel).toArray
       // Parallelize the record batches to create an RDD
-      JavaRDD.fromRDD(sqlContext.sparkContext.parallelize(batches, batches.length))
+      JavaRDD.fromRDD(session.sparkContext.parallelize(batches, batches.length))
     }
   }
 

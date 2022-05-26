@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -101,21 +100,20 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-
+    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning &&
+      !requiredSchema.exists(_.name == sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val parsedOptions = new CSVOptions(
       options,
-      sparkSession.sessionState.conf.csvColumnPruning,
+      columnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
-
-    if (requiredSchema.length == 1 &&
-      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
-      throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
-    }
-    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
+    // Don't push any filter which refers to the "virtual" column which cannot present in the input.
+    // Such filters will be applied later on the upper layer.
+    val actualFilters =
+      filters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
@@ -127,7 +125,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         actualDataSchema,
         actualRequiredSchema,
         parsedOptions,
-        filters)
+        actualFilters)
       val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(

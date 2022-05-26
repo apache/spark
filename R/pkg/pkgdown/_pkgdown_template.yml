@@ -29,12 +29,6 @@ template:
       </a>
 
 authors:
-  Shivaram Venkataraman :
-    href: https://github.com/shivaram
-  Xiangrui Meng:
-    href: https://github.com/mengxr
-  Felix Cheung:
-    href: https://github.com/felixcheung
   " The Apache Software Foundation":
     href: "https://www.apache.org/"
 

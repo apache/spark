@@ -320,7 +320,7 @@ object KubernetesUtils extends Logging {
             fs.mkdirs(new Path(s"${uploadPath}/${randomDirName}"))
             val targetUri = s"${uploadPath}/${randomDirName}/${fileUri.getPath.split("/").last}"
             log.info(s"Uploading file: ${fileUri.getPath} to dest: $targetUri...")
-            uploadFileToHadoopCompatibleFS(new Path(fileUri.getPath), new Path(targetUri), fs)
+            uploadFileToHadoopCompatibleFS(new Path(fileUri), new Path(targetUri), fs)
             targetUri
           } catch {
             case e: Exception =>
@@ -344,7 +344,7 @@ object KubernetesUtils extends Logging {
       delSrc : Boolean = false,
       overwrite: Boolean = true): Unit = {
     try {
-      fs.copyFromLocalFile(false, true, src, dest)
+      fs.copyFromLocalFile(delSrc, overwrite, src, dest)
     } catch {
       case e: IOException =>
         throw new SparkException(s"Error uploading file ${src.getName}", e)

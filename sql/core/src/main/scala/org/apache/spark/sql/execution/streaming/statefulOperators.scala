@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
@@ -337,7 +337,8 @@ case class StateStoreRestoreExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      StatefulOperatorPartitioning.getCompatibleDistribution(
+        keyExpressions, getStateInfo, conf) :: Nil
     }
   }
 
@@ -496,7 +497,8 @@ case class StateStoreSaveExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      StatefulOperatorPartitioning.getCompatibleDistribution(
+        keyExpressions, getStateInfo, conf) :: Nil
     }
   }
 
@@ -527,6 +529,12 @@ case class SessionWindowStateStoreRestoreExec(
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader with WatermarkSupport {
 
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
+      "number of rows which are dropped by watermark")
+  )
+
   override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
   assert(keyExpressions.nonEmpty, "Grouping key must be specified when using sessionWindow")
@@ -547,7 +555,11 @@ case class SessionWindowStateStoreRestoreExec(
 
       // We need to filter out outdated inputs
       val filteredIterator = watermarkPredicateForData match {
-        case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
+        case Some(predicate) => iter.filter((row: InternalRow) => {
+          val shouldKeep = !predicate.eval(row)
+          if (!shouldKeep) longMetric("numRowsDroppedByWatermark") += 1
+          shouldKeep
+        })
         case None => iter
       }
 
@@ -573,7 +585,8 @@ case class SessionWindowStateStoreRestoreExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(keyWithoutSessionExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
@@ -684,7 +697,8 @@ case class SessionWindowStateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
@@ -729,6 +743,29 @@ case class SessionWindowStateStoreSaveExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+
+  /**
+   * The class overrides this method since dropping late events are happening in the upstream node
+   * [[SessionWindowStateStoreRestoreExec]], and this class has responsibility to report the number
+   * of dropped late events as a part of StateOperatorProgress.
+   *
+   * This method should be called in the driver after this SparkPlan has been executed and metrics
+   * have been updated.
+   */
+  override def getProgress(): StateOperatorProgress = {
+    val stateOpProgress = super.getProgress()
+
+    // This should be safe, since the method is called in the driver after the plan has been
+    // executed and metrics have been updated.
+    val numRowsDroppedByWatermark = child.collectFirst {
+      case s: SessionWindowStateStoreRestoreExec =>
+        s.longMetric("numRowsDroppedByWatermark").value
+    }.getOrElse(0L)
+
+    stateOpProgress.copy(
+      newNumRowsUpdated = stateOpProgress.numRowsUpdated,
+      newNumRowsDroppedByWatermark = numRowsDroppedByWatermark)
+  }
 }
 
 
@@ -741,8 +778,10 @@ case class StreamingDeduplicateExec(
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
   /** Distribute by grouping attributes */
-  override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+  override def requiredChildDistribution: Seq[Distribution] = {
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      keyExpressions, getStateInfo, conf) :: Nil
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver

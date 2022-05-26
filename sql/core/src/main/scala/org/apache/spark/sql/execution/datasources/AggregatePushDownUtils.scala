@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.RowToColumnConverter
+import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DateType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructField, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -42,27 +43,28 @@ object AggregatePushDownUtils {
 
     var finalSchema = new StructType()
 
-    def getStructFieldForCol(col: NamedReference): StructField = {
-      schema.apply(col.fieldNames.head)
+    def getStructFieldForCol(colName: String): StructField = {
+      schema.apply(colName)
     }
 
-    def isPartitionCol(col: NamedReference) = {
-      partitionNames.contains(col.fieldNames.head)
+    def isPartitionCol(colName: String) = {
+      partitionNames.contains(colName)
     }
 
     def processMinOrMax(agg: AggregateFunc): Boolean = {
-      val (column, aggType) = agg match {
-        case max: Max => (max.column, "max")
-        case min: Min => (min.column, "min")
-        case _ =>
-          throw new IllegalArgumentException(s"Unexpected type of AggregateFunc ${agg.describe}")
+      val (columnName, aggType) = agg match {
+        case max: Max if V2ColumnUtils.extractV2Column(max.column).isDefined =>
+          (V2ColumnUtils.extractV2Column(max.column).get, "max")
+        case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
+          (V2ColumnUtils.extractV2Column(min.column).get, "min")
+        case _ => return false
       }
 
-      if (isPartitionCol(column)) {
+      if (isPartitionCol(columnName)) {
         // don't push down partition column, footer doesn't have max/min for partition column
         return false
       }
-      val structField = getStructFieldForCol(column)
+      val structField = getStructFieldForCol(columnName)
 
       structField.dataType match {
         // not push down complex type
@@ -92,8 +94,8 @@ object AggregatePushDownUtils {
       return None
     }
 
-    if (aggregation.groupByColumns.nonEmpty &&
-      partitionNames.size != aggregation.groupByColumns.length) {
+    if (aggregation.groupByExpressions.nonEmpty &&
+      partitionNames.size != aggregation.groupByExpressions.length) {
       // If there are group by columns, we only push down if the group by columns are the same as
       // the partition columns. In theory, if group by columns are a subset of partition columns,
       // we should still be able to push down. e.g. if table t has partition columns p1, p2, and p3,
@@ -105,11 +107,11 @@ object AggregatePushDownUtils {
       // aggregate push down simple and don't handle this complicate case for now.
       return None
     }
-    aggregation.groupByColumns.foreach { col =>
+    aggregation.groupByExpressions.map(extractColName).foreach { colName =>
       // don't push down if the group by columns are not the same as the partition columns (orders
       // doesn't matter because reorder can be done at data source layer)
-      if (col.fieldNames.length != 1 || !isPartitionCol(col)) return None
-      finalSchema = finalSchema.add(getStructFieldForCol(col))
+      if (colName.isEmpty || !isPartitionCol(colName.get)) return None
+      finalSchema = finalSchema.add(getStructFieldForCol(colName.get))
     }
 
     aggregation.aggregateExpressions.foreach {
@@ -117,10 +119,10 @@ object AggregatePushDownUtils {
         if (!processMinOrMax(max)) return None
       case min: Min =>
         if (!processMinOrMax(min)) return None
-      case count: Count =>
-        if (count.column.fieldNames.length != 1 || count.isDistinct) return None
-        finalSchema =
-          finalSchema.add(StructField(s"count(" + count.column.fieldNames.head + ")", LongType))
+      case count: Count
+        if V2ColumnUtils.extractV2Column(count.column).isDefined && !count.isDistinct =>
+        val columnName = V2ColumnUtils.extractV2Column(count.column).get
+        finalSchema = finalSchema.add(StructField(s"count($columnName)", LongType))
       case _: CountStar =>
         finalSchema = finalSchema.add(StructField("count(*)", LongType))
       case _ =>
@@ -136,7 +138,8 @@ object AggregatePushDownUtils {
   def equivalentAggregations(a: Aggregation, b: Aggregation): Boolean = {
     a.aggregateExpressions.sortBy(_.hashCode())
       .sameElements(b.aggregateExpressions.sortBy(_.hashCode())) &&
-      a.groupByColumns.sortBy(_.hashCode()).sameElements(b.groupByColumns.sortBy(_.hashCode()))
+      a.groupByExpressions.sortBy(_.hashCode())
+        .sameElements(b.groupByExpressions.sortBy(_.hashCode()))
   }
 
   /**
@@ -163,7 +166,7 @@ object AggregatePushDownUtils {
   def getSchemaWithoutGroupingExpression(
       aggSchema: StructType,
       aggregation: Aggregation): StructType = {
-    val numOfGroupByColumns = aggregation.groupByColumns.length
+    val numOfGroupByColumns = aggregation.groupByExpressions.length
     if (numOfGroupByColumns > 0) {
       new StructType(aggSchema.fields.drop(numOfGroupByColumns))
     } else {
@@ -178,7 +181,7 @@ object AggregatePushDownUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       partitionValues: InternalRow): InternalRow = {
-    val groupByColNames = aggregation.groupByColumns.map(_.fieldNames.head)
+    val groupByColNames = aggregation.groupByExpressions.flatMap(extractColName)
     assert(groupByColNames.length == partitionSchema.length &&
       groupByColNames.length == partitionValues.numFields, "The number of group by columns " +
       s"${groupByColNames.length} should be the same as partition schema length " +
@@ -195,5 +198,10 @@ object AggregatePushDownUtils {
     } else {
       partitionValues
     }
+  }
+
+  private def extractColName(v2Expr: V2Expression): Option[String] = v2Expr match {
+    case f: FieldReference if f.fieldNames.length == 1 => Some(f.fieldNames.head)
+    case _ => None
   }
 }

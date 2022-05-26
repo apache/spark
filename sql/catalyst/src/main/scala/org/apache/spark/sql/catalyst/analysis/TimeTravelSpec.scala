@@ -41,7 +41,7 @@ object TimeTravelSpec {
         throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(ts)
       }
       val tsToEval = ts.transform {
-        case r: RuntimeReplaceable => r.child
+        case r: RuntimeReplaceable => r.replacement
         case _: Unevaluable =>
           throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(ts)
         case e if !e.deterministic =>

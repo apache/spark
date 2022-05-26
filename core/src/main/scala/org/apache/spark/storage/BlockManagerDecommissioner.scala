@@ -109,17 +109,21 @@ private[storage] class BlockManagerDecommissioner(
               s"to $peer ($retryCount / $maxReplicationFailuresForDecommission)")
             // Migrate the components of the blocks.
             try {
-              blocks.foreach { case (blockId, buffer) =>
-                logDebug(s"Migrating sub-block ${blockId}")
-                bm.blockTransferService.uploadBlockSync(
-                  peer.host,
-                  peer.port,
-                  peer.executorId,
-                  blockId,
-                  buffer,
-                  StorageLevel.DISK_ONLY,
-                  null) // class tag, we don't need for shuffle
-                logDebug(s"Migrated sub-block $blockId")
+              if (fallbackStorage.isDefined && peer == FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
+                fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
+              } else {
+                blocks.foreach { case (blockId, buffer) =>
+                  logDebug(s"Migrating sub-block ${blockId}")
+                  bm.blockTransferService.uploadBlockSync(
+                    peer.host,
+                    peer.port,
+                    peer.executorId,
+                    blockId,
+                    buffer,
+                    StorageLevel.DISK_ONLY,
+                    null) // class tag, we don't need for shuffle
+                  logDebug(s"Migrated sub-block $blockId")
+                }
               }
               logInfo(s"Migrated $shuffleBlockInfo to $peer")
             } catch {
@@ -131,7 +135,10 @@ private[storage] class BlockManagerDecommissioner(
                 // driver a no longer referenced RDD with shuffle files.
                 if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).size < blocks.size) {
                   logWarning(s"Skipping block $shuffleBlockInfo, block deleted.")
-                } else if (fallbackStorage.isDefined) {
+                } else if (fallbackStorage.isDefined
+                    // Confirm peer is not the fallback BM ID because fallbackStorage would already
+                    // have been used in the try-block above so there's no point trying again
+                    && peer != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
                   fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
                 } else {
                   logError(s"Error occurred during migrating $shuffleBlockInfo", e)

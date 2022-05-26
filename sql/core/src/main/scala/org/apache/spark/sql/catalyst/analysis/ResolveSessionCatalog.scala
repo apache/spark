@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -59,7 +60,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE COLUMNS")
 
-    case a @ AlterColumn(ResolvedV1TableAndIdentifier(table, ident), _, _, _, _, _) =>
+    case a @ AlterColumn(ResolvedV1TableAndIdentifier(table, ident), _, _, _, _, _, _) =>
       if (a.column.name.length > 1) {
         throw QueryCompilationErrors
           .operationOnlySupportedWithV2TableError("ALTER COLUMN with qualified column")
@@ -83,6 +84,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
               quoteIfNeeded(colName), table)
           }
       }
+      // Add the current default column value string (if any) to the column metadata.
+      a.setDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, c) }
       val newColumn = StructField(
         colName,
         dataType,
@@ -93,7 +96,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case RenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("RENAME COLUMN")
 
-    case DropColumns(ResolvedV1TableIdentifier(_), _) =>
+    case DropColumns(ResolvedV1TableIdentifier(_), _, _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("DROP COLUMN")
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
@@ -402,7 +405,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropFunction(ResolvedPersistentFunc(catalog, identifier, _), ifExists) =>
       if (isSessionCatalog(catalog)) {
         val funcIdentifier = identifier.asFunctionIdentifier
-        DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, false)
+        DropFunctionCommand(funcIdentifier, ifExists, false)
       } else {
         throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "DROP FUNCTION")
       }
@@ -425,9 +428,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         } else {
           None
         }
+        val identifier = FunctionIdentifier(nameParts.last, database)
         CreateFunctionCommand(
-          database,
-          nameParts.last,
+          identifier,
           className,
           resources,
           false,
@@ -592,6 +595,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   private def convertToStructField(col: QualifiedColType): StructField = {
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
+    col.default.map {
+      value: String => builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+    }
     StructField(col.name.head, col.dataType, nullable = true, builder.build())
   }
 

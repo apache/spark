@@ -77,7 +77,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       }
 
       val metadataSchema =
-        relation.output.collect { case MetadataAttribute(attr) => attr }.toStructType
+        relation.output.collect { case FileSourceMetadataAttribute(attr) => attr }.toStructType
       val prunedMetadataSchema = if (metadataSchema.nonEmpty) {
         pruneSchema(metadataSchema, requestedRootFields)
       } else {
@@ -91,8 +91,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
       if (countLeaves(hadoopFsRelation.dataSchema) > countLeaves(prunedDataSchema) ||
         countLeaves(metadataSchema) > countLeaves(prunedMetadataSchema)) {
         val prunedRelation = leafNodeBuilder(prunedDataSchema, prunedMetadataSchema)
-        val projectionOverSchema =
-          ProjectionOverSchema(prunedDataSchema.merge(prunedMetadataSchema))
+        val projectionOverSchema = ProjectionOverSchema(
+          prunedDataSchema.merge(prunedMetadataSchema), AttributeSet(relation.output))
         Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
           prunedRelation, projectionOverSchema))
       } else {

@@ -43,7 +43,7 @@ class StringKeyHashMap[T](normalizer: (String) => String) {
 
   def remove(key: String): Option[T] = base.remove(normalizer(key))
 
-  def iterator: Iterator[(String, T)] = base.toIterator
+  def iterator: Iterator[(String, T)] = base.iterator
 
   def clear(): Unit = base.clear()
 }

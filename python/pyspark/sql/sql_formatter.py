@@ -50,9 +50,9 @@ class SQLStringFormatter(string.Formatter):
         from pyspark.sql import Column, DataFrame
 
         if isinstance(val, Column):
-            assert SparkContext._gateway is not None  # type: ignore[attr-defined]
+            assert SparkContext._gateway is not None
 
-            gw = SparkContext._gateway  # type: ignore[attr-defined]
+            gw = SparkContext._gateway
             jexpr = val._jc.expr()
             if is_instance_of(
                 gw, jexpr, "org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute"

@@ -833,7 +833,7 @@ private[columnar] object ColumnType {
       case arr: ArrayType => ARRAY(arr)
       case map: MapType => MAP(map)
       case struct: StructType => STRUCT(struct)
-      case udt: UserDefinedType[_] => apply(udt.sqlType)
+      case udt: UserDefinedType[_] => ColumnType(udt.sqlType)
       case other => throw QueryExecutionErrors.unsupportedTypeError(other)
     }
   }

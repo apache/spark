@@ -165,9 +165,10 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       }
       x.map(y => (y, y))
     }
-    val testRdd = shuffle match {
-      case true => baseRdd.reduceByKey(_ + _)
-      case false => baseRdd
+    val testRdd = if (shuffle) {
+      baseRdd.reduceByKey(_ + _)
+    } else {
+      baseRdd
     }
 
     // Listen for the job & block updates

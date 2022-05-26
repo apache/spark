@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -369,7 +369,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("SELECT * WHERE (quoted strings)") {
-    assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
+    assert(sql("select * from foobar").where($"NAME" === "joe 'foo' \"bar\"").collect().size === 1)
   }
 
   test("SELECT first field") {
@@ -773,33 +773,36 @@ class JDBCSuite extends QueryTest
   }
 
   test("compile filters") {
-    val compileFilter = PrivateMethod[Option[String]](Symbol("compileFilter"))
     def doCompileFilter(f: Filter): String =
-      JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
-    assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")
-    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === """(NOT ("col1" = 'abc'))""")
-    assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
-      === """("col0" = 0) AND ("col1" = 'def')""")
-    assert(doCompileFilter(Or(EqualTo("col0", 2), EqualTo("col1", "ghi")))
-      === """("col0" = 2) OR ("col1" = 'ghi')""")
-    assert(doCompileFilter(LessThan("col0", 5)) === """"col0" < 5""")
-    assert(doCompileFilter(LessThan("col3",
-      Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """"col3" < '1995-11-21 00:00:00.0'""")
-    assert(doCompileFilter(LessThan("col4", Date.valueOf("1983-08-04")))
-      === """"col4" < '1983-08-04'""")
-    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === """"col0" <= 5""")
-    assert(doCompileFilter(GreaterThan("col0", 3)) === """"col0" > 3""")
-    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === """"col0" >= 3""")
-    assert(doCompileFilter(In("col1", Array("jkl"))) === """"col1" IN ('jkl')""")
-    assert(doCompileFilter(In("col1", Array.empty)) ===
-      """CASE WHEN "col1" IS NULL THEN NULL ELSE FALSE END""")
-    assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
-      === """(NOT ("col1" IN ('mno', 'pqr')))""")
-    assert(doCompileFilter(IsNull("col1")) === """"col1" IS NULL""")
-    assert(doCompileFilter(IsNotNull("col1")) === """"col1" IS NOT NULL""")
-    assert(doCompileFilter(And(EqualNullSafe("col0", "abc"), EqualTo("col1", "def")))
-      === """((NOT ("col0" != 'abc' OR "col0" IS NULL OR 'abc' IS NULL) """
-        + """OR ("col0" IS NULL AND 'abc' IS NULL))) AND ("col1" = 'def')""")
+      JdbcDialects.get("jdbc:").compileExpression(f.toV2).getOrElse("")
+
+    Seq(("col0", "col1"), ("`col0`", "`col1`")).foreach { case(col0, col1) =>
+      assert(doCompileFilter(EqualTo(col0, 3)) === """"col0" = 3""")
+      assert(doCompileFilter(Not(EqualTo(col1, "abc"))) === """NOT ("col1" = 'abc')""")
+      assert(doCompileFilter(And(EqualTo(col0, 0), EqualTo(col1, "def")))
+        === """("col0" = 0) AND ("col1" = 'def')""")
+      assert(doCompileFilter(Or(EqualTo(col0, 2), EqualTo(col1, "ghi")))
+        === """("col0" = 2) OR ("col1" = 'ghi')""")
+      assert(doCompileFilter(LessThan(col0, 5)) === """"col0" < 5""")
+      assert(doCompileFilter(LessThan(col0,
+        Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """"col0" < '1995-11-21 00:00:00.0'""")
+      assert(doCompileFilter(LessThan(col0, Date.valueOf("1983-08-04")))
+        === """"col0" < '1983-08-04'""")
+      assert(doCompileFilter(LessThanOrEqual(col0, 5)) === """"col0" <= 5""")
+      assert(doCompileFilter(GreaterThan(col0, 3)) === """"col0" > 3""")
+      assert(doCompileFilter(GreaterThanOrEqual(col0, 3)) === """"col0" >= 3""")
+      assert(doCompileFilter(In(col1, Array("jkl"))) === """"col1" IN ('jkl')""")
+      assert(doCompileFilter(In(col1, Array.empty)) ===
+        """CASE WHEN "col1" IS NULL THEN NULL ELSE FALSE END""")
+      assert(doCompileFilter(Not(In(col1, Array("mno", "pqr"))))
+        === """NOT ("col1" IN ('mno', 'pqr'))""")
+      assert(doCompileFilter(IsNull(col1)) === """"col1" IS NULL""")
+      assert(doCompileFilter(IsNotNull(col1)) === """"col1" IS NOT NULL""")
+      assert(doCompileFilter(And(EqualNullSafe(col0, "abc"), EqualTo(col1, "def")))
+        === """(("col0" = 'abc') OR ("col0" IS NULL AND 'abc' IS NULL))"""
+        + """ AND ("col1" = 'def')""")
+    }
+    assert(doCompileFilter(EqualTo("col0.nested", 3)).isEmpty)
   }
 
   test("Dialect unregister") {
@@ -1138,7 +1141,7 @@ class JDBCSuite extends QueryTest
          """.stripMargin)
 
       val show = ShowCreateTableCommand(TableIdentifier(tableName), ShowCreateTable.getoutputAttrs)
-      spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+      spark.sessionState.executePlan(show).executedPlan.executeCollectPublic().foreach { r =>
         assert(!r.toString.contains(password))
         assert(r.toString.contains(dbTable))
         assert(r.toString.contains(userName))
@@ -1151,7 +1154,7 @@ class JDBCSuite extends QueryTest
       }
 
       withSQLConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN.key -> "(?i)dbtable|user") {
-        spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+        spark.sessionState.executePlan(show).executedPlan.executeCollectPublic().foreach { r =>
           assert(!r.toString.contains(password))
           assert(!r.toString.contains(dbTable))
           assert(!r.toString.contains(userName))

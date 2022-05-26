@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningSubquery, EqualNullSafe, EqualTo, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
@@ -34,6 +34,33 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  */
 object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelper {
 
+  private def collectEqualityConditionExpressions(condition: Expression): Seq[Expression] = {
+    splitConjunctivePredicates(condition).flatMap(_.collect {
+      case EqualTo(l, r) if l.deterministic && r.foldable => l
+      case EqualTo(l, r) if r.deterministic && l.foldable => r
+      case EqualNullSafe(l, r) if l.deterministic && r.foldable => l
+      case EqualNullSafe(l, r) if r.deterministic && l.foldable => r
+    })
+  }
+
+  /**
+   * If a partition key already has equality conditions, then its DPP filter is useless and
+   * can't prune anything. So we should remove it.
+   */
+  private def removeUnnecessaryDynamicPruningSubquery(plan: LogicalPlan): LogicalPlan = {
+    plan.transformWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
+      case f @ Filter(condition, _) =>
+        val unnecessaryPruningKeys = ExpressionSet(collectEqualityConditionExpressions(condition))
+        val newCondition = condition.transformWithPruning(
+          _.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
+          case dynamicPruning: DynamicPruningSubquery
+              if unnecessaryPruningKeys.contains(dynamicPruning.pruningKey) =>
+            TrueLiteral
+        }
+        f.copy(condition = newCondition)
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.dynamicPartitionPruningEnabled) {
       return plan
@@ -43,10 +70,13 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       // No-op for trees that do not contain dynamic pruning.
       _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
       // pass through anything that is pushed down into PhysicalOperation
-      case p @ PhysicalOperation(_, _, LogicalRelation(_: HadoopFsRelation, _, _, _)) => p
+      case p @ PhysicalOperation(_, _, LogicalRelation(_: HadoopFsRelation, _, _, _)) =>
+        removeUnnecessaryDynamicPruningSubquery(p)
       // pass through anything that is pushed down into PhysicalOperation
-      case p @ PhysicalOperation(_, _, HiveTableRelation(_, _, _, _, _)) => p
-      case p @ PhysicalOperation(_, _, _: DataSourceV2ScanRelation) => p
+      case p @ PhysicalOperation(_, _, HiveTableRelation(_, _, _, _, _)) =>
+        removeUnnecessaryDynamicPruningSubquery(p)
+      case p @ PhysicalOperation(_, _, _: DataSourceV2ScanRelation) =>
+        removeUnnecessaryDynamicPruningSubquery(p)
       // remove any Filters with DynamicPruning that didn't get pushed down to PhysicalOperation.
       case f @ Filter(condition, _) =>
         val newCondition = condition.transformWithPruning(

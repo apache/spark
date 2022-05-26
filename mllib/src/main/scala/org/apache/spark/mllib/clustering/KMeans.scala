@@ -234,6 +234,22 @@ class KMeans private (
     model
   }
 
+  private[spark] def initialize(data: RDD[Vector]): Array[Vector] = {
+    val dataWithNorms = data.map(new VectorWithNorm(_))
+
+    val centers = initializationMode match {
+      case KMeans.RANDOM =>
+        initRandom(dataWithNorms)
+      case KMeans.K_MEANS_PARALLEL =>
+        val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
+        dataWithNorms.persist(StorageLevel.MEMORY_AND_DISK)
+        val centers = initKMeansParallel(dataWithNorms, distanceMeasureInstance)
+        dataWithNorms.unpersist()
+        centers
+    }
+    centers.map(_.vector)
+  }
+
   /**
    * Implementation of K-Means algorithm.
    */
@@ -269,15 +285,22 @@ class KMeans private (
 
     instr.foreach(_.logNumFeatures(numFeatures))
 
-    val shouldDistributed = centers.length * centers.length * numFeatures.toLong > 1000000L
+    val shouldComputeStats =
+      DistanceMeasure.shouldComputeStatistics(centers.length)
+    val shouldComputeStatsLocally =
+      DistanceMeasure.shouldComputeStatisticsLocally(centers.length, numFeatures)
 
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
       val bcCenters = sc.broadcast(centers)
-      val stats = if (shouldDistributed) {
-        distanceMeasureInstance.computeStatisticsDistributedly(sc, bcCenters)
+      val stats = if (shouldComputeStats) {
+        if (shouldComputeStatsLocally) {
+          Some(distanceMeasureInstance.computeStatistics(centers))
+        } else {
+          Some(distanceMeasureInstance.computeStatisticsDistributedly(sc, bcCenters))
+        }
       } else {
-        distanceMeasureInstance.computeStatistics(centers)
+        None
       }
       val bcStats = sc.broadcast(stats)
 

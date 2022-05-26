@@ -18,30 +18,31 @@
 import time
 import threading
 import queue as Queue
+from typing import Any, Callable, List, Tuple
 
 from pyspark import SparkConf, SparkContext
 
 
-def delayed(seconds):
-    def f(x):
+def delayed(seconds: int) -> Callable[[Any], Any]:
+    def f(x: int) -> int:
         time.sleep(seconds)
         return x
     return f
 
 
-def call_in_background(f, *args):
-    result = Queue.Queue(1)
+def call_in_background(f: Callable[..., Any], *args: Any) -> Queue.Queue:
+    result: Queue.Queue = Queue.Queue(1)
     t = threading.Thread(target=lambda: result.put(f(*args)))
     t.daemon = True
     t.start()
     return result
 
 
-def main():
+def main() -> None:
     conf = SparkConf().set("spark.ui.showConsoleProgress", "false")
     sc = SparkContext(appName="PythonStatusAPIDemo", conf=conf)
 
-    def run():
+    def run() -> List[Tuple[int, int]]:
         rdd = sc.parallelize(range(10), 10).map(delayed(2))
         reduced = rdd.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x + y)
         return reduced.map(delayed(2)).collect()
@@ -52,6 +53,8 @@ def main():
         ids = status.getJobIdsForGroup()
         for id in ids:
             job = status.getJobInfo(id)
+            assert job is not None
+
             print("Job", id, "status: ", job.status)
             for sid in job.stageIds:
                 info = status.getStageInfo(sid)

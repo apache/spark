@@ -280,6 +280,6 @@ Arguments: IdentityBroadcastMode, [id=#33]
 Join condition: None
 
 (51) Project [codegen id : 10]
-Output [1]: [CheckOverflow((promote_precision(cast(amc#18 as decimal(15,4))) / promote_precision(cast(pmc#32 as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#34]
+Output [1]: [CheckOverflow((promote_precision(cast(amc#18 as decimal(15,4))) / promote_precision(cast(pmc#32 as decimal(15,4)))), DecimalType(35,20)) AS am_pm_ratio#34]
 Input [2]: [amc#18, pmc#32]
 

@@ -53,7 +53,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
+    spark.conf.set(SQLConf.ORC_IMPLEMENTATION, "native")
   }
 
   override def afterAll(): Unit = {
@@ -181,7 +181,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
   allFileBasedDataSources.foreach { format =>
     testQuietly(s"Enabling/disabling ignoreMissingFiles using $format") {
-      def testIgnoreMissingFiles(): Unit = {
+      def testIgnoreMissingFiles(options: Map[String, String]): Unit = {
         withTempDir { dir =>
           val basePath = dir.getCanonicalPath
 
@@ -197,7 +197,7 @@ class FileBasedDataSourceSuite extends QueryTest
             fs.listStatus(p).filter(_.isFile).map(_.getPath)
           }
 
-          val df = spark.read.format(format).load(
+          val df = spark.read.options(options).format(format).load(
             new Path(basePath, "first").toString,
             new Path(basePath, "second").toString,
             new Path(basePath, "third").toString,
@@ -214,20 +214,27 @@ class FileBasedDataSourceSuite extends QueryTest
         }
       }
 
+      // Test set ignoreMissingFiles via SQL Conf and Data Source reader options
       for {
-        ignore <- Seq("true", "false")
+        (ignore, options, sqlConf) <- Seq(
+          // Set via SQL Conf: leave options empty
+          ("true", Map.empty[String, String], "true"),
+          ("false", Map.empty[String, String], "false"),
+          // Set via reader options: explicitly set SQL Conf to opposite
+          ("true", Map("ignoreMissingFiles" -> "true"), "false"),
+          ("false", Map("ignoreMissingFiles" -> "false"), "true"))
         sources <- Seq("", format)
       } {
-        withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> ignore,
-          SQLConf.USE_V1_SOURCE_LIST.key -> sources) {
-            if (ignore.toBoolean) {
-              testIgnoreMissingFiles()
-            } else {
-              val exception = intercept[SparkException] {
-                testIgnoreMissingFiles()
-              }
-              assert(exception.getMessage().contains("does not exist"))
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> sources,
+          SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
+          if (ignore.toBoolean) {
+            testIgnoreMissingFiles(options)
+          } else {
+            val exception = intercept[SparkException] {
+              testIgnoreMissingFiles(options)
             }
+            assert(exception.getMessage().contains("does not exist"))
+          }
         }
       }
     }
@@ -836,12 +843,13 @@ class FileBasedDataSourceSuite extends QueryTest
           }
           assert(filterCondition.isDefined)
           // The partitions filters should be pushed down and no need to be reevaluated.
-          assert(filterCondition.get.collectFirst {
-            case a: AttributeReference if a.name == "p1" || a.name == "p2" => a
-          }.isEmpty)
+          assert(!filterCondition.get.exists {
+            case a: AttributeReference => a.name == "p1" || a.name == "p2"
+            case _ => false
+          })
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _) => f
+            case BatchScanExec(_, f: FileScan, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.nonEmpty)
@@ -881,7 +889,7 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(filterCondition.isDefined)
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _) => f
+            case BatchScanExec(_, f: FileScan, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.isEmpty)
@@ -967,52 +975,57 @@ class FileBasedDataSourceSuite extends QueryTest
 
           // cases when value == MAX
           var v = Short.MaxValue
-          checkPushedFilters(format, df.where('id > v.toInt), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id >= v.toInt), Array(sources.IsNotNull("id"),
-            sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where('id === v.toInt), Array(sources.IsNotNull("id"),
-            sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where('id <=> v.toInt),
+          checkPushedFilters(format, df.where($"id" > v.toInt), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" >= v.toInt),
+            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where($"id" === v.toInt),
+            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where($"id" <=> v.toInt),
             Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(format, df.where('id <= v.toInt), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where('id < v.toInt), Array(sources.IsNotNull("id"),
-            sources.Not(sources.EqualTo("id", v))))
+          checkPushedFilters(format, df.where($"id" <= v.toInt),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where($"id" < v.toInt),
+            Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
 
           // cases when value > MAX
           var v1: Int = positiveInt
-          checkPushedFilters(format, df.where('id > v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id >= v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id === v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id <=> v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id <= v1), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where('id < v1), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where($"id" > v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" >= v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" === v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" <=> v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" <= v1), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where($"id" < v1), Array(sources.IsNotNull("id")))
 
           // cases when value = MIN
           v = Short.MinValue
-          checkPushedFilters(format, df.where(lit(v.toInt) < 'id), Array(sources.IsNotNull("id"),
-            sources.Not(sources.EqualTo("id", v))))
-          checkPushedFilters(format, df.where(lit(v.toInt) <= 'id), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v.toInt) === 'id), Array(sources.IsNotNull("id"),
+          checkPushedFilters(format, df.where(lit(v.toInt) < $"id"),
+            Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
+          checkPushedFilters(format, df.where(lit(v.toInt) <= $"id"),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v.toInt) === $"id"),
+            Array(sources.IsNotNull("id"),
             sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) <=> 'id),
+          checkPushedFilters(format, df.where(lit(v.toInt) <=> $"id"),
             Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) >= 'id), Array(sources.IsNotNull("id"),
-            sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) > 'id), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v.toInt) >= $"id"),
+            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where(lit(v.toInt) > $"id"), Array(), noScan = true)
 
           // cases when value < MIN
           v1 = negativeInt
-          checkPushedFilters(format, df.where(lit(v1) < 'id), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v1) <= 'id), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v1) === 'id), Array(), noScan = true)
-          checkPushedFilters(format, df.where(lit(v1) >= 'id), Array(), noScan = true)
-          checkPushedFilters(format, df.where(lit(v1) > 'id), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) < $"id"),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v1) <= $"id"),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v1) === $"id"), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) >= $"id"), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) > $"id"), Array(), noScan = true)
 
           // cases when value is within range (MIN, MAX)
-          checkPushedFilters(format, df.where('id > 30), Array(sources.IsNotNull("id"),
+          checkPushedFilters(format, df.where($"id" > 30), Array(sources.IsNotNull("id"),
             sources.GreaterThan("id", 30)))
-          checkPushedFilters(format, df.where(lit(100) >= 'id), Array(sources.IsNotNull("id"),
-            sources.LessThanOrEqual("id", 100)))
+          checkPushedFilters(format, df.where(lit(100) >= $"id"),
+            Array(sources.IsNotNull("id"), sources.LessThanOrEqual("id", 100)))
         }
       }
     }

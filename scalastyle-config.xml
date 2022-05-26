@@ -324,6 +324,11 @@ This file is divided into 3 sections:
     <customMessage>Omit braces in case clauses.</customMessage>
   </check>
 
+  <check level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">new (java\.lang\.)?(Byte|Integer|Long|Short)\(</parameter></parameters>
+    <customMessage>Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors.</customMessage>
+  </check>
+
   <!-- SPARK-16877: Avoid Java annotations -->
   <check level="error" class="org.scalastyle.scalariform.OverrideJavaChecker" enabled="true"></check>
 
@@ -424,5 +429,12 @@ This file is divided into 3 sections:
   <check customId="GuavaToStringHelper" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Objects.toStringHelper</parameter></parameters>
     <customMessage>Avoid using Object.toStringHelper. Use ToStringBuilder instead.</customMessage>
+  </check>
+
+  <check customId="GuavaFilesCreateTempDir" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Files\.createTempDir\(</parameter></parameters>
+    <customMessage>Avoid using com.google.common.io.Files.createTempDir due to CVE-2020-8908.
+      Use org.apache.spark.util.Utils.createTempDir instead.
+    </customMessage>
   </check>
 </scalastyle>

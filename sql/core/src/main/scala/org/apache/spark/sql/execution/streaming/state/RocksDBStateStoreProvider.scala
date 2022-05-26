@@ -148,7 +148,7 @@ private[sql] class RocksDBStateStoreProvider
 
       StateStoreMetrics(
         rocksDBMetrics.numUncommittedKeys,
-        rocksDBMetrics.memUsageBytes,
+        rocksDBMetrics.totalMemUsageBytes,
         stateStoreCustomMetrics)
     }
 

@@ -96,7 +96,10 @@ SELECT float('N A N')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: N A N. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'N A N' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT float('N A N')
+       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -105,7 +108,10 @@ SELECT float('NaN x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: NaN x. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'NaN x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT float('NaN x')
+       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -114,7 +120,10 @@ SELECT float(' INFINITY    x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric:  INFINITY    x. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value ' INFINITY    x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT float(' INFINITY    x')
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -147,7 +156,10 @@ SELECT float(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: nan. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_INVALID_INPUT] The value 'nan' of the type "STRING" cannot be cast to "DECIMAL(10,0)" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 14) ==
+SELECT float(decimal('nan'))
+             ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -171,6 +183,7 @@ struct<four:string,f1:float>
 	0.0
 	1.2345679E-20
 	1.2345679E20
+	1004.3
 
 
 -- !query
@@ -178,7 +191,7 @@ SELECT '' AS one, f.* FROM FLOAT4_TBL f WHERE f.f1 = '1004.3'
 -- !query schema
 struct<one:string,f1:float>
 -- !query output
-	1004.3
+
 
 
 -- !query
@@ -189,6 +202,7 @@ struct<three:string,f1:float>
 	-34.84
 	0.0
 	1.2345679E-20
+	1004.3
 
 
 -- !query
@@ -199,6 +213,7 @@ struct<three:string,f1:float>
 	-34.84
 	0.0
 	1.2345679E-20
+	1004.3
 
 
 -- !query
@@ -227,22 +242,22 @@ struct<four:string,f1:float>
 SELECT '' AS three, f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
 -- !query schema
-struct<three:string,f1:float,x:float>
+struct<three:string,f1:float,x:double>
 -- !query output
-	1.2345679E-20	-1.2345678E-19
-	1.2345679E20	-1.2345678E21
-	1004.3	-10043.0
+	1.2345679E-20	-1.2345678720289608E-19
+	1.2345679E20	-1.2345678955701443E21
+	1004.3	-10042.999877929688
 
 
 -- !query
 SELECT '' AS three, f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
 -- !query schema
-struct<three:string,f1:float,x:float>
+struct<three:string,f1:float,x:double>
 -- !query output
 	1.2345679E-20	-10.0
-	1.2345679E20	1.2345679E20
-	1004.3	994.3
+	1.2345679E20	1.2345678955701443E20
+	1004.3	994.2999877929688
 
 
 -- !query
@@ -260,11 +275,11 @@ struct<three:string,f1:float,x:double>
 SELECT '' AS three, f.f1, f.f1 - '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
 -- !query schema
-struct<three:string,f1:float,x:float>
+struct<three:string,f1:float,x:double>
 -- !query output
 	1.2345679E-20	10.0
-	1.2345679E20	1.2345679E20
-	1004.3	1014.3
+	1.2345679E20	1.2345678955701443E20
+	1004.3	1014.2999877929688
 
 
 -- !query
@@ -325,7 +340,7 @@ SELECT int(float('2147483647'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 2.14748365E9 to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_OVERFLOW] The value 2.14748365E9 of the type "FLOAT" cannot be cast to "INT" due to an overflow. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -342,7 +357,7 @@ SELECT int(float('-2147483900'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -2.1474839E9 to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_OVERFLOW] The value -2.1474839E9 of the type "FLOAT" cannot be cast to "INT" due to an overflow. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -375,7 +390,7 @@ SELECT bigint(float('-9223380000000000000'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -9.22338E18 to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_OVERFLOW] The value -9.22338E18 of the type "FLOAT" cannot be cast to "BIGINT" due to an overflow. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query

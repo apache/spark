@@ -164,6 +164,13 @@ public abstract class BloomFilter {
   public abstract void writeTo(OutputStream out) throws IOException;
 
   /**
+   * @return the number of set bits in this {@link BloomFilter}.
+   */
+  public long cardinality() {
+    throw new UnsupportedOperationException("Not implemented");
+  }
+
+  /**
    * Reads in a {@link BloomFilter} from an input stream. It is the caller's responsibility to close
    * the stream.
    */

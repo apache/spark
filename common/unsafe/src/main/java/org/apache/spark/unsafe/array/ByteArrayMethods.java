@@ -19,6 +19,8 @@ package org.apache.spark.unsafe.array;
 
 import org.apache.spark.unsafe.Platform;
 
+import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
+
 public class ByteArrayMethods {
 
   private ByteArrayMethods() {
@@ -90,5 +92,40 @@ public class ByteArrayMethods {
       i += 1;
     }
     return true;
+  }
+
+  public static boolean contains(byte[] arr, byte[] sub) {
+    if (sub.length == 0) {
+      return true;
+    }
+    byte first = sub[0];
+    for (int i = 0; i <= arr.length - sub.length; i++) {
+      if (arr[i] == first && matchAt(arr, sub, i)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public static boolean startsWith(byte[] array, byte[] target) {
+    if (target.length > array.length) {
+      return false;
+    }
+    return arrayEquals(array, BYTE_ARRAY_OFFSET, target, BYTE_ARRAY_OFFSET, target.length);
+  }
+
+  public static boolean endsWith(byte[] array, byte[] target) {
+    if (target.length > array.length) {
+      return false;
+    }
+    return arrayEquals(array, BYTE_ARRAY_OFFSET + array.length - target.length,
+      target, BYTE_ARRAY_OFFSET, target.length);
+  }
+
+  public static boolean matchAt(byte[] arr, byte[] sub, int pos) {
+    if (sub.length + pos > arr.length || pos < 0) {
+      return false;
+    }
+    return arrayEquals(arr, BYTE_ARRAY_OFFSET + pos, sub, BYTE_ARRAY_OFFSET, sub.length);
   }
 }

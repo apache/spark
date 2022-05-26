@@ -21,8 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern,
-  UNARY_POSITIVE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -204,10 +203,13 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 
+  override def flatArguments: Iterator[Any] = Iterator(child)
+
   override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
+abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
+    with SupportQueryContext {
 
   protected val failOnError: Boolean
 
@@ -216,6 +218,14 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
+
+  override def initQueryContext(): String = {
+    if (failOnError) {
+      origin.context
+    } else {
+      ""
+    }
+  }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
@@ -266,19 +276,16 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
            |${ev.value} = (${CodeGenerator.javaType(dataType)})($tmpResult);
          """.stripMargin
       })
-    case IntegerType | LongType =>
+    case IntegerType | LongType if failOnError && exactMathMethod.isDefined =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val operation = if (failOnError && exactMathMethod.isDefined) {
-          val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
-          s"$mathUtils.${exactMathMethod.get}($eval1, $eval2)"
-        } else {
-          s"$eval1 $symbol $eval2"
-        }
+        val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+        val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
         s"""
-           |${ev.value} = $operation;
+           |${ev.value} = $mathUtils.${exactMathMethod.get}($eval1, $eval2, $errorContext);
          """.stripMargin
       })
-    case DoubleType | FloatType =>
+
+    case IntegerType | LongType | DoubleType | FloatType =>
       // When Double/Float overflows, there can be 2 cases:
       // - precision loss: according to SQL standard, the number is truncated;
       // - returns (+/-)Infinite: same behavior also other DBs have (e.g. Postgres)
@@ -331,6 +338,10 @@ case class Add(
       MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
     case _: YearMonthIntervalType =>
       MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
+    case _: IntegerType if failOnError =>
+      MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
+    case _: LongType if failOnError =>
+      MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
     case _ => numeric.plus(input1, input2)
   }
 
@@ -377,6 +388,10 @@ case class Subtract(
       MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
     case _: YearMonthIntervalType =>
       MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
+    case _: IntegerType if failOnError =>
+      MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
+    case _: LongType if failOnError =>
+      MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
     case _ => numeric.minus(input1, input2)
   }
 
@@ -409,7 +424,13 @@ case class Multiply(
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case _: IntegerType if failOnError =>
+      MathUtils.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
+    case _: LongType if failOnError =>
+      MathUtils.multiplyExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
+    case _ => numeric.times(input1, input2)
+  }
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
 
@@ -444,10 +465,10 @@ trait DivModLike extends BinaryArithmetic {
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must be true.
-          throw QueryExecutionErrors.divideByZeroError()
+          throw QueryExecutionErrors.divideByZeroError(queryContext)
         }
         if (checkDivideOverflow && input1 == Long.MinValue && input2 == -1) {
-          throw QueryExecutionErrors.overflowInIntegralDivideError()
+          throw QueryExecutionErrors.overflowInIntegralDivideError(queryContext)
         }
         evalOperation(input1, input2)
       }
@@ -474,10 +495,11 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
+    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
       s"""
         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
-        |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+        |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
         |""".stripMargin
     } else {
       ""
@@ -486,7 +508,7 @@ trait DivModLike extends BinaryArithmetic {
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.divideByZeroError();"
+        s"throw QueryExecutionErrors.divideByZeroError($errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -504,7 +526,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContext);"
       } else {
         ""
       }
@@ -729,7 +751,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw QueryExecutionErrors.divideByZeroError
+          throw QueryExecutionErrors.divideByZeroError(queryContext)
         }
         input1 match {
           case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
@@ -754,7 +776,7 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-
+    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
     val result = dataType match {
       case DecimalType.Fixed(_, _) =>
         val decimalAdd = "$plus"
@@ -790,7 +812,7 @@ case class Pmod(
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.divideByZeroError();"
+        s"throw QueryExecutionErrors.divideByZeroError($errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -807,7 +829,7 @@ case class Pmod(
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContext);"
       } else {
         ""
       }

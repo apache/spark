@@ -660,7 +660,7 @@ select date_part(c, c) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The field parameter needs to be a foldable string value.; line 1 pos 7
+The 'field' parameter of function 'date_part' needs to be a string literal.; line 1 pos 7
 
 
 -- !query
@@ -677,7 +677,7 @@ select date_part(i, i) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The field parameter needs to be a foldable string value.; line 1 pos 7
+The 'field' parameter of function 'date_part' needs to be a string literal.; line 1 pos 7
 
 
 -- !query

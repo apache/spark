@@ -1225,6 +1225,13 @@ Note that there are some restrictions when you use session window in streaming q
 
 For batch query, global window (only having `session_window` in grouping key) is supported.
 
+By default, Spark does not perform partial aggregation for session window aggregation, since it requires additional
+sort in local partitions before grouping. It works better for the case there are only few number of input rows in
+same group key for each local partition, but for the case there are numerous input rows having same group key in
+local partition, doing partial aggregation can still increase the performance significantly despite additional sort.
+
+You can enable `spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition` to indicate Spark to perform partial aggregation.
+
 ##### Conditions for watermarking to clean aggregation state
 {:.no_toc}
 
@@ -3316,9 +3323,9 @@ Will print something like the following.
 
 You can also asynchronously monitor all queries associated with a
 `SparkSession` by attaching a `StreamingQueryListener`
-([Scala](api/scala/org/apache/spark/sql/streaming/StreamingQueryListener.html)/[Java](api/java/org/apache/spark/sql/streaming/StreamingQueryListener.html) docs).
+([Scala](api/scala/org/apache/spark/sql/streaming/StreamingQueryListener.html)/[Java](api/java/org/apache/spark/sql/streaming/StreamingQueryListener.html)/[Python](api/python/reference/api/pyspark.sql.streaming.StreamingQueryListener.html) docs).
 Once you attach your custom `StreamingQueryListener` object with
-`sparkSession.streams.attachListener()`, you will get callbacks when a query is started and
+`sparkSession.streams.addListener()`, you will get callbacks when a query is started and
 stopped and when there is progress made in an active query. Here is an example,
 
 <div class="codetabs">
@@ -3364,8 +3371,21 @@ spark.streams().addListener(new StreamingQueryListener() {
 
 </div>
 <div data-lang="python"  markdown="1">
-{% highlight bash %}
-Not available in Python.
+{% highlight python %}
+spark = ...
+
+class Listener(StreamingQueryListener):
+    def onQueryStarted(self, event):
+        print("Query started: " + queryStarted.id)
+
+    def onQueryProgress(self, event):
+        println("Query terminated: " + queryTerminated.id)
+
+    def onQueryTerminated(self, event):
+        println("Query made progress: " + queryProgress.progress)
+
+
+spark.streams.addListener(Listener())
 {% endhighlight %}
 
 </div>

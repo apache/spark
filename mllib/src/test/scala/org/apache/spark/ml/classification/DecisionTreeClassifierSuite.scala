@@ -67,6 +67,12 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
+  test("DecisionTreeClassifier validate input dataset") {
+    testInvalidClassificationLabels(new DecisionTreeClassifier().fit(_), None)
+    testInvalidWeights(new DecisionTreeClassifier().setWeightCol("weight").fit(_))
+    testInvalidVectors(new DecisionTreeClassifier().fit(_))
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////

@@ -24,9 +24,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.util.InternalRowSet
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeFiltering}
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeFiltering}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 
 /**
@@ -35,7 +36,8 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 case class BatchScanExec(
     output: Seq[AttributeReference],
     @transient scan: Scan,
-    runtimeFilters: Seq[Expression]) extends DataSourceV2ScanExecBase {
+    runtimeFilters: Seq[Expression],
+    keyGroupedPartitioning: Option[Seq[Expression]] = None) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 
@@ -49,9 +51,9 @@ case class BatchScanExec(
 
   override def hashCode(): Int = Objects.hashCode(batch, runtimeFilters)
 
-  @transient override lazy val partitions: Seq[InputPartition] = batch.planInputPartitions()
+  @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
 
-  @transient private lazy val filteredPartitions: Seq[InputPartition] = {
+  @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
       case DynamicPruningExpression(e) => DataSourceStrategy.translateRuntimeFilter(e)
       case _ => None
@@ -68,16 +70,36 @@ case class BatchScanExec(
       val newPartitions = scan.toBatch.planInputPartitions()
 
       originalPartitioning match {
-        case p: DataSourcePartitioning if p.numPartitions != newPartitions.size =>
-          throw new SparkException(
-            "Data source must have preserved the original partitioning during runtime filtering; " +
-            s"reported num partitions: ${p.numPartitions}, " +
-            s"num partitions after runtime filtering: ${newPartitions.size}")
+        case p: KeyGroupedPartitioning =>
+          if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
+            throw new SparkException("Data source must have preserved the original partitioning " +
+                "during runtime filtering: not all partitions implement HasPartitionKey after " +
+                "filtering")
+          }
+
+          val newRows = new InternalRowSet(p.expressions.map(_.dataType))
+          newRows ++= newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
+          val oldRows = p.partitionValuesOpt.get
+
+          if (oldRows.size != newRows.size) {
+            throw new SparkException("Data source must have preserved the original partitioning " +
+                "during runtime filtering: the number of unique partition values obtained " +
+                s"through HasPartitionKey changed: before ${oldRows.size}, after ${newRows.size}")
+          }
+
+          if (!oldRows.forall(newRows.contains)) {
+            throw new SparkException("Data source must have preserved the original partitioning " +
+                "during runtime filtering: the number of unique partition values obtained " +
+                s"through HasPartitionKey remain the same but do not exactly match")
+          }
+
+          groupPartitions(newPartitions).get.map(_._2)
+
         case _ =>
           // no validation is needed as the data source did not report any specific partitioning
+        newPartitions.map(Seq(_))
       }
 
-      newPartitions
     } else {
       partitions
     }

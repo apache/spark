@@ -177,7 +177,7 @@ class RocksDB(
         numKeysOnWritingVersion -= 1
       }
     }
-    writeBatch.remove(key)
+    writeBatch.delete(key)
   }
 
   /**
@@ -370,6 +370,9 @@ class RocksDB(
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
     val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
+    val blockCacheUsage = getDBProperty("rocksdb.block-cache-usage")
+    // Get the approximate memory usage of this writeBatchWithIndex
+    val writeBatchMemUsage = writeBatch.getWriteBatch.getDataSize
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
       "put" -> DB_WRITE,
@@ -403,7 +406,8 @@ class RocksDB(
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
-      readerMemUsage + memTableMemUsage,
+      readerMemUsage + memTableMemUsage + blockCacheUsage + writeBatchMemUsage,
+      writeBatchMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros.toMap,
       commitLatencyMs,
@@ -446,7 +450,7 @@ class RocksDB(
   }
 
   private def closePrefixScanIterators(): Unit = {
-    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
+    prefixScanReuseIter.values().asScala.foreach(_.close())
     prefixScanReuseIter.clear()
   }
 
@@ -616,7 +620,8 @@ object RocksDBConf {
 case class RocksDBMetrics(
     numCommittedKeys: Long,
     numUncommittedKeys: Long,
-    memUsageBytes: Long,
+    totalMemUsageBytes: Long,
+    writeBatchMemUsageBytes: Long,
     totalSSTFilesBytes: Long,
     nativeOpsHistograms: Map[String, RocksDBNativeHistogram],
     lastCommitLatencyMs: Map[String, Long],

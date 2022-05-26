@@ -30,11 +30,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 class ResolveSubquerySuite extends AnalysisTest {
 
-  val a = 'a.int
-  val b = 'b.int
-  val c = 'c.int
-  val x = 'x.struct(a)
-  val y = 'y.struct(a)
+  val a = $"a".int
+  val b = $"b".int
+  val c = $"c".int
+  val x = $"x".struct(a)
+  val y = $"y".struct(a)
   val t0 = OneRowRelation()
   val t1 = LocalRelation(a, b)
   val t2 = LocalRelation(b, c)
@@ -68,7 +68,7 @@ class ResolveSubquerySuite extends AnalysisTest {
   }
 
   test("deduplicate lateral subquery") {
-    val plan = lateralJoin(t1, t0.select('a))
+    val plan = lateralJoin(t1, t0.select($"a"))
     // The subquery's output OuterReference(a#0) conflicts with the left child output
     // attribute a#0. So an alias should be added to deduplicate the subquery's outputs.
     val expected = LateralJoin(
@@ -80,12 +80,12 @@ class ResolveSubquerySuite extends AnalysisTest {
   }
 
   test("lateral join with ambiguous join conditions") {
-    val plan = lateralJoin(t1, t0.select('b), condition = Some('b ===  1))
+    val plan = lateralJoin(t1, t0.select($"b"), condition = Some($"b" ===  1))
     assertAnalysisError(plan, "Reference 'b' is ambiguous, could be: b, b." :: Nil)
   }
 
   test("prefer resolving lateral subquery attributes from the inner query") {
-    val plan = lateralJoin(t1, t2.select('a, 'b, 'c))
+    val plan = lateralJoin(t1, t2.select($"a", $"b", $"c"))
     val expected = LateralJoin(
       t1,
       LateralSubquery(Project(Seq(OuterReference(a).as(a.name), b, c), t2), Seq(a)),
@@ -115,7 +115,7 @@ class ResolveSubquerySuite extends AnalysisTest {
   test("resolve nested lateral subqueries") {
     // SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT a, b, c FROM t2), LATERAL (SELECT b, c))
     checkAnalysis(
-      lateralJoin(t1, lateralJoin(t2.select('a, 'b, 'c), t0.select('b, 'c))),
+      lateralJoin(t1, lateralJoin(t2.select($"a", $"b", $"c"), t0.select($"b", $"c"))),
       LateralJoin(
         t1,
         LateralSubquery(
@@ -132,7 +132,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b, c))
     // TODO: support accessing columns from outer outer query.
     assertAnalysisErrorClass(
-      lateralJoin(t1, lateralJoin(t2, t0.select('a, 'b, 'c))),
+      lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
       "MISSING_COLUMN",
       Array("a", ""))
   }
@@ -140,13 +140,13 @@ class ResolveSubquerySuite extends AnalysisTest {
   test("lateral subquery with unresolvable attributes") {
     // SELECT * FROM t1, LATERAL (SELECT a, c)
     assertAnalysisErrorClass(
-      lateralJoin(t1, t0.select('a, 'c)),
+      lateralJoin(t1, t0.select($"a", $"c")),
       "MISSING_COLUMN",
       Array("c", "")
     )
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
     assertAnalysisErrorClass(
-      lateralJoin(t1, t2.select('a, 'b, 'c, 'd)),
+      lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
       "MISSING_COLUMN",
       Array("d", "b, c")
     )
@@ -158,7 +158,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
     assertAnalysisErrorClass(
-      lateralJoin(t1, lateralJoin(t2, t0.select('a, 'b))),
+      lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
       "MISSING_COLUMN",
       Array("a", "")
     )
@@ -179,8 +179,8 @@ class ResolveSubquerySuite extends AnalysisTest {
   }
 
   test("lateral join with unsupported expressions") {
-    val plan = lateralJoin(t1, t0.select(('a + 'b).as("c")),
-      condition = Some(sum('a) === sum('c)))
+    val plan = lateralJoin(t1, t0.select(($"a" + $"b").as("c")),
+      condition = Some(sum($"a") === sum($"c")))
     assertAnalysisError(plan, Seq("Invalid expressions: [sum(a), sum(c)]"))
   }
 
@@ -249,13 +249,13 @@ class ResolveSubquerySuite extends AnalysisTest {
   test("SPARK-36028: resolve scalar subqueries with outer references in Project") {
     // SELECT (SELECT a) FROM t1
     checkAnalysis(
-      Project(ScalarSubquery(t0.select('a)).as("sub") :: Nil, t1),
+      Project(ScalarSubquery(t0.select($"a")).as("sub") :: Nil, t1),
       Project(ScalarSubquery(Project(OuterReference(a) :: Nil, t0), Seq(a)).as("sub") :: Nil, t1)
     )
     // SELECT (SELECT a + b + c AS r FROM t2) FROM t1
     checkAnalysis(
       Project(ScalarSubquery(
-        t2.select(('a + 'b + 'c).as("r"))).as("sub") :: Nil, t1),
+        t2.select(($"a" + $"b" + $"c").as("r"))).as("sub") :: Nil, t1),
       Project(ScalarSubquery(
         Project((OuterReference(a) + b + c).as("r") :: Nil, t2), Seq(a)).as("sub") :: Nil, t1)
     )

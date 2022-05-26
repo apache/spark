@@ -66,23 +66,27 @@ import org.apache.spark.sql.types._
  * }}}
  */
 object RowEncoder {
-  def apply(schema: StructType): ExpressionEncoder[Row] = {
+  def apply(schema: StructType, lenient: Boolean): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    val serializer = serializerFor(inputObject, schema)
+    val serializer = serializerFor(inputObject, schema, lenient)
     val deserializer = deserializerFor(GetColumnByOrdinal(0, serializer.dataType), schema)
     new ExpressionEncoder[Row](
       serializer,
       deserializer,
       ClassTag(cls))
   }
+  def apply(schema: StructType): ExpressionEncoder[Row] = {
+    apply(schema, lenient = false)
+  }
 
   private def serializerFor(
       inputObject: Expression,
-      inputType: DataType): Expression = inputType match {
+      inputType: DataType,
+      lenient: Boolean): Expression = inputType match {
     case dt if ScalaReflection.isNativeType(dt) => inputObject
 
-    case p: PythonUserDefinedType => serializerFor(inputObject, p.sqlType)
+    case p: PythonUserDefinedType => serializerFor(inputObject, p.sqlType, lenient)
 
     case udt: UserDefinedType[_] =>
       val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
@@ -100,7 +104,9 @@ object RowEncoder {
       Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
     case TimestampType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
+      if (lenient) {
+        createSerializerForAnyTimestamp(inputObject)
+      } else if (SQLConf.get.datetimeJava8ApiEnabled) {
         createSerializerForJavaInstant(inputObject)
       } else {
         createSerializerForSqlTimestamp(inputObject)
@@ -109,7 +115,9 @@ object RowEncoder {
     case TimestampNTZType => createSerializerForLocalDateTime(inputObject)
 
     case DateType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
+      if (lenient) {
+        createSerializerForAnyDate(inputObject)
+      } else if (SQLConf.get.datetimeJava8ApiEnabled) {
         createSerializerForJavaLocalDate(inputObject)
       } else {
         createSerializerForSqlDate(inputObject)
@@ -144,7 +152,7 @@ object RowEncoder {
             inputObject,
             ObjectType(classOf[Object]),
             element => {
-              val value = serializerFor(ValidateExternalType(element, et), et)
+              val value = serializerFor(ValidateExternalType(element, et, lenient), et, lenient)
               expressionWithNullSafety(value, containsNull, WalkedTypePath())
             })
       }
@@ -156,7 +164,7 @@ object RowEncoder {
             returnNullable = false),
           "toSeq",
           ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
-      val convertedKeys = serializerFor(keys, ArrayType(kt, false))
+      val convertedKeys = serializerFor(keys, ArrayType(kt, false), lenient)
 
       val values =
         Invoke(
@@ -164,7 +172,7 @@ object RowEncoder {
             returnNullable = false),
           "toSeq",
           ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
-      val convertedValues = serializerFor(values, ArrayType(vt, valueNullable))
+      val convertedValues = serializerFor(values, ArrayType(vt, valueNullable), lenient)
 
       val nonNullOutput = NewInstance(
         classOf[ArrayBasedMapData],
@@ -183,8 +191,10 @@ object RowEncoder {
         val fieldValue = serializerFor(
           ValidateExternalType(
             GetExternalRowField(inputObject, index, field.name),
-            field.dataType),
-          field.dataType)
+            field.dataType,
+            lenient),
+          field.dataType,
+          lenient)
         val convertedField = if (field.nullable) {
           If(
             Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
@@ -214,12 +224,13 @@ object RowEncoder {
    * can be `scala.math.BigDecimal`, `java.math.BigDecimal`, or
    * `org.apache.spark.sql.types.Decimal`.
    */
-  def externalDataTypeForInput(dt: DataType): DataType = dt match {
+  def externalDataTypeForInput(dt: DataType, lenient: Boolean): DataType = dt match {
     // In order to support both Decimal and java/scala BigDecimal in external row, we make this
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
     // In order to support both Array and Seq in external row, we make this as java.lang.Object.
     case _: ArrayType => ObjectType(classOf[java.lang.Object])
+    case _: DateType | _: TimestampType if lenient => ObjectType(classOf[java.lang.Object])
     case _ => externalDataTypeFor(dt)
   }
 

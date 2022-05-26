@@ -171,25 +171,36 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - mismatched column list size") {
-    val msg = "Cannot write to table due to mismatched user specified column size"
-    withTable("t1") {
-      val cols = Seq("c1", "c2", "c3")
-      createTable("t1", cols, Seq("int", "long", "string"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
-      assert(e1.getMessage.contains(msg))
-      val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
-      assert(e2.getMessage.contains(msg))
+    val msgs = Seq("Cannot write to table due to mismatched user specified column size",
+      "expected 3 columns but found")
+    def test: Unit = {
+      withTable("t1") {
+        val cols = Seq("c1", "c2", "c3")
+        createTable("t1", cols, Seq("int", "long", "string"))
+        val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
+        assert(e1.getMessage.contains(msgs(0)) || e1.getMessage.contains(msgs(1)))
+        val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
+        assert(e2.getMessage.contains(msgs(0)) || e2.getMessage.contains(msgs(1)))
+      }
+    }
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      test
+    }
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
+      test
     }
   }
 
   test("insert with column list - mismatched target table out size after rewritten query") {
-    val v2Msg = "Cannot write to 'testcat.t1', not enough data columns:"
+    val v2Msg = "expected 2 columns but found"
     val cols = Seq("c1", "c2", "c3", "c4")
 
     withTable("t1") {
       createTable("t1", cols, Seq.fill(4)("int"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)"))
       assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
+        e1.getMessage.contains("expected 4 columns but found 1") ||
+        e1.getMessage.contains("not enough data columns") ||
         e1.getMessage.contains(v2Msg))
     }
 
@@ -199,6 +210,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
       }
       assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
+        e1.getMessage.contains("not enough data columns") ||
         e1.getMessage.contains(v2Msg))
     }
   }
@@ -264,7 +276,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
       }
-      assert(e.getMessage.contains("Found duplicate keys 'c'"))
+      assert(e.getMessage.contains("Found duplicate keys `c`"))
     }
     // The following code is skipped for Hive because columns stored in Hive Metastore is always
     // case insensitive and we cannot create such table in Hive Metastore.
@@ -286,20 +298,44 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     } else {
       SQLConf.StoreAssignmentPolicy.values
     }
+
+    def shouldThrowException(policy: SQLConf.StoreAssignmentPolicy.Value): Boolean = policy match {
+      case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+        true
+      case SQLConf.StoreAssignmentPolicy.LEGACY =>
+        false
+    }
+
     testingPolicies.foreach { policy =>
-      withSQLConf(
-        SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
+      withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
         withTable("t") {
           sql("create table t(a int, b string) using parquet partitioned by (a)")
-          policy match {
-            case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
-              val errorMsg = intercept[NumberFormatException] {
-                sql("insert into t partition(a='ansi') values('ansi')")
-              }.getMessage
-              assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
-            case SQLConf.StoreAssignmentPolicy.LEGACY =>
+          if (shouldThrowException(policy)) {
+            val errorMsg = intercept[NumberFormatException] {
               sql("insert into t partition(a='ansi') values('ansi')")
-              checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+            }.getMessage
+            assert(errorMsg.contains(
+              """The value 'ansi' of the type "STRING" cannot be cast to "INT""""))
+          } else {
+            sql("insert into t partition(a='ansi') values('ansi')")
+            checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-38228: legacy store assignment should not fail on error under ANSI mode") {
+    // DS v2 doesn't support the legacy policy
+    if (format != "foo") {
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(
+          SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          withTable("t") {
+            sql("create table t(a int) using parquet")
+            sql("insert into t values('ansi')")
+            checkAnswer(spark.table("t"), Row(null))
           }
         }
       }

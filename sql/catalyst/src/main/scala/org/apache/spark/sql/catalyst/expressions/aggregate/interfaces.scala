@@ -83,7 +83,7 @@ object AggregateExpression {
   }
 
   def containsAggregate(expr: Expression): Boolean = {
-    expr.find(isAggregate).isDefined
+    expr.exists(isAggregate)
   }
 
   def isAggregate(expr: Expression): Boolean = {

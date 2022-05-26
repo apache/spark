@@ -21,7 +21,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{count, explode, sum}
+import org.apache.spark.sql.functions.{count, explode, sum, year}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
@@ -466,5 +466,22 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df22 = df21.filter($"x" > 0)
     assertAmbiguousSelfJoin(df21.join(df22, df21("x") === df22("y")))
     assertAmbiguousSelfJoin(df22.join(df21, df21("x") === df22("y")))
+  }
+
+  test("SPARK-35937: GetDateFieldOperations should skip unresolved nodes") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = Seq("1644821603").map(i => (i.toInt, i)).toDF("tsInt", "tsStr")
+      val df1 = df.select(df("tsStr").cast("timestamp")).as("df1")
+      val df2 = df.select(df("tsStr").cast("timestamp")).as("df2")
+      df1.join(df2, $"df1.tsStr" === $"df2.tsStr", "left_outer")
+      val df3 = df1.join(df2, $"df1.tsStr" === $"df2.tsStr", "left_outer")
+        .select($"df1.tsStr".as("timeStr")).as("df3")
+      // Before the fix, it throws "UnresolvedException: Invalid call to
+      // dataType on unresolved object".
+      val ex = intercept[AnalysisException](
+        df3.join(df1, year($"df1.timeStr") === year($"df3.tsStr"))
+      )
+      assert(ex.message.contains("Column 'df1.timeStr' does not exist."))
+    }
   }
 }

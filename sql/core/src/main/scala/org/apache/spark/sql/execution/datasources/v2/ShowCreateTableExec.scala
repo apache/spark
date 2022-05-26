@@ -36,7 +36,7 @@ case class ShowCreateTableExec(
     output: Seq[Attribute],
     table: Table) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    val builder = StringBuilder.newBuilder
+    val builder = new StringBuilder
     showCreateTable(table, builder)
     Seq(InternalRow(UTF8String.fromString(builder.toString)))
   }
@@ -114,9 +114,13 @@ case class ShowCreateTableExec(
   }
 
   private def showTableLocation(table: Table, builder: StringBuilder): Unit = {
-    Option(table.properties.get(TableCatalog.PROP_LOCATION))
-      .map("LOCATION '" + escapeSingleQuotedString(_) + "'\n")
-      .foreach(builder.append)
+    val isManagedOption = Option(table.properties.get(TableCatalog.PROP_IS_MANAGED_LOCATION))
+    // Only generate LOCATION clause if it's not managed.
+    if (isManagedOption.forall(_.equalsIgnoreCase("false"))) {
+      Option(table.properties.get(TableCatalog.PROP_LOCATION))
+        .map("LOCATION '" + escapeSingleQuotedString(_) + "'\n")
+        .foreach(builder.append)
+    }
   }
 
   private def showTableProperties(

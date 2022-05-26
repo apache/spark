@@ -25,7 +25,7 @@ from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
 from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import _jvm  # type: ignore[attr-defined]
+from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
 
@@ -393,7 +393,7 @@ class JavaTransformer(JavaParams, Transformer, metaclass=ABCMeta):
         assert self._java_obj is not None
 
         self._transfer_params_to_java()
-        return DataFrame(self._java_obj.transform(dataset._jdf), dataset.sql_ctx)
+        return DataFrame(self._java_obj.transform(dataset._jdf), dataset.sparkSession)
 
 
 @inherit_doc

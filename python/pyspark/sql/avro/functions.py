@@ -23,7 +23,7 @@ A collections of builtin avro functions
 from typing import Dict, Optional, TYPE_CHECKING
 from pyspark import SparkContext
 from pyspark.sql.column import Column, _to_java_column
-from pyspark.util import _print_missing_jar  # type: ignore[attr-defined]
+from pyspark.util import _print_missing_jar
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName

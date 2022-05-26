@@ -388,6 +388,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         localSparkSession.conf.set(SQLConf.TIMESTAMP_TYPE.key,
           TimestampTypes.TIMESTAMP_NTZ.toString)
       case _ =>
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
     }
 
     if (configSet.nonEmpty) {

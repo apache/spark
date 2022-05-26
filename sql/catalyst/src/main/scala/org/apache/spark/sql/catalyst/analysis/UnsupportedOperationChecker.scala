@@ -386,6 +386,8 @@ object UnsupportedOperationChecker extends Logging {
           throwError("Limits are not supported on streaming DataFrames/Datasets in Update " +
             "output mode")
 
+        case Offset(_, _) => throwError("Offset is not supported on streaming DataFrames/Datasets")
+
         case Sort(_, _, _) if !containsCompleteData(subPlan) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on " +
             "aggregated DataFrame/Dataset in Complete output mode")

@@ -28,14 +28,15 @@ import warnings
 
 from pyspark.context import SparkContext
 from pyspark.sql import SparkSession
+from pyspark.sql.context import SQLContext
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-SparkContext._ensure_initialized()  # type: ignore
+SparkContext._ensure_initialized()
 
 try:
-    spark = SparkSession._create_shell_session()  # type: ignore
+    spark = SparkSession._create_shell_session()
 except Exception:
     import sys
     import traceback
@@ -49,7 +50,7 @@ sql = spark.sql
 atexit.register((lambda sc: lambda: sc.stop())(sc))
 
 # for compatibility
-sqlContext = spark._wrapped
+sqlContext = SQLContext._get_or_create(sc)
 sqlCtx = sqlContext
 
 print(

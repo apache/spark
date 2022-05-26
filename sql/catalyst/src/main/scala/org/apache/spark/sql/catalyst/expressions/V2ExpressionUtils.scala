@@ -17,16 +17,22 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, IdentityTransform, NamedReference, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortValue}
+import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
+import org.apache.spark.sql.connector.catalog.functions._
+import org.apache.spark.sql.connector.expressions.{BucketTransform, Expression => V2Expression, FieldReference, IdentityTransform, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
  * A utility class that converts public connector expressions into Catalyst expressions.
  */
-object V2ExpressionUtils extends SQLConfHelper {
+object V2ExpressionUtils extends SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
@@ -44,17 +50,82 @@ object V2ExpressionUtils extends SQLConfHelper {
     refs.map(ref => resolveRef[T](ref, plan))
   }
 
-  def toCatalyst(expr: V2Expression, query: LogicalPlan): Expression = {
+  /**
+   * Converts the array of input V2 [[V2SortOrder]] into their counterparts in catalyst.
+   */
+  def toCatalystOrdering(ordering: Array[V2SortOrder], query: LogicalPlan): Seq[SortOrder] = {
+    sequenceToOption(ordering.map(toCatalyst(_, query))).asInstanceOf[Option[Seq[SortOrder]]]
+      .getOrElse(Seq.empty)
+  }
+
+  def toCatalyst(
+      expr: V2Expression,
+      query: LogicalPlan,
+      funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = {
     expr match {
+      case t: Transform =>
+        toCatalystTransform(t, query, funCatalogOpt)
       case SortValue(child, direction, nullOrdering) =>
-        val catalystChild = toCatalyst(child, query)
-        SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
-      case IdentityTransform(ref) =>
-        resolveRef[NamedExpression](ref, query)
+        toCatalyst(child, query, funCatalogOpt).map { catalystChild =>
+          SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
+        }
       case ref: FieldReference =>
-        resolveRef[NamedExpression](ref, query)
+        Some(resolveRef[NamedExpression](ref, query))
       case _ =>
         throw new AnalysisException(s"$expr is not currently supported")
+    }
+  }
+
+  def toCatalystTransform(
+      trans: Transform,
+      query: LogicalPlan,
+      funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
+    case IdentityTransform(ref) =>
+      Some(resolveRef[NamedExpression](ref, query))
+    case BucketTransform(numBuckets, refs, sorted)
+        if sorted.isEmpty && refs.length == 1 && refs.forall(_.isInstanceOf[NamedReference]) =>
+      val resolvedRefs = refs.map(r => resolveRef[NamedExpression](r, query))
+      // Create a dummy reference for `numBuckets` here and use that, together with `refs`, to
+      // look up the V2 function.
+      val numBucketsRef = AttributeReference("numBuckets", IntegerType, nullable = false)()
+      funCatalogOpt.flatMap { catalog =>
+        loadV2Function(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs).map { bound =>
+          TransformExpression(bound, resolvedRefs, Some(numBuckets))
+        }
+      }
+    case NamedTransform(name, refs)
+        if refs.length == 1 && refs.forall(_.isInstanceOf[NamedReference]) =>
+      val resolvedRefs = refs.map(_.asInstanceOf[NamedReference]).map { r =>
+        resolveRef[NamedExpression](r, query)
+      }
+      funCatalogOpt.flatMap { catalog =>
+        loadV2Function(catalog, name, resolvedRefs).map { bound =>
+          TransformExpression(bound, resolvedRefs)
+        }
+      }
+    case _ =>
+      throw new AnalysisException(s"Transform $trans is not currently supported")
+  }
+
+  private def loadV2Function(
+      catalog: FunctionCatalog,
+      name: String,
+      args: Seq[Expression]): Option[BoundFunction] = {
+    val inputType = StructType(args.zipWithIndex.map {
+      case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+    })
+    try {
+      val unbound = catalog.loadFunction(Identifier.of(Array.empty, name))
+      Some(unbound.bind(inputType))
+    } catch {
+      case _: NoSuchFunctionException =>
+        val parameterString = args.map(_.dataType.typeName).mkString("(", ", ", ")")
+        logWarning(s"V2 function $name with parameter types $parameterString is used in " +
+            "partition transforms, but its definition couldn't be found in the function catalog " +
+            "provided")
+        None
+      case _: UnsupportedOperationException =>
+        None
     }
   }
 

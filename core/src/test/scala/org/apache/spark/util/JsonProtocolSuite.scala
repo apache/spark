@@ -45,23 +45,23 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
     val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 201, 301, 401L, 501L))
-    val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 444L, false))
+    val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 333, 444L, false))
     val taskGettingResult =
-      SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
+      SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 2000, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
-      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
-      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
     val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
-      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
@@ -78,6 +78,8 @@ class JsonProtocolSuite extends SparkFunSuite {
       "Spark Properties" -> Seq(("Job throughput", "80000 jobs/s, regardless of job type")),
       "Hadoop Properties" -> Seq(("hadoop.tmp.dir", "/usr/local/hadoop/tmp")),
       "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
+      "Metrics Properties" ->
+        Seq(("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")),
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
     val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
@@ -96,6 +98,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
+    val executorAddedWithTime = SparkListenerExecutorAdded(executorAddedTime, "exec1",
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4,
+        Some(1), Some(0)))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorExcludedTime, "exec1", 22)
     val executorUnblacklisted =
@@ -155,6 +160,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(applicationStartWithLogs, applicationStartJsonWithLogUrlsString)
     testEvent(applicationEnd, applicationEndJsonString)
     testEvent(executorAdded, executorAddedJsonString)
+    testEvent(executorAddedWithTime, executorAddedWithTimeJsonString)
     testEvent(executorRemoved, executorRemovedJsonString)
     testEvent(executorBlacklisted, executorBlacklistedJsonString)
     testEvent(executorUnblacklisted, executorUnblacklistedJsonString)
@@ -173,13 +179,16 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
+    val rinfo = Map[String, ResourceInformation]().toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L, DeterministicLevel.DETERMINATE))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
-    testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
+    testTaskInfo(makeTaskInfo(999L, 888, 55, 888, 777L, false))
     testTaskMetrics(makeTaskMetrics(
       33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
     testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes))
+    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes,
+      rinfo, 1, Some(1), Some(0)))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -1021,9 +1030,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
     stageInfo
   }
 
-  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
-    val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
-      speculative)
+  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Int, e: Long, speculative: Boolean) = {
+    val taskInfo = new TaskInfo(a, b, c, d, e,
+      "executor", "your kind sir", TaskLocality.NODE_LOCAL, speculative)
     taskInfo.setAccumulables(
       List(makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true)))
     taskInfo
@@ -1226,6 +1235,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 222,
       |    "Index": 333,
       |    "Attempt": 1,
+      |    "Partition ID": 333,
       |    "Launch Time": 444,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1273,6 +1283,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 1000,
       |    "Index": 2000,
       |    "Attempt": 5,
+      |    "Partition ID": 2000,
       |    "Launch Time": 3000,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1326,6 +1337,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 123,
       |    "Index": 234,
       |    "Attempt": 67,
+      |    "Partition ID": 234,
       |    "Launch Time": 345,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1451,6 +1463,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 123,
       |    "Index": 234,
       |    "Attempt": 67,
+      |    "Partition ID": 234,
       |    "Launch Time": 345,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1576,6 +1589,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 123,
       |    "Index": 234,
       |    "Attempt": 67,
+      |    "Partition ID": 234,
       |    "Launch Time": 345,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -2036,6 +2050,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Username": "guest",
       |    "Password": "guest"
       |  },
+      |  "Metrics Properties": {
+      |    "*.sink.servlet.class": "org.apache.spark.metrics.sink.MetricsServlet"
+      |  },
       |  "Classpath Entries": {
       |    "Super library": "/tmp/super_library"
       |  }
@@ -2138,6 +2155,37 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    },
       |    "Resource Profile Id": 4
       |  }
+      |}
+    """.stripMargin
+
+  private val executorAddedWithTimeJsonString =
+    s"""
+      |{
+      |  "Event": "SparkListenerExecutorAdded",
+      |  "Timestamp": ${executorAddedTime},
+      |  "Executor ID": "exec1",
+      |  "Executor Info": {
+      |    "Host": "Hostee.awesome.com",
+      |    "Total Cores": 11,
+      |    "Log Urls" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |    },
+      |    "Attributes" : {
+      |      "ContainerId" : "ct1",
+      |      "User" : "spark"
+      |    },
+      |    "Resources" : {
+      |      "gpu" : {
+      |        "name" : "gpu",
+      |        "addresses" : [ "0", "1" ]
+      |      }
+      |    },
+      |    "Resource Profile Id": 4,
+      |    "Registration Time" : 1,
+      |    "Request Time" : 0
+      |  }
+      |
       |}
     """.stripMargin
 

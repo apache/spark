@@ -297,7 +297,7 @@ Input [3]: [ctr_state#36, sum#45, count#46]
 Keys [1]: [ctr_state#36]
 Functions [1]: [avg(ctr_total_return#37)]
 Aggregate Attributes [1]: [avg(ctr_total_return#37)#48]
-Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#37)#48) * 1.200000), DecimalType(24,7), true) AS (avg(ctr_total_return) * 1.2)#49, ctr_state#36 AS ctr_state#36#50]
+Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#37)#48) * 1.200000), DecimalType(24,7)) AS (avg(ctr_total_return) * 1.2)#49, ctr_state#36 AS ctr_state#36#50]
 
 (53) Filter [codegen id : 19]
 Input [2]: [(avg(ctr_total_return) * 1.2)#49, ctr_state#36#50]

@@ -29,7 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -60,7 +60,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     super.beforeAll()
     val catalog = newCatalog()
     catalog.createNamespace(Array("db"), emptyProps)
-    catalog.createNamespace(Array("db2"), emptyProps)
+    catalog.createNamespace(Array("db2"),
+      Map(SupportsNamespaces.PROP_LOCATION -> "file:///db2.db").asJava)
     catalog.createNamespace(Array("ns"), emptyProps)
     catalog.createNamespace(Array("ns2"), emptyProps)
   }
@@ -186,10 +187,17 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(t2.catalogTable.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
     catalog.dropTable(testIdent)
 
-    // absolute path
+    // absolute path without scheme
     properties.put(TableCatalog.PROP_LOCATION, "/absolute/path")
     val t3 = catalog.createTable(testIdent, schema, Array.empty, properties).asInstanceOf[V1Table]
-    assert(t3.catalogTable.location.toString === "file:/absolute/path")
+    assert(t3.catalogTable.location.toString === "file:///absolute/path")
+    catalog.dropTable(testIdent)
+
+    // absolute path with scheme
+    properties.put(TableCatalog.PROP_LOCATION, "file:/absolute/path")
+    val t4 = catalog.createTable(testIdent, schema, Array.empty, properties).asInstanceOf[V1Table]
+    assert(t4.catalogTable.location.toString === "file:/absolute/path")
+    catalog.dropTable(testIdent)
   }
 
   test("tableExists") {
@@ -602,7 +610,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == schema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.deleteColumn(Array("id")))
+      TableChange.deleteColumn(Array("id"), false))
 
     val expectedSchema = new StructType().add("data", StringType)
     assert(updated.schema == expectedSchema)
@@ -619,7 +627,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == tableSchema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.deleteColumn(Array("point", "y")))
+      TableChange.deleteColumn(Array("point", "y"), false))
 
     val newPointStruct = new StructType().add("x", DoubleType)
     val expectedSchema = schema.add("point", newPointStruct)
@@ -635,11 +643,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == schema)
 
     val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col")))
+      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), false))
     }
 
     assert(exc.getMessage.contains("missing_col"))
     assert(exc.getMessage.contains("Cannot find"))
+
+    // with if exists it should pass
+    catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), true))
+    assert(table.schema == schema)
   }
 
   test("alterTable: delete missing nested column fails") {
@@ -653,11 +665,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == tableSchema)
 
     val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z")))
+      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), false))
     }
 
     assert(exc.getMessage.contains("z"))
     assert(exc.getMessage.contains("Cannot find"))
+
+    // with if exists it should pass
+    catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), true))
+    assert(table.schema == tableSchema)
   }
 
   test("alterTable: table does not exist") {
@@ -685,10 +701,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       TableChange.setProperty(TableCatalog.PROP_LOCATION, "relative/path")).asInstanceOf[V1Table]
     assert(t2.catalogTable.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
 
-    // absolute path
+    // absolute path without scheme
     val t3 = catalog.alterTable(testIdent,
       TableChange.setProperty(TableCatalog.PROP_LOCATION, "/absolute/path")).asInstanceOf[V1Table]
-    assert(t3.catalogTable.location.toString === "file:/absolute/path")
+    assert(t3.catalogTable.location.toString === "file:///absolute/path")
+
+    // absolute path with scheme
+    val t4 = catalog.alterTable(testIdent, TableChange.setProperty(
+      TableCatalog.PROP_LOCATION, "file:/absolute/path")).asInstanceOf[V1Table]
+    assert(t4.catalogTable.location.toString === "file:/absolute/path")
   }
 
   test("dropTable") {

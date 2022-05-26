@@ -56,7 +56,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
   }
 
   test("Full stack traces as error message for jdbc or thrift client") {
-    val sql = "select date_sub(date'2011-11-11', '1.2')"
+    val sql = "select from_json('a', 'a INT', map('mode', 'FAILFAST'))"
     withCLIServiceClient() { client =>
       val sessionHandle = client.openSession(user, "")
 
@@ -67,24 +67,18 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
           sql,
           confOverlay)
       }
-
-      assert(e.getMessage
-        .contains("The second argument of 'date_sub' function needs to be an integer."))
-      assert(!e.getMessage.contains("" +
-        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
-      assert(e.getSQLState == "22023")
+      assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
+      assert(!e.getMessage.contains(
+        "SparkException: Malformed records are detected in record parsing"))
     }
 
     withJdbcStatement { statement =>
       val e = intercept[SQLException] {
         statement.executeQuery(sql)
       }
-      assert(e.getMessage
-        .contains("The second argument of 'date_sub' function needs to be an integer."))
-      assert(e.getMessage.contains("[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER]"))
-      assert(e.getMessage.contains("" +
-        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
-      assert(e.getSQLState == "22023")
+      assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
+      assert(e.getMessage.contains(
+        "SparkException: Malformed records are detected in record parsing"))
     }
   }
 
@@ -132,20 +126,27 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
       exec(s"set ${SQLConf.ANSI_ENABLED.key}=false")
 
-      val opHandle1 = exec("select current_user(), current_user")
-      val rowSet1 = client.fetchResults(opHandle1)
-      rowSet1.toTRowSet.getColumns.forEach { col =>
-        assert(col.getStringVal.getValues.get(0) === clientUser)
+      val userFuncs = Seq("user", "current_user")
+      userFuncs.foreach { func =>
+        val opHandle1 = exec(s"select $func(), $func")
+        val rowSet1 = client.fetchResults(opHandle1)
+        rowSet1.getColumns.forEach { col =>
+          assert(col.getStringVal.getValues.get(0) === clientUser)
+        }
       }
 
       exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
       exec(s"set ${SQLConf.ENFORCE_RESERVED_KEYWORDS.key}=true")
-      val opHandle2 = exec("select current_user")
-      assert(client.fetchResults(opHandle2).toTRowSet.getColumns.get(0)
-        .getStringVal.getValues.get(0) === clientUser)
+      userFuncs.foreach { func =>
+        val opHandle2 = exec(s"select $func")
+        assert(client.fetchResults(opHandle2)
+          .getColumns.get(0).getStringVal.getValues.get(0) === clientUser)
+      }
 
-      val e = intercept[HiveSQLException](exec("select current_user()"))
-      assert(e.getMessage.contains("current_user"))
+      userFuncs.foreach { func =>
+        val e = intercept[HiveSQLException](exec(s"select $func()"))
+        assert(e.getMessage.contains(func))
+      }
     }
   }
 }

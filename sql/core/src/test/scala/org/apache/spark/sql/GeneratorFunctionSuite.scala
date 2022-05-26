@@ -331,7 +331,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       val msg1 = intercept[AnalysisException] {
         sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
       }.getMessage
-      assert(msg1.contains("Generators are not supported when it's nested in expressions"))
+      assert(msg1.contains("The generator is not supported: nested in expressions"))
 
       val msg2 = intercept[AnalysisException] {
         sql(
@@ -341,7 +341,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
             |from t1 group by c1
           """.stripMargin)
       }.getMessage
-      assert(msg2.contains("Only one generator allowed per aggregate clause"))
+      assert(msg2.contains("The generator is not supported: " +
+        "only one generator allowed per aggregate clause"))
     }
   }
 
@@ -349,13 +350,44 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val errMsg = intercept[AnalysisException] {
       sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
     }.getMessage
-    assert(errMsg.contains("Generators are not supported when it's nested in expressions, " +
-      "but got: explode(explode(v))"))
+    assert(errMsg.contains("The generator is not supported: " +
+      """nested in expressions "explode(explode(v))""""))
   }
 
   test("SPARK-30997: generators in aggregate expressions for dataframe") {
     val df = Seq(1, 2, 3).toDF("v")
     checkAnswer(df.select(explode(array(min($"v"), max($"v")))), Row(1) :: Row(3) :: Nil)
+  }
+
+  test("SPARK-38528: generator in stream of aggregate expressions") {
+    val df = Seq(1, 2, 3).toDF("v")
+    checkAnswer(
+      df.select(Stream(explode(array(min($"v"), max($"v"))), sum($"v")): _*),
+      Row(1, 6) :: Row(3, 6) :: Nil)
+  }
+
+  test("SPARK-37947: lateral view <func>_outer()") {
+    checkAnswer(
+      sql("select * from values 1, 2 lateral view explode_outer(array()) a as b"),
+      Row(1, null) :: Row(2, null) :: Nil)
+
+    checkAnswer(
+      sql("select * from values 1, 2 lateral view outer explode_outer(array()) a as b"),
+      Row(1, null) :: Row(2, null) :: Nil)
+
+    withTempView("t1") {
+      sql(
+        """select * from values
+          |array(struct(0, 1), struct(3, 4)),
+          |array(struct(6, 7)),
+          |array(),
+          |null
+          |as tbl(arr)
+         """.stripMargin).createOrReplaceTempView("t1")
+      checkAnswer(
+        sql("select f1, f2 from t1 lateral view inline_outer(arr) as f1, f2"),
+        Row(0, 1) :: Row(3, 4) :: Row(6, 7) :: Row(null, null) :: Row(null, null) :: Nil)
+    }
   }
 }
 

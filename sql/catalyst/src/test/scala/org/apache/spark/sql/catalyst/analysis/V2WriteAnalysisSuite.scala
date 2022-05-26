@@ -224,11 +224,11 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
   override def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Seq(EliminateSubqueryAliases)
 
-  val table = TestRelation(Seq('x.float, 'y.float))
+  val table = TestRelation(Seq($"x".float, $"y".float))
 
-  val requiredTable = TestRelation(Seq('x.float.notNull, 'y.float.notNull))
+  val requiredTable = TestRelation(Seq($"x".float.notNull, $"y".float.notNull))
 
-  val widerTable = TestRelation(Seq('x.double, 'y.double))
+  val widerTable = TestRelation(Seq($"x".double, $"y".double))
 
   def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan
 
@@ -446,8 +446,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   }
 
   test("byName: fail extra data fields in struct") {
-    val table = TestRelation(Seq('a.int, 'b.struct('x.int, 'y.int)))
-    val query = TestRelation(Seq('b.struct('y.int, 'x.int, 'z.int), 'a.int))
+    val table = TestRelation(Seq($"a".int, $"b".struct($"x".int, $"y".int)))
+    val query = TestRelation(Seq($"b".struct($"y".int, $"x".int, $"z".int), $"a".int))
 
     val writePlan = byName(table, query)
     assertAnalysisError(writePlan, Seq(
@@ -698,8 +698,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   }
 
   test("SPARK-36498: reorder inner fields with byName mode") {
-    val table = TestRelation(Seq('a.int, 'b.struct('x.int, 'y.int)))
-    val query = TestRelation(Seq('b.struct('y.int, 'x.byte), 'a.int))
+    val table = TestRelation(Seq($"a".int, $"b".struct($"x".int, $"y".int)))
+    val query = TestRelation(Seq($"b".struct($"y".int, $"x".byte), $"a".int))
 
     val writePlan = byName(table, query).analyze
     assert(writePlan.children.head.schema == table.schema)
@@ -707,11 +707,11 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
   test("SPARK-36498: reorder inner fields in array of struct with byName mode") {
     val table = TestRelation(Seq(
-      'a.int,
-      'arr.array(new StructType().add("x", "int").add("y", "int"))))
+      $"a".int,
+      $"arr".array(new StructType().add("x", "int").add("y", "int"))))
     val query = TestRelation(Seq(
-      'arr.array(new StructType().add("y", "int").add("x", "byte")),
-      'a.int))
+      $"arr".array(new StructType().add("y", "int").add("x", "byte")),
+      $"a".int))
 
     val writePlan = byName(table, query).analyze
     assert(writePlan.children.head.schema == table.schema)
@@ -719,15 +719,15 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
   test("SPARK-36498: reorder inner fields in map of struct with byName mode") {
     val table = TestRelation(Seq(
-      'a.int,
-      'm.map(
+      $"a".int,
+      Symbol("m").map(
         new StructType().add("x", "int").add("y", "int"),
         new StructType().add("x", "int").add("y", "int"))))
     val query = TestRelation(Seq(
-      'm.map(
+      Symbol("m").map(
         new StructType().add("y", "int").add("x", "byte"),
         new StructType().add("y", "int").add("x", "byte")),
-      'a.int))
+      $"a".int))
 
     val writePlan = byName(table, query).analyze
     assert(writePlan.children.head.schema == table.schema)

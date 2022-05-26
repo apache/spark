@@ -57,7 +57,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
 
       // Get the token renewal interval if it is not set. It will only be called once.
       if (tokenRenewalInterval == null) {
-        tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, sparkConf, fileSystems)
+        tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, fileSystems)
       }
 
       // Get the time of next renewal.
@@ -123,7 +123,6 @@ private[deploy] class HadoopFSDelegationTokenProvider
 
   private def getTokenRenewalInterval(
       hadoopConf: Configuration,
-      sparkConf: SparkConf,
       filesystems: Set[FileSystem]): Option[Long] = {
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in

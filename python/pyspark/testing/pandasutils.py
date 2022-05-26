@@ -18,7 +18,6 @@
 import functools
 import shutil
 import tempfile
-import unittest
 import warnings
 from contextlib import contextmanager
 from distutils.version import LooseVersion
@@ -32,9 +31,8 @@ from pyspark import pandas as ps
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
-from pyspark.pandas.utils import default_session, SPARK_CONF_ARROW_ENABLED
-from pyspark.testing.sqlutils import SQLTestUtils
-
+from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 tabulate_requirement_message = None
 try:
@@ -46,7 +44,7 @@ have_tabulate = tabulate_requirement_message is None
 
 matplotlib_requirement_message = None
 try:
-    import matplotlib  # type: ignore # noqa: F401
+    import matplotlib  # noqa: F401
 except ImportError as e:
     # If matplotlib requirement is not satisfied, skip related tests.
     matplotlib_requirement_message = str(e)
@@ -54,25 +52,18 @@ have_matplotlib = matplotlib_requirement_message is None
 
 plotly_requirement_message = None
 try:
-    import plotly  # type: ignore # noqa: F401
+    import plotly  # noqa: F401
 except ImportError as e:
     # If plotly requirement is not satisfied, skip related tests.
     plotly_requirement_message = str(e)
 have_plotly = plotly_requirement_message is None
 
 
-class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
+class PandasOnSparkTestCase(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        cls.spark = default_session()
+        super(PandasOnSparkTestCase, cls).setUpClass()
         cls.spark.conf.set(SPARK_CONF_ARROW_ENABLED, True)
-
-    @classmethod
-    def tearDownClass(cls):
-        # We don't stop Spark session to reuse across all tests.
-        # The Spark session will be started and stopped at PyTest session level.
-        # Please see pyspark/pandas/conftest.py.
-        pass
 
     def assertPandasEqual(self, left, right, check_exact=True):
         if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
@@ -259,7 +250,7 @@ class TestUtils:
     @contextmanager
     def temp_file(self):
         with self.temp_dir() as tmp:
-            yield tempfile.mktemp(dir=tmp)
+            yield tempfile.mkstemp(dir=tmp)[1]
 
 
 class ComparisonTestBase(PandasOnSparkTestCase):

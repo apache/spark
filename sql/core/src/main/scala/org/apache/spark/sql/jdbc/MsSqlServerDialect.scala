@@ -40,25 +40,38 @@ private object MsSqlServerDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
+  // Microsoft SQL Server does not have the boolean type.
+  // Compile the boolean value to the bit data type instead.
+  // scalastyle:off line.size.limit
+  // See https://docs.microsoft.com/en-us/sql/t-sql/data-types/data-types-transact-sql?view=sql-server-ver15
+  // scalastyle:on line.size.limit
+  override def compileValue(value: Any): Any = value match {
+    case booleanValue: Boolean => if (booleanValue) 1 else 0
+    case other => super.compileValue(other)
+  }
+
+  // scalastyle:off line.size.limit
+  // See https://docs.microsoft.com/en-us/sql/t-sql/functions/aggregate-functions-transact-sql?view=sql-server-ver15
+  // scalastyle:on line.size.limit
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
         case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VARP($distinct${f.inputs().head})")
+          Some(s"VARP($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR($distinct${f.inputs().head})")
+          Some(s"VAR($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDEVP($distinct${f.inputs().head})")
+          Some(s"STDEVP($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDEV($distinct${f.inputs().head})")
+          Some(s"STDEV($distinct${f.children().head})")
         case _ => None
       }
     )

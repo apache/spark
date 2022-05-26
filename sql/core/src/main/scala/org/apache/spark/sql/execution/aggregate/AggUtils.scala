@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
@@ -45,7 +46,7 @@ object AggUtils {
     }
   }
 
-  private def createAggregate(
+  private def createStreamingAggregate(
       requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
       groupingExpressions: Seq[NamedExpression] = Nil,
       aggregateExpressions: Seq[AggregateExpression] = Nil,
@@ -53,13 +54,35 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    val useHash = HashAggregateExec.supportsAggregate(
+    createAggregate(
+      requiredChildDistributionExpressions,
+      isStreaming = true,
+      groupingExpressions = groupingExpressions,
+      aggregateExpressions = aggregateExpressions,
+      aggregateAttributes = aggregateAttributes,
+      initialInputBufferOffset = initialInputBufferOffset,
+      resultExpressions = resultExpressions,
+      child = child)
+  }
+
+  private def createAggregate(
+      requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
+      isStreaming: Boolean = false,
+      groupingExpressions: Seq[NamedExpression] = Nil,
+      aggregateExpressions: Seq[AggregateExpression] = Nil,
+      aggregateAttributes: Seq[Attribute] = Nil,
+      initialInputBufferOffset: Int = 0,
+      resultExpressions: Seq[NamedExpression] = Nil,
+      child: SparkPlan): SparkPlan = {
+    val useHash = Aggregate.supportsHashAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
     val forceSortAggregate = forceApplySortAggregate(child.conf)
 
     if (useHash && !forceSortAggregate) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+        isStreaming = isStreaming,
+        numShufflePartitions = None,
         groupingExpressions = groupingExpressions,
         aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
         aggregateAttributes = aggregateAttributes,
@@ -68,11 +91,13 @@ object AggUtils {
         child = child)
     } else {
       val objectHashEnabled = child.conf.useObjectHashAggregation
-      val useObjectHash = ObjectHashAggregateExec.supportsAggregate(aggregateExpressions)
+      val useObjectHash = Aggregate.supportsObjectHashAggregate(aggregateExpressions)
 
       if (objectHashEnabled && useObjectHash && !forceSortAggregate) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+          isStreaming = isStreaming,
+          numShufflePartitions = None,
           groupingExpressions = groupingExpressions,
           aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
           aggregateAttributes = aggregateAttributes,
@@ -82,6 +107,8 @@ object AggUtils {
       } else {
         SortAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+          isStreaming = isStreaming,
+          numShufflePartitions = None,
           groupingExpressions = groupingExpressions,
           aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
           aggregateAttributes = aggregateAttributes,
@@ -290,7 +317,7 @@ object AggUtils {
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
+      createStreamingAggregate(
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
@@ -302,7 +329,7 @@ object AggUtils {
     val partialMerged1: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
+      createStreamingAggregate(
         requiredChildDistributionExpressions =
             Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
@@ -320,7 +347,7 @@ object AggUtils {
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
+      createStreamingAggregate(
         requiredChildDistributionExpressions =
             Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
@@ -348,7 +375,7 @@ object AggUtils {
       // projection:
       val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
 
-      createAggregate(
+      createStreamingAggregate(
         requiredChildDistributionExpressions = Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = finalAggregateExpressions,
@@ -407,7 +434,7 @@ object AggUtils {
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
+      createStreamingAggregate(
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
@@ -424,7 +451,8 @@ object AggUtils {
       // this is to reduce amount of rows to shuffle
       MergingSessionsExec(
         requiredChildDistributionExpressions = None,
-        requiredChildDistributionOption = None,
+        isStreaming = true,
+        numShufflePartitions = None,
         groupingExpressions = groupingAttributes,
         sessionExpression = sessionExpression,
         aggregateExpressions = aggregateExpressions,
@@ -447,8 +475,10 @@ object AggUtils {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       MergingSessionsExec(
-        requiredChildDistributionExpressions = None,
-        requiredChildDistributionOption = Some(restored.requiredChildDistribution),
+        requiredChildDistributionExpressions = Some(groupingWithoutSessionAttributes),
+        isStreaming = true,
+        // This will be replaced with actual value in state rule.
+        numShufflePartitions = None,
         groupingExpressions = groupingAttributes,
         sessionExpression = sessionExpression,
         aggregateExpressions = aggregateExpressions,
@@ -476,8 +506,8 @@ object AggUtils {
       // projection:
       val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
 
-      createAggregate(
-        requiredChildDistributionExpressions = Some(groupingAttributes),
+      createStreamingAggregate(
+        requiredChildDistributionExpressions = Some(groupingWithoutSessionAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = finalAggregateExpressions,
         aggregateAttributes = finalAggregateAttributes,
@@ -491,10 +521,15 @@ object AggUtils {
 
   private def mayAppendUpdatingSessionExec(
       groupingExpressions: Seq[NamedExpression],
-      maybeChildPlan: SparkPlan): SparkPlan = {
+      maybeChildPlan: SparkPlan,
+      isStreaming: Boolean = false): SparkPlan = {
     groupingExpressions.find(_.metadata.contains(SessionWindow.marker)) match {
       case Some(sessionExpression) =>
         UpdatingSessionsExec(
+          isStreaming = isStreaming,
+          // numShufflePartitions will be set to None, and replaced to the actual value in the
+          // state rule if the query is streaming.
+          numShufflePartitions = None,
           groupingExpressions.map(_.toAttribute),
           sessionExpression.toAttribute,
           maybeChildPlan)
@@ -506,7 +541,8 @@ object AggUtils {
   private def mayAppendMergingSessionExec(
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
-      partialAggregate: SparkPlan): SparkPlan = {
+      partialAggregate: SparkPlan,
+      isStreaming: Boolean = false): SparkPlan = {
     groupingExpressions.find(_.metadata.contains(SessionWindow.marker)) match {
       case Some(sessionExpression) =>
         val aggExpressions = aggregateExpressions.map(_.copy(mode = PartialMerge))
@@ -519,7 +555,10 @@ object AggUtils {
 
         MergingSessionsExec(
           requiredChildDistributionExpressions = Some(groupingWithoutSessionsAttributes),
-          requiredChildDistributionOption = None,
+          isStreaming = isStreaming,
+          // numShufflePartitions will be set to None, and replaced to the actual value in the
+          // state rule if the query is streaming.
+          numShufflePartitions = None,
           groupingExpressions = groupingAttributes,
           sessionExpression = sessionExpression,
           aggregateExpressions = aggExpressions,

@@ -33,4 +33,10 @@ public interface SupportsPushDownLimit extends ScanBuilder {
    * Pushes down LIMIT to the data source.
    */
   boolean pushLimit(int limit);
+
+  /**
+   * Whether the LIMIT is partially pushed or not. If it returns true, then Spark will do LIMIT
+   * again. This method will only be called when {@link #pushLimit} returns true.
+   */
+  default boolean isPartiallyPushed() { return true; }
 }

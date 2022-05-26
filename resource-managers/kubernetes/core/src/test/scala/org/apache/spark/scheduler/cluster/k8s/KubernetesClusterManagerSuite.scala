@@ -47,8 +47,8 @@ class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("constructing a AbstractPodsAllocator works") {
     val validConfigs = List("statefulset", "direct",
-      "org.apache.spark.scheduler.cluster.k8s.StatefulsetPodsAllocator",
-      "org.apache.spark.scheduler.cluster.k8s.ExecutorPodsAllocator")
+      classOf[StatefulSetPodsAllocator].getName,
+      classOf[ExecutorPodsAllocator].getName)
     validConfigs.foreach { c =>
       val manager = new KubernetesClusterManager()
         when(sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)).thenReturn(c)

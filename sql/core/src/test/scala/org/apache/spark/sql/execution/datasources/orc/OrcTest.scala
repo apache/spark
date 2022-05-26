@@ -47,7 +47,7 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
  */
-abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
+trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
 
   val orcImp: String = "native"
 
@@ -56,6 +56,8 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
   override protected val dataSourceName: String = "orc"
   override protected val vectorizedReaderEnabledKey: String =
     SQLConf.ORC_VECTORIZED_READER_ENABLED.key
+  override protected val vectorizedReaderNestedEnabledKey: String =
+    SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -118,8 +120,7 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters,
-          DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
+      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         if (noneSupported) {
           assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")

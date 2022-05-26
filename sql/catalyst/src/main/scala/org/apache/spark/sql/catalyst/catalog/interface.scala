@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
-import java.time.ZoneOffset
+import java.time.{ZoneId, ZoneOffset}
 import java.util.Date
 
 import scala.collection.mutable
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -656,10 +656,13 @@ object CatalogColumnStat extends Logging {
 
   val VERSION = 2
 
-  private def getTimestampFormatter(isParsing: Boolean): TimestampFormatter = {
+  def getTimestampFormatter(
+      isParsing: Boolean,
+      format: String = "yyyy-MM-dd HH:mm:ss.SSSSSS",
+      zoneId: ZoneId = ZoneOffset.UTC): TimestampFormatter = {
     TimestampFormatter(
-      format = "yyyy-MM-dd HH:mm:ss.SSSSSS",
-      zoneId = ZoneOffset.UTC,
+      format = format,
+      zoneId = zoneId,
       isParsing = isParsing)
   }
 
@@ -835,7 +838,7 @@ case class HiveTableRelation(
     tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
       .orElse(tableStats)
       .getOrElse {
-      throw QueryExecutionErrors.tableStatsNotSpecifiedError
+      throw new IllegalStateException("Table stats must be specified.")
     }
   }
 

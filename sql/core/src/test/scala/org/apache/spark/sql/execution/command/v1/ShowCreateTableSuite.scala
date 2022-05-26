@@ -53,7 +53,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |COMMENT 'This is a comment'
            |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
            |PARTITIONED BY (a)
-           |LOCATION '/tmp'
+           |LOCATION 'file:/tmp'
         """.stripMargin)
       val showDDL = getShowCreateDDL(t)
       assert(showDDL === Array(

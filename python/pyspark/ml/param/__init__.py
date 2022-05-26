@@ -20,7 +20,6 @@ import copy
 from typing import (
     Any,
     Callable,
-    cast,
     Generic,
     List,
     Optional,
@@ -304,7 +303,7 @@ class Params(Identifiable, metaclass=ABCMeta):
         Explains a single param and returns its name, doc, and optional
         default value and user-supplied value in a string.
         """
-        param = cast(Param, self._resolveParam(param))
+        param = self._resolveParam(param)
         values = []
         if self.isDefined(param):
             if param in self._defaultParamMap:

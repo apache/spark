@@ -118,7 +118,7 @@ Join condition: None
 
 (15) Filter [codegen id : 3]
 Input [5]: [i_item_sk#5, i_current_price#6, i_category#7, avg(i_current_price)#16, i_category#9]
-Condition : (cast(i_current_price#6 as decimal(14,7)) > CheckOverflow((1.200000 * promote_precision(avg(i_current_price)#16)), DecimalType(14,7), true))
+Condition : (cast(i_current_price#6 as decimal(14,7)) > CheckOverflow((1.200000 * promote_precision(avg(i_current_price)#16)), DecimalType(14,7)))
 
 (16) Project [codegen id : 3]
 Output [1]: [i_item_sk#5]

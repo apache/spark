@@ -17,14 +17,13 @@
 package org.apache.spark.storage
 
 import java.io.{DataOutputStream, File, FileOutputStream, IOException}
-import java.net.{InetAddress, UnknownHostException}
 import java.nio.file.Files
 
 import scala.concurrent.duration._
 
 import org.apache.hadoop.conf.Configuration
 import org.mockito.{ArgumentMatchers => mc}
-import org.mockito.Mockito.{mock, times, verify, when}
+import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
@@ -42,13 +41,6 @@ import org.apache.spark.util.Utils.tryWithResource
 class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
   def getSparkConf(initialExecutor: Int = 1, minExecutor: Int = 1): SparkConf = {
-    // Some DNS always replies for all hostnames including unknown host names
-    try {
-      InetAddress.getByName(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.host)
-      assume(false)
-    } catch {
-      case _: UnknownHostException =>
-    }
     new SparkConf(false)
       .setAppName(getClass.getName)
       .set(SPARK_MASTER, s"local-cluster[$initialExecutor,1,1024]")
@@ -179,8 +171,8 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       decommissioner.start()
       val fallbackStorage = new FallbackStorage(conf)
       eventually(timeout(10.second), interval(1.seconds)) {
-        // uploadBlockSync is not used
-        verify(blockTransferService, times(1))
+        // uploadBlockSync should not be used, verify that it is not called
+        verify(blockTransferService, never())
           .uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
 
         Seq("shuffle_1_1_0.index", "shuffle_1_1_0.data").foreach { filename =>

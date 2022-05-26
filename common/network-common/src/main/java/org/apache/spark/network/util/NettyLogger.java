@@ -35,6 +35,7 @@ public class NettyLogger {
       super(clazz, level);
     }
 
+    @Override
     protected String format(ChannelHandlerContext ctx, String eventName, Object arg) {
       if (arg instanceof ByteBuf) {
         return format(ctx, eventName) + " " + ((ByteBuf) arg).readableBytes() + "B";

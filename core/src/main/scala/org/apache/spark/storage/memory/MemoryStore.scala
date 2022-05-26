@@ -305,7 +305,7 @@ private[spark] class MemoryStore(
         val unrolledIterator = if (valuesHolder.vector != null) {
           valuesHolder.vector.iterator
         } else {
-          valuesHolder.arrayValues.toIterator
+          valuesHolder.arrayValues.iterator
         }
 
         Left(new PartiallyUnrolledIterator(

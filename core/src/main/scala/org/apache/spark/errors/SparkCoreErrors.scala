@@ -315,4 +315,14 @@ object SparkCoreErrors {
   def failToGetNonShuffleBlockError(blockId: BlockId, e: Throwable): Throwable = {
     new SparkException(s"Failed to get block $blockId, which is not a shuffle block", e)
   }
+
+  def graphiteSinkInvalidProtocolError(invalidProtocol: String): Throwable = {
+    new SparkException(errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",
+      messageParameters = Array(invalidProtocol), cause = null)
+  }
+
+  def graphiteSinkPropertyMissingError(missingProperty: String): Throwable = {
+    new SparkException(errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+      messageParameters = Array(missingProperty), cause = null)
+  }
 }

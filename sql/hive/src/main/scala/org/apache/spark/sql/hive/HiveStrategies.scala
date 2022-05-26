@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, InsertIntoDataSourceDirCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
@@ -186,6 +186,8 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * - When writing to non-partitioned Hive-serde Parquet/Orc tables
  * - When writing to partitioned Hive-serde Parquet/Orc tables when
  *   `spark.sql.hive.convertInsertingPartitionedTable` is true
+ * - When writing to directory with Hive-serde
+ * - When writing to non-partitioned Hive-serde Parquet/ORC tables using CTAS
  * - When scanning Hive-serde Parquet/ORC tables
  *
  * This rule must be run before all other DDL post-hoc resolution rules, i.e.
@@ -198,9 +200,18 @@ case class RelationConversions(
   }
 
   private def isConvertible(tableMeta: CatalogTable): Boolean = {
-    val serde = tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    isConvertible(tableMeta.storage)
+  }
+
+  private def isConvertible(storage: CatalogStorageFormat): Boolean = {
+    val serde = storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
     serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
       serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+  }
+
+  private def convertProvider(storage: CatalogStorageFormat): String = {
+    val serde = storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    if (serde.contains("parquet")) "parquet" else "orc"
   }
 
   private val metastoreCatalog = sessionCatalog.metastoreCatalog
@@ -230,6 +241,16 @@ case class RelationConversions(
         DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
+
+      // INSERT HIVE DIR
+      case InsertIntoDir(_, storage, provider, query, overwrite)
+        if query.resolved && DDLUtils.isHiveTable(provider) &&
+          isConvertible(storage) && conf.getConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR) =>
+        val outputPath = new Path(storage.locationUri.get)
+        if (overwrite) DDLUtils.verifyNotReadPath(query, outputPath)
+
+        InsertIntoDataSourceDirCommand(metastoreCatalog.convertStorageFormat(storage),
+          convertProvider(storage), query, overwrite)
     }
   }
 }

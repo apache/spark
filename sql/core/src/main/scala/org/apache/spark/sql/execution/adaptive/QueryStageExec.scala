@@ -124,6 +124,10 @@ abstract class QueryStageExec extends LeafExecNode {
 
   protected override def stringArgs: Iterator[Any] = Iterator.single(id)
 
+  override def simpleStringWithNodeId(): String = {
+    super.simpleStringWithNodeId() + computeStats().map(", " + _.toString).getOrElse("")
+  }
+
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
