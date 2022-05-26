@@ -43,7 +43,7 @@
   },
   "CAST_OVERFLOW" : {
     "message" : [
-      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error."
+      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22005"
   },
@@ -157,8 +157,7 @@
           "See more details in SPARK-31404. You can set the SQL config <config> or",
           "the datasource option <option> to \"LEGACY\" to rebase the datetime values",
           "w.r.t. the calendar difference during reading. To read the datetime values",
-          "as it is, set the SQL config <config> or the datasource option <option>",
-          "to \"CORRECTED\"."
+          "as it is, set the SQL config or the datasource option t \"CORRECTED\"."
         ]
       },
       "WRITE_ANCIENT_DATETIME" : {
@@ -170,7 +169,7 @@
           "is different from Spark 3.0+'s Proleptic Gregorian calendar. See more",
           "details in SPARK-31404. You can set <config> to \"LEGACY\" to rebase the",
           "datetime values w.r.t. the calendar difference during writing, to get maximum",
-          "interoperability. Or set <config> to \"CORRECTED\" to write the datetime",
+          "interoperability. Or set the config to \"CORRECTED\" to write the datetime",
           "values as it is, if you are sure that the written files will only be read by",
           "Spark 3.0+ or other systems that use Proleptic Gregorian calendar."
         ]
@@ -190,12 +189,12 @@
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ]
   },
   "INVALID_BUCKET_FILE" : {
@@ -211,7 +210,7 @@
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
-      "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to \"false\" to bypass this error."
+      "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22023"
   },

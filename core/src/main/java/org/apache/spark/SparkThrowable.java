@@ -35,6 +35,9 @@ public interface SparkThrowable {
   // Succinct, human-readable, unique, and consistent representation of the error category
   // If null, error class is not set
   String getErrorClass();
+  default String getErrorSubClass() {
+    return null;
+  }
 
   // Portable error identifier across SQL engines
   // If null, error class or SQLSTATE is not set
@@ -45,5 +48,14 @@ public interface SparkThrowable {
   // True if this error is an internal error.
   default boolean isInternalError() {
     return SparkThrowableHelper.isInternalError(this.getErrorClass());
+  }
+
+  default String[] getMessageParameters() {
+    return new String[]{};
+  }
+
+  // True if this error is an internal error.
+  default String[] getParameterNames() {
+    return SparkThrowableHelper.getParameterNames(this.getErrorClass(), this.getErrorSubClass());
   }
 }
