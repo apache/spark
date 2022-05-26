@@ -611,7 +611,7 @@ class SparkSession(SparkConversionMixin):
         :class:`pyspark.sql.types.StructType`
         """
         first = rdd.first()
-        if first != 0 and not first:
+        if first is None:
             raise ValueError("The first row in RDD is empty, " "can not infer schema")
 
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
