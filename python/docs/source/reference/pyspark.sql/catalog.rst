@@ -16,22 +16,33 @@
     under the License.
 
 
-=============
-API Reference
-=============
+=======
+Catalog
+=======
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. currentmodule:: pyspark.sql
 
-Pandas API on Spark follows the API specifications of latest pandas release.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-   :maxdepth: 2
-
-   pyspark.sql/index
-   pyspark.pandas/index
-   pyspark.ss
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
+    Catalog.cacheTable
+    Catalog.clearCache
+    Catalog.createExternalTable
+    Catalog.createTable
+    Catalog.currentDatabase
+    Catalog.databaseExists
+    Catalog.dropGlobalTempView
+    Catalog.dropTempView
+    Catalog.functionExists
+    Catalog.isCached
+    Catalog.listColumns
+    Catalog.listDatabases
+    Catalog.listFunctions
+    Catalog.listTables
+    Catalog.recoverPartitions
+    Catalog.refreshByPath
+    Catalog.refreshTable
+    Catalog.registerFunction
+    Catalog.setCurrentDatabase
+    Catalog.tableExists
+    Catalog.uncacheTable

@@ -226,7 +226,7 @@ class QueryExecutionErrorsSuite
         errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
         errorSubClass = Some("READ_ANCIENT_DATETIME"),
         msg =
-          "You may get a different result due to the upgrading to Spark >= 3.0: " +
+          "You may get a different result due to the upgrading to Spark >= 3.0:" +
           s"""
             |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
             |from $format files can be ambiguous, as the files may be written by
@@ -236,8 +236,7 @@ class QueryExecutionErrorsSuite
             |the datasource option $option to "LEGACY" to rebase the datetime values
             |w.r.t. the calendar difference during reading. To read the datetime values
             |as it is, set the SQL config $config or the datasource option $option
-            |to "CORRECTED".
-            |""".stripMargin)
+            |to "CORRECTED".""".stripMargin)
     }
 
     // Fail to write ancient datetime values.
@@ -255,7 +254,7 @@ class QueryExecutionErrorsSuite
           errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
           errorSubClass = Some("WRITE_ANCIENT_DATETIME"),
           msg =
-            "You may get a different result due to the upgrading to Spark >= 3.0: " +
+            "You may get a different result due to the upgrading to Spark >= 3.0:" +
             s"""
               |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
               |into $format files can be dangerous, as the files may be read by Spark 2.x
@@ -265,8 +264,7 @@ class QueryExecutionErrorsSuite
               |datetime values w.r.t. the calendar difference during writing, to get maximum
               |interoperability. Or set $config to "CORRECTED" to write the datetime
               |values as it is, if you are sure that the written files will only be read by
-              |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
-              |""".stripMargin)
+              |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.""".stripMargin)
       }
     }
   }
