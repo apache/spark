@@ -39,6 +39,7 @@ class JDBCTableCatalog extends TableCatalog
   private var catalogName: String = null
   private var options: JDBCOptions = _
   private var dialect: JdbcDialect = _
+  private lazy val functions: Map[String, UnboundFunction] = dialect.functions.toMap
 
   override def name(): String = {
     require(catalogName != null, "The JDBC table catalog is not initialed")
@@ -303,14 +304,14 @@ class JDBCTableCatalog extends TableCatalog
 
   override def listFunctions(namespace: Array[String]): Array[Identifier] = {
     if (namespace.isEmpty || namespaceExists(namespace)) {
-      dialect.functions.map(_._1).filter(_.namespace.sameElements(namespace)).toArray
+      functions.keys.map(Identifier.of(namespace, _)).toArray
     } else {
       throw new NoSuchNamespaceException(namespace)
     }
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
-    dialect.functions.toMap.get(ident) match {
+    functions.get(ident.name()) match {
       case Some(func) =>
         func
       case _ =>

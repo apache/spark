@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
@@ -87,18 +86,14 @@ private[sql] object H2Dialect extends JdbcDialect {
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
-  private val functionMap: java.util.Map[Identifier, UnboundFunction] =
-    new ConcurrentHashMap[Identifier, UnboundFunction]()
+  private val functionMap: java.util.Map[String, UnboundFunction] =
+    new ConcurrentHashMap[String, UnboundFunction]()
 
-  def registerFunction(ident: Identifier, fn: UnboundFunction): UnboundFunction = {
-    functionMap.put(ident, fn)
+  def registerFunction(name: String, fn: UnboundFunction): UnboundFunction = {
+    functionMap.put(name, fn)
   }
 
-  def clearFunctions(): Unit = {
-    functionMap.clear()
-  }
-
-  override def functions: Seq[(Identifier, UnboundFunction)] = functionMap.asScala.toSeq
+  override def functions: Seq[(String, UnboundFunction)] = functionMap.asScala.toSeq
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {
     e match {
