@@ -225,7 +225,7 @@ def read_csv(
     dtype: Optional[Union[str, Dtype, Dict[str, Union[str, Dtype]]]] = None,
     nrows: Optional[int] = None,
     parse_dates: bool = False,
-    quotechar: Optional[str] = None,
+    quotechar: Optional[str] = '"',
     escapechar: Optional[str] = None,
     comment: Optional[str] = None,
     encoding: Optional[str] = None,
