@@ -97,14 +97,14 @@ function formatLogsCells(execLogs, type) {
 
 function getStandAloneAppId(cb) {
   var words = getBaseURI().split('/');
-  var ind = words.indexOf("proxy");
+  var ind = indexOfExcludeBaseProxy(words, "proxy");
   var appId;
   if (ind > 0) {
     appId = words[ind + 1];
     cb(appId);
     return;
   }
-  ind = words.indexOf("history");
+  ind = indexOfExcludeBaseProxy(words, "history");
   if (ind > 0) {
     appId = words[ind + 1];
     cb(appId);
@@ -149,13 +149,13 @@ function ConvertDurationString(data) {
 
 function createTemplateURI(appId, templateName) {
   var words = getBaseURI().split('/');
-  var ind = words.indexOf("proxy");
+  var ind = indexOfExcludeBaseProxy(words, "proxy");
   var baseURI;
   if (ind > 0) {
     baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/' + templateName + '-template.html';
     return baseURI;
   }
-  ind = words.indexOf("history");
+  ind = indexOfExcludeBaseProxy(words, "history");
   if(ind > 0) {
     baseURI = words.slice(0, ind).join('/') + '/static/' + templateName + '-template.html';
     return baseURI;
@@ -184,14 +184,14 @@ function formatDate(date) {
 
 function createRESTEndPointForExecutorsPage(appId) {
   var words = getBaseURI().split('/');
-  var ind = words.indexOf("proxy");
+  var ind = indexOfExcludeBaseProxy(words, "proxy");
   var newBaseURI;
   if (ind > 0) {
     appId = words[ind + 1];
     newBaseURI = words.slice(0, ind + 2).join('/');
     return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
   }
-  ind = words.indexOf("history");
+  ind = indexOfExcludeBaseProxy(words, "history");
   if (ind > 0) {
     appId = words[ind + 1];
     var attemptId = words[ind + 2];
@@ -207,14 +207,14 @@ function createRESTEndPointForExecutorsPage(appId) {
 
 function createRESTEndPointForMiscellaneousProcess(appId) {
   var words = getBaseURI().split('/');
-  var ind = words.indexOf("proxy");
+  var ind = indexOfExcludeBaseProxy(words, "proxy");
   var newBaseURI;
   if (ind > 0) {
     appId = words[ind + 1];
     newBaseURI = words.slice(0, ind + 2).join('/');
     return newBaseURI + "/api/v1/applications/" + appId + "/allmiscellaneousprocess";
   }
-  ind = words.indexOf("history");
+  ind = indexOfExcludeBaseProxy(words, "history");
   if (ind > 0) {
     appId = words[ind + 1];
     var attemptId = words[ind + 2];
@@ -230,5 +230,15 @@ function createRESTEndPointForMiscellaneousProcess(appId) {
 
 function getBaseURI() {
   return document.baseURI || document.URL;
+}
+
+function indexOfExcludeBaseProxy(words, searchWords) {
+    var wordsOfRoot = uiRoot.split('/');
+    var ind = wordsOfRoot.indexOf(searchWords);
+    if (ind < 0) {
+        return words.indexOf(searchWords);
+    } else {
+        return words.indexOf(searchWords, words.indexOf(searchWords) + 1);
+    }
 }
 /* eslint-enable no-unused-vars */
