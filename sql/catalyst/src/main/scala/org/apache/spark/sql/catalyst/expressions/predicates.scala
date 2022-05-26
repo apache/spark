@@ -1094,15 +1094,16 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   """,
   since = "3.4.0",
   group = "misc_funcs")
-case class EqualNull(left: Expression, right: Expression) extends RuntimeReplaceable {
-  override lazy val replacement: Expression = EqualNullSafe(left, right)
-
-  override def children: Seq[Expression] = Seq(left, right)
+case class EqualNull(left: Expression, right: Expression, replacement: Expression)
+    extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(left: Expression, right: Expression) = this(left, right, EqualNullSafe(left, right))
 
   override def prettyName: String = "equal_null"
 
-  override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(left = newChildren(0), right = newChildren(1))
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): EqualNull =
+    this.copy(replacement = newChild)
 }
 
 @ExpressionDescription(

@@ -300,7 +300,7 @@ struct<(a + 150):int>
 -- !query
 select b, c, equal_null(b, c), equal_null(c, b) from t1
 -- !query schema
-struct<b:int,c:int,(b <=> c):boolean,(c <=> b):boolean>
+struct<b:int,c:int,equal_null(b, c):boolean,equal_null(c, b):boolean>
 -- !query output
 0	0	true	true
 0	1	false	false
