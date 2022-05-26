@@ -53,8 +53,9 @@ class QueryCompilationErrorsDSv2Suite
         checkErrorClass(
           exception = e,
           errorClass = "UNSUPPORTED_FEATURE",
+          errorSubClass = Some("INSERT_PARTITION_SPEC_IF_NOT_EXISTS"),
           msg = "The feature is not supported: " +
-            s""""IF NOT EXISTS" for the table `testcat`.`ns1`.`ns2`.`tbl` by "INSERT INTO".""",
+            s"""INSERT INTO `testcat`.`ns1`.`ns2`.`tbl` IF NOT EXISTS in the PARTITION spec.""",
           sqlState = Some("0A000"))
       }
     }
@@ -73,7 +74,7 @@ class QueryCompilationErrorsDSv2Suite
       checkErrorClass(
         exception = e,
         errorClass = "NON_PARTITION_COLUMN",
-        msg = "PARTITION clause cannot contain a non-partition column name: `id`")
+        msg = "PARTITION clause cannot contain the non-partition column: `id`.")
     }
   }
 
@@ -90,7 +91,7 @@ class QueryCompilationErrorsDSv2Suite
       checkErrorClass(
         exception = e,
         errorClass = "NON_PARTITION_COLUMN",
-        msg = "PARTITION clause cannot contain a non-partition column name: `data`")
+        msg = "PARTITION clause cannot contain the non-partition column: `data`.")
     }
   }
 }

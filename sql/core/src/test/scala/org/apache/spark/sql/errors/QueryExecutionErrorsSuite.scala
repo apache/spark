@@ -17,22 +17,30 @@
 
 package org.apache.spark.sql.errors
 
-import java.util.Locale
+import java.io.{File, IOException}
+import java.net.{URI, URL}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
+import java.util.{Locale, Properties, ServiceConfigurationError}
 
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
+import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
-import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
-import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
+import org.apache.spark.sql.types.{DataType, DecimalType, MetadataBuilder, StructType}
+import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
   extends QueryTest
@@ -121,6 +129,7 @@ class QueryExecutionErrorsSuite
           df.collect
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "UNSUPPORTED_FEATURE",
+        errorSubClass = Some("AES_MODE"),
         msg =
           """The feature is not supported: AES-\w+ with the padding \w+""" +
           " by the `aes_encrypt`/`aes_decrypt` function.",
@@ -143,7 +152,8 @@ class QueryExecutionErrorsSuite
       checkErrorClass(
         exception = intercept[SparkRuntimeException] { lit(v) },
         errorClass = "UNSUPPORTED_FEATURE",
-        msg = """The feature is not supported: literal for '.+' of .+\.""",
+        errorSubClass = Some("LITERAL_TYPE"),
+        msg = """The feature is not supported: Literal for '.+' of .+\.""",
         sqlState = Some("0A000"),
         matchMsg = true)
     }
@@ -160,7 +170,8 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = "The feature is not supported: pivoting by the value" +
+      errorSubClass = Some("PIVOT_TYPE"),
+      msg = "The feature is not supported: Pivoting by the value" +
         """ '[dotnet,Dummies]' of the column data type "STRUCT<col1: STRING, training: STRING>".""",
       sqlState = Some("0A000"))
   }
@@ -177,7 +188,8 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e1,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = """The feature is not supported: Repeated "PIVOT"s.""",
+      errorSubClass = Some("REPEATED_PIVOT"),
+      msg = "The feature is not supported: Repeated PIVOT operation.",
       sqlState = Some("0A000"))
 
     val e2 = intercept[SparkUnsupportedOperationException] {
@@ -190,7 +202,8 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = """The feature is not supported: "PIVOT" not after a "GROUP BY".""",
+      errorSubClass = Some("PIVOT_AFTER_GROUP_BY"),
+      msg = "The feature is not supported: PIVOT clause following a GROUP BY clause.",
       sqlState = Some("0A000"))
   }
 
@@ -206,24 +219,24 @@ class QueryExecutionErrorsSuite
       }.getCause.asInstanceOf[SparkUpgradeException]
 
       val format = "Parquet"
-      val config = SQLConf.PARQUET_REBASE_MODE_IN_READ.key
-      val option = "datetimeRebaseMode"
+      val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_READ.key + "\""
+      val option = "\"datetimeRebaseMode\""
       checkErrorClass(
         exception = e,
         errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+        errorSubClass = Some("READ_ANCIENT_DATETIME"),
         msg =
-          "You may get a different result due to the upgrading to Spark >= 3.0: " +
+          "You may get a different result due to the upgrading to Spark >= 3.0:" +
           s"""
             |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
             |from $format files can be ambiguous, as the files may be written by
             |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
             |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
-            |See more details in SPARK-31404. You can set the SQL config '$config' or
-            |the datasource option '$option' to 'LEGACY' to rebase the datetime values
+            |See more details in SPARK-31404. You can set the SQL config $config or
+            |the datasource option $option to "LEGACY" to rebase the datetime values
             |w.r.t. the calendar difference during reading. To read the datetime values
-            |as it is, set the SQL config '$config' or the datasource option '$option'
-            |to 'CORRECTED'.
-            |""".stripMargin)
+            |as it is, set the SQL config $config or the datasource option $option
+            |to "CORRECTED".""".stripMargin)
     }
 
     // Fail to write ancient datetime values.
@@ -235,38 +248,28 @@ class QueryExecutionErrorsSuite
         }.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException]
 
         val format = "Parquet"
-        val config = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
+        val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
         checkErrorClass(
           exception = e,
           errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+          errorSubClass = Some("WRITE_ANCIENT_DATETIME"),
           msg =
-            "You may get a different result due to the upgrading to Spark >= 3.0: " +
+            "You may get a different result due to the upgrading to Spark >= 3.0:" +
             s"""
               |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
               |into $format files can be dangerous, as the files may be read by Spark 2.x
               |or legacy versions of Hive later, which uses a legacy hybrid calendar that
               |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
-              |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
+              |details in SPARK-31404. You can set $config to "LEGACY" to rebase the
               |datetime values w.r.t. the calendar difference during writing, to get maximum
-              |interoperability. Or set $config to 'CORRECTED' to write the datetime values
-              |as it is, if you are 100% sure that the written files will only be read by
-              |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
-              |""".stripMargin)
+              |interoperability. Or set $config to "CORRECTED" to write the datetime
+              |values as it is, if you are sure that the written files will only be read by
+              |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.""".stripMargin)
       }
     }
   }
 
-  test("UNSUPPORTED_OPERATION: timeZoneId not specified while converting TimestampType to Arrow") {
-    checkErrorClass(
-      exception = intercept[SparkUnsupportedOperationException] {
-        ArrowUtils.toArrowSchema(new StructType().add("value", TimestampType), null)
-      },
-      errorClass = "UNSUPPORTED_OPERATION",
-      msg = "The operation is not supported: \"TIMESTAMP\" must supply timeZoneId " +
-        "parameter while converting to the arrow timestamp type.")
-  }
-
-  test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
+  test("UNSUPPORTED_FEATURE - SPARK-36346: can't read Timestamp as TimestampNTZ") {
     withTempPath { file =>
       sql("select timestamp_ltz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
@@ -274,14 +277,15 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_OPERATION",
-          msg = "The operation is not supported: " +
+          errorClass = "UNSUPPORTED_FEATURE",
+          errorSubClass = Some("ORC_TYPE_CAST"),
+          msg = "The feature is not supported: " +
             "Unable to convert \"TIMESTAMP\" of Orc to data type \"TIMESTAMP_NTZ\".")
       }
     }
   }
 
-  test("UNSUPPORTED_OPERATION - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
+  test("UNSUPPORTED_FEATURE - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
     withTempPath { file =>
       sql("select timestamp_ntz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
@@ -289,8 +293,9 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_OPERATION",
-          msg = "The operation is not supported: " +
+          errorClass = "UNSUPPORTED_FEATURE",
+          errorSubClass = Some("ORC_TYPE_CAST"),
+          msg = "The feature is not supported: " +
             "Unable to convert \"TIMESTAMP_NTZ\" of Orc to data type \"TIMESTAMP\".")
       }
     }
@@ -341,10 +346,10 @@ class QueryExecutionErrorsSuite
     assert(e3.getCause.isInstanceOf[BadRecordException])
 
     val e4 = e3.getCause.asInstanceOf[BadRecordException]
-    assert(e4.getCause.isInstanceOf[SparkIllegalStateException])
+    assert(e4.getCause.isInstanceOf[SparkRuntimeException])
 
     checkErrorClass(
-      exception = e4.getCause.asInstanceOf[SparkIllegalStateException],
+      exception = e4.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "CANNOT_PARSE_DECIMAL",
       msg = "Cannot parse decimal",
       sqlState = Some("42000"))
@@ -404,24 +409,238 @@ class QueryExecutionErrorsSuite
       trainingSales
       sql(
         """
-          | select * from (
-          | select *,map(sales.course, sales.year) as map
-          | from trainingSales
+          | select *
+          | from (
+          |   select *,map(sales.course, sales.year) as map
+          |   from trainingSales
           | )
           | pivot (
-          | sum(sales.earnings) as sum
-          | for map in (
-          | map("dotNET", 2012), map("JAVA", 2012),
-          | map("dotNet", 2013), map("Java", 2013)
-          | ))
+          |   sum(sales.earnings) as sum
+          |   for map in (
+          |     map("dotNET", 2012), map("JAVA", 2012),
+          |     map("dotNet", 2013), map("Java", 2013)
+          |   )
+          | )
           |""".stripMargin).collect()
     }
     checkErrorClass(
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      msg = "Invalid pivot column 'map.*\\'. Pivot columns must be comparable.",
-      sqlState = Some("42000"),
-      matchMsg = true
-    )
+      msg = "Invalid pivot column `__auto_generated_subquery_name`.`map`. " +
+        "Pivot columns must be comparable.",
+      sqlState = Some("42000"))
+  }
+
+  test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
+    withTempPath { path =>
+      val e1 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      checkErrorClass(
+        exception = e1,
+        errorClass = "UNSUPPORTED_SAVE_MODE",
+        errorSubClass = Some("NON_EXISTENT_PATH"),
+        msg = "The save mode NULL is not supported for: a non-existent path.")
+
+      Utils.createDirectory(path)
+
+      val e2 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      checkErrorClass(
+        exception = e2,
+        errorClass = "UNSUPPORTED_SAVE_MODE",
+        errorSubClass = Some("EXISTENT_PATH"),
+        msg = "The save mode NULL is not supported for: an existent path.")
+    }
+  }
+
+  test("RESET_PERMISSION_TO_ORIGINAL: can't set permission") {
+      withTable("t") {
+        withSQLConf(
+          "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          sql("CREATE TABLE t(c String) USING parquet")
+
+          val e = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE t")
+          }
+          assert(e.getCause.isInstanceOf[SparkSecurityException])
+
+          checkErrorClass(
+            exception = e.getCause.asInstanceOf[SparkSecurityException],
+            errorClass = "RESET_PERMISSION_TO_ORIGINAL",
+            msg = "Failed to set original permission .+ " +
+              "back to the created path: .+\\. Exception: .+",
+            matchMsg = true)
+      }
+    }
+  }
+
+  test("INCOMPATIBLE_DATASOURCE_REGISTER: create table using an incompatible data source") {
+    val newClassLoader = new ClassLoader() {
+
+      override def getResources(name: String): java.util.Enumeration[URL] = {
+        if (name.equals("META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")) {
+          // scalastyle:off
+          throw new ServiceConfigurationError(s"Illegal configuration-file syntax: $name",
+            new NoClassDefFoundError("org.apache.spark.sql.sources.HadoopFsRelationProvider"))
+          // scalastyle:on throwerror
+        } else {
+          super.getResources(name)
+        }
+      }
+    }
+
+    Utils.withContextClassLoader(newClassLoader) {
+      val e = intercept[SparkClassNotFoundException] {
+        sql("CREATE TABLE student (id INT, name STRING, age INT) USING org.apache.spark.sql.fake")
+      }
+      checkErrorClass(
+        exception = e,
+        errorClass = "INCOMPATIBLE_DATASOURCE_REGISTER",
+        msg = "Detected an incompatible DataSourceRegister. Please remove the incompatible library " +
+          "from classpath or upgrade it. Error: Illegal configuration-file syntax: " +
+          "META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")
+    }
+  }
+
+  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type -100") {
+    Utils.classForName("org.h2.Driver")
+
+    val properties = new Properties()
+    properties.setProperty("user", "testUser")
+    properties.setProperty("password", "testPass")
+
+    val url = "jdbc:h2:mem:testdb0"
+    val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
+    val tableName = "test.table1"
+    val unrecognizedColumnType = -100
+
+    var conn: java.sql.Connection = null
+    try {
+      conn = DriverManager.getConnection(url, properties)
+      conn.prepareStatement("create schema test").executeUpdate()
+      conn.commit()
+
+      conn.prepareStatement(s"create table $tableName (a INT)").executeUpdate()
+      conn.prepareStatement(
+        s"insert into $tableName values (1)").executeUpdate()
+      conn.commit()
+    } finally {
+      if (null != conn) {
+        conn.close()
+      }
+    }
+
+    val testH2DialectUnrecognizedSQLType = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+
+      override def getCatalystType(sqlType: Int, typeName: String, size: Int,
+        md: MetadataBuilder): Option[DataType] = {
+        sqlType match {
+          case _ => None
+        }
+      }
+
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+        val driverClass: String = options.driverClass
+
+        (_: Int) => {
+          DriverRegistry.register(driverClass)
+
+          val resultSetMetaData = mock(classOf[ResultSetMetaData])
+          when(resultSetMetaData.getColumnCount).thenReturn(1)
+          when(resultSetMetaData.getColumnType(1)).thenReturn(unrecognizedColumnType)
+
+          val resultSet = mock(classOf[ResultSet])
+          when(resultSet.next()).thenReturn(true).thenReturn(false)
+          when(resultSet.getMetaData).thenReturn(resultSetMetaData)
+
+          val preparedStatement = mock(classOf[PreparedStatement])
+          when(preparedStatement.executeQuery).thenReturn(resultSet)
+
+          val connection = mock(classOf[Connection])
+          when(connection.prepareStatement(s"SELECT * FROM $tableName WHERE 1=0")).
+            thenReturn(preparedStatement)
+
+          connection
+        }
+      }
+    }
+
+    val existH2Dialect = JdbcDialects.get(urlWithUserAndPass)
+    JdbcDialects.unregisterDialect(existH2Dialect)
+
+    JdbcDialects.registerDialect(testH2DialectUnrecognizedSQLType)
+
+    checkErrorClass(
+      exception = intercept[SparkSQLException] {
+        spark.read.jdbc(urlWithUserAndPass, tableName, new Properties()).collect()
+      },
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      msg = s"Unrecognized SQL type $unrecognizedColumnType")
+
+    JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
+  }
+
+  test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
+    val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).
+      toDF("i", "j", "k").as("df1")
+
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i").
+        saveAsTable("bucketed_table")
+      val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+      val tableDir = new File(warehouseFilePath, "bucketed_table")
+      Utils.deleteRecursively(tableDir)
+      df1.write.parquet(tableDir.getAbsolutePath)
+
+      val aggregated = spark.table("bucketed_table").groupBy("i").count()
+
+      checkErrorClass(
+        exception = intercept[SparkException] {
+          aggregated.count()
+        },
+        errorClass = "INVALID_BUCKET_FILE",
+        msg = "Invalid bucket file: .+",
+        matchMsg = true)
+    }
+  }
+
+  test("MULTI_VALUE_SUBQUERY_ERROR: " +
+    "more than one row returned by a subquery used as an expression") {
+    checkErrorClass(
+      exception = intercept[SparkException] {
+        sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
+      },
+      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      msg =
+        """more than one row returned by a subquery used as an expression: """ +
+          """Subquery subquery#\w+, \[id=#\w+\]
+            |\+\- AdaptiveSparkPlan isFinalPlan=true
+            |   \+\- == Final Plan ==
+            |      Union
+            |      :\- \*\(1\) Project \[\w+ AS a#\w+\]
+            |      :  \+\- \*\(1\) Scan OneRowRelation\[\]
+            |      \+\- \*\(2\) Project \[\w+ AS a#\w+\]
+            |         \+\- \*\(2\) Scan OneRowRelation\[\]
+            |   \+\- == Initial Plan ==
+            |      Union
+            |      :\- Project \[\w+ AS a#\w+\]
+            |      :  \+\- Scan OneRowRelation\[\]
+            |      \+\- Project \[\w+ AS a#\w+\]
+            |         \+\- Scan OneRowRelation\[\]
+            |""".stripMargin,
+      matchMsg = true)
+  }
+}
+
+class FakeFileSystemSetPermission extends LocalFileSystem {
+
+  override def setPermission(src: Path, permission: FsPermission): Unit = {
+    throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
 }

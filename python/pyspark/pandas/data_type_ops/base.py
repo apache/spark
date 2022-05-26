@@ -116,9 +116,12 @@ def _as_categorical_type(
     assert isinstance(dtype, CategoricalDtype)
     if dtype.categories is None:
         codes, uniques = index_ops.factorize()
+        categories = uniques.astype(index_ops.dtype)
         return codes._with_new_scol(
             codes.spark.column,
-            field=codes._internal.data_fields[0].copy(dtype=CategoricalDtype(categories=uniques)),
+            field=codes._internal.data_fields[0].copy(
+                dtype=CategoricalDtype(categories=categories)
+            ),
         )
     else:
         categories = dtype.categories

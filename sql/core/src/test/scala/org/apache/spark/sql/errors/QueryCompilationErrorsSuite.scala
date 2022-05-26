@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{grouping, grouping_id, sum, udf}
+import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
 
@@ -29,6 +29,8 @@ case class StringLongClass(a: String, b: Long)
 case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
+
+case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
   extends QueryTest
@@ -106,15 +108,16 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("ILLEGAL_SUBSTRING: the argument_index of string format is invalid") {
+  test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
     withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
       val e = intercept[AnalysisException] {
         sql("select format_string('%0$s', 'Hello')")
       }
       checkErrorClass(
         exception = e,
-        errorClass = "ILLEGAL_SUBSTRING",
-        msg = "The argument_index of string format cannot contain position 0$.; line 1 pos 7")
+        errorClass = "INVALID_PARAMETER_VALUE",
+        msg = "The value of parameter(s) 'strfmt' in `format_string` is invalid: " +
+          "expects %1$, %2$ and so on, but got %0$.; line 1 pos 7")
     }
   }
 
@@ -165,8 +168,9 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("PYTHON_UDF_IN_ON_CLAUSE"),
       msg = "The feature is not supported: " +
-        "Using PythonUDF in join condition of join type \"LEFT OUTER\" is not supported.",
+        "Python UDF in the ON clause of a LEFT OUTER JOIN.",
       sqlState = Some("0A000"))
   }
 
@@ -188,8 +192,9 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("PANDAS_UDAF_IN_PIVOT"),
       msg = "The feature is not supported: " +
-        "Pandas UDF aggregate expressions don't support pivot.",
+        "Pandas user defined aggregate function in the PIVOT clause.",
       sqlState = Some("0A000"))
   }
 
@@ -227,7 +232,7 @@ class QueryCompilationErrorsSuite
         "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
         "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
         "if input types are all non primitive\n" +
-        s"3. set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and " +
+        s"""3. set "${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key}" to "true" and """ +
         s"use this API with caution")
   }
 
@@ -270,7 +275,8 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = "The feature is not supported: UDF class with 24 type arguments",
+      errorSubClass = Some("TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS"),
+      msg = "The feature is not supported: UDF class with 24 type arguments.",
       sqlState = Some("0A000"))
   }
 
@@ -349,7 +355,7 @@ class QueryCompilationErrorsSuite
             sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation "DESC PARTITION" is not allowed """ +
+          msg = s"""The operation DESC PARTITION is not allowed """ +
             s"on the temporary view: `$tempViewName`")
       }
     }
@@ -375,7 +381,7 @@ class QueryCompilationErrorsSuite
             sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation "DESC PARTITION" is not allowed """ +
+          msg = s"""The operation DESC PARTITION is not allowed """ +
             s"on the view: `$viewName`")
       }
     }
@@ -394,8 +400,7 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("INVALID_JSON_SCHEMA_MAPTYPE: " +
-    "Parse JSON rows can only contain StringType as a key type for a MapType.") {
+  test("INVALID_JSON_SCHEMA_MAP_TYPE: only STRING as a key type for MAP") {
     val schema = StructType(
       StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
 
@@ -403,10 +408,239 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         spark.read.schema(schema).json(spark.emptyDataset[String])
       },
-      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
-      msg = "Input schema " +
-        "StructType(StructField(map,MapType(IntegerType,IntegerType,true),false)) " +
-        "can only contain StringType as a key type for a MapType."
+      errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
+      msg = """Input schema "STRUCT<map: MAP<INT, INT>>" """ +
+        "can only contain STRING as a key type for a MAP."
+    )
+  }
+
+  test("MISSING_COLUMN: SELECT distinct does not work correctly " +
+    "if order by missing attribute") {
+    checkAnswer(
+      sql(
+        """select distinct struct.a, struct.b
+          |from (
+          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+          |  union all
+          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+          |order by a, b
+          |""".stripMargin), Row(1, 2) :: Nil)
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        sql(
+          """select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by struct.a, struct.b
+            |""".stripMargin)
+      },
+      errorClass = "MISSING_COLUMN",
+      msg = """Column 'struct.a' does not exist. """ +
+        """Did you mean one of the following\? \[a, b\]; line 6 pos 9;
+           |'Sort \['struct.a ASC NULLS FIRST, 'struct.b ASC NULLS FIRST\], true
+           |\+\- Distinct
+           |   \+\- Project \[struct#\w+\.a AS a#\w+, struct#\w+\.b AS b#\w+\]
+           |      \+\- SubqueryAlias tmp
+           |         \+\- Union false, false
+           |            :\- Project \[named_struct\(a, 1, b, 2, c, 3\) AS struct#\w+\]
+           |            :  \+\- OneRowRelation
+           |            \+\- Project \[named_struct\(a, 1, b, 2, c, 4\) AS struct#\w+\]
+           |               \+\- OneRowRelation
+           |""".stripMargin,
+      matchMsg = true)
+  }
+
+  test("MISSING_COLUMN - SPARK-21335: support un-aliased subquery") {
+    withTempView("v") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
+      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
+
+      checkErrorClass(
+        exception = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)")),
+        errorClass = "MISSING_COLUMN",
+        msg = """Column 'v.i' does not exist. Did you mean one of the following\? """ +
+          """\[__auto_generated_subquery_name.i\]; line 1 pos 7;
+            |'Project \['v.i\]
+            |\+\- SubqueryAlias __auto_generated_subquery_name
+            |   \+\- Project \[i#\w+\]
+            |      \+\- SubqueryAlias v
+            |         \+\- View \(`v`, \[i#\w+,j#\w+\]\)
+            |            \+\- Project \[_\w+#\w+ AS i#\w+, _\w+#\w+ AS j#\w+\]
+            |               \+\- LocalRelation \[_\w+#\w+, _\w+#\w+\]
+            |""".stripMargin,
+        matchMsg = true)
+
+      checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
+  }
+
+  test("AMBIGUOUS_FIELD_NAME: alter column matching multi fields in the struct") {
+    withTable("t") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        sql("CREATE TABLE t(c struct<X:String, x:String>) USING parquet")
+      }
+
+      checkErrorClass(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'")
+        },
+        errorClass = "AMBIGUOUS_FIELD_NAME",
+        msg = "Field name c.X is ambiguous and has 2 matching fields in the struct.; line 1 pos 0")
+    }
+  }
+
+  test("PIVOT_VALUE_DATA_TYPE_MISMATCH: can't cast pivot value data type (struct) " +
+    "to pivot column data type (int)") {
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("dotNET", 2012, 5000),
+      ("dotNET", 2013, 48000),
+      ("Java", 2013, 30000)
+    ).toDF("course", "year", "earnings")
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        df.groupBy(df("course")).pivot(df("year"), Seq(
+          struct(lit("dotnet"), lit("Experts")),
+          struct(lit("java"), lit("Dummies")))).
+          agg(sum($"earnings")).collect()
+      },
+      errorClass = "PIVOT_VALUE_DATA_TYPE_MISMATCH",
+      msg = "Invalid pivot value 'struct(col1, dotnet, col2, Experts)': value data type " +
+        "struct<col1:string,col2:string> does not match pivot column data type int")
+  }
+
+  test("INVALID_FIELD_NAME: add a nested field for not struct parent") {
+    withTable("t") {
+      sql("CREATE TABLE t(c struct<x:string>, m string) USING parquet")
+
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t ADD COLUMNS (m.n int)")
+      }
+      checkErrorClass(
+        exception = e,
+        errorClass = "INVALID_FIELD_NAME",
+        msg = "Field name `m`.`n` is invalid: `m` is not a struct.; line 1 pos 27")
+    }
+  }
+
+  test("NON_LITERAL_PIVOT_VALUES: literal expressions required for pivot values") {
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("dotNET", 2012, 5000),
+      ("dotNET", 2013, 48000),
+      ("Java", 2013, 30000)
+    ).toDF("course", "year", "earnings")
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        df.groupBy(df("course")).
+          pivot(df("year"), Seq($"earnings")).
+          agg(sum($"earnings")).collect()
+      },
+      errorClass = "NON_LITERAL_PIVOT_VALUES",
+      msg = """Literal expressions required for pivot values, found "earnings".""")
+  }
+
+  test("UNSUPPORTED_DESERIALIZER: data type mismatch") {
+    val e = intercept[AnalysisException] {
+      sql("select 1 as arr").as[ArrayClass]
+    }
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      errorSubClass = Some("DATA_TYPE_MISMATCH"),
+      msg = """The deserializer is not supported: need an "ARRAY" field but got "INT".""")
+  }
+
+  test("UNSUPPORTED_DESERIALIZER: " +
+    "the real number of fields doesn't match encoder schema") {
+    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
+
+    val e1 = intercept[AnalysisException] {
+      ds.as[(String, Int, Long)]
+    }
+    checkErrorClass(
+      exception = e1,
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+        "to Tuple3, but failed as the number of fields does not line up.")
+
+    val e2 = intercept[AnalysisException] {
+      ds.as[Tuple1[String]]
+    }
+    checkErrorClass(
+      exception = e2,
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+        "to Tuple1, but failed as the number of fields does not line up.")
+  }
+
+  test("UNSUPPORTED_GENERATOR: " +
+    "generators are not supported when it's nested in expressions") {
+    val e = intercept[AnalysisException](
+      sql("""select explode(Array(1, 2, 3)) + 1""").collect()
+    )
+
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_GENERATOR",
+      errorSubClass = Some("NESTED_IN_EXPRESSIONS"),
+      msg = """The generator is not supported: """ +
+        """nested in expressions "(explode(array(1, 2, 3)) + 1)"""")
+  }
+
+  test("UNSUPPORTED_GENERATOR: only one generator allowed") {
+    val e = intercept[AnalysisException](
+      sql("""select explode(Array(1, 2, 3)), explode(Array(1, 2, 3))""").collect()
+    )
+
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_GENERATOR",
+      errorSubClass = Some("MULTI_GENERATOR"),
+      msg = "The generator is not supported: only one generator allowed per select clause " +
+        """but found 2: "explode(array(1, 2, 3))", "explode(array(1, 2, 3))""""
+    )
+  }
+
+  test("UNSUPPORTED_GENERATOR: generators are not supported outside the SELECT clause") {
+    val e = intercept[AnalysisException](
+      sql("""select 1 from t order by explode(Array(1, 2, 3))""").collect()
+    )
+
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_GENERATOR",
+      errorSubClass = Some("OUTSIDE_SELECT"),
+      msg = "The generator is not supported: outside the SELECT clause, found: " +
+        "'Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true"
+    )
+  }
+
+  test("UNSUPPORTED_GENERATOR: not a generator") {
+    val e = intercept[AnalysisException](
+      sql(
+        """
+          |SELECT explodedvalue.*
+          |FROM VALUES array(1, 2, 3) AS (value)
+          |LATERAL VIEW array_contains(value, 1) AS explodedvalue""".stripMargin).collect()
+    )
+
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_GENERATOR",
+      errorSubClass = Some("NOT_GENERATOR"),
+      msg = """The generator is not supported: `array_contains` is expected to be a generator. """ +
+        "However, its class is org.apache.spark.sql.catalyst.expressions.ArrayContains, " +
+        "which is not a generator.; line 4 pos 0"
     )
   }
 }

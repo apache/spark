@@ -110,10 +110,11 @@ statement
         RENAME COLUMN
         from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS)
+        DROP (COLUMN | COLUMNS) (IF EXISTS)?
         LEFT_PAREN columns=multipartIdentifierList RIGHT_PAREN         #dropTableColumns
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS) columns=multipartIdentifierList        #dropTableColumns
+        DROP (COLUMN | COLUMNS) (IF EXISTS)?
+        columns=multipartIdentifierList                                #dropTableColumns
     | ALTER (TABLE | VIEW) from=multipartIdentifier
         RENAME TO to=multipartIdentifier                               #renameTable
     | ALTER (TABLE | VIEW) multipartIdentifier
@@ -815,7 +816,7 @@ datetimeUnit
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER)                                   #currentLike
     | name=(TIMESTAMPADD | DATEADD) LEFT_PAREN unit=datetimeUnit COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
     | name=(TIMESTAMPDIFF | DATEDIFF) LEFT_PAREN unit=datetimeUnit COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
@@ -823,6 +824,7 @@ primaryExpression
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
     | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN #struct
     | FIRST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                  #first
+    | ANY_VALUE LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                              #any_value
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
     | constant                                                                                 #constantDefault
@@ -1071,6 +1073,7 @@ ansiNonReserved
     | ALTER
     | ANALYZE
     | ANTI
+    | ANY_VALUE
     | ARCHIVE
     | ARRAY
     | ASC
@@ -1313,6 +1316,7 @@ nonReserved
     | ANALYZE
     | AND
     | ANY
+    | ANY_VALUE
     | ARCHIVE
     | ARRAY
     | AS

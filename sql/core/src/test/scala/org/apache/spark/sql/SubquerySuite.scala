@@ -145,15 +145,6 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     )
   }
 
-  test("runtime error when the number of rows is greater than 1") {
-    val error2 = intercept[RuntimeException] {
-      sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
-    }
-    assert(error2.getMessage.contains(
-      "more than one row returned by a subquery used as an expression")
-    )
-  }
-
   test("uncorrelated scalar subquery on a DataFrame generated query") {
     withTempView("subqueryData") {
       val df = Seq((1, "one"), (2, "two"), (3, "three")).toDF("key", "value")

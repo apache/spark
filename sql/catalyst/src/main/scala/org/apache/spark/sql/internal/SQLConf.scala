@@ -959,6 +959,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED =
+    buildConf("spark.sql.parquet.filterPushdown.stringPredicate")
+      .doc("If true, enables Parquet filter push-down optimization for string predicate such " +
+        "as startsWith/endsWith/contains function. This configuration only has an effect when " +
+        s"'${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is enabled.")
+      .version("3.4.0")
+      .internal()
+      .fallbackConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
       .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
@@ -1061,6 +1070,17 @@ object SQLConf {
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
+
+  val PARQUET_TIMESTAMP_NTZ_ENABLED =
+    buildConf("spark.sql.parquet.timestampNTZ.enabled")
+      .doc(s"Enables ${TimestampTypes.TIMESTAMP_NTZ} support for Parquet reads and writes. " +
+        s"When enabled, ${TimestampTypes.TIMESTAMP_NTZ} values are written as Parquet timestamp " +
+        "columns with annotation isAdjustedToUTC = false and are inferred in a similar way. " +
+        s"When disabled, such values are read as ${TimestampTypes.TIMESTAMP_LTZ} and have to be " +
+        s"converted to ${TimestampTypes.TIMESTAMP_LTZ} for writes.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
@@ -1907,7 +1927,8 @@ object SQLConf {
   val STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS =
   buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
     .internal()
-    .doc("When true, this config will skip null values in hash based stream-stream joins.")
+    .doc("When true, this config will skip null values in hash based stream-stream joins. " +
+      "The number of skipped null values will be shown as custom metric of stream join operator.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -2557,8 +2578,9 @@ object SQLConf {
   val PYSPARK_JVM_STACKTRACE_ENABLED =
     buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
       .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
-        "together with Python stacktrace. By default, it is disabled and hides JVM stacktrace " +
-        "and shows a Python-friendly exception only.")
+        "together with Python stacktrace. By default, it is disabled to hide JVM stacktrace " +
+        "and shows a Python-friendly exception only. Note that this is independent from log " +
+        "level settings.")
       .version("3.0.0")
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
@@ -2860,7 +2882,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
-    buildConf("spark.sql.defaultColumn.useNullsForMissingDefautValues")
+    buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
       .doc("When true, and DEFAULT columns are enabled, allow column definitions lacking " +
         "explicit default values to behave as if they had specified DEFAULT NULL instead. " +
@@ -3004,6 +3026,17 @@ object SQLConf {
     .version("3.0.3")
     .intConf
     .createOptional
+
+  val LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION =
+    buildConf("spark.sql.legacy.respectNullabilityInTextDatasetConversion")
+      .internal()
+      .doc("When true, the nullability in the user-specified schema for " +
+        "`DataFrameReader.schema(schema).json(jsonDataset)` and " +
+        "`DataFrameReader.schema(schema).csv(csvDataset)` is respected. Otherwise, they are " +
+        "turned to a nullable schema forcibly.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
@@ -3725,6 +3758,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT =
+    buildConf("spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled")
+      .doc("PySpark's SparkSession.createDataFrame infers the element type of an array from all " +
+        "values in the array by default. If this config is set to true, it restores the legacy " +
+        "behavior of only inferring the type from the first array element.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_USE_V1_COMMAND =
     buildConf("spark.sql.legacy.useV1Command")
       .internal()
@@ -4050,8 +4092,8 @@ class SQLConf extends Serializable with Logging {
 
   def parquetFilterPushDownDecimal: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED)
 
-  def parquetFilterPushDownStringStartWith: Boolean =
-    getConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+  def parquetFilterPushDownStringPredicate: Boolean =
+    getConf(PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED)
 
   def parquetFilterPushDownInFilterThreshold: Int =
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
@@ -4521,11 +4563,16 @@ class SQLConf extends Serializable with Logging {
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 
+  def legacyInferArrayTypeFromFirstElement: Boolean = getConf(
+    SQLConf.LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT)
+
   def parquetFieldIdReadEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED)
 
   def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
+
+  def parquetTimestampNTZEnabled: Boolean = getConf(PARQUET_TIMESTAMP_NTZ_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 

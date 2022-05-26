@@ -123,11 +123,7 @@ def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
     import pyspark.pandas as ps
-
-    if isinstance(data, ps.DataFrame):
-        raise RuntimeError(
-            "plotly does not support a box plot with pandas-on-Spark DataFrame. Use Series instead."
-        )
+    from pyspark.sql.types import NumericType
 
     # 'whis' isn't actually an argument in plotly (but in matplotlib). But seems like
     # plotly doesn't expose the reach of the whiskers to the beyond the first and
@@ -150,40 +146,82 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
             "Set to False." % notched
         )
 
-    colname = name_like_string(data.name)
-    spark_column_name = data._internal.spark_column_name_for(data._column_label)
-
-    # Computes mean, median, Q1 and Q3 with approx_percentile and precision
-    col_stats, col_fences = BoxPlotBase.compute_stats(data, spark_column_name, whis, precision)
-
-    # Creates a column to flag rows as outliers or not
-    outliers = BoxPlotBase.outliers(data, spark_column_name, *col_fences)
-
-    # Computes min and max values of non-outliers - the whiskers
-    whiskers = BoxPlotBase.calc_whiskers(spark_column_name, outliers)
-
-    fliers = None
-    if boxpoints:
-        fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, whiskers[0])
-        fliers = [fliers] if len(fliers) > 0 else None
-
     fig = go.Figure()
-    fig.add_trace(
-        go.Box(
-            name=colname,
-            q1=[col_stats["q1"]],
-            median=[col_stats["med"]],
-            q3=[col_stats["q3"]],
-            mean=[col_stats["mean"]],
-            lowerfence=[whiskers[0]],
-            upperfence=[whiskers[1]],
-            y=fliers,
-            boxpoints=boxpoints,
-            notched=notched,
-            **kwargs,  # this is for workarounds. Box takes different options from express.box.
+    if isinstance(data, ps.Series):
+        colname = name_like_string(data.name)
+        spark_column_name = data._internal.spark_column_name_for(data._column_label)
+
+        # Computes mean, median, Q1 and Q3 with approx_percentile and precision
+        col_stats, col_fences = BoxPlotBase.compute_stats(data, spark_column_name, whis, precision)
+
+        # Creates a column to flag rows as outliers or not
+        outliers = BoxPlotBase.outliers(data, spark_column_name, *col_fences)
+
+        # Computes min and max values of non-outliers - the whiskers
+        whiskers = BoxPlotBase.calc_whiskers(spark_column_name, outliers)
+
+        fliers = None
+        if boxpoints:
+            fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, whiskers[0])
+            fliers = [fliers] if len(fliers) > 0 else None
+
+        fig.add_trace(
+            go.Box(
+                name=colname,
+                q1=[col_stats["q1"]],
+                median=[col_stats["med"]],
+                q3=[col_stats["q3"]],
+                mean=[col_stats["mean"]],
+                lowerfence=[whiskers[0]],
+                upperfence=[whiskers[1]],
+                y=fliers,
+                boxpoints=boxpoints,
+                notched=notched,
+                **kwargs,  # this is for workarounds. Box takes different options from express.box.
+            )
         )
-    )
-    fig["layout"]["xaxis"]["title"] = colname
+        fig["layout"]["xaxis"]["title"] = colname
+
+    else:
+        numeric_column_names = []
+        for column_label in data._internal.column_labels:
+            if isinstance(data._internal.spark_type_for(column_label), NumericType):
+                numeric_column_names.append(name_like_string(column_label))
+
+        # Computes mean, median, Q1 and Q3 with approx_percentile and precision
+        multicol_stats = BoxPlotBase.compute_multicol_stats(
+            data, numeric_column_names, whis, precision
+        )
+
+        # Creates a column to flag rows as outliers or not
+        outliers = BoxPlotBase.multicol_outliers(data, multicol_stats)
+
+        # Computes min and max values of non-outliers - the whiskers
+        whiskers = BoxPlotBase.calc_multicol_whiskers(numeric_column_names, outliers)
+
+        i = 0
+        for colname in numeric_column_names:
+            col_stats = multicol_stats[colname]
+            col_whiskers = whiskers[colname]
+
+            fig.add_trace(
+                go.Box(
+                    x=[i],
+                    name=colname,
+                    q1=[col_stats["q1"]],
+                    median=[col_stats["med"]],
+                    q3=[col_stats["q3"]],
+                    mean=[col_stats["mean"]],
+                    lowerfence=[col_whiskers["min"]],
+                    upperfence=[col_whiskers["max"]],
+                    y=None,  # todo: support y=fliers
+                    boxpoints=boxpoints,
+                    notched=notched,
+                    **kwargs,
+                )
+            )
+            i += 1
+
     fig["layout"]["yaxis"]["title"] = "value"
     return fig
 

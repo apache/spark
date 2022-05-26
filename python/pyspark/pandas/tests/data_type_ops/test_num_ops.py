@@ -620,6 +620,7 @@ class FractionalExtensionOpsTest(OpsTestBase):
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
         for pser, psser in self.fractional_extension_pser_psser_pairs:
             self.assert_eq(pser.astype(float), psser.astype(float))
+            self.assert_eq(pser.astype("category"), psser.astype("category"))
             self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
             with ps.option_context("compute.eager_check", True):
                 self.assertRaisesRegex(

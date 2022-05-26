@@ -484,7 +484,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "generator nested in expressions",
     listRelation.select(Explode($"list") + 1),
-    "Generators are not supported when it's nested in expressions, but got: (explode(list) + 1)"
+    """The generator is not supported: nested in expressions "(explode(list) + 1)""""
       :: Nil
   )
 
@@ -495,29 +495,29 @@ class AnalysisErrorSuite extends AnalysisTest {
         AttributeReference("nestedList", ArrayType(ArrayType(IntegerType)))())
       nestedListRelation.select(Explode(Explode($"nestedList")))
     },
-    "Generators are not supported when it's nested in expressions, but got: " +
-      "explode(explode(nestedList))" :: Nil
+    "The generator is not supported: nested in expressions " +
+      """"explode(explode(nestedList))"""" :: Nil
   )
 
   errorTest(
     "SPARK-30998: unsupported nested inner generators for aggregates",
     testRelation.select(Explode(Explode(
       CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)))),
-    "Generators are not supported when it's nested in expressions, but got: " +
-      "explode(explode(array(array(min(a), max(a)))))" :: Nil
+    "The generator is not supported: nested in expressions " +
+      """"explode(explode(array(array(min(a), max(a)))))"""" :: Nil
   )
 
   errorTest(
     "generator nested in expressions for aggregates",
     testRelation.select(Explode(CreateArray(min($"a") :: max($"a") :: Nil)) + 1),
-    "Generators are not supported when it's nested in expressions, but got: " +
-      "(explode(array(min(a), max(a))) + 1)" :: Nil
+    "The generator is not supported: nested in expressions " +
+      """"(explode(array(min(a), max(a))) + 1)"""" :: Nil
   )
 
   errorTest(
     "generator appears in operator which is not Project",
     listRelation.sortBy(Explode($"list").asc),
-    "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
+    "The generator is not supported: outside the SELECT clause, found: Sort" :: Nil
   )
 
   errorTest(
@@ -557,20 +557,6 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
-    "OFFSET clause is outermost node",
-    testRelation.offset(Literal(10, IntegerType)),
-    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
-      " clause is found to be the outermost node." :: Nil
-  )
-
-  errorTest(
-    "OFFSET clause in other node",
-    testRelation2.offset(Literal(10, IntegerType)).where('b > 1),
-    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
-      " clause found in: Filter." :: Nil
-  )
-
-  errorTest(
     "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
     testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
     "The sum of the LIMIT clause and the OFFSET clause must not be greater than" +
@@ -581,15 +567,16 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "more than one generators in SELECT",
     listRelation.select(Explode($"list"), Explode($"list")),
-    "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil
+    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+      """"explode(list)", "explode(list)"""" :: Nil
   )
 
   errorTest(
     "more than one generators for aggregates in SELECT",
     testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
       Explode(CreateArray(max($"a") :: Nil))),
-    "Only one generator allowed per select clause but found 2: " +
-      "explode(array(min(a))), explode(array(max(a)))" :: Nil
+    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+      """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
   )
 
   errorTest(

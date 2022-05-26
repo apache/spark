@@ -43,7 +43,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Row(1)) :: Nil)
   }
 
-  test("from_csv with option") {
+  test("from_csv with option (timestampFormat)") {
     val df = Seq("26/08/2015 18:00").toDS()
     val schema = new StructType().add("time", TimestampType)
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
@@ -79,6 +79,110 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("from_csv with option (escape)") {
+    val df = Seq("\"#\"\"").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("escape" -> "#")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row("\"")))
+  }
+
+  test("from_csv with option (comment)") {
+    val df = Seq("# This line is commented").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("comment" -> "#")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row(null)))
+  }
+
+  test("from_csv with option (ignoreLeadingWhiteSpace)") {
+    val df = Seq(" a   ").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("ignoreLeadingWhiteSpace" -> "true")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row("a   ")))
+  }
+
+  test("from_csv with option (ignoreTrailingWhiteSpace)") {
+    val df = Seq(" a   ").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("ignoreTrailingWhiteSpace" -> "true")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row(" a")))
+  }
+
+  test("from_csv with option (nullValue)") {
+    val df = Seq("-").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("nullValue" -> "-")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row(null)))
+  }
+
+  test("from_csv with option (nanValue)") {
+    val df = Seq("#").toDS()
+    val schema = new StructType().add("float", FloatType)
+    val options = Map("nanValue" -> "#")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row(Float.NaN)))
+  }
+
+  test("from_csv with option (positiveInf)") {
+    val df = Seq("#").toDS()
+    val schema = new StructType().add("float", FloatType)
+    val options = Map("positiveInf" -> "#")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row(Double.PositiveInfinity)))
+  }
+
+  test("from_csv with option (negativeInf)") {
+    val df = Seq("#").toDS()
+    val schema = new StructType().add("float", FloatType)
+    val options = Map("negativeInf" -> "#")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row(Double.NegativeInfinity)))
+  }
+
+  test("from_csv with option (dateFormat)") {
+    val df = Seq("26/08/2015").toDS()
+    val schema = new StructType().add("time", DateType)
+    val options = Map("dateFormat" -> "dd/MM/yyyy")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row(java.sql.Date.valueOf("2015-08-26"))))
+  }
+
+  test("from_csv with option (maxCharsPerColumn)") {
+    val df = Seq("12345").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("maxCharsPerColumn" -> "2")
+
+    val exception = intercept[SparkException] {
+      df.select(from_csv($"value", schema, options)).collect()
+    }.getCause.getMessage
+
+    assert(exception.contains(
+      "Length of parsed input (3) exceeds the maximum number of " +
+      "characters defined in your parser settings (2)."))
+  }
+
   test("schema_of_csv - infers schemas") {
     checkAnswer(
       spark.range(1).select(schema_of_csv(lit("0.1,1"))),
@@ -100,11 +204,60 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(to_csv($"a")), Row("1") :: Nil)
   }
 
-  test("to_csv with option") {
+  test("to_csv with option (timestampFormat)") {
     val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm").asJava
 
     checkAnswer(df.select(to_csv($"a", options)), Row("26/08/2015 18:00") :: Nil)
+  }
+
+  test("to_csv with option (escape)") {
+    val df = Seq(Tuple1(Tuple1("\""))).toDF("a")
+    val options = Map("escape" -> "#").asJava
+
+    checkAnswer(df.select(to_csv($"a", options)), Row("\"#\"\"") :: Nil)
+  }
+
+  test("to_csv with option (escapeQuotes)") {
+    val df = Seq(Tuple1(Tuple1("test \"escapeQuotes\""))).toDF("a")
+    val options = Map("escapeQuotes" -> "false").asJava
+
+    checkAnswer(df.select(to_csv($"a", options)), Row("test \"escapeQuotes\"") :: Nil)
+  }
+
+  test("to_csv with option (ignoreLeadingWhiteSpace)") {
+    val df = Seq(Tuple1(Tuple1("  a, b  , c  "))).toDF("a")
+    val options = Map("ignoreLeadingWhiteSpace" -> "false").asJava
+
+    checkAnswer(df.select(to_csv($"a", options)), Row("\"  a, b  , c\"") :: Nil)
+  }
+
+  test("to_csv with option (ignoreTrailingWhiteSpace)") {
+    val df = Seq(Tuple1(Tuple1("  a, b  , c  "))).toDF("a")
+    val options = Map("ignoreTrailingWhiteSpace" -> "false").asJava
+
+    checkAnswer(df.select(to_csv($"a", options)), Row("\"a, b  , c  \"") :: Nil)
+  }
+
+  test("to_csv with option (nullValue)") {
+    val df = Seq(Tuple1(Tuple1(null))).toDF("a")
+    val options = Map("nullValue" -> "-").asJava
+
+    checkAnswer(df.select(to_csv($"a", options)), Row("-") :: Nil)
+  }
+
+  test("to_csv with option (dateFormat)") {
+    val df = Seq(Tuple1(Tuple1(java.sql.Date.valueOf("2015-08-26")))).toDF("a")
+    val options = Map("dateFormat" -> "dd/MM/yyyy").asJava
+
+    checkAnswer(df.select(to_csv($"a", options)), Row("26/08/2015") :: Nil)
+  }
+
+  test("to_csv with option (emptyValue)") {
+    val df = Seq(Tuple1(Tuple1(""))).toDF("a")
+    val options = Map("emptyValue" -> "-").asJava
+
+    checkAnswer(df.select(to_csv($"a", options)), Row("-") :: Nil)
   }
 
   test("from_csv invalid csv - check modes") {

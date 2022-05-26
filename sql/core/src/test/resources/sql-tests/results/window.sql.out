@@ -425,6 +425,9 @@ stddev(val) OVER w AS stddev,
 first_value(val) OVER w AS first_value,
 first_value(val, true) OVER w AS first_value_ignore_null,
 first_value(val, false) OVER w AS first_value_contain_null,
+any_value(val) OVER w AS any_value,
+any_value(val, true) OVER w AS any_value_ignore_null,
+any_value(val, false) OVER w AS any_value_contain_null,
 last_value(val) OVER w AS last_value,
 last_value(val, true) OVER w AS last_value_ignore_null,
 last_value(val, false) OVER w AS last_value_contain_null,
@@ -449,17 +452,17 @@ FROM testData
 WINDOW w AS (PARTITION BY cate ORDER BY val)
 ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,max:int,min:int,min:int,count:bigint,sum:bigint,avg:double,stddev:double,first_value:int,first_value_ignore_null:int,first_value_contain_null:int,last_value:int,last_value_ignore_null:int,last_value_contain_null:int,rank:int,dense_rank:int,cume_dist:double,percent_rank:double,ntile:int,row_number:int,var_pop:double,var_samp:double,approx_count_distinct:bigint,covar_pop:double,corr:double,stddev_samp:double,stddev_pop:double,collect_list:array<int>,collect_set:array<int>,skewness:double,kurtosis:double>
+struct<val:int,cate:string,max:int,min:int,min:int,count:bigint,sum:bigint,avg:double,stddev:double,first_value:int,first_value_ignore_null:int,first_value_contain_null:int,any_value:int,any_value_ignore_null:int,any_value_contain_null:int,last_value:int,last_value_ignore_null:int,last_value_contain_null:int,rank:int,dense_rank:int,cume_dist:double,percent_rank:double,ntile:int,row_number:int,var_pop:double,var_samp:double,approx_count_distinct:bigint,covar_pop:double,corr:double,stddev_samp:double,stddev_pop:double,collect_list:array<int>,collect_set:array<int>,skewness:double,kurtosis:double>
 -- !query output
-NULL	NULL	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.5	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
-3	NULL	3	3	3	1	3	3.0	NULL	NULL	3	NULL	3	3	3	2	2	1.0	1.0	2	2	0.0	NULL	1	0.0	NULL	NULL	0.0	[3]	[3]	NULL	NULL
-NULL	a	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.25	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
-1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	1	2	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
-1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	2	3	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
-2	a	2	1	1	3	4	1.3333333333333333	0.5773502691896258	NULL	1	NULL	2	2	2	4	3	1.0	1.0	2	4	0.22222222222222224	0.33333333333333337	2	4.772185885555555E8	1.0	0.5773502691896258	0.4714045207910317	[1,1,2]	[1,2]	1.1539890888012805	-0.6672217220327235
-1	b	1	1	1	1	1	1.0	NULL	1	1	1	1	1	1	1	1	0.3333333333333333	0.0	1	1	0.0	NULL	1	NULL	NULL	NULL	0.0	[1]	[1]	NULL	NULL
-2	b	2	1	1	2	3	1.5	0.7071067811865476	1	1	1	2	2	2	2	2	0.6666666666666666	0.5	1	2	0.25	0.5	2	0.0	NULL	0.7071067811865476	0.5	[1,2]	[1,2]	0.0	-2.0000000000000013
-3	b	3	1	1	3	6	2.0	1.0	1	1	1	3	3	3	3	3	1.0	1.0	2	3	0.6666666666666666	1.0	3	5.3687091175E8	1.0	1.0	0.816496580927726	[1,2,3]	[1,2,3]	0.7057890433107311	-1.4999999999999984
+NULL	NULL	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.5	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
+3	NULL	3	3	3	1	3	3.0	NULL	NULL	3	NULL	NULL	3	NULL	3	3	3	2	2	1.0	1.0	2	2	0.0	NULL	1	0.0	NULL	NULL	0.0	[3]	[3]	NULL	NULL
+NULL	a	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.25	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
+1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	1	2	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
+1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	2	3	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
+2	a	2	1	1	3	4	1.3333333333333333	0.5773502691896258	NULL	1	NULL	NULL	1	NULL	2	2	2	4	3	1.0	1.0	2	4	0.22222222222222224	0.33333333333333337	2	4.772185885555555E8	1.0	0.5773502691896258	0.4714045207910317	[1,1,2]	[1,2]	1.1539890888012805	-0.6672217220327235
+1	b	1	1	1	1	1	1.0	NULL	1	1	1	1	1	1	1	1	1	1	1	0.3333333333333333	0.0	1	1	0.0	NULL	1	NULL	NULL	NULL	0.0	[1]	[1]	NULL	NULL
+2	b	2	1	1	2	3	1.5	0.7071067811865476	1	1	1	1	1	1	2	2	2	2	2	0.6666666666666666	0.5	1	2	0.25	0.5	2	0.0	NULL	0.7071067811865476	0.5	[1,2]	[1,2]	0.0	-2.0000000000000013
+3	b	3	1	1	3	6	2.0	1.0	1	1	1	1	1	1	3	3	3	3	3	1.0	1.0	2	3	0.6666666666666666	1.0	3	5.3687091175E8	1.0	1.0	0.816496580927726	[1,2,3]	[1,2,3]	0.7057890433107311	-1.4999999999999984
 
 
 -- !query
@@ -508,6 +511,9 @@ SELECT val, cate,
 first_value(false) OVER w AS first_value,
 first_value(true, true) OVER w AS first_value_ignore_null,
 first_value(false, false) OVER w AS first_value_contain_null,
+any_value(false) OVER w AS any_value,
+any_value(true, true) OVER w AS any_value_ignore_null,
+any_value(false, false) OVER w AS any_value_contain_null,
 last_value(false) OVER w AS last_value,
 last_value(true, true) OVER w AS last_value_ignore_null,
 last_value(false, false) OVER w AS last_value_contain_null
@@ -515,17 +521,17 @@ FROM testData
 WINDOW w AS ()
 ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,first_value:boolean,first_value_ignore_null:boolean,first_value_contain_null:boolean,last_value:boolean,last_value_ignore_null:boolean,last_value_contain_null:boolean>
+struct<val:int,cate:string,first_value:boolean,first_value_ignore_null:boolean,first_value_contain_null:boolean,any_value:boolean,any_value_ignore_null:boolean,any_value_contain_null:boolean,last_value:boolean,last_value_ignore_null:boolean,last_value_contain_null:boolean>
 -- !query output
-NULL	NULL	false	true	false	false	true	false
-3	NULL	false	true	false	false	true	false
-NULL	a	false	true	false	false	true	false
-1	a	false	true	false	false	true	false
-1	a	false	true	false	false	true	false
-2	a	false	true	false	false	true	false
-1	b	false	true	false	false	true	false
-2	b	false	true	false	false	true	false
-3	b	false	true	false	false	true	false
+NULL	NULL	false	true	false	false	true	false	false	true	false
+3	NULL	false	true	false	false	true	false	false	true	false
+NULL	a	false	true	false	false	true	false	false	true	false
+1	a	false	true	false	false	true	false	false	true	false
+1	a	false	true	false	false	true	false	false	true	false
+2	a	false	true	false	false	true	false	false	true	false
+1	b	false	true	false	false	true	false	false	true	false
+2	b	false	true	false	false	true	false	false	true	false
+3	b	false	true	false	false	true	false	false	true	false
 
 
 -- !query
@@ -561,31 +567,32 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
 WINDOW w AS (ORDER BY salary DESC)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
 -- !query output
-Larry Bott	11798	Larry Bott	NULL
-Gerard Bondur	11472	Larry Bott	Gerard Bondur
-Pamela Castillo	11303	Larry Bott	Gerard Bondur
-Barry Jones	10586	Larry Bott	Gerard Bondur
-George Vanauf	10563	Larry Bott	Gerard Bondur
-Loui Bondur	10449	Larry Bott	Gerard Bondur
-Mary Patterson	9998	Larry Bott	Gerard Bondur
-Steve Patterson	9441	Larry Bott	Gerard Bondur
-Julie Firrelli	9181	Larry Bott	Gerard Bondur
-Jeff Firrelli	8992	Larry Bott	Gerard Bondur
-William Patterson	8870	Larry Bott	Gerard Bondur
-Diane Murphy	8435	Larry Bott	Gerard Bondur
-Leslie Jennings	8113	Larry Bott	Gerard Bondur
-Gerard Hernandez	6949	Larry Bott	Gerard Bondur
-Foon Yue Tseng	6660	Larry Bott	Gerard Bondur
-Anthony Bow	6627	Larry Bott	Gerard Bondur
-Leslie Thompson	5186	Larry Bott	Gerard Bondur
+Larry Bott	11798	Larry Bott	Larry Bott	NULL
+Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
+Pamela Castillo	11303	Larry Bott	Larry Bott	Gerard Bondur
+Barry Jones	10586	Larry Bott	Larry Bott	Gerard Bondur
+George Vanauf	10563	Larry Bott	Larry Bott	Gerard Bondur
+Loui Bondur	10449	Larry Bott	Larry Bott	Gerard Bondur
+Mary Patterson	9998	Larry Bott	Larry Bott	Gerard Bondur
+Steve Patterson	9441	Larry Bott	Larry Bott	Gerard Bondur
+Julie Firrelli	9181	Larry Bott	Larry Bott	Gerard Bondur
+Jeff Firrelli	8992	Larry Bott	Larry Bott	Gerard Bondur
+William Patterson	8870	Larry Bott	Larry Bott	Gerard Bondur
+Diane Murphy	8435	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Jennings	8113	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Hernandez	6949	Larry Bott	Larry Bott	Gerard Bondur
+Foon Yue Tseng	6660	Larry Bott	Larry Bott	Gerard Bondur
+Anthony Bow	6627	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Thompson	5186	Larry Bott	Larry Bott	Gerard Bondur
 
 
 -- !query
@@ -593,31 +600,32 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
 WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
 -- !query output
-Larry Bott	11798	Larry Bott	NULL
-Gerard Bondur	11472	Larry Bott	Gerard Bondur
-Pamela Castillo	11303	Larry Bott	Gerard Bondur
-Barry Jones	10586	Larry Bott	Gerard Bondur
-George Vanauf	10563	Larry Bott	Gerard Bondur
-Loui Bondur	10449	Larry Bott	Gerard Bondur
-Mary Patterson	9998	Larry Bott	Gerard Bondur
-Steve Patterson	9441	Larry Bott	Gerard Bondur
-Julie Firrelli	9181	Larry Bott	Gerard Bondur
-Jeff Firrelli	8992	Larry Bott	Gerard Bondur
-William Patterson	8870	Larry Bott	Gerard Bondur
-Diane Murphy	8435	Larry Bott	Gerard Bondur
-Leslie Jennings	8113	Larry Bott	Gerard Bondur
-Gerard Hernandez	6949	Larry Bott	Gerard Bondur
-Foon Yue Tseng	6660	Larry Bott	Gerard Bondur
-Anthony Bow	6627	Larry Bott	Gerard Bondur
-Leslie Thompson	5186	Larry Bott	Gerard Bondur
+Larry Bott	11798	Larry Bott	Larry Bott	NULL
+Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
+Pamela Castillo	11303	Larry Bott	Larry Bott	Gerard Bondur
+Barry Jones	10586	Larry Bott	Larry Bott	Gerard Bondur
+George Vanauf	10563	Larry Bott	Larry Bott	Gerard Bondur
+Loui Bondur	10449	Larry Bott	Larry Bott	Gerard Bondur
+Mary Patterson	9998	Larry Bott	Larry Bott	Gerard Bondur
+Steve Patterson	9441	Larry Bott	Larry Bott	Gerard Bondur
+Julie Firrelli	9181	Larry Bott	Larry Bott	Gerard Bondur
+Jeff Firrelli	8992	Larry Bott	Larry Bott	Gerard Bondur
+William Patterson	8870	Larry Bott	Larry Bott	Gerard Bondur
+Diane Murphy	8435	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Jennings	8113	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Hernandez	6949	Larry Bott	Larry Bott	Gerard Bondur
+Foon Yue Tseng	6660	Larry Bott	Larry Bott	Gerard Bondur
+Anthony Bow	6627	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Thompson	5186	Larry Bott	Larry Bott	Gerard Bondur
 
 
 -- !query
@@ -625,31 +633,32 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
 WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
 -- !query output
-Larry Bott	11798	Larry Bott	NULL
-Gerard Bondur	11472	Larry Bott	Gerard Bondur
-Pamela Castillo	11303	Larry Bott	Gerard Bondur
-Barry Jones	10586	Larry Bott	Gerard Bondur
-George Vanauf	10563	Larry Bott	Gerard Bondur
-Loui Bondur	10449	Larry Bott	Gerard Bondur
-Mary Patterson	9998	Larry Bott	Gerard Bondur
-Steve Patterson	9441	Larry Bott	Gerard Bondur
-Julie Firrelli	9181	Larry Bott	Gerard Bondur
-Jeff Firrelli	8992	Larry Bott	Gerard Bondur
-William Patterson	8870	Larry Bott	Gerard Bondur
-Diane Murphy	8435	Larry Bott	Gerard Bondur
-Leslie Jennings	8113	Larry Bott	Gerard Bondur
-Gerard Hernandez	6949	Larry Bott	Gerard Bondur
-Foon Yue Tseng	6660	Larry Bott	Gerard Bondur
-Anthony Bow	6627	Larry Bott	Gerard Bondur
-Leslie Thompson	5186	Larry Bott	Gerard Bondur
+Larry Bott	11798	Larry Bott	Larry Bott	NULL
+Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
+Pamela Castillo	11303	Larry Bott	Larry Bott	Gerard Bondur
+Barry Jones	10586	Larry Bott	Larry Bott	Gerard Bondur
+George Vanauf	10563	Larry Bott	Larry Bott	Gerard Bondur
+Loui Bondur	10449	Larry Bott	Larry Bott	Gerard Bondur
+Mary Patterson	9998	Larry Bott	Larry Bott	Gerard Bondur
+Steve Patterson	9441	Larry Bott	Larry Bott	Gerard Bondur
+Julie Firrelli	9181	Larry Bott	Larry Bott	Gerard Bondur
+Jeff Firrelli	8992	Larry Bott	Larry Bott	Gerard Bondur
+William Patterson	8870	Larry Bott	Larry Bott	Gerard Bondur
+Diane Murphy	8435	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Jennings	8113	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Hernandez	6949	Larry Bott	Larry Bott	Gerard Bondur
+Foon Yue Tseng	6660	Larry Bott	Larry Bott	Gerard Bondur
+Anthony Bow	6627	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Thompson	5186	Larry Bott	Larry Bott	Gerard Bondur
 
 
 -- !query
@@ -657,31 +666,32 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
 WINDOW w AS (ORDER BY salary RANGE BETWEEN 2000 PRECEDING AND 1000 FOLLOWING)
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
 -- !query output
-Leslie Thompson	5186	Leslie Thompson	NULL
-Anthony Bow	6627	Leslie Thompson	Anthony Bow
-Foon Yue Tseng	6660	Leslie Thompson	Anthony Bow
-Gerard Hernandez	6949	Leslie Thompson	Anthony Bow
-Leslie Jennings	8113	Anthony Bow	Foon Yue Tseng
-Diane Murphy	8435	Anthony Bow	Foon Yue Tseng
-William Patterson	8870	Gerard Hernandez	Leslie Jennings
-Jeff Firrelli	8992	Leslie Jennings	Diane Murphy
-Julie Firrelli	9181	Leslie Jennings	Diane Murphy
-Steve Patterson	9441	Leslie Jennings	Diane Murphy
-Mary Patterson	9998	Leslie Jennings	Diane Murphy
-Loui Bondur	10449	William Patterson	Jeff Firrelli
-George Vanauf	10563	William Patterson	Jeff Firrelli
-Barry Jones	10586	William Patterson	Jeff Firrelli
-Pamela Castillo	11303	Steve Patterson	Mary Patterson
-Gerard Bondur	11472	Mary Patterson	Loui Bondur
-Larry Bott	11798	Mary Patterson	Loui Bondur
+Leslie Thompson	5186	Leslie Thompson	Leslie Thompson	NULL
+Anthony Bow	6627	Leslie Thompson	Leslie Thompson	Anthony Bow
+Foon Yue Tseng	6660	Leslie Thompson	Leslie Thompson	Anthony Bow
+Gerard Hernandez	6949	Leslie Thompson	Leslie Thompson	Anthony Bow
+Leslie Jennings	8113	Anthony Bow	Anthony Bow	Foon Yue Tseng
+Diane Murphy	8435	Anthony Bow	Anthony Bow	Foon Yue Tseng
+William Patterson	8870	Gerard Hernandez	Gerard Hernandez	Leslie Jennings
+Jeff Firrelli	8992	Leslie Jennings	Leslie Jennings	Diane Murphy
+Julie Firrelli	9181	Leslie Jennings	Leslie Jennings	Diane Murphy
+Steve Patterson	9441	Leslie Jennings	Leslie Jennings	Diane Murphy
+Mary Patterson	9998	Leslie Jennings	Leslie Jennings	Diane Murphy
+Loui Bondur	10449	William Patterson	William Patterson	Jeff Firrelli
+George Vanauf	10563	William Patterson	William Patterson	Jeff Firrelli
+Barry Jones	10586	William Patterson	William Patterson	Jeff Firrelli
+Pamela Castillo	11303	Steve Patterson	Steve Patterson	Mary Patterson
+Gerard Bondur	11472	Mary Patterson	Mary Patterson	Loui Bondur
+Larry Bott	11798	Mary Patterson	Mary Patterson	Loui Bondur
 
 
 -- !query
@@ -689,31 +699,32 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
 WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
 -- !query output
-Larry Bott	11798	Larry Bott	Gerard Bondur
-Gerard Bondur	11472	Larry Bott	Gerard Bondur
-Pamela Castillo	11303	Larry Bott	Gerard Bondur
-Barry Jones	10586	Gerard Bondur	Pamela Castillo
-George Vanauf	10563	Pamela Castillo	Barry Jones
-Loui Bondur	10449	Barry Jones	George Vanauf
-Mary Patterson	9998	George Vanauf	Loui Bondur
-Steve Patterson	9441	Loui Bondur	Mary Patterson
-Julie Firrelli	9181	Mary Patterson	Steve Patterson
-Jeff Firrelli	8992	Steve Patterson	Julie Firrelli
-William Patterson	8870	Julie Firrelli	Jeff Firrelli
-Diane Murphy	8435	Jeff Firrelli	William Patterson
-Leslie Jennings	8113	William Patterson	Diane Murphy
-Gerard Hernandez	6949	Diane Murphy	Leslie Jennings
-Foon Yue Tseng	6660	Leslie Jennings	Gerard Hernandez
-Anthony Bow	6627	Gerard Hernandez	Foon Yue Tseng
-Leslie Thompson	5186	Foon Yue Tseng	Anthony Bow
+Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
+Pamela Castillo	11303	Larry Bott	Larry Bott	Gerard Bondur
+Barry Jones	10586	Gerard Bondur	Gerard Bondur	Pamela Castillo
+George Vanauf	10563	Pamela Castillo	Pamela Castillo	Barry Jones
+Loui Bondur	10449	Barry Jones	Barry Jones	George Vanauf
+Mary Patterson	9998	George Vanauf	George Vanauf	Loui Bondur
+Steve Patterson	9441	Loui Bondur	Loui Bondur	Mary Patterson
+Julie Firrelli	9181	Mary Patterson	Mary Patterson	Steve Patterson
+Jeff Firrelli	8992	Steve Patterson	Steve Patterson	Julie Firrelli
+William Patterson	8870	Julie Firrelli	Julie Firrelli	Jeff Firrelli
+Diane Murphy	8435	Jeff Firrelli	Jeff Firrelli	William Patterson
+Leslie Jennings	8113	William Patterson	William Patterson	Diane Murphy
+Gerard Hernandez	6949	Diane Murphy	Diane Murphy	Leslie Jennings
+Foon Yue Tseng	6660	Leslie Jennings	Leslie Jennings	Gerard Hernandez
+Anthony Bow	6627	Gerard Hernandez	Gerard Hernandez	Foon Yue Tseng
+Leslie Thompson	5186	Foon Yue Tseng	Foon Yue Tseng	Anthony Bow
 
 
 -- !query
@@ -721,31 +732,32 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
 WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
 -- !query output
-Larry Bott	11798	Larry Bott	Gerard Bondur
-Gerard Bondur	11472	Gerard Bondur	Pamela Castillo
-Pamela Castillo	11303	Pamela Castillo	Barry Jones
-Barry Jones	10586	Barry Jones	George Vanauf
-George Vanauf	10563	George Vanauf	Loui Bondur
-Loui Bondur	10449	Loui Bondur	Mary Patterson
-Mary Patterson	9998	Mary Patterson	Steve Patterson
-Steve Patterson	9441	Steve Patterson	Julie Firrelli
-Julie Firrelli	9181	Julie Firrelli	Jeff Firrelli
-Jeff Firrelli	8992	Jeff Firrelli	William Patterson
-William Patterson	8870	William Patterson	Diane Murphy
-Diane Murphy	8435	Diane Murphy	Leslie Jennings
-Leslie Jennings	8113	Leslie Jennings	Gerard Hernandez
-Gerard Hernandez	6949	Gerard Hernandez	Foon Yue Tseng
-Foon Yue Tseng	6660	Foon Yue Tseng	Anthony Bow
-Anthony Bow	6627	Anthony Bow	Leslie Thompson
-Leslie Thompson	5186	Leslie Thompson	NULL
+Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Bondur	11472	Gerard Bondur	Gerard Bondur	Pamela Castillo
+Pamela Castillo	11303	Pamela Castillo	Pamela Castillo	Barry Jones
+Barry Jones	10586	Barry Jones	Barry Jones	George Vanauf
+George Vanauf	10563	George Vanauf	George Vanauf	Loui Bondur
+Loui Bondur	10449	Loui Bondur	Loui Bondur	Mary Patterson
+Mary Patterson	9998	Mary Patterson	Mary Patterson	Steve Patterson
+Steve Patterson	9441	Steve Patterson	Steve Patterson	Julie Firrelli
+Julie Firrelli	9181	Julie Firrelli	Julie Firrelli	Jeff Firrelli
+Jeff Firrelli	8992	Jeff Firrelli	Jeff Firrelli	William Patterson
+William Patterson	8870	William Patterson	William Patterson	Diane Murphy
+Diane Murphy	8435	Diane Murphy	Diane Murphy	Leslie Jennings
+Leslie Jennings	8113	Leslie Jennings	Leslie Jennings	Gerard Hernandez
+Gerard Hernandez	6949	Gerard Hernandez	Gerard Hernandez	Foon Yue Tseng
+Foon Yue Tseng	6660	Foon Yue Tseng	Foon Yue Tseng	Anthony Bow
+Anthony Bow	6627	Anthony Bow	Anthony Bow	Leslie Thompson
+Leslie Thompson	5186	Leslie Thompson	Leslie Thompson	NULL
 
 
 -- !query
@@ -753,31 +765,32 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
 WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
 -- !query output
-Larry Bott	11798	Larry Bott	Gerard Bondur
-Gerard Bondur	11472	Larry Bott	Gerard Bondur
-Pamela Castillo	11303	Larry Bott	Gerard Bondur
-Barry Jones	10586	Larry Bott	Gerard Bondur
-George Vanauf	10563	Larry Bott	Gerard Bondur
-Loui Bondur	10449	Larry Bott	Gerard Bondur
-Mary Patterson	9998	Larry Bott	Gerard Bondur
-Steve Patterson	9441	Larry Bott	Gerard Bondur
-Julie Firrelli	9181	Larry Bott	Gerard Bondur
-Jeff Firrelli	8992	Larry Bott	Gerard Bondur
-William Patterson	8870	Larry Bott	Gerard Bondur
-Diane Murphy	8435	Larry Bott	Gerard Bondur
-Leslie Jennings	8113	Larry Bott	Gerard Bondur
-Gerard Hernandez	6949	Larry Bott	Gerard Bondur
-Foon Yue Tseng	6660	Larry Bott	Gerard Bondur
-Anthony Bow	6627	Larry Bott	Gerard Bondur
-Leslie Thompson	5186	Larry Bott	Gerard Bondur
+Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
+Pamela Castillo	11303	Larry Bott	Larry Bott	Gerard Bondur
+Barry Jones	10586	Larry Bott	Larry Bott	Gerard Bondur
+George Vanauf	10563	Larry Bott	Larry Bott	Gerard Bondur
+Loui Bondur	10449	Larry Bott	Larry Bott	Gerard Bondur
+Mary Patterson	9998	Larry Bott	Larry Bott	Gerard Bondur
+Steve Patterson	9441	Larry Bott	Larry Bott	Gerard Bondur
+Julie Firrelli	9181	Larry Bott	Larry Bott	Gerard Bondur
+Jeff Firrelli	8992	Larry Bott	Larry Bott	Gerard Bondur
+William Patterson	8870	Larry Bott	Larry Bott	Gerard Bondur
+Diane Murphy	8435	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Jennings	8113	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Hernandez	6949	Larry Bott	Larry Bott	Gerard Bondur
+Foon Yue Tseng	6660	Larry Bott	Larry Bott	Gerard Bondur
+Anthony Bow	6627	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Thompson	5186	Larry Bott	Larry Bott	Gerard Bondur
 
 
 -- !query
@@ -785,31 +798,32 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
 WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
 -- !query output
-Larry Bott	11798	Larry Bott	Gerard Bondur
-Gerard Bondur	11472	Larry Bott	Gerard Bondur
-Pamela Castillo	11303	Larry Bott	Gerard Bondur
-Barry Jones	10586	Larry Bott	Gerard Bondur
-George Vanauf	10563	Larry Bott	Gerard Bondur
-Loui Bondur	10449	Larry Bott	Gerard Bondur
-Mary Patterson	9998	Larry Bott	Gerard Bondur
-Steve Patterson	9441	Larry Bott	Gerard Bondur
-Julie Firrelli	9181	Larry Bott	Gerard Bondur
-Jeff Firrelli	8992	Larry Bott	Gerard Bondur
-William Patterson	8870	Larry Bott	Gerard Bondur
-Diane Murphy	8435	Larry Bott	Gerard Bondur
-Leslie Jennings	8113	Larry Bott	Gerard Bondur
-Gerard Hernandez	6949	Larry Bott	Gerard Bondur
-Foon Yue Tseng	6660	Larry Bott	Gerard Bondur
-Anthony Bow	6627	Larry Bott	Gerard Bondur
-Leslie Thompson	5186	Larry Bott	Gerard Bondur
+Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
+Pamela Castillo	11303	Larry Bott	Larry Bott	Gerard Bondur
+Barry Jones	10586	Larry Bott	Larry Bott	Gerard Bondur
+George Vanauf	10563	Larry Bott	Larry Bott	Gerard Bondur
+Loui Bondur	10449	Larry Bott	Larry Bott	Gerard Bondur
+Mary Patterson	9998	Larry Bott	Larry Bott	Gerard Bondur
+Steve Patterson	9441	Larry Bott	Larry Bott	Gerard Bondur
+Julie Firrelli	9181	Larry Bott	Larry Bott	Gerard Bondur
+Jeff Firrelli	8992	Larry Bott	Larry Bott	Gerard Bondur
+William Patterson	8870	Larry Bott	Larry Bott	Gerard Bondur
+Diane Murphy	8435	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Jennings	8113	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Hernandez	6949	Larry Bott	Larry Bott	Gerard Bondur
+Foon Yue Tseng	6660	Larry Bott	Larry Bott	Gerard Bondur
+Anthony Bow	6627	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Thompson	5186	Larry Bott	Larry Bott	Gerard Bondur
 
 
 -- !query
@@ -817,31 +831,32 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
 WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
 -- !query output
-Larry Bott	11798	Larry Bott	Gerard Bondur
-Gerard Bondur	11472	Larry Bott	Gerard Bondur
-Pamela Castillo	11303	Larry Bott	Gerard Bondur
-Barry Jones	10586	Larry Bott	Gerard Bondur
-George Vanauf	10563	Larry Bott	Gerard Bondur
-Loui Bondur	10449	Larry Bott	Gerard Bondur
-Mary Patterson	9998	Larry Bott	Gerard Bondur
-Steve Patterson	9441	Larry Bott	Gerard Bondur
-Julie Firrelli	9181	Larry Bott	Gerard Bondur
-Jeff Firrelli	8992	Larry Bott	Gerard Bondur
-William Patterson	8870	Larry Bott	Gerard Bondur
-Diane Murphy	8435	Larry Bott	Gerard Bondur
-Leslie Jennings	8113	Larry Bott	Gerard Bondur
-Gerard Hernandez	6949	Larry Bott	Gerard Bondur
-Foon Yue Tseng	6660	Larry Bott	Gerard Bondur
-Anthony Bow	6627	Larry Bott	Gerard Bondur
-Leslie Thompson	5186	Larry Bott	Gerard Bondur
+Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
+Pamela Castillo	11303	Larry Bott	Larry Bott	Gerard Bondur
+Barry Jones	10586	Larry Bott	Larry Bott	Gerard Bondur
+George Vanauf	10563	Larry Bott	Larry Bott	Gerard Bondur
+Loui Bondur	10449	Larry Bott	Larry Bott	Gerard Bondur
+Mary Patterson	9998	Larry Bott	Larry Bott	Gerard Bondur
+Steve Patterson	9441	Larry Bott	Larry Bott	Gerard Bondur
+Julie Firrelli	9181	Larry Bott	Larry Bott	Gerard Bondur
+Jeff Firrelli	8992	Larry Bott	Larry Bott	Gerard Bondur
+William Patterson	8870	Larry Bott	Larry Bott	Gerard Bondur
+Diane Murphy	8435	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Jennings	8113	Larry Bott	Larry Bott	Gerard Bondur
+Gerard Hernandez	6949	Larry Bott	Larry Bott	Gerard Bondur
+Foon Yue Tseng	6660	Larry Bott	Larry Bott	Gerard Bondur
+Anthony Bow	6627	Larry Bott	Larry Bott	Gerard Bondur
+Leslie Thompson	5186	Larry Bott	Larry Bott	Gerard Bondur
 
 
 -- !query
@@ -886,6 +901,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -898,13 +914,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-[INVALID_SQL_SYNTAX] Invalid SQL syntax: The definition of window `w` is repetitive.(line 8, pos 0)
+[INVALID_SQL_SYNTAX] Invalid SQL syntax: The definition of window `w` is repetitive.(line 9, pos 0)
 
 == SQL ==
 SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -932,23 +949,24 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,lead_0:string,lead_1:string,lead_2:string,lead_3:string,lag_0:string,lag_1:string,lag_2:string,lag_3:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,last_value:string>
+struct<content:string,id:int,v:string,lead_0:string,lead_1:string,lead_2:string,lead_3:string,lag_0:string,lag_1:string,lag_2:string,lag_3:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	NULL	x	y	z	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
-a	1	x	x	y	z	v	x	NULL	NULL	NULL	x	NULL	NULL	x	x
-b	2	NULL	NULL	y	z	v	NULL	x	NULL	NULL	x	NULL	NULL	x	x
-c	3	NULL	NULL	y	z	v	NULL	x	NULL	NULL	x	NULL	NULL	x	x
-a	4	y	y	z	v	NULL	y	x	NULL	NULL	x	y	NULL	x	y
-b	5	NULL	NULL	z	v	NULL	NULL	y	x	NULL	x	y	NULL	x	y
-a	6	z	z	v	NULL	NULL	z	y	x	NULL	x	y	z	x	z
-a	7	v	v	NULL	NULL	NULL	v	z	y	x	x	y	z	x	v
-a	8	NULL	NULL	NULL	NULL	NULL	NULL	v	z	y	x	y	z	x	v
+a	0	NULL	NULL	x	y	z	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+a	1	x	x	y	z	v	x	NULL	NULL	NULL	x	NULL	NULL	x	x	x
+b	2	NULL	NULL	y	z	v	NULL	x	NULL	NULL	x	NULL	NULL	x	x	x
+c	3	NULL	NULL	y	z	v	NULL	x	NULL	NULL	x	NULL	NULL	x	x	x
+a	4	y	y	z	v	NULL	y	x	NULL	NULL	x	y	NULL	x	x	y
+b	5	NULL	NULL	z	v	NULL	NULL	y	x	NULL	x	y	NULL	x	x	y
+a	6	z	z	v	NULL	NULL	z	y	x	NULL	x	y	z	x	x	z
+a	7	v	v	NULL	NULL	NULL	v	z	y	x	x	y	z	x	x	v
+a	8	NULL	NULL	NULL	NULL	NULL	NULL	v	z	y	x	y	z	x	x	v
 
 
 -- !query
@@ -960,23 +978,24 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,last_value:string>
+struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	NULL	NULL	NULL	NULL	NULL
-a	1	x	x	NULL	NULL	x	x
-b	2	NULL	x	NULL	NULL	x	x
-c	3	NULL	x	NULL	NULL	x	x
-a	4	y	x	y	NULL	x	y
-b	5	NULL	x	y	NULL	x	y
-a	6	z	x	y	z	x	z
-a	7	v	x	y	z	x	v
-a	8	NULL	x	y	z	x	v
+a	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+a	1	x	x	NULL	NULL	x	x	x
+b	2	NULL	x	NULL	NULL	x	x	x
+c	3	NULL	x	NULL	NULL	x	x	x
+a	4	y	x	y	NULL	x	x	y
+b	5	NULL	x	y	NULL	x	x	y
+a	6	z	x	y	z	x	x	z
+a	7	v	x	y	z	x	x	v
+a	8	NULL	x	y	z	x	x	v
 
 
 -- !query
@@ -988,23 +1007,24 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,last_value:string>
+struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	NULL	NULL	NULL	NULL	NULL
-a	1	x	x	NULL	NULL	x	x
-b	2	NULL	x	NULL	NULL	x	x
-c	3	NULL	x	NULL	NULL	x	x
-a	4	y	x	y	NULL	x	y
-b	5	NULL	x	y	NULL	x	y
-a	6	z	x	y	z	x	z
-a	7	v	x	y	z	x	v
-a	8	NULL	x	y	z	x	v
+a	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+a	1	x	x	NULL	NULL	x	x	x
+b	2	NULL	x	NULL	NULL	x	x	x
+c	3	NULL	x	NULL	NULL	x	x	x
+a	4	y	x	y	NULL	x	x	y
+b	5	NULL	x	y	NULL	x	x	y
+a	6	z	x	y	z	x	x	z
+a	7	v	x	y	z	x	x	v
+a	8	NULL	x	y	z	x	x	v
 
 
 -- !query
@@ -1016,23 +1036,24 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,last_value:string>
+struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	x	NULL	NULL	x	x
-a	1	x	x	NULL	NULL	x	x
-b	2	NULL	x	y	NULL	x	y
-c	3	NULL	x	y	NULL	x	y
-a	4	y	y	z	NULL	y	z
-b	5	NULL	y	z	v	y	v
-a	6	z	y	z	v	y	v
-a	7	v	z	v	NULL	z	v
-a	8	NULL	z	v	NULL	z	v
+a	0	NULL	x	NULL	NULL	x	x	x
+a	1	x	x	NULL	NULL	x	x	x
+b	2	NULL	x	y	NULL	x	x	y
+c	3	NULL	x	y	NULL	x	x	y
+a	4	y	y	z	NULL	y	y	z
+b	5	NULL	y	z	v	y	y	v
+a	6	z	y	z	v	y	y	v
+a	7	v	z	v	NULL	z	z	v
+a	8	NULL	z	v	NULL	z	z	v
 
 
 -- !query
@@ -1044,23 +1065,24 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,last_value:string>
+struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	x	NULL	NULL	x	x
-a	1	x	x	NULL	NULL	x	x
-b	2	NULL	x	y	NULL	x	y
-c	3	NULL	x	y	NULL	x	y
-a	4	y	y	z	NULL	y	z
-b	5	NULL	y	z	v	y	v
-a	6	z	y	z	v	y	v
-a	7	v	z	v	NULL	z	v
-a	8	NULL	z	v	NULL	z	v
+a	0	NULL	x	NULL	NULL	x	x	x
+a	1	x	x	NULL	NULL	x	x	x
+b	2	NULL	x	y	NULL	x	x	y
+c	3	NULL	x	y	NULL	x	x	y
+a	4	y	y	z	NULL	y	y	z
+b	5	NULL	y	z	v	y	y	v
+a	6	z	y	z	v	y	y	v
+a	7	v	z	v	NULL	z	z	v
+a	8	NULL	z	v	NULL	z	z	v
 
 
 -- !query
@@ -1072,23 +1094,24 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,last_value:string>
+struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	x	y	z	x	v
-a	1	x	x	y	z	x	v
-b	2	NULL	y	z	v	y	v
-c	3	NULL	y	z	v	y	v
-a	4	y	y	z	v	y	v
-b	5	NULL	z	v	NULL	z	v
-a	6	z	z	v	NULL	z	v
-a	7	v	v	NULL	NULL	v	v
-a	8	NULL	NULL	NULL	NULL	NULL	NULL
+a	0	NULL	x	y	z	x	x	v
+a	1	x	x	y	z	x	x	v
+b	2	NULL	y	z	v	y	y	v
+c	3	NULL	y	z	v	y	y	v
+a	4	y	y	z	v	y	y	v
+b	5	NULL	z	v	NULL	z	z	v
+a	6	z	z	v	NULL	z	z	v
+a	7	v	v	NULL	NULL	v	v	v
+a	8	NULL	NULL	NULL	NULL	NULL	NULL	NULL
 
 
 -- !query
@@ -1100,23 +1123,24 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,last_value:string>
+struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	x	y	z	x	v
-a	1	x	x	y	z	x	v
-b	2	NULL	x	y	z	x	v
-c	3	NULL	x	y	z	x	v
-a	4	y	x	y	z	x	v
-b	5	NULL	x	y	z	x	v
-a	6	z	x	y	z	x	v
-a	7	v	x	y	z	x	v
-a	8	NULL	x	y	z	x	v
+a	0	NULL	x	y	z	x	x	v
+a	1	x	x	y	z	x	x	v
+b	2	NULL	x	y	z	x	x	v
+c	3	NULL	x	y	z	x	x	v
+a	4	y	x	y	z	x	x	v
+b	5	NULL	x	y	z	x	x	v
+a	6	z	x	y	z	x	x	v
+a	7	v	x	y	z	x	x	v
+a	8	NULL	x	y	z	x	x	v
 
 
 -- !query
@@ -1128,23 +1152,24 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,last_value:string>
+struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	x	y	z	x	v
-a	1	x	x	y	z	x	v
-b	2	NULL	x	y	z	x	v
-c	3	NULL	x	y	z	x	v
-a	4	y	x	y	z	x	v
-b	5	NULL	x	y	z	x	v
-a	6	z	x	y	z	x	v
-a	7	v	x	y	z	x	v
-a	8	NULL	x	y	z	x	v
+a	0	NULL	x	y	z	x	x	v
+a	1	x	x	y	z	x	x	v
+b	2	NULL	x	y	z	x	x	v
+c	3	NULL	x	y	z	x	x	v
+a	4	y	x	y	z	x	x	v
+b	5	NULL	x	y	z	x	x	v
+a	6	z	x	y	z	x	x	v
+a	7	v	x	y	z	x	x	v
+a	8	NULL	x	y	z	x	x	v
 
 
 -- !query
@@ -1156,23 +1181,24 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,last_value:string>
+struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	x	NULL	NULL	x	x
-a	1	x	x	NULL	NULL	x	x
-b	2	NULL	x	NULL	NULL	x	x
-c	3	NULL	x	y	NULL	x	y
-a	4	y	x	y	NULL	x	y
-b	5	NULL	x	y	z	x	z
-a	6	z	x	y	z	x	v
-a	7	v	x	y	z	x	v
-a	8	NULL	x	y	z	x	v
+a	0	NULL	x	NULL	NULL	x	x	x
+a	1	x	x	NULL	NULL	x	x	x
+b	2	NULL	x	NULL	NULL	x	x	x
+c	3	NULL	x	y	NULL	x	x	y
+a	4	y	x	y	NULL	x	x	y
+b	5	NULL	x	y	z	x	x	z
+a	6	z	x	y	z	x	x	v
+a	7	v	x	y	z	x	x	v
+a	8	NULL	x	y	z	x	x	v
 
 
 -- !query

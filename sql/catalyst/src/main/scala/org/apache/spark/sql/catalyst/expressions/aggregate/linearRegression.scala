@@ -174,7 +174,7 @@ case class RegrSXX(
     with ImplicitCastInputTypes
     with BinaryLike[Expression] {
   override lazy val replacement: Expression =
-    RegrSXXReplacement(If(Or(IsNull(left), IsNull(right)), Literal.create(null, DoubleType), right))
+    RegrReplacement(If(Or(IsNull(left), IsNull(right)), Literal.create(null, DoubleType), right))
   override def nodeName: String = "regr_sxx"
   override def inputTypes: Seq[DoubleType] = Seq(DoubleType, DoubleType)
   override protected def withNewChildrenInternal(
@@ -205,4 +205,35 @@ case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrSXY =
     this.copy(y = newLeft, x = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
+       0.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
+       0.6666666666666666
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
+       0.5
+  """,
+  group = "agg_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+case class RegrSYY(
+    left: Expression,
+    right: Expression)
+  extends AggregateFunction
+    with RuntimeReplaceableAggregate
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
+  override lazy val replacement: Expression =
+    RegrReplacement(If(Or(IsNull(left), IsNull(right)), Literal.create(null, DoubleType), left))
+  override def nodeName: String = "regr_syy"
+  override def inputTypes: Seq[DoubleType] = Seq(DoubleType, DoubleType)
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RegrSYY =
+    this.copy(left = newLeft, right = newRight)
 }

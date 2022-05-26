@@ -826,7 +826,7 @@ case class ArrayAggregate(
       var i = 0
       while (i < arr.numElements()) {
         elementVar.value.set(arr.get(i, elementVar.dataType))
-        accForMergeVar.value.set(mergeForEval.eval(input))
+        accForMergeVar.value.set(InternalRow.copyValue(mergeForEval.eval(input)))
         i += 1
       }
       accForFinishVar.value.set(accForMergeVar.value.get)
@@ -1123,8 +1123,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     val valueData2 = mapData2.valueArray()
     var i = 0
     for ((key, Array(index1, index2)) <- keysWithIndexes) {
-      val v1 = index1.map(valueData1.get(_, leftValueType)).getOrElse(null)
-      val v2 = index2.map(valueData2.get(_, rightValueType)).getOrElse(null)
+      val v1 = index1.map(valueData1.get(_, leftValueType)).orNull
+      val v2 = index2.map(valueData2.get(_, rightValueType)).orNull
       keyVar.value.set(key)
       value1Var.value.set(v1)
       value2Var.value.set(v2)

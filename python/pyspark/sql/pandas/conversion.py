@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 import sys
-import warnings
 from collections import Counter
 from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING
+from warnings import catch_warnings, simplefilter, warn
 
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 
 class PandasConversionMixin:
     """
-    Min-in for the conversion from Spark to pandas. Currently, only :class:`DataFrame`
+    Mix-in for the conversion from Spark to pandas. Currently, only :class:`DataFrame`
     can use this class.
     """
 
@@ -65,10 +65,10 @@ class PandasConversionMixin:
 
         Notes
         -----
-        This method should only be used if the resulting Pandas's :class:`DataFrame` is
+        This method should only be used if the resulting Pandas ``pandas.DataFrame`` is
         expected to be small, as all the data is loaded into the driver's memory.
 
-        Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+        Usage with ``spark.sql.execution.arrow.pyspark.enabled=True`` is experimental.
 
         Examples
         --------
@@ -111,7 +111,7 @@ class PandasConversionMixin:
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                         "true." % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                     use_arrow = False
                 else:
                     msg = (
@@ -121,7 +121,7 @@ class PandasConversionMixin:
                         "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
                         "false.\n  %s" % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                     raise
 
             # Try to use Arrow optimization when the schema is supported and the required version
@@ -136,8 +136,7 @@ class PandasConversionMixin:
 
                     # Rename columns to avoid duplicated column names.
                     tmp_column_names = ["col_{}".format(i) for i in range(len(self.columns))]
-                    c = self.sparkSession._jconf
-                    self_destruct = c.arrowPySparkSelfDestructEnabled()
+                    self_destruct = jconf.arrowPySparkSelfDestructEnabled()
                     batches = self.toDF(*tmp_column_names)._collect_as_arrow(
                         split_batches=self_destruct
                     )
@@ -176,11 +175,11 @@ class PandasConversionMixin:
                     else:
                         corrected_panda_types = {}
                         for index, field in enumerate(self.schema):
-                            panda_type = PandasConversionMixin._to_corrected_pandas_type(
+                            pandas_type = PandasConversionMixin._to_corrected_pandas_type(
                                 field.dataType
                             )
                             corrected_panda_types[tmp_column_names[index]] = (
-                                np.object0 if panda_type is None else panda_type
+                                np.object0 if pandas_type is None else pandas_type
                             )
 
                         pdf = pd.DataFrame(columns=tmp_column_names).astype(
@@ -199,43 +198,44 @@ class PandasConversionMixin:
                         "effect on failures in the middle of "
                         "computation.\n  %s" % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                     raise
 
         # Below is toPandas without Arrow optimization.
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
         column_counter = Counter(self.columns)
 
-        dtype: List[Optional[Type]] = [None] * len(self.schema)
-        for fieldIdx, field in enumerate(self.schema):
-            # For duplicate column name, we use `iloc` to access it.
+        corrected_dtypes: List[Optional[Type]] = [None] * len(self.schema)
+        for index, field in enumerate(self.schema):
+            # We use `iloc` to access columns with duplicate column names.
             if column_counter[field.name] > 1:
-                pandas_col = pdf.iloc[:, fieldIdx]
+                pandas_col = pdf.iloc[:, index]
             else:
                 pandas_col = pdf[field.name]
 
             pandas_type = PandasConversionMixin._to_corrected_pandas_type(field.dataType)
             # SPARK-21766: if an integer field is nullable and has null values, it can be
-            # inferred by pandas as float column. Once we convert the column with NaN back
-            # to integer type e.g., np.int16, we will hit exception. So we use the inferred
-            # float type, not the corrected type from the schema in this case.
+            # inferred by pandas as a float column. If we convert the column with NaN back
+            # to integer type e.g., np.int16, we will hit an exception. So we use the
+            # pandas-inferred float type, rather than the corrected type from the schema
+            # in this case.
             if pandas_type is not None and not (
                 isinstance(field.dataType, IntegralType)
                 and field.nullable
                 and pandas_col.isnull().any()
             ):
-                dtype[fieldIdx] = pandas_type
-            # Ensure we fall back to nullable numpy types, even when whole column is null:
+                corrected_dtypes[index] = pandas_type
+            # Ensure we fall back to nullable numpy types.
             if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
-                dtype[fieldIdx] = np.float64
+                corrected_dtypes[index] = np.float64
             if isinstance(field.dataType, BooleanType) and pandas_col.isnull().any():
-                dtype[fieldIdx] = np.object  # type: ignore[attr-defined]
+                corrected_dtypes[index] = np.object  # type: ignore[attr-defined]
 
         df = pd.DataFrame()
-        for index, t in enumerate(dtype):
+        for index, t in enumerate(corrected_dtypes):
             column_name = self.schema[index].name
 
-            # For duplicate column name, we use `iloc` to access it.
+            # We use `iloc` to access columns with duplicate column names.
             if column_counter[column_name] > 1:
                 series = pdf.iloc[:, index]
             else:
@@ -247,33 +247,36 @@ class PandasConversionMixin:
             if (t is not None and not is_timedelta64_dtype(t)) or should_check_timedelta:
                 series = series.astype(t, copy=False)
 
-            # `insert` API makes copy of data, we only do it for Series of duplicate column names.
-            # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work because `iloc` could
-            # return a view or a copy depending by context.
-            if column_counter[column_name] > 1:
-                df.insert(index, column_name, series, allow_duplicates=True)
-            else:
-                df[column_name] = series
+            with catch_warnings():
+                from pandas.errors import PerformanceWarning
 
-        pdf = df
+                simplefilter(action="ignore", category=PerformanceWarning)
+                # `insert` API makes copy of data,
+                # we only do it for Series of duplicate column names.
+                # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work
+                # because `iloc` could return a view or a copy depending by context.
+                if column_counter[column_name] > 1:
+                    df.insert(index, column_name, series, allow_duplicates=True)
+                else:
+                    df[column_name] = series
 
         if timezone is None:
-            return pdf
+            return df
         else:
             from pyspark.sql.pandas.types import _check_series_convert_timestamps_local_tz
 
             for field in self.schema:
                 # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
                 if isinstance(field.dataType, TimestampType):
-                    pdf[field.name] = _check_series_convert_timestamps_local_tz(
-                        pdf[field.name], timezone
+                    df[field.name] = _check_series_convert_timestamps_local_tz(
+                        df[field.name], timezone
                     )
-            return pdf
+            return df
 
     @staticmethod
     def _to_corrected_pandas_type(dt: DataType) -> Optional[Type]:
         """
-        When converting Spark SQL records to Pandas :class:`DataFrame`, the inferred data type
+        When converting Spark SQL records to Pandas `pandas.DataFrame`, the inferred data type
         may be wrong. This method gets the corrected data type for Pandas if that type may be
         inferred incorrectly.
         """
@@ -419,7 +422,7 @@ class SparkConversionMixin:
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                         "true." % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                 else:
                     msg = (
                         "createDataFrame attempted Arrow optimization because "
@@ -428,7 +431,7 @@ class SparkConversionMixin:
                         "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
                         "has been set to false.\n  %s" % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                     raise
         converted_data = self._convert_from_pandas(data, schema, timezone)
         return self._create_dataframe(converted_data, schema, samplingRatio, verifySchema)

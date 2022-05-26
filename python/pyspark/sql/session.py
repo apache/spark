@@ -104,6 +104,46 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
     RDD.toDF = toDF  # type: ignore[assignment]
 
 
+# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
+# In Python 3.9, the @property decorator has been made compatible with the
+# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
+#
+# @classmethod + @property is also affected by a bug in Python's docstring which was backported
+# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+class classproperty(property):
+    """Same as Python's @property decorator, but for class attributes.
+
+    Example:
+
+    >>> class Builder:
+    ...
+    ...    def build(self):
+    ...        return MyClass()
+    ...
+    >>> class MyClass:
+    ...
+    ...     @classproperty
+    ...     def builder(cls):
+    ...         print("instantiating new builder")
+    ...         return Builder()
+    >>> c1 = MyClass.builder
+    instantiating new builder
+    >>> c2 = MyClass.builder
+    instantiating new builder
+    >>> c1 == c2
+    False
+    >>> isinstance(c1.build(), MyClass)
+    True
+    """
+
+    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
+        # The "type: ignore" below silences the following error from mypy:
+        # error: Argument 1 to "classmethod" has incompatible
+        # type "Optional[Callable[[Any], Any]]";
+        # expected "Callable[..., Any]"  [arg-type]
+        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
+
+
 class SparkSession(SparkConversionMixin):
     """The entry point to programming Spark with the Dataset and DataFrame API.
 
@@ -142,8 +182,9 @@ class SparkSession(SparkConversionMixin):
         """Builder for :class:`SparkSession`."""
 
         _lock = RLock()
-        _options: Dict[str, Any] = {}
-        _sc: Optional[SparkContext] = None
+
+        def __init__(self) -> None:
+            self._options: Dict[str, Any] = {}
 
         @overload
         def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
@@ -247,13 +288,19 @@ class SparkSession(SparkConversionMixin):
             >>> s1.conf.get("k1") == "v1"
             True
 
+            The configuration of the SparkSession can be changed afterwards
+
+            >>> s1.conf.set("k1", "v1_new")
+            >>> s1.conf.get("k1") == "v1_new"
+            True
+
             In case an existing SparkSession is returned, the config options specified
             in this builder will be applied to the existing SparkSession.
 
             >>> s2 = SparkSession.builder.config("k2", "v2").getOrCreate()
-            >>> s1.conf.get("k1") == s2.conf.get("k1")
+            >>> s1.conf.get("k1") == s2.conf.get("k1") == "v1_new"
             True
-            >>> s1.conf.get("k2") == s2.conf.get("k2")
+            >>> s1.conf.get("k2") == s2.conf.get("k2") == "v2"
             True
             """
             with self._lock:
@@ -276,8 +323,18 @@ class SparkSession(SparkConversionMixin):
                     ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
-    builder = Builder()
-    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances."""
+    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
+    # Python 3.8 is dropped.
+    #
+    # In Python 3.9, the @property decorator has been made compatible with the
+    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
+    #
+    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
+    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+    @classproperty
+    def builder(cls) -> Builder:
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
+        return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
@@ -513,10 +570,20 @@ class SparkSession(SparkConversionMixin):
         if not data:
             raise ValueError("can not infer schema from empty dataset")
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
+        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         schema = reduce(
             _merge_type,
-            (_infer_schema(row, names, infer_dict_as_struct, prefer_timestamp_ntz) for row in data),
+            (
+                _infer_schema(
+                    row,
+                    names,
+                    infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
+                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                )
+                for row in data
+            ),
         )
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
@@ -548,6 +615,7 @@ class SparkSession(SparkConversionMixin):
             raise ValueError("The first row in RDD is empty, " "can not infer schema")
 
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
+        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
             schema = _infer_schema(
@@ -564,6 +632,7 @@ class SparkSession(SparkConversionMixin):
                             row,
                             names=names,
                             infer_dict_as_struct=infer_dict_as_struct,
+                            infer_array_from_first_element=infer_array_from_first_element,
                             prefer_timestamp_ntz=prefer_timestamp_ntz,
                         ),
                     )
@@ -582,6 +651,7 @@ class SparkSession(SparkConversionMixin):
                     row,
                     names,
                     infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
                     prefer_timestamp_ntz=prefer_timestamp_ntz,
                 )
             ).reduce(_merge_type)

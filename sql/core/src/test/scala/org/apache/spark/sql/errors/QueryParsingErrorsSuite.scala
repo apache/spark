@@ -27,9 +27,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("LATERAL_NATURAL_JOIN"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "LATERAL" join with "NATURAL" join.(line 1, pos 14)
+        """The feature is not supported: NATURAL join with LATERAL correlation.(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)
@@ -41,9 +42,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("LATERAL_JOIN_USING"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "LATERAL" join with "USING" join.(line 1, pos 14)
+        """The feature is not supported: JOIN USING with LATERAL correlation.(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)
@@ -56,9 +58,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       validateParsingError(
         sqlText = s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
         errorClass = "UNSUPPORTED_FEATURE",
+        errorSubClass = Some("LATERAL_JOIN_OF_TYPE"),
         sqlState = "0A000",
         message =
-          s"""The feature is not supported: "LATERAL" join type "$joinType".(line 1, pos 14)
+          s"""The feature is not supported: $joinType JOIN with LATERAL correlation.(line 1, pos 14)
             |
             |== SQL ==
             |SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3
@@ -81,7 +84,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         errorClass = "INVALID_SQL_SYNTAX",
         sqlState = "42000",
         message =
-          s"""Invalid SQL syntax: "LATERAL" can only be used with subquery.(line 1, pos $pos)
+          s"""Invalid SQL syntax: LATERAL can only be used with subquery.(line 1, pos $pos)
             |
             |== SQL ==
             |$sqlText
@@ -94,9 +97,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "SELECT * FROM a NATURAL CROSS JOIN b",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("NATURAL_CROSS_JOIN"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "NATURAL CROSS JOIN".(line 1, pos 14)
+        """The feature is not supported: NATURAL CROSS JOIN.(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM a NATURAL CROSS JOIN b
@@ -150,9 +154,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("TRANSFORM_DISTINCT_ALL"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "TRANSFORM" does not support "DISTINCT"/"ALL" in inputs(line 1, pos 17)
+        """The feature is not supported: TRANSFORM with the DISTINCT/ALL clause.(line 1, pos 17)
           |
           |== SQL ==
           |SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t
@@ -165,9 +170,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = "SELECT TRANSFORM(a) ROW FORMAT SERDE " +
         "'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("TRANSFORM_NON_HIVE"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "TRANSFORM" with serde is only supported in hive mode(line 1, pos 0)
+        """The feature is not supported: TRANSFORM with SERDE is only supported in hive mode.(line 1, pos 0)
           |
           |== SQL ==
           |SELECT TRANSFORM(a) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t
@@ -222,7 +228,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: "SHOW" `sys` "FUNCTIONS" not supported(line 1, pos 5)
+        """Invalid SQL syntax: SHOW `sys` FUNCTIONS not supported(line 1, pos 5)
           |
           |== SQL ==
           |SHOW sys FUNCTIONS
@@ -236,7 +242,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a "STRING" literal.(line 1, pos 21)
+        """Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a "STRING" literal.(line 1, pos 21)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db f1
@@ -247,7 +253,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a "STRING" literal.(line 1, pos 26)
+        """Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a "STRING" literal.(line 1, pos 26)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db LIKE f1
@@ -263,7 +269,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      """"CREATE FUNCTION" with both "IF NOT EXISTS" and "REPLACE" is not allowed.(line 2, pos 0)"""
+      """CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,
@@ -289,7 +295,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      """It is not allowed to define a "TEMPORARY FUNCTION" with "IF NOT EXISTS".(line 2, pos 0)"""
+      """It is not allowed to define a TEMPORARY FUNCTION with IF NOT EXISTS.(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,
@@ -339,7 +345,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      """Specifying a database in "CREATE TEMPORARY FUNCTION" is not allowed: `db`(line 2, pos 0)"""
+      """Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: `db`(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,
@@ -359,7 +365,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
 
   test("INVALID_SQL_SYNTAX: Drop temporary function requires a single part name") {
     val errorDesc =
-      "\"DROP TEMPORARY FUNCTION\" requires a single part name but got: `db`.`func`(line 1, pos 0)"
+      "DROP TEMPORARY FUNCTION requires a single part name but got: `db`.`func`(line 1, pos 0)"
 
     validateParsingError(
       sqlText = "DROP TEMPORARY FUNCTION db.func",
@@ -574,6 +580,154 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
           |== SQL ==
           |SELECT * FROM test WHERE x NOT NULL
           |---------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: show table partition key must set value") {
+    validateParsingError(
+      sqlText = "SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: Partition key `grade` must set value (can't be empty).(line 1, pos 47)
+          |
+          |== SQL ==
+          |SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)
+          |-----------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: expected a column reference for transform bucket") {
+    validateParsingError(
+      sqlText =
+        "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: Expected a column reference for transform `bucket`: 66(line 1, pos 67)
+          |
+          |== SQL ==
+          |CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))
+          |-------------------------------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: DESC TABLE COLUMN for a specific partition") {
+    validateParsingError(
+      sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age",
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("DESC_TABLE_COLUMN_PARTITION"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: DESC TABLE COLUMN for a specific partition""" +
+        """.(line 1, pos 0)""" +
+        """|
+           |
+           |== SQL ==
+           |DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age
+           |^^^
+           |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: PARTITION specification is incomplete") {
+    validateParsingError(
+      sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade)",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: PARTITION specification is incomplete: `grade`(line 1, pos 0)
+          |
+          |== SQL ==
+          |DESCRIBE TABLE EXTENDED customer PARTITION (grade)
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: cannot set reserved namespace property") {
+    val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("SET_NAMESPACE_PROPERTY"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: location is a reserved namespace property, """ +
+        """please use the LOCATION clause to specify it.(line 1, pos 0)""" +
+        s"""
+          |
+          |== SQL ==
+          |$sql
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: cannot set reserved table property") {
+    val sql = "CREATE TABLE student (id INT, name STRING, age INT) " +
+      "USING PARQUET TBLPROPERTIES ('provider'='parquet')"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("SET_TABLE_PROPERTY"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: provider is a reserved table property, """ +
+        """please use the USING clause to specify it.(line 1, pos 66)""" +
+        s"""
+          |
+          |== SQL ==
+          |$sql
+          |------------------------------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_PROPERTY_KEY: invalid property key for set quoted configuration") {
+    val sql = "set =`value`"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "INVALID_PROPERTY_KEY",
+      sqlState = null,
+      message =
+        s""""" is an invalid property key, please use quotes, e.g. SET ""="value"(line 1, pos 0)
+          |
+          |== SQL ==
+          |$sql
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_PROPERTY_VALUE: invalid property value for set quoted configuration") {
+    val sql = "set `key`=1;2;;"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "INVALID_PROPERTY_VALUE",
+      sqlState = null,
+      message =
+        """"1;2;;" is an invalid property value, please use quotes, """ +
+        """e.g. SET "key"="1;2;;"(line 1, pos 0)""" +
+        s"""
+           |
+           |== SQL ==
+           |$sql
+           |^^^
+           |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: cannot set Properties and DbProperties at the same time") {
+    val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c') " +
+      "WITH DBPROPERTIES('a'='a', 'b'='b', 'c'='c')"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("SET_PROPERTIES_AND_DBPROPERTIES"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: set PROPERTIES and DBPROPERTIES at the same time.""" +
+        """(line 1, pos 0)""" +
+        s"""
+          |
+          |== SQL ==
+          |$sql
+          |^^^
           |""".stripMargin)
   }
 }

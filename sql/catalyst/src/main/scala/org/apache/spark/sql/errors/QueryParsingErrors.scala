@@ -77,7 +77,11 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
-    new ParseException(s"Found an empty partition key '$key'.", ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters =
+        Array(s"Partition key ${toSQLId(key)} must set value (can't be empty)."),
+      ctx)
   }
 
   def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
@@ -92,16 +96,14 @@ object QueryParsingErrors extends QueryErrorsBase {
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"${toSQLStmt("TRANSFORM")} does not support" +
-        s" ${toSQLStmt("DISTINCT")}/${toSQLStmt("ALL")} in inputs"),
+      messageParameters = Array("TRANSFORM_DISTINCT_ALL"),
       ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(
-        s"${toSQLStmt("TRANSFORM")} with serde is only supported in hive mode"),
+      messageParameters = Array("TRANSFORM_NON_HIVE"),
       ctx)
   }
 
@@ -112,21 +114,21 @@ object QueryParsingErrors extends QueryErrorsBase {
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"${toSQLStmt("LATERAL")} join with ${toSQLStmt("NATURAL")} join."),
+      messageParameters = Array("LATERAL_NATURAL_JOIN"),
       ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"${toSQLStmt("LATERAL")} join with ${toSQLStmt("USING")} join."),
+      messageParameters = Array("LATERAL_JOIN_USING"),
       ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"${toSQLStmt("LATERAL")} join type ${toSQLStmt(joinType)}."),
+      messageParameters = Array("LATERAL_JOIN_OF_TYPE", s"${toSQLStmt(joinType)}"),
       ctx)
   }
 
@@ -153,7 +155,7 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE", Array(toSQLStmt("NATURAL CROSS JOIN") + "."), ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL_CROSS_JOIN"), ctx)
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
@@ -245,7 +247,11 @@ object QueryParsingErrors extends QueryErrorsBase {
 
   def partitionTransformNotExpectedError(
       name: String, describe: String, ctx: ApplyTransformContext): Throwable = {
-    new ParseException(s"Expected a column reference for transform $name: $describe", ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters =
+        Array(s"Expected a column reference for transform ${toSQLId(name)}: $describe"),
+      ctx)
   }
 
   def tooManyArgumentsForTransformError(name: String, ctx: ApplyTransformContext): Throwable = {
@@ -261,16 +267,26 @@ object QueryParsingErrors extends QueryErrorsBase {
 
   def cannotCleanReservedNamespacePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
-    new ParseException(s"$property is a reserved namespace property, $msg.", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("SET_NAMESPACE_PROPERTY", property, msg),
+      ctx)
   }
 
   def propertiesAndDbPropertiesBothSpecifiedError(ctx: CreateNamespaceContext): Throwable = {
-    new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("SET_PROPERTIES_AND_DBPROPERTIES"),
+      ctx
+    )
   }
 
   def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
-    new ParseException(s"$property is a reserved table property, $msg.", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("SET_TABLE_PROPERTY", property, msg),
+      ctx)
   }
 
   def duplicatedTablePathsFoundError(
@@ -300,12 +316,18 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def descColumnForPartitionUnsupportedError(ctx: DescribeRelationContext): Throwable = {
-    new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("DESC_TABLE_COLUMN_PARTITION"),
+      ctx)
   }
 
   def incompletePartitionSpecificationError(
       key: String, ctx: DescribeRelationContext): Throwable = {
-    new ParseException(s"PARTITION specification is incomplete: `$key`", ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(s"PARTITION specification is incomplete: ${toSQLId(key)}"),
+      ctx)
   }
 
   def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
@@ -357,33 +379,33 @@ object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(toSQLId(key)), ctx)
   }
 
-  def unexpectedFomatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
+  def unexpectedFormatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      s"""
-         |Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include
-         |special characters in key, or include semicolon in value, please use quotes,
-         |e.g., SET `ke y`=`v;alue`.
-       """.stripMargin.replaceAll("\n", " "), ctx)
+      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include " +
+      "special characters in key, or include semicolon in value, please use quotes, " +
+      "e.g., SET `key`=`value`.", ctx)
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
       keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"'$keyCandidate' is an invalid property key, please " +
-      s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
+    new ParseException(errorClass = "INVALID_PROPERTY_KEY",
+      messageParameters = Array(toSQLConf(keyCandidate),
+        toSQLConf(keyCandidate), toSQLConf(valueStr)),
+      ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
       valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"'$valueCandidate' is an invalid property value, please " +
-      s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
+    new ParseException(errorClass = "INVALID_PROPERTY_VALUE",
+      messageParameters = Array(toSQLConf(valueCandidate),
+        toSQLConf(keyStr), toSQLConf(valueCandidate)),
+      ctx)
   }
 
   def unexpectedFormatForResetConfigurationError(ctx: ResetConfigurationContext): Throwable = {
     new ParseException(
-      s"""
-         |Expected format is 'RESET' or 'RESET key'. If you want to include special characters
-         |in key, please use quotes, e.g., RESET `ke y`.
-       """.stripMargin.replaceAll("\n", " "), ctx)
+      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters " +
+      "in key, please use quotes, e.g., RESET `key`.", ctx)
   }
 
   def intervalValueOutOfRangeError(ctx: IntervalContext): Throwable = {
