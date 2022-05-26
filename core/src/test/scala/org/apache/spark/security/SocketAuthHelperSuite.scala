@@ -16,12 +16,13 @@
  */
 package org.apache.spark.security
 
-import java.io.Closeable
+import java.io.{Closeable, InputStream, OutputStream}
 import java.net._
-
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
 
 class SocketAuthHelperSuite extends SparkFunSuite {
 
@@ -44,15 +45,35 @@ class SocketAuthHelperSuite extends SparkFunSuite {
     Utils.tryWithResource(new ServerThread()) { server =>
       Utils.tryWithResource(server.createClient()) { client =>
         val badHelper = new SocketAuthHelper(new SparkConf().set(AUTH_SECRET_BIT_LENGTH, 128))
-        intercept[IllegalArgumentException] {
+        val exception = intercept[SparkException] {
           badHelper.authToServer(client)
         }
+        assert(exception.getErrorClass === "AUTHENTICATION_FAILED")
+        assert(exception.getMessage ===
+          "[AUTHENTICATION_FAILED] Failed to authenticate server.")
         server.close()
         server.join()
         assert(server.error != null)
         assert(!server.authenticated)
       }
     }
+  }
+
+  test("failed to authenticate client") {
+    val mockedSocket = mock(classOf[Socket])
+    val in = mock(classOf[InputStream])
+    val out = mock(classOf[OutputStream])
+    when(in.read(any())).thenReturn(1)
+    when(in.read(any(), any(), any())).thenReturn(1)
+    when(mockedSocket.getInputStream()).thenReturn(in)
+    when(mockedSocket.getOutputStream()).thenReturn(out)
+    val helper = new SocketAuthHelper(new SparkConf().set(AUTH_SECRET_BIT_LENGTH, 128))
+    val exception = intercept[SparkException] {
+      helper.authClient(mockedSocket)
+    }
+    assert(exception.getErrorClass === "AUTHENTICATION_FAILED")
+    assert(exception.getMessage ===
+      "[AUTHENTICATION_FAILED] Failed to authenticate client.")
   }
 
   private class ServerThread extends Thread with Closeable {

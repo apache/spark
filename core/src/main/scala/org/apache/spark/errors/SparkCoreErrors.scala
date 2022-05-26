@@ -325,4 +325,13 @@ private[spark] object SparkCoreErrors {
     new SparkException(errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
       messageParameters = Array(missingProperty), cause = null)
   }
+
+  def authenticationFailedError(hostType: String): Throwable = {
+    new SparkException(errorClass = "AUTHENTICATION_FAILED",
+      messageParameters = Array(hostType), cause = null)
+  }
+
+  def streamClosed(): Throwable = {
+    new SparkException("Cipher stream is closed.")
+  }
 }

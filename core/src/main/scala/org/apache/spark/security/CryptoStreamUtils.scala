@@ -16,7 +16,7 @@
  */
 package org.apache.spark.security
 
-import java.io.{Closeable, InputStream, IOException, OutputStream}
+import java.io.{Closeable, InputStream, OutputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, WritableByteChannel}
 import java.util.Properties
@@ -31,6 +31,7 @@ import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.{CryptoUtils, JavaUtils}
@@ -190,7 +191,7 @@ private[spark] object CryptoStreamUtils extends Logging {
 
     protected def safeCall[T](fn: => T): T = {
       if (closed) {
-        throw new IOException("Cipher stream is closed.")
+        throw SparkCoreErrors.streamClosed()
       }
       try {
         fn

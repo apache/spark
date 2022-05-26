@@ -22,6 +22,7 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.SparkConf
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
@@ -60,7 +61,7 @@ private[spark] class SocketAuthHelper(val conf: SparkConf) {
           shouldClose = false
         } else {
           writeUtf8("err", s)
-          throw new IllegalArgumentException("Authentication failed.")
+          throw SparkCoreErrors.authenticationFailedError("client")
         }
       } finally {
         s.setSoTimeout(currentTimeout)
@@ -87,7 +88,7 @@ private[spark] class SocketAuthHelper(val conf: SparkConf) {
 
       val reply = readUtf8(s)
       if (reply != "ok") {
-        throw new IllegalArgumentException("Authentication failed.")
+        throw SparkCoreErrors.authenticationFailedError("server")
       } else {
         shouldClose = false
       }
