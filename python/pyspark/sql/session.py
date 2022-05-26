@@ -612,7 +612,7 @@ class SparkSession(SparkConversionMixin):
         """
         first = rdd.first()
         if first is None:
-            raise ValueError("The first row in RDD is empty, " "can not infer schema")
+            raise ValueError("The first row in RDD is empty, can not infer schema")
 
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
         infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
