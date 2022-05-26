@@ -1572,20 +1572,41 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
 
     // This represents one test configuration over a data source.
-    case class Config(dataSource: String, sqlConf: Seq[(String, String)] = Seq())
+    case class Config(
+      dataSource: String,
+      sqlConf: Seq[Option[(String, String)]] = Seq())
+    // Run the test several times using each configuration.
     Seq(
+      Config(dataSource = "json",
+        Seq(
+          Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false"))),
       Config(dataSource = "csv",
         Seq(
-          SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false"))
+          None,
+          Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))
     ).foreach { config: Config =>
-      // First run the test with default settings.
-      runTest(config.dataSource)
-      // Then run the test again with each pair of custom SQLConf values.
-      config.sqlConf.foreach { kv: (String, String) =>
-        withSQLConf(kv) {
+      config.sqlConf.foreach {
+        _.map { kv: (String, String) =>
+          withSQLConf(kv) {
+            // Run the test with the pair of custom SQLConf values.
+            runTest(config.dataSource)
+          }
+        }.getOrElse {
+          // Run the test with default settings.
           runTest(config.dataSource)
         }
       }
+    }
+  }
+
+  test("SPARK-39211 INSERT into JSON table, ADD COLUMNS with DEFAULTs, then SELECT them") {
+    // By default, INSERT commands into JSON tables do not store NULL values. Therefore, if such
+    // destination table columns have DEFAULT values, SELECTing out the same columns will return the
+    // default values (instead of NULL) since nothing is present in storage.
+    withTable("t") {
+      sql("create table t(a string default 'abc') using json")
+      sql("insert into t values(null)")
+      checkAnswer(spark.table("t"), Row("abc"))
     }
   }
 
