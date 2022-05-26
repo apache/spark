@@ -2461,6 +2461,10 @@ private[spark] class DAGScheduler(
     // Check if the execId is a shuffle push merger. We do not remove the executor if it is,
     // and only remove the outputs on the host.
     val isShuffleMerger = execId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    if (isShuffleMerger && pushBasedShuffleEnabled) {
+      hostToUnregisterOutputs.foreach(
+        host => blockManagerMaster.removeShufflePushMergerLocation(host))
+    }
     if ((!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch)
       && !isShuffleMerger) {
       executorFailureEpoch(execId) = currentEpoch

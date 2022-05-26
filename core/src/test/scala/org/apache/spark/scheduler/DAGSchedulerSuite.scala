@@ -293,6 +293,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def removeExecutor(execId: String): Unit = {
       // don't need to propagate to the driver, which we don't have
     }
+
+    override def removeShufflePushMergerLocation(host: String): Unit = {
+      // don't need to propagate to the driver, which we don't have
+    }
   }
 
   /** The list of results that DAGScheduler has collected. */
@@ -4389,7 +4393,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-38987: All shuffle outputs for a shuffle push" +
     " merger executor should be cleaned up on a fetch failure when" +
     "spark.files.fetchFailure.unRegisterOutputOnHost is true") {
-    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+    initPushBasedShuffleConfs(conf)
     conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
 
     val shuffleMapRdd = new MyRDD(sc, 3, Nil)
@@ -4419,6 +4423,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Verify that we are not removing the executor,
     // and that we are only removing the outputs on the host
     verify(blockManagerMaster, times(0)).removeExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    verify(blockManagerMaster, times(1)).removeShufflePushMergerLocation("hostA")
     verify(mapOutputTracker,
       times(1)).removeOutputsOnHost("hostA")
 
