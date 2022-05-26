@@ -801,7 +801,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       partitionTableScanBenchmark(1024 * 1024 * 15)
     }
     runBenchmark("Vectorized Scan Multiple Partition Columns") {
-      for (pColumns <- List(10, 50, 100)) {
+      for (pColumns <- List(1, 2, 3)) {
         vectorizedScanPartitionColumnsBenchmark(1024 * 1024 * 15, pColumns)
       }
     }
