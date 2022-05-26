@@ -142,20 +142,17 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
-    val limitOrOffsetInfo =
+    val topNOrLimitInfo =
       if (pushedDownOperators.limit.isDefined && pushedDownOperators.sortValues.nonEmpty) {
         val topNStr =
           s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
           s" LIMIT ${pushedDownOperators.limit.get}"
-        if (pushedDownOperators.offset.isDefined) {
-          Map("PushedPaging" -> s"$topNStr OFFSET ${pushedDownOperators.offset.get}")
-        } else {
-          Map("PushedTopN" -> topNStr)
-        }
+        Map("PushedTopN" -> topNStr)
       } else {
-        pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value").toMap ++
-          pushedDownOperators.offset.map(value => "PushedOffset" -> s"OFFSET $value")
+        pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value").toMap
       }
+
+    val offsetInfo = pushedDownOperators.offset.map(value => "PushedOffset" -> s"OFFSET $value")
 
     val pushedFilters = if (pushedDownOperators.pushedPredicates.nonEmpty) {
       seqToString(pushedDownOperators.pushedPredicates.map(_.describe()))
@@ -168,7 +165,8 @@ case class RowDataSourceScanExec(
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
           "PushedGroupByExpressions" -> seqToString(v.groupByExpressions.map(_.describe())))} ++
-      limitOrOffsetInfo ++
+      topNOrLimitInfo ++
+      offsetInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )

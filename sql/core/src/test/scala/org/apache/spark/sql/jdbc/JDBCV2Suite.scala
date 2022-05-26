@@ -340,7 +340,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkLimitRemoved(df5)
     checkOffsetRemoved(df5)
     checkPushedInfo(df5, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], " +
-      "PushedPaging: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 2 OFFSET 1, ReadSchema:")
+      "PushedOffset: OFFSET 1, PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 2, ReadSchema:")
     checkAnswer(df5, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
 
     val df6 = spark.read
@@ -479,7 +479,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkLimitRemoved(df5, false)
     checkOffsetRemoved(df5)
     checkPushedInfo(df5, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], " +
-      "PushedPaging: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 2 OFFSET 1, ReadSchema:")
+      "PushedOffset: OFFSET 1, PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 2, ReadSchema:")
     checkAnswer(df5, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
 
     val df6 = spark.read
