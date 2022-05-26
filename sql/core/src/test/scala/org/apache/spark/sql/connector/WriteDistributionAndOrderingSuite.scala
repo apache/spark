@@ -88,7 +88,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: overwriteDynamic") {
-    checkOrderedDistributionAndSortWithSameExprs("overwriteDynamic")
+    checkOrderedDistributionAndSortWithSameExprs("overwriteDynamic", Some(10))
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: micro-batch append") {
@@ -184,7 +184,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: overwriteDynamic") {
-    checkClusteredDistributionAndSortWithSameExprs("overwriteDynamic", Some(10) )
+    checkClusteredDistributionAndSortWithSameExprs("overwriteDynamic", Some(10))
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: micro-batch append") {
@@ -196,8 +196,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: micro-batch complete") {
-    checkClusteredDistributionAndSortWithSameExprs(
-      microBatchPrefix + "complete", Some(10))
+    checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "complete", Some(10))
   }
 
   private def checkClusteredDistributionAndSortWithSameExprsInVariousCases(cmd: String) = {
@@ -778,7 +777,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and local sort with manual global sort with numPartitions: append") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort("append")
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("append", Some(10))
   }
 
   test("clustered distribution and local sort with manual global sort with numPartitions: " +
@@ -1075,7 +1074,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         assert(read.head.partitionSpecs.size == 1)
         checkPartitioningAndOrdering(
           // num of partition in expectedWritePartitioning is 1
-          executedPlan, expectedWritePartitioning, expectedWriteOrdering, 1, false)
+          executedPlan, expectedWritePartitioning, expectedWriteOrdering, 1)
       } else {
         if (dataSkewed && !distributionStrictlyRequired) {
           withSQLConf(
@@ -1103,7 +1102,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
             SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
             val executedPlan = executeCommand()
             checkPartitioningAndOrdering(
-              executedPlan, expectedWritePartitioning, expectedWriteOrdering, 1, false)
+              executedPlan, expectedWritePartitioning, expectedWriteOrdering, 1)
           }
         }
       }
@@ -1170,7 +1169,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
           expectedWritePartitioning,
           expectedWriteOrdering,
           // there is an extra shuffle for groupBy in complete mode
-          maxNumShuffles = if (outputMode != "complete") 1 else 2, false)
+          maxNumShuffles = if (outputMode != "complete") 1 else 2)
 
         val expectedRows = outputMode match {
           case "append" | "update" => Row(1, "a") :: Row(2, "b") :: Nil
@@ -1186,7 +1185,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       partitioning: physical.Partitioning,
       ordering: Seq[catalyst.expressions.SortOrder],
       maxNumShuffles: Int = 1,
-      skewSplit: Boolean): Unit = {
+      skewSplit: Boolean = false): Unit = {
 
     val sorts = collect(plan) { case s: SortExec => s }
     assert(sorts.size <= 1, "must be at most one sort")
