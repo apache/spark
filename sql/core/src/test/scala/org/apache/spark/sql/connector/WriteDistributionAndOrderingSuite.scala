@@ -56,36 +56,15 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     .add("data", StringType)
 
   test("ordered distribution and sort with same exprs: append") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithSameExprs(
-            "append", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithSameExprsInVariousCases("append")
   }
 
   test("ordered distribution and sort with same exprs: overwrite") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithSameExprs(
-            "overwrite", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithSameExprsInVariousCases("overwrite")
   }
 
   test("ordered distribution and sort with same exprs: overwriteDynamic") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithSameExprs(
-            "overwriteDynamic", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithSameExprsInVariousCases("overwriteDynamic")
   }
 
   test("ordered distribution and sort with same exprs: micro-batch append") {
@@ -101,47 +80,46 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: append") {
-    checkOrderedDistributionAndSortWithSameExprs("append", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithSameExprs("append", Some(10))
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: overwrite") {
-    checkOrderedDistributionAndSortWithSameExprs("overwrite", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithSameExprs("overwrite", Some(10))
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: overwriteDynamic") {
-    checkOrderedDistributionAndSortWithSameExprs("overwriteDynamic", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithSameExprs("overwriteDynamic")
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: micro-batch append") {
-    checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "append", Some(10),
-      true, false, false)
+    checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "append", Some(10))
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: micro-batch update") {
-    checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "update", Some(10),
-      true, false, false)
+    checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "update", Some(10))
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: micro-batch complete") {
-    checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "complete", Some(10),
-      true, false, false)
+    checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "complete", Some(10))
+  }
+
+  private def checkOrderedDistributionAndSortWithSameExprsInVariousCases(cmd: String) = {
+    Seq(true, false).foreach { distributionStrictlyRequired =>
+      Seq(true, false).foreach { dataSkewed =>
+        Seq(true, false).foreach { coalesce =>
+          checkOrderedDistributionAndSortWithSameExprs(
+            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+        }
+      }
+    }
   }
 
   private def checkOrderedDistributionAndSortWithSameExprs(
       command: String,
+      targetNumPartitions: Option[Int] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
-    checkOrderedDistributionAndSortWithSameExprs(
-      command, None, distributionStrictlyRequired, dataSkewed, coalesce)
-  }
-
-  private def checkOrderedDistributionAndSortWithSameExprs(
-      command: String,
-      targetNumPartitions: Option[Int],
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
@@ -174,36 +152,15 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and sort with same exprs: append") {
-    Seq(true).foreach { distributionStrictlyRequired =>
-      Seq(true).foreach { dataSkewed =>
-        Seq(false).foreach { coalesce =>
-          checkClusteredDistributionAndSortWithSameExprs(
-            "append", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndSortWithSameExprsInVariousCases("append")
   }
 
   test("clustered distribution and sort with same exprs: overwrite") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndSortWithSameExprs(
-            "overwrite", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndSortWithSameExprsInVariousCases("overwrite")
   }
 
   test("clustered distribution and sort with same exprs: overwriteDynamic") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndSortWithSameExprs(
-            "overwriteDynamic", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndSortWithSameExprsInVariousCases("overwriteDynamic")
   }
 
   test("clustered distribution and sort with same exprs: micro-batch append") {
@@ -219,48 +176,47 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: append") {
-    checkClusteredDistributionAndSortWithSameExprs("append", Some(10), true, false, false)
+    checkClusteredDistributionAndSortWithSameExprs("append", Some(10))
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: overwrite") {
-    checkClusteredDistributionAndSortWithSameExprs("overwrite", Some(10), true, false, false)
+    checkClusteredDistributionAndSortWithSameExprs("overwrite", Some(10))
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: overwriteDynamic") {
-    checkClusteredDistributionAndSortWithSameExprs(
-      "overwriteDynamic", Some(10), true, false, false)
+    checkClusteredDistributionAndSortWithSameExprs("overwriteDynamic", Some(10) )
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: micro-batch append") {
-    checkClusteredDistributionAndSortWithSameExprs(
-      microBatchPrefix + "append", Some(10), true, false, false)
+    checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "append", Some(10))
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: micro-batch update") {
-    checkClusteredDistributionAndSortWithSameExprs(
-      microBatchPrefix + "update", Some(10), true, false, false)
+    checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "update", Some(10))
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: micro-batch complete") {
     checkClusteredDistributionAndSortWithSameExprs(
-      microBatchPrefix + "complete", Some(10), true, false, false)
+      microBatchPrefix + "complete", Some(10))
+  }
+
+  private def checkClusteredDistributionAndSortWithSameExprsInVariousCases(cmd: String) = {
+    Seq(true, false).foreach { distributionStrictlyRequired =>
+      Seq(true, false).foreach { dataSkewed =>
+        Seq(true, false).foreach { coalesce =>
+          checkClusteredDistributionAndSortWithSameExprs(
+            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+        }
+      }
+    }
   }
 
   private def checkClusteredDistributionAndSortWithSameExprs(
       command: String,
+      targetNumPartitions: Option[Int] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
-    checkClusteredDistributionAndSortWithSameExprs(
-      command, None, distributionStrictlyRequired, dataSkewed, coalesce)
-  }
-
-  private def checkClusteredDistributionAndSortWithSameExprs(
-      command: String,
-      targetNumPartitions: Option[Int],
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -302,102 +258,74 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and sort with extended exprs: append") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndSortWithExtendedExprs(
-            "append", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndSortWithExtendedExprsInVariousCases("append")
   }
 
   test("clustered distribution and sort with extended exprs: overwrite") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndSortWithExtendedExprs(
-            "overwrite", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndSortWithExtendedExprsInVariousCases("overwrite")
   }
 
   test("clustered distribution and sort with extended exprs: overwriteDynamic") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndSortWithExtendedExprs(
-            "overwriteDynamic", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndSortWithExtendedExprsInVariousCases("overwriteDynamic")
   }
 
   test("clustered distribution and sort with extended exprs: micro-batch append") {
-    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "append",
-      true, false, false)
+    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "append")
   }
 
   test("clustered distribution and sort with extended exprs: micro-batch update") {
-    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "update",
-      true, false, false)
+    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "update")
   }
 
   test("clustered distribution and sort with extended exprs: micro-batch complete") {
-    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "complete",
-      true, false, false)
+    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "complete")
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: append") {
-    checkClusteredDistributionAndSortWithExtendedExprs("append", Some(10),
-      true, false, false)
+    checkClusteredDistributionAndSortWithExtendedExprs("append", Some(10))
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: overwrite") {
-    checkClusteredDistributionAndSortWithExtendedExprs("overwrite", Some(10),
-      true, false, false)
+    checkClusteredDistributionAndSortWithExtendedExprs("overwrite", Some(10))
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: " +
     "overwriteDynamic") {
-    checkClusteredDistributionAndSortWithExtendedExprs("overwriteDynamic", Some(10),
-      true, false, false)
+    checkClusteredDistributionAndSortWithExtendedExprs("overwriteDynamic", Some(10))
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: " +
     "micro-batch append") {
-    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "append", Some(10),
-      true, false, false)
+    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "append", Some(10))
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: " +
     "micro-batch update") {
-    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "update", Some(10),
-      true, false, false)
+    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "update", Some(10))
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: " +
     "micro-batch complete") {
-    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "complete", Some(10),
-      true, false, false)
+    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "complete", Some(10))
+  }
+
+  private def checkClusteredDistributionAndSortWithExtendedExprsInVariousCases(cmd: String) = {
+    Seq(true, false).foreach { distributionStrictlyRequired =>
+      Seq(true, false).foreach { dataSkewed =>
+        Seq(true, false).foreach { coalesce =>
+          checkClusteredDistributionAndSortWithExtendedExprs(
+            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+        }
+      }
+    }
   }
 
   private def checkClusteredDistributionAndSortWithExtendedExprs(
       command: String,
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
-    checkClusteredDistributionAndSortWithExtendedExprs(
-      command, None, distributionStrictlyRequired, dataSkewed, coalesce)
-  }
-
-  private def checkClusteredDistributionAndSortWithExtendedExprs(
-      command: String,
-      targetNumPartitions: Option[Int],
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
+      targetNumPartitions: Option[Int] = None,
+      distributionStrictlyRequired: Boolean = true,
+      dataSkewed: Boolean = false,
+      coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -593,67 +521,47 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("ordered distribution and sort with manual global sort: append") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithManualGlobalSort(
-            "append", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithManualGlobalSortInVariousCases("append")
   }
 
   test("ordered distribution and sort with manual global sort: overwrite") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithManualGlobalSort(
-            "overwrite", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithManualGlobalSortInVariousCases("overwrite")
   }
 
   test("ordered distribution and sort with manual global sort: overwriteDynamic") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithManualGlobalSort(
-            "overwriteDynamic", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithManualGlobalSortInVariousCases("overwriteDynamic")
   }
 
   test("ordered distribution and sort with manual global sort with numPartitions: append") {
-    checkOrderedDistributionAndSortWithManualGlobalSort("append", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithManualGlobalSort("append", Some(10))
   }
 
   test("ordered distribution and sort with manual global sort with numPartitions: overwrite") {
-    checkOrderedDistributionAndSortWithManualGlobalSort("overwrite", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithManualGlobalSort("overwrite", Some(10))
   }
 
   test("ordered distribution and sort with manual global sort with numPartitions: " +
     "overwriteDynamic") {
-    checkOrderedDistributionAndSortWithManualGlobalSort(
-      "overwriteDynamic", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithManualGlobalSort("overwriteDynamic", Some(10))
+  }
+
+  private def checkOrderedDistributionAndSortWithManualGlobalSortInVariousCases(cmd: String) = {
+    Seq(true, false).foreach { distributionStrictlyRequired =>
+      Seq(true, false).foreach { dataSkewed =>
+        Seq(true, false).foreach { coalesce =>
+          checkOrderedDistributionAndSortWithManualGlobalSort(
+            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+        }
+      }
+    }
   }
 
   private def checkOrderedDistributionAndSortWithManualGlobalSort(
       command: String,
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
-    checkOrderedDistributionAndSortWithManualGlobalSort(
-      command, None, distributionStrictlyRequired, dataSkewed, coalesce)
-  }
-
-  private def checkOrderedDistributionAndSortWithManualGlobalSort(
-      command: String,
-      targetNumPartitions: Option[Int],
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
+      targetNumPartitions: Option[Int] = None,
+      distributionStrictlyRequired: Boolean = true,
+      dataSkewed: Boolean = false,
+      coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -694,70 +602,49 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("ordered distribution and sort with incompatible global sort: append") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-            "append", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSortInVariousCases("append")
   }
 
   test("ordered distribution and sort with incompatible global sort: overwrite") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-            "overwrite", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSortInVariousCases("overwrite")
   }
 
   test("ordered distribution and sort with incompatible global sort: overwriteDynamic") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-            "overwriteDynamic", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSortInVariousCases("overwriteDynamic")
   }
 
   test("ordered distribution and sort with incompatible global sort with numPartitions: append") {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-      "append", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("append", Some(10))
   }
 
   test("ordered distribution and sort with incompatible global sort with numPartitions: " +
     "overwrite") {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-      "overwrite", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwrite", Some(10))
   }
 
   test("ordered distribution and sort with incompatible global sort with numPartitions: " +
     "overwriteDynamic") {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-      "overwriteDynamic", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwriteDynamic", Some(10))
+  }
+
+  private def checkOrderedDistributionAndSortWithIncompatibleGlobalSortInVariousCases(
+      cmd: String) = {
+    Seq(true, false).foreach { distributionStrictlyRequired =>
+      Seq(true, false).foreach { dataSkewed =>
+        Seq(true, false).foreach { coalesce =>
+          checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
+            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+        }
+      }
+    }
   }
 
   private def checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
       command: String,
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-      command, None, distributionStrictlyRequired, dataSkewed, coalesce)
-  }
-
-  private def checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-      command: String,
-      targetNumPartitions: Option[Int],
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
+      targetNumPartitions: Option[Int] = None,
+      distributionStrictlyRequired: Boolean = true,
+      dataSkewed: Boolean = false,
+      coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -798,67 +685,47 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("ordered distribution and sort with manual local sort: append") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithManualLocalSort(
-            "append", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithManualLocalSortInVariousCases("append")
   }
 
   test("ordered distribution and sort with manual local sort: overwrite") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithManualLocalSort(
-            "overwrite", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithManualLocalSortInVariousCases("overwrite")
   }
 
   test("ordered distribution and sort with manual local sort: overwriteDynamic") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithManualLocalSort(
-            "overwriteDynamic", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkOrderedDistributionAndSortWithManualLocalSortInVariousCases("overwriteDynamic")
   }
 
   test("ordered distribution and sort with manual local sort with numPartitions: append") {
-    checkOrderedDistributionAndSortWithManualLocalSort("append", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithManualLocalSort("append", Some(10))
   }
 
   test("ordered distribution and sort with manual local sort with numPartitions: overwrite") {
-    checkOrderedDistributionAndSortWithManualLocalSort("overwrite", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithManualLocalSort("overwrite", Some(10))
   }
 
   test("ordered distribution and sort with manual local sort with numPartitions: " +
     "overwriteDynamic") {
-    checkOrderedDistributionAndSortWithManualLocalSort(
-      "overwriteDynamic", Some(10), true, false, false)
+    checkOrderedDistributionAndSortWithManualLocalSort("overwriteDynamic", Some(10))
+  }
+
+  private def checkOrderedDistributionAndSortWithManualLocalSortInVariousCases(cmd: String) = {
+    Seq(true, false).foreach { distributionStrictlyRequired =>
+      Seq(true, false).foreach { dataSkewed =>
+        Seq(true, false).foreach { coalesce =>
+          checkOrderedDistributionAndSortWithManualLocalSort(
+            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+        }
+      }
+    }
   }
 
   private def checkOrderedDistributionAndSortWithManualLocalSort(
       command: String,
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
-    checkOrderedDistributionAndSortWithManualLocalSort(
-      command, None, distributionStrictlyRequired, dataSkewed, coalesce)
-  }
-
-  private def checkOrderedDistributionAndSortWithManualLocalSort(
-      command: String,
-      targetNumPartitions: Option[Int],
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
+      targetNumPartitions: Option[Int] = None,
+      distributionStrictlyRequired: Boolean = true,
+      dataSkewed: Boolean = false,
+      coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -899,70 +766,49 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and local sort with manual global sort: append") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-            "append", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndLocalSortWithManualGlobalSortInVariousCases("append")
   }
 
   test("clustered distribution and local sort with manual global sort: overwrite") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-            "overwrite", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndLocalSortWithManualGlobalSortInVariousCases("overwrite")
   }
 
   test("clustered distribution and local sort with manual global sort: overwriteDynamic") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-            "overwriteDynamic", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndLocalSortWithManualGlobalSortInVariousCases("overwriteDynamic")
   }
 
   test("clustered distribution and local sort with manual global sort with numPartitions: append") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-      "append", Some(10), true, false, false)
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("append")
   }
 
   test("clustered distribution and local sort with manual global sort with numPartitions: " +
     "overwrite") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-      "overwrite", Some(10), true, false, false)
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwrite", Some(10))
   }
 
   test("clustered distribution and local sort with manual global sort with numPartitions: " +
     "overwriteDynamic") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-      "overwriteDynamic", Some(10), true, false, false)
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwriteDynamic", Some(10))
+  }
+
+  private def checkClusteredDistributionAndLocalSortWithManualGlobalSortInVariousCases(
+      cmd: String) = {
+    Seq(true, false).foreach { distributionStrictlyRequired =>
+      Seq(true, false).foreach { dataSkewed =>
+        Seq(true, false).foreach { coalesce =>
+          checkClusteredDistributionAndLocalSortWithManualGlobalSort(
+            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+        }
+      }
+    }
   }
 
   private def checkClusteredDistributionAndLocalSortWithManualGlobalSort(
       command: String,
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-      command, None, distributionStrictlyRequired, dataSkewed, coalesce)
-  }
-
-  private def checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-      command: String,
-      targetNumPartitions: Option[Int],
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
+      targetNumPartitions: Option[Int] = None,
+      distributionStrictlyRequired: Boolean = true,
+      dataSkewed: Boolean = false,
+      coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -1004,70 +850,49 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and local sort with manual local sort: append") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndLocalSortWithManualLocalSort(
-            "append", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndLocalSortWithManualLocalSortInVariousCases("append")
   }
 
   test("clustered distribution and local sort with manual local sort: overwrite") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndLocalSortWithManualLocalSort(
-            "overwrite", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndLocalSortWithManualLocalSortInVariousCases("overwrite")
   }
 
   test("clustered distribution and local sort with manual local sort: overwriteDynamic") {
-    Seq(true, false).foreach { distributionStrictlyRequired =>
-      Seq(true, false).foreach { dataSkewed =>
-        Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndLocalSortWithManualLocalSort(
-            "overwriteDynamic", distributionStrictlyRequired, dataSkewed, coalesce)
-        }
-      }
-    }
+    checkClusteredDistributionAndLocalSortWithManualLocalSortInVariousCases("overwriteDynamic")
   }
 
   test("clustered distribution and local sort with manual local sort with numPartitions: append") {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort(
-      "append", Some(10), true, false, false)
+    checkClusteredDistributionAndLocalSortWithManualLocalSort("append", Some(10))
   }
 
   test("clustered distribution and local sort with manual local sort with numPartitions: " +
     "overwrite") {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort(
-      "overwrite", Some(10), true, false, false)
+    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwrite", Some(10))
   }
 
   test("clustered distribution and local sort with manual local sort with numPartitions: " +
     "overwriteDynamic") {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort(
-      "overwriteDynamic", Some(10), true, false, false)
+    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwriteDynamic", Some(10))
+  }
+
+  private def checkClusteredDistributionAndLocalSortWithManualLocalSortInVariousCases(
+      cmd: String) = {
+    Seq(true, false).foreach { distributionStrictlyRequired =>
+      Seq(true, false).foreach { dataSkewed =>
+        Seq(true, false).foreach { coalesce =>
+          checkClusteredDistributionAndLocalSortWithManualLocalSort(
+            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+        }
+      }
+    }
   }
 
   private def checkClusteredDistributionAndLocalSortWithManualLocalSort(
       command: String,
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort(
-      command, None, distributionStrictlyRequired, dataSkewed, coalesce)
-  }
-
-  private def checkClusteredDistributionAndLocalSortWithManualLocalSort(
-      command: String,
-      targetNumPartitions: Option[Int],
-      distributionStrictlyRequired: Boolean,
-      dataSkewed: Boolean,
-      coalesce: Boolean): Unit = {
+      targetNumPartitions: Option[Int] = None,
+      distributionStrictlyRequired: Boolean = true,
+      dataSkewed: Boolean = false,
+      coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)

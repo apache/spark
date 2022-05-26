@@ -40,7 +40,7 @@ object DistributionAndOrderingUtils {
       }
 
       val queryWithDistribution = if (distribution.nonEmpty) {
-        val optNumPartitions = if (numPartitions == 0) None else Some(numPartitions)
+        val optNumPartitions = if (numPartitions > 0) Some(numPartitions) else None
         // the conversion to catalyst expressions above produces SortOrder expressions
         // for OrderedDistribution and generic expressions for ClusteredDistribution
         // this allows RebalancePartitions/RepartitionByExpression to pick either
