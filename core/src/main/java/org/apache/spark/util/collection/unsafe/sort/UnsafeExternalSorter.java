@@ -21,7 +21,9 @@ import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Queue;
 import java.util.function.Supplier;
 
@@ -578,58 +580,70 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     public long spill() throws IOException {
-      synchronized (this) {
-        if (inMemSorter == null) {
-          return 0L;
-        }
+      List<MemoryBlock> pagesToFree = new ArrayList<>();
+      try {
+        synchronized (this) {
+          if (inMemSorter == null) {
+            return 0L;
+          }
 
-        long currentPageNumber = upstream.getCurrentPageNumber();
+          long currentPageNumber = upstream.getCurrentPageNumber();
 
-        ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-        if (numRecords > 0) {
-          // Iterate over the records that have not been returned and spill them.
-          final UnsafeSorterSpillWriter spillWriter = new UnsafeSorterSpillWriter(
-                  blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
-          spillIterator(upstream, spillWriter);
-          spillWriters.add(spillWriter);
-          upstream = spillWriter.getReader(serializerManager);
-        } else {
-          // Nothing to spill as all records have been read already, but do not return yet, as the
-          // memory still has to be freed.
-          upstream = null;
-        }
+          ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
+          if (numRecords > 0) {
+            // Iterate over the records that have not been returned and spill them.
+            final UnsafeSorterSpillWriter spillWriter = new UnsafeSorterSpillWriter(
+                    blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
+            spillIterator(upstream, spillWriter);
+            spillWriters.add(spillWriter);
+            upstream = spillWriter.getReader(serializerManager);
+          } else {
+            // Nothing to spill as all records have been read already, but do not return yet, as the
+            // memory still has to be freed.
+            upstream = null;
+          }
 
-        long released = 0L;
-        synchronized (UnsafeExternalSorter.this) {
-          // release the pages except the one that is used. There can still be a caller that
-          // is accessing the current record. We free this page in that caller's next loadNext()
-          // call.
-          for (MemoryBlock page : allocatedPages) {
-            if (!loaded || page.pageNumber != currentPageNumber) {
-              released += page.size();
-              freePage(page);
-            } else {
-              lastPage = page;
+          long released = 0L;
+          synchronized (UnsafeExternalSorter.this) {
+            // release the pages except the one that is used. There can still be a caller that
+            // is accessing the current record. We free this page in that caller's next loadNext()
+            // call.
+            for (MemoryBlock page : allocatedPages) {
+              if (!loaded || page.pageNumber != currentPageNumber) {
+                released += page.size();
+                // Do not free the page, while we are locking `SpillableIterator`. The `freePage`
+                // method locks the `TaskMemoryManager`, and it's not a good idea to lock 2 objects
+                // in sequence. We may hit dead lock if another thread locks `TaskMemoryManager`
+                // and `SpillableIterator` in sequence, which may happen in
+                // `TaskMemoryManager.acquireExecutionMemory`.
+                pagesToFree.add(page);
+              } else {
+                lastPage = page;
+              }
+            }
+            allocatedPages.clear();
+            if (lastPage != null) {
+              // Add the last page back to the list of allocated pages to make sure it gets freed in
+              // case loadNext() never gets called again.
+              allocatedPages.add(lastPage);
             }
           }
-          allocatedPages.clear();
-          if (lastPage != null) {
-            // Add the last page back to the list of allocated pages to make sure it gets freed in
-            // case loadNext() never gets called again.
-            allocatedPages.add(lastPage);
-          }
-        }
 
-        // in-memory sorter will not be used after spilling
-        assert(inMemSorter != null);
-        released += inMemSorter.getMemoryUsage();
-        totalSortTimeNanos += inMemSorter.getSortTimeNanos();
-        inMemSorter.freeMemory();
-        inMemSorter = null;
-        taskContext.taskMetrics().incMemoryBytesSpilled(released);
-        taskContext.taskMetrics().incDiskBytesSpilled(writeMetrics.bytesWritten());
-        totalSpillBytes += released;
-        return released;
+          // in-memory sorter will not be used after spilling
+          assert (inMemSorter != null);
+          released += inMemSorter.getMemoryUsage();
+          totalSortTimeNanos += inMemSorter.getSortTimeNanos();
+          inMemSorter.freeMemory();
+          inMemSorter = null;
+          taskContext.taskMetrics().incMemoryBytesSpilled(released);
+          taskContext.taskMetrics().incDiskBytesSpilled(writeMetrics.bytesWritten());
+          totalSpillBytes += released;
+          return released;
+        }
+      } finally {
+        for (MemoryBlock pageToFree : pagesToFree) {
+          freePage(pageToFree);
+        }
       }
     }
 
