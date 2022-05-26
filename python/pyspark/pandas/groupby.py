@@ -54,7 +54,6 @@ else:
 
     _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
 
-from pyspark import SparkContext
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (
     BooleanType,
