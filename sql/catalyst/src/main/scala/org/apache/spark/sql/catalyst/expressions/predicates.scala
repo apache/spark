@@ -1069,6 +1069,43 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 }
 
 @ExpressionDescription(
+  usage = """
+    _FUNC_(expr1, expr2) - Returns same result as the EQUAL(=) operator for non-null operands,
+      but returns true if both are null, false if one of the them is null.
+  """,
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be used in equality comparison. Map type is not supported.
+          For complex types such array/struct, the data types of fields must be orderable.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(3, 3);
+       true
+      > SELECT _FUNC_(1, '11');
+       false
+      > SELECT _FUNC_(true, NULL);
+       false
+      > SELECT _FUNC_(NULL, 'abc');
+       false
+      > SELECT _FUNC_(NULL, NULL);
+       true
+  """,
+  since = "3.4.0",
+  group = "misc_funcs")
+case class EqualNull(left: Expression, right: Expression) extends RuntimeReplaceable {
+  override lazy val replacement: Expression = EqualNullSafe(left, right)
+
+  override def children: Seq[Expression] = Seq(left, right)
+
+  override def prettyName: String = "equal_null"
+
+  override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(left = newChildren(0), right = newChildren(1))
+}
+
+@ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.",
   arguments = """
     Arguments:
