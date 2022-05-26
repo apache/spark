@@ -885,6 +885,11 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new NamespaceAlreadyExistsException(namespace)
   }
 
+  def namespaceInJdbcUDFUnsupportedError(ident: Identifier): Throwable = {
+    new AnalysisException(
+      s"JDBC UDF ${ident.quoted} cannot use namespace in JDBC catalog.")
+  }
+
   private def notSupportedInJDBCCatalog(cmd: String): Throwable = {
     new AnalysisException(s"$cmd is not supported in JDBC catalog.")
   }

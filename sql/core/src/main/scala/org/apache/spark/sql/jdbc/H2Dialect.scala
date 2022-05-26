@@ -89,6 +89,7 @@ private[sql] object H2Dialect extends JdbcDialect {
   private val functionMap: java.util.Map[String, UnboundFunction] =
     new ConcurrentHashMap[String, UnboundFunction]()
 
+  // test only
   def registerFunction(name: String, fn: UnboundFunction): UnboundFunction = {
     functionMap.put(name, fn)
   }

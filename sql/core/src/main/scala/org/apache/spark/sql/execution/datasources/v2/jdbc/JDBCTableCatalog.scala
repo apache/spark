@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, NoSuchNamespaceException}
+import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
@@ -39,7 +39,7 @@ class JDBCTableCatalog extends TableCatalog
   private var catalogName: String = null
   private var options: JDBCOptions = _
   private var dialect: JdbcDialect = _
-  private lazy val functions: Map[String, UnboundFunction] = dialect.functions.toMap
+  private var functions: Map[String, UnboundFunction] = _
 
   override def name(): String = {
     require(catalogName != null, "The JDBC table catalog is not initialed")
@@ -56,6 +56,7 @@ class JDBCTableCatalog extends TableCatalog
     // fake value, so that it can pass the check of `JDBCOptions`.
     this.options = new JDBCOptions(map + (JDBCOptions.JDBC_TABLE_NAME -> "__invalid_dbtable"))
     dialect = JdbcDialects.get(this.options.url)
+    functions = dialect.functions.toMap
   }
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
@@ -303,19 +304,27 @@ class JDBCTableCatalog extends TableCatalog
   }
 
   override def listFunctions(namespace: Array[String]): Array[Identifier] = {
-    if (namespace.isEmpty || namespaceExists(namespace)) {
+    if (namespace.isEmpty) {
       functions.keys.map(Identifier.of(namespace, _)).toArray
     } else {
-      throw new NoSuchNamespaceException(namespace)
+      throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
+    if (ident.namespace().nonEmpty) {
+      throw QueryCompilationErrors.namespaceInJdbcUDFUnsupportedError(ident)
+    }
     functions.get(ident.name()) match {
       case Some(func) =>
         func
       case _ =>
         throw new NoSuchFunctionException(ident)
     }
+  }
+
+  // test only
+  def clearFunctions(): Unit = {
+    functions = Map.empty[String, UnboundFunction]
   }
 }
