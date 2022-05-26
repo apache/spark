@@ -35,7 +35,7 @@ class ExecutionData private[spark] (
 
 class CompileData private[spark] (
      val executionId: Long,
-     val phases: Seq[PhaseTime],
+     val phases: Seq[Phase],
      val rules: Seq[Rule])
 
 case class Rule private[spark](
@@ -51,6 +51,8 @@ case class Node private[spark](
     metrics: Seq[Metric])
 
 case class Metric private[spark] (name: String, value: String)
+
+case class Phase private[spark](phase: String, timeMs: Long)
 
 class SQLDiagnosticData private[spark] (
     val id: Long,

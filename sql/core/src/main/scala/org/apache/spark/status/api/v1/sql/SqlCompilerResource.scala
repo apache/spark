@@ -38,9 +38,7 @@ private[v1] class SqlCompilerResource extends BaseAppResource with Logging {
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       sqlStore.executionsList(offset, length).map { exec =>
         val compileStats = sqlStore.getCompilerStats(exec.executionId)
-        sqlStore
-          .execution(exec.executionId)
-          .map(prepareCompileData(_, compileStats)).getOrElse(null)
+        prepareCompileData(exec, compileStats)
       }
     }
   }
@@ -66,11 +64,11 @@ private[v1] class SqlCompilerResource extends BaseAppResource with Logging {
     val phaseString = compileStats.split(QueryPlanningTracker.ruleHeader)
     val phaseListStr = phaseString.head.split(QueryPlanningTracker.phaseHeader)(1).
       split("\\r?\\n")
-    val phaseTimes = new ListBuffer[PhaseTime]()
+    val phaseTimes = new ListBuffer[Phase]()
     for(i <- 1 until phaseListStr.length by 2) {
       val phaseStr = phaseListStr(i).split(":")(1).trim
       val time = phaseListStr(i + 1).split(":")(1).trim
-      phaseTimes += PhaseTime(phaseStr, time.toLong)
+      phaseTimes += Phase(phaseStr, time.toLong)
     }
 
     val rulesListStr = phaseString(1).trim().split("\\r?\\n")
