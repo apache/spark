@@ -803,6 +803,16 @@ class EncryptionArrowTests(ArrowTests):
         return super(EncryptionArrowTests, cls).conf().set("spark.io.encryption.enabled", "true")
 
 
+class RDDBasedArrowTests(ArrowTests):
+    @classmethod
+    def conf(cls):
+        return (
+            super(RDDBasedArrowTests, cls)
+            .conf()
+            .set("spark.sql.execution.arrow.localRelationThreshold", "0")
+        )
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.test_arrow import *  # noqa: F401
 
