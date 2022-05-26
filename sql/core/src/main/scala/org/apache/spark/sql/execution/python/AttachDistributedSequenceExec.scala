@@ -43,11 +43,11 @@ case class AttachDistributedSequenceExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute().map(_.copy())
     val checkpointed = if (childRDD.getNumPartitions > 1) {
-      // to avoid execute multiple jobs. zipWithIndex launches a Spark job.
       childRDD.localCheckpoint()
     } else {
       childRDD
     }
+    // to avoid execute multiple jobs. zipWithIndex launches a Spark job.
     checkpointed.zipWithIndex().mapPartitions { iter =>
       val unsafeProj = UnsafeProjection.create(output, output)
       val joinedRow = new JoinedRow
