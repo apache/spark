@@ -89,7 +89,7 @@ case class Origin(
         ""
       }
       val builder = new StringBuilder
-      builder ++= s"\n== SQL$objectContext$positionContext ==\n"
+      builder ++= s"== SQL$objectContext$positionContext ==\n"
 
       val text = sqlText.get
       val start = math.max(startIndex.get, 0)

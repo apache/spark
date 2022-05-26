@@ -61,8 +61,13 @@ private[spark] object SparkThrowableHelper {
       queryContext: String = ""): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
+    val displayQueryContext = if (queryContext.isEmpty) {
+      ""
+    } else {
+      s"\n$queryContext"
+    }
     String.format(errorInfo.messageFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-      messageParameters: _*) + queryContext
+      messageParameters: _*) + displayQueryContext
   }
 
   def getSqlState(errorClass: String): String = {
