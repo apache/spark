@@ -720,6 +720,7 @@ object FunctionRegistry {
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
+    expression[EqualNull]("equal_null"),
 
     // grouping sets
     expression[Grouping]("grouping"),

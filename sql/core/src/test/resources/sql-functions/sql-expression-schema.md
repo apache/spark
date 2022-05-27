@@ -110,6 +110,7 @@
 | org.apache.spark.sql.catalyst.expressions.Elt | elt | SELECT elt(1, 'scala', 'java') | struct<elt(1, scala, java):string> |
 | org.apache.spark.sql.catalyst.expressions.Encode | encode | SELECT encode('abc', 'utf-8') | struct<encode(abc, utf-8):binary> |
 | org.apache.spark.sql.catalyst.expressions.EndsWithExpressionBuilder | endswith | SELECT endswith('Spark SQL', 'SQL') | struct<endswith(Spark SQL, SQL):boolean> |
+| org.apache.spark.sql.catalyst.expressions.EqualNull | equal_null | SELECT equal_null(3, 3) | struct<equal_null(3, 3):boolean> |
 | org.apache.spark.sql.catalyst.expressions.EqualNullSafe | <=> | SELECT 2 <=> 2 | struct<(2 <=> 2):boolean> |
 | org.apache.spark.sql.catalyst.expressions.EqualTo | = | SELECT 2 = 2 | struct<(2 = 2):boolean> |
 | org.apache.spark.sql.catalyst.expressions.EqualTo | == | SELECT 2 == 2 | struct<(2 = 2):boolean> |
