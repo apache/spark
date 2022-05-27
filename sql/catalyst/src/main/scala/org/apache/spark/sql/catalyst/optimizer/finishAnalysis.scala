@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros, localDateToDays}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
@@ -77,8 +78,8 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
 
   /** Required to build custom rules for commands that do not keep sub-plans as children in Delta */
   def applyWithTimestamp(plan: LogicalPlan, instant: Instant): LogicalPlan = {
-    val currentTimestamp = instantToMicros(instant)
-    val currentTime = Literal.create(currentTimestamp, TimestampType)
+    val currentTimestampMicros = instantToMicros(instant)
+    val currentTime = Literal.create(currentTimestampMicros, TimestampType)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
 
     def transformCondition(treePatternbits: TreePatternBits): Boolean = {
@@ -90,7 +91,8 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
         subQuery.transformAllExpressionsWithPruning(transformCondition) {
           case cd: CurrentDate =>
             Literal.create(
-              localDateToDays(instant.atZone(cd.zoneId).toLocalDate).asInstanceOf[Int], DateType)
+              DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId).asInstanceOf[Int],
+              DateType)
           case CurrentTimestamp() | Now() => currentTime
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>
