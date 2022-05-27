@@ -81,20 +81,23 @@ abstract class AverageBase
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
-  protected def getEvaluateExpression(queryContext: String) = child.dataType match {
-    case _: DecimalType =>
-      DecimalPrecision.decimalAndDecimal()(
-        Divide(
-          CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd, queryContext),
-          count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
-    case _: YearMonthIntervalType =>
-      If(EqualTo(count, Literal(0L)),
-        Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
-    case _: DayTimeIntervalType =>
-      If(EqualTo(count, Literal(0L)),
-        Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
-    case _ =>
-      Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
+  protected def getEvaluateExpression(queryContext: Option[SQLQueryContext]) = {
+    child.dataType match {
+      case _: DecimalType =>
+        DecimalPrecision.decimalAndDecimal()(
+          Divide(
+            CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd,
+              queryContext),
+            count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
+      case _: YearMonthIntervalType =>
+        If(EqualTo(count, Literal(0L)),
+          Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
+      case _: DayTimeIntervalType =>
+        If(EqualTo(count, Literal(0L)),
+          Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
+      case _ =>
+        Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
+    }
   }
 
   protected def getUpdateExpressions: Seq[Expression] = Seq(
@@ -200,7 +203,7 @@ case class TryAverage(child: Expression) extends AverageBase {
   }
 
   override lazy val evaluateExpression: Expression = {
-    addTryEvalIfNeeded(getEvaluateExpression(""))
+    addTryEvalIfNeeded(getEvaluateExpression(None))
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =

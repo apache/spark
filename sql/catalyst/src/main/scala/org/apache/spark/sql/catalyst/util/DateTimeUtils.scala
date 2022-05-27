@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 
 import sun.util.calendar.ZoneInfo
 
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -448,14 +449,17 @@ object DateTimeUtils {
     }
   }
 
-  def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId, errorContext: String = ""): Long = {
+  def stringToTimestampAnsi(
+      s: UTF8String,
+      timeZoneId: ZoneId,
+      errorContext: Option[SQLQueryContext] = None): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
         s, StringType, TimestampType, errorContext)
     }
   }
 
-  def doubleToTimestampAnsi(d: Double, errorContext: String): Long = {
+  def doubleToTimestampAnsi(d: Double, errorContext: Option[SQLQueryContext]): Long = {
     if (d.isNaN || d.isInfinite) {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
         d, DoubleType, TimestampType, errorContext)
@@ -505,7 +509,9 @@ object DateTimeUtils {
     stringToTimestampWithoutTimeZone(s, true)
   }
 
-  def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String, errorContext: String): Long = {
+  def stringToTimestampWithoutTimeZoneAnsi(
+      s: UTF8String,
+      errorContext: Option[SQLQueryContext]): Long = {
     stringToTimestampWithoutTimeZone(s, true).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
         s, StringType, TimestampNTZType, errorContext)
@@ -624,7 +630,7 @@ object DateTimeUtils {
     }
   }
 
-  def stringToDateAnsi(s: UTF8String, errorContext: String = ""): Int = {
+  def stringToDateAnsi(s: UTF8String, errorContext: Option[SQLQueryContext] = None): Int = {
     stringToDate(s).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
         s, StringType, DateType, errorContext)

@@ -87,12 +87,14 @@ private[spark] class SparkUpgradeException(
 private[spark] class SparkArithmeticException(
     errorClass: String,
     messageParameters: Array[String],
-    queryContext: String = "")
+    queryContext: Option[QueryContext] = None)
   extends ArithmeticException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters, queryContext))
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
+
+  override def getQueryContext: QueryContext = queryContext.orNull
 }
 
 /**
@@ -139,12 +141,14 @@ private[spark] class SparkConcurrentModificationException(
 private[spark] class SparkDateTimeException(
     errorClass: String,
     messageParameters: Array[String],
-    queryContext: String = "")
+    queryContext: Option[QueryContext] = None)
   extends DateTimeException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters, queryContext))
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
+
+  override def getQueryContext: QueryContext = queryContext.orNull
 }
 
 /**
@@ -177,12 +181,14 @@ private[spark] class SparkFileNotFoundException(
 private[spark] class SparkNumberFormatException(
     errorClass: String,
     messageParameters: Array[String],
-    queryContext: String)
+    queryContext: Option[QueryContext])
   extends NumberFormatException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters, queryContext))
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
+
+  override def getQueryContext: QueryContext = queryContext.orNull
 }
 
 /**
@@ -237,12 +243,14 @@ private[spark] class SparkRuntimeException(
     errorClass: String,
     messageParameters: Array[String],
     cause: Throwable = null,
-    queryContext: String = "")
+    queryContext: Option[QueryContext] = None)
   extends RuntimeException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters, queryContext), cause)
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
+
+  override def getQueryContext: QueryContext = queryContext.orNull
 }
 
 /**
@@ -287,12 +295,14 @@ private[spark] class SparkSQLException(
 private[spark] class SparkNoSuchElementException(
     errorClass: String,
     messageParameters: Array[String],
-    queryContext: String)
+    queryContext: Option[QueryContext])
   extends NoSuchElementException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters, queryContext))
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
+
+  override def getQueryContext: QueryContext = queryContext.orNull
 }
 
 /**

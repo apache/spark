@@ -179,7 +179,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    queryContext: String = "") extends UnaryExpression {
+    queryContext: Option[SQLQueryContext] = None) extends UnaryExpression {
 
   override def nullable: Boolean = true
 
