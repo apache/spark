@@ -148,7 +148,9 @@ case class JDBCScanBuilder(
       // There are some push down path.
       // 1. For `dataset.limit(m).offset(n)`, try to push down `LIMIT (m - n) OFFSET n`.
       //    For example, `dataset.limit(5).offset(3)`, we can push down `LIMIT 2 OFFSET 3`.
-      // 2. For `dataset.offset(n)`, try to push down `OFFSET n`.
+      // 2. For `dataset.offset(n).limit(m)`, try to push down `LIMIT m OFFSET n`.
+      //    For example, `dataset.offset(3).limit(5)`, we can push down `LIMIT 5 OFFSET 3`.
+      // 3. For `dataset.offset(n)`, try to push down `OFFSET n`.
       //    For example, `dataset.offset(3)`, we can push down `OFFSET 3`.
       if (pushedLimit > 0) {
         pushedLimit = pushedLimit - offset
