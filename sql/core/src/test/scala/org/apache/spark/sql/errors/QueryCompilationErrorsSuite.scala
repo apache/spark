@@ -524,7 +524,7 @@ class QueryCompilationErrorsSuite
       checkErrorClass(
         exception = e,
         errorClass = "INVALID_FIELD_NAME",
-        msg = "Field name m.n is invalid: m is not a struct.; line 1 pos 27")
+        msg = "Field name `m`.`n` is invalid: `m` is not a struct.; line 1 pos 27")
     }
   }
 
@@ -544,8 +544,7 @@ class QueryCompilationErrorsSuite
           agg(sum($"earnings")).collect()
       },
       errorClass = "NON_LITERAL_PIVOT_VALUES",
-      msg = "Literal expressions required for pivot values, found 'earnings#\\w+'",
-      matchMsg = true)
+      msg = """Literal expressions required for pivot values, found "earnings".""")
   }
 
   test("UNSUPPORTED_DESERIALIZER: data type mismatch") {
@@ -582,6 +581,67 @@ class QueryCompilationErrorsSuite
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
       msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
         "to Tuple1, but failed as the number of fields does not line up.")
+  }
+
+  test("UNSUPPORTED_GENERATOR: " +
+    "generators are not supported when it's nested in expressions") {
+    val e = intercept[AnalysisException](
+      sql("""select explode(Array(1, 2, 3)) + 1""").collect()
+    )
+
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_GENERATOR",
+      errorSubClass = Some("NESTED_IN_EXPRESSIONS"),
+      msg = """The generator is not supported: """ +
+        """nested in expressions "(explode(array(1, 2, 3)) + 1)"""")
+  }
+
+  test("UNSUPPORTED_GENERATOR: only one generator allowed") {
+    val e = intercept[AnalysisException](
+      sql("""select explode(Array(1, 2, 3)), explode(Array(1, 2, 3))""").collect()
+    )
+
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_GENERATOR",
+      errorSubClass = Some("MULTI_GENERATOR"),
+      msg = "The generator is not supported: only one generator allowed per select clause " +
+        """but found 2: "explode(array(1, 2, 3))", "explode(array(1, 2, 3))""""
+    )
+  }
+
+  test("UNSUPPORTED_GENERATOR: generators are not supported outside the SELECT clause") {
+    val e = intercept[AnalysisException](
+      sql("""select 1 from t order by explode(Array(1, 2, 3))""").collect()
+    )
+
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_GENERATOR",
+      errorSubClass = Some("OUTSIDE_SELECT"),
+      msg = "The generator is not supported: outside the SELECT clause, found: " +
+        "'Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true"
+    )
+  }
+
+  test("UNSUPPORTED_GENERATOR: not a generator") {
+    val e = intercept[AnalysisException](
+      sql(
+        """
+          |SELECT explodedvalue.*
+          |FROM VALUES array(1, 2, 3) AS (value)
+          |LATERAL VIEW array_contains(value, 1) AS explodedvalue""".stripMargin).collect()
+    )
+
+    checkErrorClass(
+      exception = e,
+      errorClass = "UNSUPPORTED_GENERATOR",
+      errorSubClass = Some("NOT_GENERATOR"),
+      msg = """The generator is not supported: `array_contains` is expected to be a generator. """ +
+        "However, its class is org.apache.spark.sql.catalyst.expressions.ArrayContains, " +
+        "which is not a generator.; line 4 pos 0"
+    )
   }
 }
 
