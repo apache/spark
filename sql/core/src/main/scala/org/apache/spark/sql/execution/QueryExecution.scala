@@ -196,7 +196,7 @@ class QueryExecution(
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
-    withInternalError(s"The phase $phase failed with an internal error. " +
+    withInternalError(s"The Spark SQL phase $phase failed with an internal error. " +
       "Please, fill in a bug report and provide the full stack trace.") {
       tracker.measurePhase(phase)(block)
     }
