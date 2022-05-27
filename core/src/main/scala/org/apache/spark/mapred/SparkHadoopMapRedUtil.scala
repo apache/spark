@@ -19,10 +19,8 @@ package org.apache.spark.mapred
 
 import java.io.IOException
 
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
 import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
@@ -73,31 +71,8 @@ object SparkHadoopMapRedUtil extends Logging {
       if (shouldCoordinateWithDriver) {
         val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
         val ctx = TaskContext.get()
-        val taskAttemptCommitPaths: Seq[Path] = committer match {
-          case f: FileOutputCommitter =>
-            val taskAttemptPath = f.getTaskAttemptPath(mrTaskContext)
-            if (f.isCommitJobRepeatable(mrTaskContext)) {
-              // if algorithmVersion is 2, Spark should pass final output path
-              def listTargets(fs: FileSystem, from: Path, to: Path): Seq[Path] = {
-                val statuses = fs.listStatus(from)
-                statuses.flatMap { status =>
-                  if (status.isFile) {
-                    Seq(new Path(to, status.getPath.getName))
-                  } else {
-                    listTargets(fs, status.getPath, new Path(to, status.getPath.getName))
-                  }
-                }
-              }
-
-              val fs: FileSystem = taskAttemptPath.getFileSystem(mrTaskContext.getConfiguration)
-              listTargets(fs, taskAttemptPath, f.getOutputPath)
-            } else {
-              Seq(taskAttemptPath)
-            }
-          case _ => Seq.empty
-        }
         val canCommit = outputCommitCoordinator.canCommit(ctx.stageId(), ctx.stageAttemptNumber(),
-          splitId, ctx.attemptNumber(), taskAttemptCommitPaths)
+          splitId, ctx.attemptNumber())
 
         if (canCommit) {
           performCommit()
