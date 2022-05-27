@@ -2465,8 +2465,8 @@ private[spark] class DAGScheduler(
       hostToUnregisterOutputs.foreach(
         host => blockManagerMaster.removeShufflePushMergerLocation(host))
     }
-    if ((!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch)
-      && !isShuffleMerger) {
+    if (!isShuffleMerger &&
+      (!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch)) {
       executorFailureEpoch(execId) = currentEpoch
       logInfo(s"Executor lost: $execId (epoch $currentEpoch)")
       if (pushBasedShuffleEnabled) {
