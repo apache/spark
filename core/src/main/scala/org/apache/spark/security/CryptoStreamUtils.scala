@@ -191,7 +191,7 @@ private[spark] object CryptoStreamUtils extends Logging {
 
     protected def safeCall[T](fn: => T): T = {
       if (closed) {
-        throw SparkCoreErrors.streamClosed()
+        throw SparkCoreErrors.streamClosed("Cipher")
       }
       try {
         fn

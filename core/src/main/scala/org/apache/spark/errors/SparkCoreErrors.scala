@@ -331,7 +331,8 @@ private[spark] object SparkCoreErrors {
       messageParameters = Array(hostType), cause = null)
   }
 
-  def streamClosed(): Throwable = {
-    new SparkException("Cipher stream is closed.")
+  def streamClosed(streamType: String): Throwable = {
+    new SparkException(errorClass = "STREAM_CLOSED",
+      messageParameters = Array(streamType), cause = null)
   }
 }

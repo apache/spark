@@ -18,11 +18,14 @@ package org.apache.spark.security
 
 import java.io.{Closeable, InputStream, OutputStream}
 import java.net._
+
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
+
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, when}
+
 
 class SocketAuthHelperSuite extends SparkFunSuite {
 

@@ -346,6 +346,11 @@
     ],
     "sqlState" : "22023"
   },
+  "STREAM_CLOSED" : {
+    "message" : [
+      "<streamType> stream is closed."
+    ]
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
