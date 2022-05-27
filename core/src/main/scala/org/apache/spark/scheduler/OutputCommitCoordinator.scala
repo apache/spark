@@ -63,7 +63,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
 
   // Class used to identify a committer 's status when this committer is allowed to commit task.
   // Status is false means this committer is allowed to commit task, status is true means this
-  // committer have sent CommitOutputSuccess message to OutputCommitCoordinator and return true.
+  // committer have sent CommitOutputSuccess message to OutputCommitCoordinator.
   private case class CommitStatus(taskIdent: TaskIdentifier, status: Boolean)
 
   private case class StageState(numPartitions: Int) {
