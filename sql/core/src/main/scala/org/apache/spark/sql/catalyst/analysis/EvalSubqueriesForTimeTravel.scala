@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.RELATION_TIME_TRAVEL
 import org.apache.spark.sql.execution.{QueryExecution, ScalarSubquery => ScalarSubqueryExec, SubqueryExec}
 
-class EvalSubquerisForTimeTravel extends Rule[LogicalPlan] {
+class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(RELATION_TIME_TRAVEL)) {
     case r @ RelationTimeTravel(_, Some(ts), _)
