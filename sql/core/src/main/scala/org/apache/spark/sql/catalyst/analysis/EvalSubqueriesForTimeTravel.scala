@@ -31,10 +31,10 @@ class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
         if ts.resolved && SubqueryExpression.hasSubquery(ts) =>
       val subqueryEvaluated = ts.transform {
         case s: ScalarSubquery =>
-          if (s.isCorrelated) {
-            throw new IllegalStateException(
-              "Correlated subquery should not appear in `EvalSubquerisForTimeTravel`.")
-          }
+          // `RelationTimeTravel` is a leaf node. Subqueries in it cannot resolve any
+          // outer references and should not be correlated.
+          assert(!s.isCorrelated,
+            "Correlated subquery should not appear in `EvalSubquerisForTimeTravel`.")
           SimpleAnalyzer.checkSubqueryExpression(r, s)
           val executedPlan = QueryExecution.prepareExecutedPlan(SparkSession.active, s.plan)
           val physicalSubquery = ScalarSubqueryExec(
