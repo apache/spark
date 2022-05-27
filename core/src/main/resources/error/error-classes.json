@@ -11,8 +11,8 @@
     ],
     "sqlState" : "22003"
   },
-  "AUTHENTICATION_FAILED": {
-    "message": [
+  "AUTHENTICATION_FAILED" : {
+    "message" : [
       "Failed to authenticate <host>."
     ]
   },
