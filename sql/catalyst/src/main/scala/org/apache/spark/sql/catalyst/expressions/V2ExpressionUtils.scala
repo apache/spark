@@ -27,7 +27,6 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.expressions.{BucketTransform, Expression => V2Expression, FieldReference, IdentityTransform, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
  * A utility class that converts public connector expressions into Catalyst expressions.
@@ -54,19 +53,19 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
    * Converts the array of input V2 [[V2SortOrder]] into their counterparts in catalyst.
    */
   def toCatalystOrdering(ordering: Array[V2SortOrder], query: LogicalPlan): Seq[SortOrder] = {
-    sequenceToOption(ordering.map(toCatalyst(_, query))).asInstanceOf[Option[Seq[SortOrder]]]
-      .getOrElse(Seq.empty)
+    ordering.map(toCatalyst(_, query).get.asInstanceOf[SortOrder])
   }
 
   def toCatalyst(
       expr: V2Expression,
       query: LogicalPlan,
+      strict: Boolean = true,
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = {
     expr match {
       case t: Transform =>
-        toCatalystTransform(t, query, funCatalogOpt)
+        toCatalystTransform(t, query, strict, funCatalogOpt)
       case SortValue(child, direction, nullOrdering) =>
-        toCatalyst(child, query, funCatalogOpt).map { catalystChild =>
+        toCatalyst(child, query, strict, funCatalogOpt).map { catalystChild =>
           SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
         }
       case ref: FieldReference =>
@@ -79,6 +78,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   def toCatalystTransform(
       trans: Transform,
       query: LogicalPlan,
+      strict: Boolean = true,
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
     case IdentityTransform(ref) =>
       Some(resolveRef[NamedExpression](ref, query))
@@ -92,6 +92,10 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         loadV2Function(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs).map { bound =>
           TransformExpression(bound, resolvedRefs, Some(numBuckets))
         }
+      } match {
+        case None if strict =>
+          throw new AnalysisException(s"Transform $trans is not currently supported")
+        case expr => expr
       }
     case NamedTransform(name, refs)
         if refs.length == 1 && refs.forall(_.isInstanceOf[NamedReference]) =>
@@ -102,6 +106,10 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         loadV2Function(catalog, name, resolvedRefs).map { bound =>
           TransformExpression(bound, resolvedRefs)
         }
+      } match {
+        case None if strict =>
+          throw new AnalysisException(s"Transform $trans is not currently supported")
+        case expr => expr
       }
     case _ =>
       throw new AnalysisException(s"Transform $trans is not currently supported")
