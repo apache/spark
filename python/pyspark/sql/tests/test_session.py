@@ -81,6 +81,8 @@ class SparkSessionTests3(unittest.TestCase):
             activeSession = SparkSession.getActiveSession()
             df = activeSession.createDataFrame([(1, "Alice")], ["age", "name"])
             self.assertEqual(df.collect(), [Row(age=1, name="Alice")])
+            df = activeSession.createDataFrame(activeSession._sc.parallelize([[], []]))
+            self.assertEqual(df.collect(), [Row(), Row()])
         finally:
             spark.stop()
 
