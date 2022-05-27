@@ -35,7 +35,7 @@ private case class AskPermissionToCommitOutput(
     stageAttempt: Int,
     partition: Int,
     attemptNumber: Int,
-    taskAttemptOutputs: Seq[Path])
+    taskAttemptCommitPaths: Seq[Path])
 
 /**
  * Authority that decides whether tasks can commit output to HDFS. Uses a "first committer wins"
@@ -61,7 +61,9 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   // concurrently in two different attempts of the same stage.
   private case class TaskIdentifier(stageAttempt: Int, taskAttempt: Int)
 
-  private case class TaskAttemptInfo(taskIdentifier: TaskIdentifier, taskAttemptOutputs: Seq[Path])
+  private case class TaskAttemptInfo(
+    taskIdentifier: TaskIdentifier,
+    taskAttemptCommitPaths: Seq[Path])
 
   private case class StageState(numPartitions: Int) {
     val authorizedCommitters = Array.fill[TaskAttemptInfo](numPartitions)(null)
@@ -98,7 +100,6 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
    * @param partition the partition number
    * @param attemptNumber how many times this task has been attempted
    *                      (see [[TaskContext.attemptNumber()]])
-   * @param taskCommitOutputs Output files or path of current task attempt.
    * @return true if this task is authorized to commit, false otherwise
    */
   def canCommit(
@@ -106,9 +107,9 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       stageAttempt: Int,
       partition: Int,
       attemptNumber: Int,
-      taskCommitOutputs: Seq[Path] = Seq.empty): Boolean = {
+      taskCommitPaths: Seq[Path] = Seq.empty): Boolean = {
     val msg = AskPermissionToCommitOutput(stage, stageAttempt, partition,
-      attemptNumber, taskCommitOutputs)
+      attemptNumber, taskCommitPaths)
     coordinatorRef match {
       case Some(endpointRef) =>
         ThreadUtils.awaitResult(endpointRef.ask[Boolean](msg),
@@ -169,9 +170,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
         if (taskAttemptInfo != null && taskAttemptInfo.taskIdentifier == taskId) {
           logDebug(s"Authorized committer (attemptNumber=$attemptNumber, stage=$stage, " +
           s"partition=$partition) failed; clearing lock and clean ommitted files.")
-          // When task failed, task may remain data under output paths of this task attempt
-          // if this task commitTask success, Spark should clean this remained dirty data.
-          taskAttemptInfo.taskAttemptOutputs.foreach { path =>
+          taskAttemptInfo.taskAttemptCommitPaths.foreach { path =>
             val fs = path.getFileSystem(hadoopConf)
             if (fs.exists(path)) {
               if (!fs.delete(path, true)) {
@@ -198,7 +197,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       stageAttempt: Int,
       partition: Int,
       attemptNumber: Int,
-      taskAttemptOutputs: Seq[Path]): Boolean = synchronized {
+      taskAttemptCommitPaths: Seq[Path]): Boolean = synchronized {
     stageStates.get(stage) match {
       case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
         logInfo(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
@@ -210,7 +209,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
           logDebug(s"Commit allowed for stage=$stage.$stageAttempt, partition=$partition, " +
             s"task attempt $attemptNumber")
           state.authorizedCommitters(partition) =
-            TaskAttemptInfo(TaskIdentifier(stageAttempt, attemptNumber), taskAttemptOutputs)
+            TaskAttemptInfo(TaskIdentifier(stageAttempt, attemptNumber), taskAttemptCommitPaths)
           true
         } else {
           logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
@@ -251,10 +250,10 @@ private[spark] object OutputCommitCoordinator {
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case AskPermissionToCommitOutput(
-      stage, stageAttempt, partition, attemptNumber, taskAttemptOutputs) =>
+      stage, stageAttempt, partition, attemptNumber, taskAttemptCommitPaths) =>
         context.reply(
           outputCommitCoordinator.handleAskPermissionToCommit(stage, stageAttempt, partition,
-            attemptNumber, taskAttemptOutputs))
+            attemptNumber, taskAttemptCommitPaths))
     }
   }
 }
