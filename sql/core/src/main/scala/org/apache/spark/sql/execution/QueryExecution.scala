@@ -180,7 +180,7 @@ class QueryExecution(
       Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
   }
 
-  // Catches asserts and illegal state exceptions and converts them to an internal errors.
+  // Catches asserts and illegal state exceptions, and converts them to internal errors.
   private def withInternalError[T](msg: String)(block: => T): T = {
     try {
       block
