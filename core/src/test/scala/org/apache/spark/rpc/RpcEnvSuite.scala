@@ -171,8 +171,6 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val conf = new SparkConf()
     val shortProp = "spark.rpc.short.timeout"
-    conf.set(Network.RPC_RETRY_WAIT, 0L)
-    conf.set(Network.RPC_NUM_RETRIES, 1)
     val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-timeout")
@@ -203,8 +201,6 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val conf = new SparkConf()
     val shortProp = "spark.rpc.short.timeout"
-    conf.set(Network.RPC_RETRY_WAIT, 0L)
-    conf.set(Network.RPC_NUM_RETRIES, 1)
     val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-abort")

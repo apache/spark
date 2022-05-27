@@ -592,6 +592,16 @@ class StreamingTests(ReusedSQLTestCase):
             if q:
                 q.stop()
 
+    def test_streaming_foreachBatch_graceful_stop(self):
+        # SPARK-39218: Make foreachBatch streaming query stop gracefully
+        def func(batch_df, _):
+            batch_df.sparkSession._jvm.java.lang.Thread.sleep(10000)
+
+        q = self.spark.readStream.format("rate").load().writeStream.foreachBatch(func).start()
+        time.sleep(3)  # 'rowsPerSecond' defaults to 1. Waits 3 secs out for the input.
+        q.stop()
+        self.assertIsNone(q.exception(), "No exception has to be propagated.")
+
     def test_streaming_read_from_table(self):
         with self.table("input_table", "this_query"):
             self.spark.sql("CREATE TABLE input_table (value string) USING parquet")
