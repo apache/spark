@@ -111,6 +111,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     val msg = AskPermissionToCommitOutput(stage, stageAttempt, partition, attemptNumber)
     coordinatorRef match {
       case Some(endpointRef) =>
+        endpointRef.send()
         ThreadUtils.awaitResult(endpointRef.ask[Boolean](msg),
           RpcUtils.askRpcTimeout(conf).duration)
       case None =>
@@ -140,8 +141,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     val msg = CommitOutputSuccess(stage, stageAttempt, partition, attemptNumber)
     coordinatorRef match {
       case Some(endpointRef) =>
-        ThreadUtils.awaitResult(endpointRef.ask[Boolean](msg),
-          RpcUtils.askRpcTimeout(conf).duration)
+        endpointRef.send(msg)
       case None =>
         logError(
           "commitSuccess called after coordinator was stopped (is SparkEnv shutdown in progress)?")
@@ -194,7 +194,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
         val taskId = TaskIdentifier(stageAttempt, attemptNumber)
         stageState.failures.getOrElseUpdate(partition, mutable.Set()) += taskId
         val commitStatus = stageState.authorizedCommitters(partition)
-        if (commitStatus.taskIdent == taskId) {
+        if (commitStatus != null && commitStatus.taskIdent == taskId) {
           if (commitStatus.status) {
             throw new SparkException(s"Authorized committer (attemptNumber=$attemptNumber, " +
               s"stage=$stage, partition=$partition) failed; but task commit success, " +
