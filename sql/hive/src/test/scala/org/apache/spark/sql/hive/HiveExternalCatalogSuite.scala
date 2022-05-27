@@ -206,9 +206,13 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     val tableLocation2 = CatalogUtils.stringToURI("viewfs://clusterB/user/hive/warehouse/t2")
     val dbLocation = CatalogUtils.stringToURI("viewfs://clusterA/user/hive/warehouse/")
 
-    assert(HiveExternalCatalog.toAbsoluteURI(tableLocation1, dbLocation)
+    assert(HiveExternalCatalog.toAbsoluteURI(tableLocation1, Some(dbLocation))
       .equals(CatalogUtils.stringToURI("viewfs://clusterA/user/hive/warehouse/t1")))
-    assert(HiveExternalCatalog.toAbsoluteURI(tableLocation2, dbLocation)
+
+    assert(HiveExternalCatalog.toAbsoluteURI(tableLocation1, None)
+      .equals(tableLocation1))
+
+    assert(HiveExternalCatalog.toAbsoluteURI(tableLocation2, Some(dbLocation))
       .equals(tableLocation2))
   }
 }

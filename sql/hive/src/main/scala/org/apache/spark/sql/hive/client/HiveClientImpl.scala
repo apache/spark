@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.client
 import java.io.PrintStream
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.InvocationTargetException
+import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
@@ -518,14 +519,14 @@ private[hive] class HiveClientImpl(
       createTime = h.getTTable.getCreateTime.toLong * 1000,
       lastAccessTime = h.getLastAccessTime.toLong * 1000,
       storage = CatalogStorageFormat(
-        locationUri = shim.getDataLocation(h).map { location =>
-          val tableUri = CatalogUtils.stringToURI(location)
-          if (!tableUri.isAbsolute) {
-            val dbUri = CatalogUtils.stringToURI(client.getDatabase(h.getDbName).getLocationUri)
-            HiveExternalCatalog.toAbsoluteURI(tableUri, dbUri)
+        locationUri = shim.getDataLocation(h).map { loc =>
+          val tableUri = CatalogUtils.stringToURI(loc)
+          val parentUri = if (tableUri.isAbsolute) {
+            None
           } else {
-            tableUri
+            Some(CatalogUtils.stringToURI(client.getDatabase(h.getDbName).getLocationUri))
           }
+          HiveExternalCatalog.toAbsoluteURI(tableUri, parentUri)
         },
         // To avoid ClassNotFound exception, we try our best to not get the format class, but get
         // the class name directly. However, for non-native tables, there is no interface to get
@@ -739,7 +740,7 @@ private[hive] class HiveClientImpl(
       spec: TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table, Some(userName))
     val hivePartition = shim.getPartition(client, hiveTable, spec.asJava, false)
-    Option(hivePartition).map(fromHivePartition(_, table))
+    Option(hivePartition).map(fromHivePartition(_, table.storage.locationUri))
   }
 
   override def getPartitions(
@@ -761,8 +762,13 @@ private[hive] class HiveClientImpl(
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
         s
     }
+    val parentUri = if (hiveTable.getDataLocation.toUri.isAbsolute) {
+      None
+    } else {
+      convertHiveTableToCatalogTable(hiveTable).storage.locationUri
+    }
     val parts = shim.getPartitions(client, hiveTable, partSpec.asJava)
-      .map(fromHivePartition(_, convertHiveTableToCatalogTable(hiveTable)))
+      .map(fromHivePartition(_, parentUri))
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts.toSeq
   }
@@ -772,7 +778,7 @@ private[hive] class HiveClientImpl(
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table, Some(userName))
     val parts = shim.getPartitionsByFilter(client, hiveTable, predicates, table)
-      .map(fromHivePartition(_, table))
+      .map(fromHivePartition(_, table.storage.locationUri))
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
   }
@@ -1153,7 +1159,7 @@ private[hive] object HiveClientImpl extends Logging {
   /**
    * Build the native partition metadata from Hive's Partition.
    */
-  def fromHivePartition(hp: HivePartition, table: CatalogTable): CatalogTablePartition = {
+  def fromHivePartition(hp: HivePartition, parentUri: Option[URI]): CatalogTablePartition = {
     val apiPartition = hp.getTPartition
     val properties: Map[String, String] = if (hp.getParameters != null) {
       hp.getParameters.asScala.toMap
@@ -1164,7 +1170,7 @@ private[hive] object HiveClientImpl extends Logging {
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
         locationUri = Option(HiveExternalCatalog.toAbsoluteURI(
-          CatalogUtils.stringToURI(apiPartition.getSd.getLocation), table.location)),
+          CatalogUtils.stringToURI(apiPartition.getSd.getLocation), parentUri)),
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
