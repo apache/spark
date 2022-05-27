@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.{Instant, LocalDateTime}
 
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.expressions._
@@ -90,7 +90,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
         subQuery.transformAllExpressionsWithPruning(transformCondition) {
           case cd: CurrentDate =>
             Literal.create(
-              localDateToDays(LocalDate.ofInstant(instant, cd.zoneId)).asInstanceOf[Int], DateType)
+              localDateToDays(instant.atZone(cd.zoneId).toLocalDate).asInstanceOf[Int], DateType)
           case CurrentTimestamp() | Now() => currentTime
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>
