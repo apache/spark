@@ -113,6 +113,24 @@ object IntegralAverage extends UnboundFunction {
       |  iavg(bigint) -> bigint""".stripMargin
 }
 
+case class StrLen(impl: BoundFunction) extends UnboundFunction {
+  override def description(): String =
+    """strlen: returns the length of the input string
+      |  strlen(string) -> int""".stripMargin
+  override def name(): String = "strlen"
+
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.fields.length != 1) {
+      throw new UnsupportedOperationException("Expect exactly one argument");
+    }
+    inputType.fields(0).dataType match {
+      case StringType => impl
+      case _ =>
+        throw new UnsupportedOperationException("Expect StringType")
+    }
+  }
+}
+
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 
@@ -529,24 +547,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       addFunction(Identifier.of(Array("ns"), "rand_add"),
         new JavaRandomAdd(new JavaRandomAddDefault))
       checkDeterministic(sql("SELECT testcat.ns.add(10, testcat.ns.rand_add(42))"))
-    }
-  }
-
-  private case class StrLen(impl: BoundFunction) extends UnboundFunction {
-    override def description(): String =
-      """strlen: returns the length of the input string
-        |  strlen(string) -> int""".stripMargin
-    override def name(): String = "strlen"
-
-    override def bind(inputType: StructType): BoundFunction = {
-      if (inputType.fields.length != 1) {
-        throw new UnsupportedOperationException("Expect exactly one argument");
-      }
-      inputType.fields(0).dataType match {
-        case StringType => impl
-        case _ =>
-          throw new UnsupportedOperationException("Expect StringType")
-      }
     }
   }
 

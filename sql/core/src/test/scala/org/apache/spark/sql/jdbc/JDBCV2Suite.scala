@@ -25,12 +25,14 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Q
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
-import org.apache.spark.sql.connector.IntegralAverage
+import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, avg, ceil, coalesce, count, count_distinct, exp, floor, lit, log => ln, not, pow, sqrt, sum, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.util.Utils
 
 class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHelper {
@@ -39,6 +41,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   var conn: java.sql.Connection = null
+
+  case object CharLength extends ScalarFunction[Int] {
+    override def inputTypes(): Array[DataType] = Array(StringType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "char_length"
+
+    override def produceResult(input: InternalRow): Int = {
+      val s = input.getString(0)
+      s.length
+    }
+  }
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
@@ -109,6 +122,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "(1, 'bottle', 99999999999999999999.123)").executeUpdate()
     }
     H2Dialect.registerFunction("my_avg", IntegralAverage)
+    H2Dialect.registerFunction("my_strlen", StrLen(CharLength))
   }
 
   override def afterAll(): Unit = {
@@ -919,12 +933,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with filter push-down with UDF") {
-    val df1 = sql("SELECT * FROM h2.test.people where h2.test.h2_strlen(name) > 2")
+    val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 2")
     checkFiltersRemoved(df1)
     checkPushedInfo(df1, "PushedFilters: [CHAR_LENGTH(NAME) > 2],")
     checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
 
-    val df2 = sql("SELECT * FROM h2.test.people where h2.test.h2_strlen(name) > 4")
+    val df2 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 4")
     checkFiltersRemoved(df2)
     checkPushedInfo(df2, "PushedFilters: [CHAR_LENGTH(NAME) > 4],")
     checkAnswer(df2, Seq())
@@ -934,7 +948,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         """
           |SELECT *
           |FROM h2.test.people
-          |WHERE h2.test.h2_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+          |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
       """.stripMargin)
       checkFiltersRemoved(df3)
       checkPushedInfo(df3,
@@ -945,7 +959,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         """
           |SELECT *
           |FROM h2.test.people
-          |WHERE h2.test.h2_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 3
+          |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 3
       """.stripMargin)
       checkFiltersRemoved(df4)
       checkPushedInfo(df4,
@@ -1878,7 +1892,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("register dialect specific functions") {
     val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
-    checkAggregateRemoved(df, false)
+    checkAggregateRemoved(df)
     checkAnswer(df, Row(1) :: Nil)
     val e1 = intercept[AnalysisException] {
       checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
@@ -1891,13 +1905,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with aggregate push-down: complete push-down UDAF") {
-    val df1 = sql("SELECT h2.test.h2_avg(id) FROM h2.test.people")
+    val df1 = sql("SELECT h2.my_avg(id) FROM h2.test.people")
     checkAggregateRemoved(df1)
     checkPushedInfo(df1,
       "PushedAggregates: [IAVG(ID)], PushedFilters: [], PushedGroupByExpressions: []")
     checkAnswer(df1, Seq(Row(1)))
 
-    val df2 = sql("SELECT name, h2.test.h2_avg(id) FROM h2.test.people group by name")
+    val df2 = sql("SELECT name, h2.my_avg(id) FROM h2.test.people group by name")
     checkAggregateRemoved(df2)
     checkPushedInfo(df2,
       "PushedAggregates: [IAVG(ID)], PushedFilters: [], PushedGroupByExpressions: [NAME]")
@@ -1906,7 +1920,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       val df3 = sql(
         """
           |SELECT
-          |  h2.test.h2_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
+          |  h2.my_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
           |FROM h2.test.people
       """.stripMargin)
       checkAggregateRemoved(df3)
@@ -1919,7 +1933,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         """
           |SELECT
           |  name,
-          |  h2.test.h2_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
+          |  h2.my_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
           |FROM h2.test.people
           |GROUP BY name
       """.stripMargin)
