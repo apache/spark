@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros, localDateToDays}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
@@ -79,9 +80,13 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val currentTime = Literal.create(currentTimestamp, TimestampType)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
 
-    plan.transformDownWithSubqueries {
+    def transformCondition(treePatternbits: TreePatternBits): Boolean = {
+      treePatternbits.containsPattern(CURRENT_LIKE)
+    }
+
+    plan.transformDownWithSubqueries(transformCondition) {
       case subQuery =>
-        subQuery.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+        subQuery.transformAllExpressionsWithPruning(transformCondition) {
           case cd: CurrentDate =>
             Literal.create(
               localDateToDays(LocalDate.ofInstant(instant, cd.zoneId)).asInstanceOf[Int], DateType)

@@ -122,7 +122,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
     val differentTimestamps = Seq(
       Alias(CurrentTimestamp(), "currentTimestamp")(),
       Alias(Now(), "now")(),
-      Alias(LocalTimestamp(Some("PLT")), "localTimestampWithTimezone")(),
+      Alias(LocalTimestamp(Some("PLT")), "localTimestampWithTimezone")()
     )
     val input = Project(differentTimestamps, LocalRelation())
 
@@ -137,7 +137,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
 
   private def literals[T](plan: LogicalPlan): Seq[T] = {
     val literals = new scala.collection.mutable.ArrayBuffer[T]
-    plan.transformDownWithSubqueries { case subQuery =>
+    plan.transformWithSubqueries { case subQuery =>
       subQuery.transformAllExpressions { case expression: Literal =>
         literals += expression.value.asInstanceOf[T]
         expression
