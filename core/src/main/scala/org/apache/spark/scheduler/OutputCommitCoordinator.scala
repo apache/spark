@@ -144,8 +144,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
           RpcUtils.askRpcTimeout(conf).duration)
       case None =>
         logError(
-          "canCommit called after coordinator was stopped (is SparkEnv shutdown in progress)?")
-        false
+          "commitSuccess called after coordinator was stopped (is SparkEnv shutdown in progress)?")
     }
   }
 
@@ -199,7 +198,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
           if (commitStatus.status) {
             throw new SparkException(s"Authorized committer (attemptNumber=$attemptNumber, " +
               s"stage=$stage, partition=$partition) failed; but task commit success, " +
-              s"should failed job")
+              s"should fail the job")
           } else {
             logDebug(s"Authorized committer (attemptNumber=$attemptNumber, stage=$stage, " +
               s"partition=$partition) failed; clearing lock")
@@ -255,12 +254,15 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       attemptNumber: Int): Unit = synchronized {
     stageStates.get(stage) match {
       case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
-        throw new SparkException("")
+        throw new SparkException(s"Authorized committer (attemptNumber=$attemptNumber, " +
+          s"stage=$stage, partition=$partition) failed; but task commit success, " +
+          s"should fail the job")
       case Some(state) =>
         val existing = state.authorizedCommitters(partition)
         if (existing == null) {
-          // should not happen
-          throw new SparkException("")
+          throw new SparkException(s"Authorized committer (attemptNumber=$attemptNumber, " +
+          s"stage=$stage, partition=$partition) commit success; partition lock removed " +
+            s"before receive CommitOutputSuccess, should fail the job")
         } else {
           val taskIdent = existing.taskIdent
           if (taskIdent.stageAttempt == stageAttempt && taskIdent.taskAttempt == attemptNumber) {
@@ -270,7 +272,9 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
               CommitStatus(TaskIdentifier(stageAttempt, attemptNumber), true)
             true
           } else {
-            throw new SparkException("")
+            throw new SparkException(s"Authorized committer (attemptNumber=$attemptNumber, " +
+              s"stage=$stage, partition=$partition) commit success; but partition lock not " +
+              s"consistent, should fail the job")
           }
         }
       case None =>
