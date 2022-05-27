@@ -143,6 +143,6 @@ class ComputeCurrentTimeSuite extends PlanTest {
         expression
       }
     }
-    literals
+    literals.asInstanceOf[Seq[T]]
   }
 }
