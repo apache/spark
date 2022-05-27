@@ -80,7 +80,6 @@ object SparkHadoopMapRedUtil extends Logging {
         val taskAttemptOutputs: Seq[Path] = if (shouldCoordinateWithTaskAttemptOutputs) {
           committer match {
             case f: FileOutputCommitter =>
-              val taskAttemptPath = f.getTaskAttemptPath(mrTaskContext)
               if (f.isCommitJobRepeatable(mrTaskContext)) {
                 // If algorithmVersion is 2, Spark should get file under final output path.
                 def getTaskAttemptCommittedPaths(
@@ -102,6 +101,7 @@ object SparkHadoopMapRedUtil extends Logging {
                   }
                 }
 
+                val taskAttemptPath = f.getTaskAttemptPath(mrTaskContext)
                 val fs: FileSystem = taskAttemptPath.getFileSystem(mrTaskContext.getConfiguration)
                 try {
                   val taskAttemptDirStatus = fs.getFileStatus(taskAttemptPath)
@@ -111,8 +111,8 @@ object SparkHadoopMapRedUtil extends Logging {
                     Seq.empty
                 }
               } else {
-                // If algorithmVersion is 1, task commit final path is `taskAttemptPath`.
-                Seq(taskAttemptPath)
+                // If algorithmVersion is 1, task commit final path is `committedTaskAttemptPath`.
+                Seq(f.getCommittedTaskPath(mrTaskContext))
               }
             case _ => Seq.empty
           }
