@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -135,10 +135,12 @@ case class Average(
 
   override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
 
-  override def initQueryContext(): String = if (useAnsiAdd) {
-    origin.context
-  } else {
-    ""
+  override def initQueryContext(): Option[SQLQueryContext] = {
+    if (useAnsiAdd) {
+      Some(origin.context)
+    } else {
+      None
+    }
   }
 }
 

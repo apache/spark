@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.Cast.resolvableNullability
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -310,10 +310,12 @@ abstract class CastBase extends UnaryExpression
 
   protected def ansiEnabled: Boolean
 
-  override def initQueryContext(): String = if (ansiEnabled) {
-    origin.context
-  } else {
-    ""
+  override def initQueryContext(): Option[SQLQueryContext] = {
+    if (ansiEnabled) {
+      Some(origin.context)
+    } else {
+      None
+    }
   }
 
   // When this cast involves TimeZone, it's only resolved if the timeZoneId is set;

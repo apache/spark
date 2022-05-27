@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -164,10 +165,12 @@ case class CheckOverflow(
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
 
-  override def initQueryContext(): String = if (nullOnOverflow) {
-    ""
-  } else {
-    origin.context
+  override def initQueryContext(): Option[SQLQueryContext] = {
+    if (!nullOnOverflow) {
+      Some(origin.context)
+    } else {
+      None
+    }
   }
 }
 

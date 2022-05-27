@@ -28,6 +28,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.{AliasIdentifier, IdentifierWithDatabase}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
@@ -52,6 +53,13 @@ import org.apache.spark.util.collection.BitSet
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
+case class SQLQueryContext(
+    override val objectType: String,
+    override val objectName: String,
+    override val startIndex: Int,
+    override val stopIndex: Int,
+    override val fragment: String) extends QueryContext
+
 /**
  * Contexts of TreeNodes, including location, SQL text, object type and object name.
  * The only supported object type is "VIEW" now. In the future, we may support SQL UDF or other
@@ -66,13 +74,20 @@ case class Origin(
   objectType: Option[String] = None,
   objectName: Option[String] = None) {
 
+  lazy val context: SQLQueryContext = SQLQueryContext(
+    objectType = objectType.getOrElse(""),
+    objectName = objectName.getOrElse(""),
+    startIndex = startIndex.getOrElse(-1),
+    stopIndex = stopIndex.getOrElse(-1),
+    fragment = getFragment()
+  )
   /**
    * The SQL query context of current node. For example:
    * == SQL of VIEW v1(line 1, position 25) ==
    * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
    *                          ^^^^^^^^^^^^^^^
    */
-  lazy val context: String = {
+  def getFragment(): String = {
     // If the query context is missing or incorrect, simply return an empty string.
     if (sqlText.isEmpty || startIndex.isEmpty || stopIndex.isEmpty ||
       startIndex.get < 0 || stopIndex.get >= sqlText.get.length || startIndex.get > stopIndex.get) {
