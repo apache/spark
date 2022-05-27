@@ -2950,6 +2950,7 @@
               <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
+              <SPARK_BEELINE_OPTS>-DmyKey=yourValue</SPARK_BEELINE_OPTS>
             </environmentVariables>
             <systemProperties>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
