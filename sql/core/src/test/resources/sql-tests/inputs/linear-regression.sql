@@ -1,8 +1,3 @@
--- Test aggregate operator with codegen on and off.
---CONFIG_DIM1 spark.sql.codegen.wholeStage=true
---CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
---CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
-
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testRegression AS SELECT * FROM VALUES
 (1, 10, null), (2, 10, 11), (2, 20, 22), (2, 25, null), (2, 30, 35)
