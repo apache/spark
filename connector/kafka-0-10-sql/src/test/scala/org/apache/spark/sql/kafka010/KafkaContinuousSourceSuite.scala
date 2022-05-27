@@ -19,14 +19,23 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.clients.producer.ProducerRecord
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.datasources.v2.ContinuousScanExec
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.test.TestSparkSession
 
 // Run tests in KafkaSourceSuiteBase in continuous execution mode.
 class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest {
   import testImplicits._
+
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[10]",
+      "continuous-stream-kafka-source",
+      sparkConf.set("spark.executor.cores", "10")
+    ))
 
   test("read Kafka transactional messages: read_committed") {
     val table = "kafka_continuous_source_test"
@@ -231,6 +240,11 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
 
 class KafkaContinuousSourceStressForDontFailOnDataLossSuite
     extends KafkaSourceStressForDontFailOnDataLossSuite {
+
+  override protected def sparkConf() = {
+    super.sparkConf.set("spark.executor.cores", "20")
+  }
+
   override protected def startStream(ds: Dataset[Int]) = {
     ds.writeStream
       .format("memory")
