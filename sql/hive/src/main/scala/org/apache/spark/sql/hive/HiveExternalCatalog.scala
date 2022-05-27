@@ -1441,17 +1441,13 @@ object HiveExternalCatalog {
    *   parentUri: viewfs://clusterA/user/hive/warehouse/
    *   The result is: viewfs://clusterA/user/hive/warehouse/test_table
    */
-  private[spark] def toAbsoluteURI(uri: URI, parentUri: Option[URI]): URI = {
-    if (uri.isAbsolute) {
-      uri
+  private[spark] def toAbsoluteURI(uri: URI, absoluteUri: Option[URI]): URI = {
+    if (!uri.isAbsolute && absoluteUri.isDefined) {
+      val aUri = absoluteUri.get
+      new URI(aUri.getScheme, aUri.getUserInfo, aUri.getHost, aUri.getPort,
+        uri.getPath, uri.getQuery, uri.getFragment)
     } else {
-      parentUri match {
-        case Some(pUri) if pUri.isAbsolute =>
-          new URI(pUri.getScheme, pUri.getUserInfo, pUri.getHost, pUri.getPort,
-            uri.getPath, uri.getQuery, uri.getFragment)
-        case _ =>
-          uri
-      }
+      uri
     }
   }
 }

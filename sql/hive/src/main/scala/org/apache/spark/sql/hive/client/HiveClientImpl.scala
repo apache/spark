@@ -521,12 +521,12 @@ private[hive] class HiveClientImpl(
       storage = CatalogStorageFormat(
         locationUri = shim.getDataLocation(h).map { loc =>
           val tableUri = CatalogUtils.stringToURI(loc)
-          val parentUri = if (tableUri.isAbsolute) {
+          val absoluteUri = if (tableUri.isAbsolute) {
             None
           } else {
             Some(CatalogUtils.stringToURI(client.getDatabase(h.getDbName).getLocationUri))
           }
-          HiveExternalCatalog.toAbsoluteURI(tableUri, parentUri)
+          HiveExternalCatalog.toAbsoluteURI(tableUri, absoluteUri)
         },
         // To avoid ClassNotFound exception, we try our best to not get the format class, but get
         // the class name directly. However, for non-native tables, there is no interface to get
@@ -762,13 +762,13 @@ private[hive] class HiveClientImpl(
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
         s
     }
-    val parentUri = if (hiveTable.getDataLocation.toUri.isAbsolute) {
+    val absoluteUri = if (hiveTable.getDataLocation.toUri.isAbsolute) {
       None
     } else {
-      convertHiveTableToCatalogTable(hiveTable).storage.locationUri
+      Some(CatalogUtils.stringToURI(client.getDatabase(hiveTable.getDbName).getLocationUri))
     }
     val parts = shim.getPartitions(client, hiveTable, partSpec.asJava)
-      .map(fromHivePartition(_, parentUri))
+      .map(fromHivePartition(_, absoluteUri))
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts.toSeq
   }
@@ -1159,7 +1159,7 @@ private[hive] object HiveClientImpl extends Logging {
   /**
    * Build the native partition metadata from Hive's Partition.
    */
-  def fromHivePartition(hp: HivePartition, parentUri: Option[URI]): CatalogTablePartition = {
+  def fromHivePartition(hp: HivePartition, absoluteUri: Option[URI]): CatalogTablePartition = {
     val apiPartition = hp.getTPartition
     val properties: Map[String, String] = if (hp.getParameters != null) {
       hp.getParameters.asScala.toMap
@@ -1170,7 +1170,7 @@ private[hive] object HiveClientImpl extends Logging {
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
         locationUri = Option(HiveExternalCatalog.toAbsoluteURI(
-          CatalogUtils.stringToURI(apiPartition.getSd.getLocation), parentUri)),
+          CatalogUtils.stringToURI(apiPartition.getSd.getLocation), absoluteUri)),
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
