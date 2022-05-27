@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -179,8 +180,25 @@ class QueryExecution(
       Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
   }
 
+  // Catches asserts and illegal state exceptions and converts them to an internal errors.
+  private def withInternalError[T](msg: String, block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: SparkThrowable => throw e
+      case e @ (_: java.lang.IllegalStateException | _: java.lang.AssertionError) =>
+        throw new SparkException(
+          errorClass = "INTERNAL_ERROR",
+          messageParameters = Array(msg),
+          cause = e)
+      case e: Throwable => throw e
+    }
+  }
+
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
-    tracker.measurePhase(phase)(block)
+    tracker.measurePhase(phase) {
+      withInternalError(s"The phase $phase failed with an internal error.", block)
+    }
   }
 
   def simpleString: String = {
