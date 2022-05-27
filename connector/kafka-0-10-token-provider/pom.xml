@@ -25,7 +25,6 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-token-provider-kafka-0-10_2.12</artifactId>
   <properties>
     <sbt.project.name>token-provider-kafka-0-10</sbt.project.name>
