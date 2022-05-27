@@ -45,10 +45,10 @@ object DistributionAndOrderingUtils {
         // for OrderedDistribution and generic expressions for ClusteredDistribution
         // this allows RebalancePartitions/RepartitionByExpression to pick either
         // range or hash partitioning
-        if (!write.distributionStrictlyRequired()) {
-          RebalancePartitions(distribution, query, optNumPartitions)
-        } else {
+        if (write.distributionStrictlyRequired()) {
           RepartitionByExpression(distribution, query, optNumPartitions)
+        } else {
+          RebalancePartitions(distribution, query, optNumPartitions)
         }
       } else if (numPartitions > 0) {
         throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
