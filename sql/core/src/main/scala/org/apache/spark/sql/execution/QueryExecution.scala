@@ -181,7 +181,7 @@ class QueryExecution(
   }
 
   // Catches asserts and illegal state exceptions and converts them to an internal errors.
-  private def withInternalError[T](msg: String, block: => T): T = {
+  private def withInternalError[T](msg: String)(block: => T): T = {
     try {
       block
     } catch {
@@ -196,8 +196,9 @@ class QueryExecution(
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
-    tracker.measurePhase(phase) {
-      withInternalError(s"The phase $phase failed with an internal error.", block)
+    withInternalError(s"The phase $phase failed with an internal error. " +
+      "Please, fill in a bug report and provide the full stack trace.") {
+      tracker.measurePhase(phase)(block)
     }
   }
 
