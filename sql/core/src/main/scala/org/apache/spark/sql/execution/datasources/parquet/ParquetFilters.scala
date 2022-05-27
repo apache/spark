@@ -21,11 +21,11 @@ import java.lang.{Boolean => JBoolean, Double => JDouble, Float => JFloat, Long 
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, Period}
+import java.util.HashSet
 import java.util.Locale
 
 import scala.collection.JavaConverters.asScalaBufferConverter
 
-import org.apache.parquet.column.statistics.{Statistics => ParquetStatistics}
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.SparkFilterApi._
 import org.apache.parquet.io.api.Binary
@@ -444,94 +444,126 @@ class ParquetFilters(
   }
 
   private val makeInPredicate:
-    PartialFunction[ParquetSchemaType,
-      (Array[String], Array[Any], ParquetStatistics[_]) => FilterPredicate] = {
+    PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
+    case ParquetBooleanType =>
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[JBoolean]()
+        for (value <- values) {
+          set.add(value.asInstanceOf[JBoolean])
+        }
+        FilterApi.in(booleanColumn(n), set)
+
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(toIntValue(_).toInt).foreach(statistics.updateStats)
-        FilterApi.and(
-          FilterApi.gtEq(intColumn(n), statistics.genericGetMin().asInstanceOf[Integer]),
-          FilterApi.ltEq(intColumn(n), statistics.genericGetMax().asInstanceOf[Integer]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[Integer]()
+        for (value <- values) {
+          set.add(Option(value).map(toIntValue(_)).orNull)
+        }
+        FilterApi.in(intColumn(n), set)
 
     case ParquetLongType =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(toLongValue).foreach(statistics.updateStats(_))
-        FilterApi.and(
-          FilterApi.gtEq(longColumn(n), statistics.genericGetMin().asInstanceOf[JLong]),
-          FilterApi.ltEq(longColumn(n), statistics.genericGetMax().asInstanceOf[JLong]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[JLong]()
+        for (value <- values) {
+          set.add(toLongValue(value))
+        }
+        FilterApi.in(longColumn(n), set)
 
     case ParquetFloatType =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(_.asInstanceOf[JFloat]).foreach(statistics.updateStats(_))
-        FilterApi.and(
-          FilterApi.gtEq(floatColumn(n), statistics.genericGetMin().asInstanceOf[JFloat]),
-          FilterApi.ltEq(floatColumn(n), statistics.genericGetMax().asInstanceOf[JFloat]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[JFloat]()
+        for (value <- values) {
+          set.add(value.asInstanceOf[JFloat])
+        }
+        FilterApi.in(floatColumn(n), set)
 
     case ParquetDoubleType =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(_.asInstanceOf[JDouble]).foreach(statistics.updateStats(_))
-        FilterApi.and(
-          FilterApi.gtEq(doubleColumn(n), statistics.genericGetMin().asInstanceOf[JDouble]),
-          FilterApi.ltEq(doubleColumn(n), statistics.genericGetMax().asInstanceOf[JDouble]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[JDouble]()
+        for (value <- values) {
+          set.add(value.asInstanceOf[JDouble])
+        }
+        FilterApi.in(doubleColumn(n), set)
 
     case ParquetStringType =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(s => Binary.fromString(s.asInstanceOf[String])).foreach(statistics.updateStats)
-        FilterApi.and(
-          FilterApi.gtEq(binaryColumn(n), statistics.genericGetMin().asInstanceOf[Binary]),
-          FilterApi.ltEq(binaryColumn(n), statistics.genericGetMax().asInstanceOf[Binary]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[Binary]()
+        for (value <- values) {
+          set.add(Option(value).map(s => Binary.fromString(s.asInstanceOf[String])).orNull)
+        }
+        FilterApi.in(binaryColumn(n), set)
 
     case ParquetBinaryType =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(b => Binary.fromReusedByteArray(b.asInstanceOf[Array[Byte]]))
-          .foreach(statistics.updateStats)
-        FilterApi.and(
-          FilterApi.gtEq(binaryColumn(n), statistics.genericGetMin().asInstanceOf[Binary]),
-          FilterApi.ltEq(binaryColumn(n), statistics.genericGetMax().asInstanceOf[Binary]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[Binary]()
+        for (value <- values) {
+          set.add(Option(value)
+            .map(b => Binary.fromReusedByteArray(b.asInstanceOf[Array[Byte]])).orNull)
+        }
+        FilterApi.in(binaryColumn(n), set)
 
     case ParquetDateType if pushDownDate =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(dateToDays).map(_.asInstanceOf[Integer]).foreach(statistics.updateStats(_))
-        FilterApi.and(
-          FilterApi.gtEq(intColumn(n), statistics.genericGetMin().asInstanceOf[Integer]),
-          FilterApi.ltEq(intColumn(n), statistics.genericGetMax().asInstanceOf[Integer]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[Integer]()
+        for (value <- values) {
+          set.add(Option(value).map(date => dateToDays(date).asInstanceOf[Integer]).orNull)
+        }
+        FilterApi.in(intColumn(n), set)
 
     case ParquetTimestampMicrosType if pushDownTimestamp =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(timestampToMicros).foreach(statistics.updateStats(_))
-        FilterApi.and(
-          FilterApi.gtEq(longColumn(n), statistics.genericGetMin().asInstanceOf[JLong]),
-          FilterApi.ltEq(longColumn(n), statistics.genericGetMax().asInstanceOf[JLong]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[JLong]()
+        for (value <- values) {
+          set.add(Option(value).map(timestampToMicros).orNull)
+        }
+        FilterApi.in(longColumn(n), set)
 
     case ParquetTimestampMillisType if pushDownTimestamp =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(timestampToMillis).foreach(statistics.updateStats(_))
-        FilterApi.and(
-          FilterApi.gtEq(longColumn(n), statistics.genericGetMin().asInstanceOf[JLong]),
-          FilterApi.ltEq(longColumn(n), statistics.genericGetMax().asInstanceOf[JLong]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[JLong]()
+        for (value <- values) {
+          set.add(Option(value).map(timestampToMillis).orNull)
+        }
+        FilterApi.in(longColumn(n), set)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(_.asInstanceOf[JBigDecimal]).map(decimalToInt32).foreach(statistics.updateStats(_))
-        FilterApi.and(
-          FilterApi.gtEq(intColumn(n), statistics.genericGetMin().asInstanceOf[Integer]),
-          FilterApi.ltEq(intColumn(n), statistics.genericGetMax().asInstanceOf[Integer]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[Integer]()
+        for (value <- values) {
+          set.add(Option(value).map(d => decimalToInt32(d.asInstanceOf[JBigDecimal])).orNull)
+        }
+        FilterApi.in(intColumn(n), set)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT64, _) if pushDownDecimal =>
-      (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(_.asInstanceOf[JBigDecimal]).map(decimalToInt64).foreach(statistics.updateStats(_))
-        FilterApi.and(
-          FilterApi.gtEq(longColumn(n), statistics.genericGetMin().asInstanceOf[JLong]),
-          FilterApi.ltEq(longColumn(n), statistics.genericGetMax().asInstanceOf[JLong]))
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[JLong]()
+        for (value <- values) {
+          set.add(Option(value).map(d => decimalToInt64(d.asInstanceOf[JBigDecimal])).orNull)
+        }
+        FilterApi.in(longColumn(n), set)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, FIXED_LEN_BYTE_ARRAY, length)
-        if pushDownDecimal =>
-      (path: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length))
-          .foreach(statistics.updateStats)
-        FilterApi.and(
-          FilterApi.gtEq(binaryColumn(path), statistics.genericGetMin().asInstanceOf[Binary]),
-          FilterApi.ltEq(binaryColumn(path), statistics.genericGetMax().asInstanceOf[Binary]))
+      if pushDownDecimal =>
+      (n: Array[String], v: Any) =>
+        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+        val set = new HashSet[Binary]()
+        for (value <- values) {
+          set.add(Option(value)
+            .map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length)).orNull)
+        }
+        FilterApi.in(binaryColumn(n), set)
   }
 
   // Returns filters that can be pushed down when reading Parquet files.
@@ -729,26 +761,8 @@ class ParquetFilters(
 
       case sources.In(name, values) if pushDownInFilterThreshold > 0 && values.nonEmpty &&
           canMakeFilterOn(name, values.head) =>
-        val fieldType = nameToParquetField(name).fieldType
-        val fieldNames = nameToParquetField(name).fieldNames
-        if (values.length <= pushDownInFilterThreshold) {
-          values.distinct.flatMap { v =>
-            makeEq.lift(fieldType).map(_(fieldNames, v))
-          }.reduceLeftOption(FilterApi.or)
-        } else if (canPartialPushDownConjuncts) {
-          val primitiveType = schema.getColumnDescription(fieldNames).getPrimitiveType
-          val statistics: ParquetStatistics[_] = ParquetStatistics.createStats(primitiveType)
-          if (values.contains(null)) {
-            Seq(makeEq.lift(fieldType).map(_(fieldNames, null)),
-              makeInPredicate.lift(fieldType)
-                .map(_(fieldNames, values.filter(_ != null), statistics))
-            ).flatten.reduceLeftOption(FilterApi.or)
-          } else {
-            makeInPredicate.lift(fieldType).map(_(fieldNames, values, statistics))
-          }
-        } else {
-          None
-        }
+        makeInPredicate.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldNames, values))
 
       case sources.StringStartsWith(name, prefix)
           if pushDownStringPredicate && canMakeFilterOn(name, prefix) =>
