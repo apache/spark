@@ -75,6 +75,7 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
 object ComputeCurrentTime extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = applyWithTimestamp(plan, Instant.now())
 
+  /** Required to build custom rules for commands that do not keep sub-plans as children in Delta */
   def applyWithTimestamp(plan: LogicalPlan, instant: Instant): LogicalPlan = {
     val currentTimestamp = instantToMicros(instant)
     val currentTime = Literal.create(currentTimestamp, TimestampType)
