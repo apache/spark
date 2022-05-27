@@ -886,6 +886,10 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         |""".stripMargin
 
     assert(origin.context.fragment == expected)
+    assert(origin.context.startIndex == origin.startIndex.get)
+    assert(origin.context.stopIndex == origin.stopIndex.get)
+    assert(origin.context.objectType == origin.objectType.get)
+    assert(origin.context.objectName == origin.objectName.get)
   }
 
   test("SPARK-39046: Return an empty context string if TreeNode.origin is wrongly set") {

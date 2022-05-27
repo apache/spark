@@ -23,17 +23,26 @@ import org.apache.spark.annotation.Evolving;
  * SQL Query context of a Spark throwable exception. It helps users understand where the error
  * occurs within the SQL query.
  *
- * @since 3.2.0
+ * @since 3.4.0
  */
 @Evolving
 public interface QueryContext {
+    // The object type of the SQL query which throws the exception.
+    // For example, it can be empty, or a "VIEW", or a SQL "FUNCTION".
     String objectType();
 
+    // The object name of the SQL query which throws the exception.
+    // For example, it can be the name of a "VIEW".
     String objectName();
 
+    // The starting index in the SQL query which throws the exception.
+    // Note the index starts from 0.
     int startIndex();
 
+    // The stopping index in the SQL query which throws the exception.
+    // The index starts from 0.
     int stopIndex();
 
+    // The corresponding fragment of the SQL query which throws the exception.
     String fragment();
 }
