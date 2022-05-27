@@ -34,10 +34,10 @@ private case class AskPermissionToCommitOutput(
     attemptNumber: Int)
 
 private case class CommitOutputSuccess(
-  stage: Int,
-  stateAttempt: Int,
-  partition: Int,
-  attemptNumber: Int)
+    stage: Int,
+    stateAttempt: Int,
+    partition: Int,
+    attemptNumber: Int)
 
 /**
  * Authority that decides whether tasks can commit output to HDFS. Uses a "first committer wins"
@@ -194,10 +194,17 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
         // Mark the attempt as failed to exclude from future commit protocol
         val taskId = TaskIdentifier(stageAttempt, attemptNumber)
         stageState.failures.getOrElseUpdate(partition, mutable.Set()) += taskId
-        if (stageState.authorizedCommitters(partition) == CommitStatus(taskId, false)) {
-          logDebug(s"Authorized committer (attemptNumber=$attemptNumber, stage=$stage, " +
-            s"partition=$partition) failed; clearing lock")
-          stageState.authorizedCommitters(partition) = null
+        val commitStatus = stageState.authorizedCommitters(partition)
+        if (commitStatus.taskIdent == taskId) {
+          if (commitStatus.status) {
+            throw new SparkException(s"Authorized committer (attemptNumber=$attemptNumber, " +
+              s"stage=$stage, partition=$partition) failed; but task commit success, " +
+              s"should failed job")
+          } else {
+            logDebug(s"Authorized committer (attemptNumber=$attemptNumber, stage=$stage, " +
+              s"partition=$partition) failed; clearing lock")
+            stageState.authorizedCommitters(partition) = null
+          }
         }
     }
   }
@@ -248,34 +255,27 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       attemptNumber: Int): Unit = synchronized {
     stageStates.get(stage) match {
       case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
-        logInfo(s"Committed should revert since stage=$stage.$stageAttempt, " +
-          s"partition=$partition: task attempt $attemptNumber already marked as failed.")
-        false
+        throw new SparkException("")
       case Some(state) =>
         val existing = state.authorizedCommitters(partition)
         if (existing == null) {
-          logInfo(s"Committed output should revert since stage=$stage.$stageAttempt, " +
-            s"partition=$partition: task attempt $attemptNumber not in right status.")
-          false
+          // should not happen
+          throw new SparkException("")
         } else {
           val taskIdent = existing.taskIdent
           if (taskIdent.stageAttempt == stageAttempt && taskIdent.taskAttempt == attemptNumber) {
-            logDebug(s"Commit success for stage=$stage.$stageAttempt, partition=$partition, " +
-              s"task attempt $attemptNumber")
+            logDebug(s"Task Commit success for stage=$stage.$stageAttempt, " +
+              s"partition=$partition, task attempt $attemptNumber")
             state.authorizedCommitters(partition) =
               CommitStatus(TaskIdentifier(stageAttempt, attemptNumber), true)
             true
           } else {
-            logInfo(s"Committed should revert since another commit for " +
-              s"stage=$stage.${taskIdent.stageAttempt}, partition=$partition: " +
-              s"task attempt ${taskIdent.taskAttempt} is allowed.")
-            false
+            throw new SparkException("")
           }
         }
       case None =>
         logDebug(s"Commit update status failed for stage=$stage.$stageAttempt, " +
           s"partition=$partition: stage already marked as completed.")
-        false
     }
   }
 
@@ -304,9 +304,8 @@ private[spark] object OutputCommitCoordinator {
         stop()
 
       case CommitOutputSuccess(stage, stageAttempt, partition, attemptNumber) =>
-        context.reply(
-          outputCommitCoordinator.handleCommitOutputSuccess(stage, stageAttempt, partition,
-            attemptNumber))
+        outputCommitCoordinator.handleCommitOutputSuccess(stage, stageAttempt, partition,
+          attemptNumber)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
