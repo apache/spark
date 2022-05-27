@@ -136,7 +136,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       stage: Int,
       stageAttempt: Int,
       partition: Int,
-      attemptNumber: Int): Boolean = {
+      attemptNumber: Int): Unit = {
     val msg = CommitOutputSuccess(stage, stageAttempt, partition, attemptNumber)
     coordinatorRef match {
       case Some(endpointRef) =>
@@ -245,7 +245,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       stage: Int,
       stageAttempt: Int,
       partition: Int,
-      attemptNumber: Int): Boolean = synchronized {
+      attemptNumber: Int): Unit = synchronized {
     stageStates.get(stage) match {
       case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
         logInfo(s"Committed should revert since stage=$stage.$stageAttempt, " +
@@ -302,17 +302,17 @@ private[spark] object OutputCommitCoordinator {
       case StopCoordinator =>
         logInfo("OutputCommitCoordinator stopped!")
         stop()
+
+      case CommitOutputSuccess(stage, stageAttempt, partition, attemptNumber) =>
+        context.reply(
+          outputCommitCoordinator.handleCommitOutputSuccess(stage, stageAttempt, partition,
+            attemptNumber))
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case AskPermissionToCommitOutput(stage, stageAttempt, partition, attemptNumber) =>
         context.reply(
           outputCommitCoordinator.handleAskPermissionToCommit(stage, stageAttempt, partition,
-            attemptNumber))
-
-      case CommitOutputSuccess(stage, stageAttempt, partition, attemptNumber) =>
-        context.reply(
-          outputCommitCoordinator.handleCommitOutputSuccess(stage, stageAttempt, partition,
             attemptNumber))
     }
   }
