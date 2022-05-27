@@ -36,6 +36,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class JDBCTableCatalog extends TableCatalog
   with SupportsNamespaces with FunctionCatalog with Logging {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
   private var catalogName: String = null
   private var options: JDBCOptions = _
   private var dialect: JdbcDialect = _
@@ -307,13 +309,13 @@ class JDBCTableCatalog extends TableCatalog
     if (namespace.isEmpty) {
       functions.keys.map(Identifier.of(namespace, _)).toArray
     } else {
-      throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+      Array.empty[Identifier]
     }
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
     if (ident.namespace().nonEmpty) {
-      throw QueryCompilationErrors.namespaceInJdbcUDFUnsupportedError(ident)
+      throw QueryCompilationErrors.noSuchFunctionError(ident.asFunctionIdentifier)
     }
     functions.get(ident.name()) match {
       case Some(func) =>
@@ -321,10 +323,5 @@ class JDBCTableCatalog extends TableCatalog
       case _ =>
         throw new NoSuchFunctionException(ident)
     }
-  }
-
-  // test only
-  def clearFunctions(): Unit = {
-    functions = Map.empty[String, UnboundFunction]
   }
 }

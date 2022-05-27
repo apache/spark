@@ -96,6 +96,11 @@ private[sql] object H2Dialect extends JdbcDialect {
 
   override def functions: Seq[(String, UnboundFunction)] = functionMap.asScala.toSeq
 
+  // test only
+  def clearFunctions(): Unit = {
+    functionMap.clear()
+  }
+
   override def classifyException(message: String, e: Throwable): AnalysisException = {
     e match {
       case exception: SQLException =>

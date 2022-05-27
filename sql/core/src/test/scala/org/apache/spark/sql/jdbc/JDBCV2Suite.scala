@@ -105,9 +105,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
         "(1, 'bottle', 99999999999999999999.123)").executeUpdate()
     }
+    H2Dialect.registerFunction("my_avg", IntegralAverage)
   }
 
   override def afterAll(): Unit = {
+    H2Dialect.clearFunctions()
     Utils.deleteRecursively(tempDir)
     super.afterAll()
   }
@@ -1415,22 +1417,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("register dialect specific functions") {
-    H2Dialect.registerFunction("my_avg", IntegralAverage)
-    val catalog = spark.sessionState.catalogManager.catalog("h2").asInstanceOf[JDBCTableCatalog]
-    try {
-      val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
-      checkAggregateRemoved(df, false)
-      checkAnswer(df, Row(1) :: Nil)
-      val e1 = intercept[AnalysisException] {
-        checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
-      }
-      assert(e1.getMessage.contains("JDBC UDF test.my_avg2 cannot use namespace in JDBC catalog"))
-      val e2 = intercept[AnalysisException] {
-        checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
-      }
-      assert(e2.getMessage.contains("Undefined function: h2.my_avg2"))
-    } finally {
-      catalog.clearFunctions()
+    val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
+    checkAggregateRemoved(df, false)
+    checkAnswer(df, Row(1) :: Nil)
+    val e1 = intercept[AnalysisException] {
+      checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
     }
+    assert(e1.getMessage.contains("Undefined function: h2.test.my_avg2"))
+    val e2 = intercept[AnalysisException] {
+      checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
+    }
+    assert(e2.getMessage.contains("Undefined function: h2.my_avg2"))
   }
 }
