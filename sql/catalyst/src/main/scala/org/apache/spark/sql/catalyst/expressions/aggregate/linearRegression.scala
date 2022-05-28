@@ -256,9 +256,9 @@ case class RegrSYY(
 case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAggregate
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  private val covarPop = new CovPopulation(right, left)
+  private[sql] val covarPop = new CovPopulation(right, left)
 
-  private val varPop = new VariancePop(right)
+  private[sql] val varPop = new VariancePop(right)
 
   override def nullable: Boolean = true
 
@@ -289,5 +289,64 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrSlope =
+    copy(left = newLeft, right = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(y, x) - Returns the intercept of the univariate linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  examples = """
+     Examples:
+       > SELECT _FUNC_(y, x) FROM VALUES (1,1), (2,2), (3,3) AS tab(y, x);
+        0.0
+       > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+        NULL
+       > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+        NULL
+   """,
+  group = "agg_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+case class RegrIntercept(left: Expression, right: Expression) extends DeclarativeAggregate
+  with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  private val avgY = Average(left)
+
+  private val regrSlope = RegrSlope(left, right)
+
+  private val avgX = Average(right)
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = DoubleType
+
+  override def inputTypes: Seq[DoubleType] = Seq(DoubleType, DoubleType)
+
+  override lazy val aggBufferAttributes: Seq[AttributeReference] =
+    avgY.aggBufferAttributes ++ regrSlope.aggBufferAttributes ++ avgX.aggBufferAttributes
+
+  override lazy val initialValues: Seq[Expression] =
+    avgY.initialValues ++ regrSlope.initialValues ++ avgX.initialValues
+
+  override lazy val updateExpressions: Seq[Expression] =
+    avgY.updateExpressions ++ regrSlope.updateExpressions ++ avgX.updateExpressions
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    avgY.mergeExpressions ++ regrSlope.mergeExpressions ++ avgX.mergeExpressions
+
+  override lazy val evaluateExpression: Expression = {
+    If(regrSlope.covarPop.n === 0.0, Literal.create(null, DoubleType),
+      avgY.evaluateExpression -
+        (regrSlope.covarPop.ck / regrSlope.varPop.m2) * avgX.evaluateExpression)
+  }
+
+  override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+    avgY.inputAggBufferAttributes ++ regrSlope.inputAggBufferAttributes ++
+      avgX.inputAggBufferAttributes
+
+  override def prettyName: String = "regr_intercept"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RegrIntercept =
     copy(left = newLeft, right = newRight)
 }

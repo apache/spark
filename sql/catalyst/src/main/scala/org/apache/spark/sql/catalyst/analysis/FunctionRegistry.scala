@@ -506,6 +506,7 @@ object FunctionRegistry {
     expression[RegrSXY]("regr_sxy"),
     expression[RegrSYY]("regr_syy"),
     expression[RegrSlope]("regr_slope"),
+    expression[RegrIntercept]("regr_intercept"),
 
     // string functions
     expression[Ascii]("ascii"),
