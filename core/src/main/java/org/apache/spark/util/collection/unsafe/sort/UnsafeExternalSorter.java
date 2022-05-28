@@ -21,7 +21,6 @@ import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -302,16 +301,30 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * @return the number of bytes freed.
    */
   private long freeMemory() {
-    updatePeakMemoryUsed();
+    List<MemoryBlock> pagesToFree = clearAndGetAllocatedPagesToFree();
     long memoryFreed = 0;
-    for (MemoryBlock block : allocatedPages) {
+    for (MemoryBlock block : pagesToFree) {
       memoryFreed += block.size();
       freePage(block);
     }
+    return memoryFreed;
+  }
+
+  /**
+   * Clear the allocated pages and return the list of allocated pages to let
+   * the caller free the page. This is to prevent the deadlock by nested locks
+   * if the caller locks the UnsafeExternalSorter and call freePage which locks the
+   * TaskMemoryManager and cause nested locks.
+   *
+   * @return list of allocated pages to free
+   */
+  private List<MemoryBlock> clearAndGetAllocatedPagesToFree() {
+    updatePeakMemoryUsed();
+    List<MemoryBlock> pagesToFree = new LinkedList<>(allocatedPages);
     allocatedPages.clear();
     currentPage = null;
     pageCursor = 0;
-    return memoryFreed;
+    return pagesToFree;
   }
 
   /**
@@ -332,12 +345,27 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * Frees this sorter's in-memory data structures and cleans up its spill files.
    */
   public void cleanupResources() {
-    synchronized (this) {
-      deleteSpillFiles();
-      freeMemory();
-      if (inMemSorter != null) {
-        inMemSorter.freeMemory();
-        inMemSorter = null;
+    // To avoid deadlocks, we can't call methods that lock the TaskMemoryManager
+    // (such as various free() methods) while synchronizing on the UnsafeExternalSorter.
+    // Instead, we will manipulate UnsafeExternalSorter state inside the synchronized
+    // lock and perform the actual free() calls outside it.
+    UnsafeInMemorySorter inMemSorterToFree = null;
+    List<MemoryBlock> pagesToFree = null;
+    try {
+      synchronized (this) {
+        deleteSpillFiles();
+        pagesToFree = clearAndGetAllocatedPagesToFree();
+        if (inMemSorter != null) {
+          inMemSorterToFree = inMemSorter;
+          inMemSorter = null;
+        }
+      }
+    } finally {
+      for (MemoryBlock pageToFree : pagesToFree) {
+        freePage(pageToFree);
+      }
+      if (inMemSorterToFree != null) {
+        inMemSorterToFree.freeMemory();
       }
     }
   }
@@ -580,7 +608,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     public long spill() throws IOException {
-      List<MemoryBlock> pagesToFree = new ArrayList<>();
+      UnsafeInMemorySorter inMemSorterToFree = null;
+      List<MemoryBlock> pagesToFree = new LinkedList<>();
       try {
         synchronized (this) {
           if (inMemSorter == null) {
@@ -633,7 +662,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           assert (inMemSorter != null);
           released += inMemSorter.getMemoryUsage();
           totalSortTimeNanos += inMemSorter.getSortTimeNanos();
-          inMemSorter.freeMemory();
+          // Do not free the sorter while we are locking `SpillableIterator`,
+          // as this can cause a deadlock.
+          inMemSorterToFree = inMemSorter;
           inMemSorter = null;
           taskContext.taskMetrics().incMemoryBytesSpilled(released);
           taskContext.taskMetrics().incDiskBytesSpilled(writeMetrics.bytesWritten());
@@ -643,6 +674,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       } finally {
         for (MemoryBlock pageToFree : pagesToFree) {
           freePage(pageToFree);
+        }
+        if (inMemSorterToFree != null) {
+          inMemSorterToFree.freeMemory();
         }
       }
     }
