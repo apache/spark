@@ -53,6 +53,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils.stringToURI
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -520,12 +521,9 @@ private[hive] class HiveClientImpl(
       lastAccessTime = h.getLastAccessTime.toLong * 1000,
       storage = CatalogStorageFormat(
         locationUri = shim.getDataLocation(h).map { loc =>
-          val tableUri = CatalogUtils.stringToURI(loc)
-          val absoluteUri = if (tableUri.isAbsolute) {
-            None
-          } else {
-            Some(CatalogUtils.stringToURI(client.getDatabase(h.getDbName).getLocationUri))
-          }
+          val tableUri = stringToURI(loc)
+          val absoluteUri = Option(tableUri).filter(!_.isAbsolute)
+            .map(_ => stringToURI(client.getDatabase(h.getDbName).getLocationUri))
           HiveExternalCatalog.toAbsoluteURI(tableUri, absoluteUri)
         },
         // To avoid ClassNotFound exception, we try our best to not get the format class, but get
@@ -762,11 +760,8 @@ private[hive] class HiveClientImpl(
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
         s
     }
-    val absoluteUri = if (hiveTable.getDataLocation.toUri.isAbsolute) {
-      None
-    } else {
-      Some(CatalogUtils.stringToURI(client.getDatabase(hiveTable.getDbName).getLocationUri))
-    }
+    val absoluteUri = shim.getDataLocation(hiveTable).map(stringToURI).filter(!_.isAbsolute)
+      .map(_ => stringToURI(client.getDatabase(hiveTable.getDbName).getLocationUri))
     val parts = shim.getPartitions(client, hiveTable, partSpec.asJava)
       .map(fromHivePartition(_, absoluteUri))
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
@@ -1170,7 +1165,7 @@ private[hive] object HiveClientImpl extends Logging {
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
         locationUri = Option(HiveExternalCatalog.toAbsoluteURI(
-          CatalogUtils.stringToURI(apiPartition.getSd.getLocation), absoluteUri)),
+          stringToURI(apiPartition.getSd.getLocation), absoluteUri)),
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),

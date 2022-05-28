@@ -1435,12 +1435,10 @@ object HiveExternalCatalog {
     case _ => true
   }
 
-  /**
-   * Rewrite uri to absolute location. For example:
-   *   uri: /user/hive/warehouse/test_table
-   *   parentUri: viewfs://clusterA/user/hive/warehouse/
-   *   The result is: viewfs://clusterA/user/hive/warehouse/test_table
-   */
+  // Rewrite uri to absolute location. For example:
+  //   uri: /user/hive/warehouse/test_table
+  //   absoluteUri: viewfs://clusterA/user/hive/warehouse/
+  //   The result is: viewfs://clusterA/user/hive/warehouse/test_table
   private[spark] def toAbsoluteURI(uri: URI, absoluteUri: Option[URI]): URI = {
     if (!uri.isAbsolute && absoluteUri.isDefined) {
       val aUri = absoluteUri.get
