@@ -1,336 +1,555 @@
 {
   "AMBIGUOUS_FIELD_NAME" : {
-    "message" : [ "Field name <fieldName> is ambiguous and has <n> matching fields in the struct." ],
+    "message" : [
+      "Field name <fieldName> is ambiguous and has <n> matching fields in the struct."
+    ],
     "sqlState" : "42000"
   },
   "ARITHMETIC_OVERFLOW" : {
-    "message" : [ "<message>.<alternative> If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error." ],
+    "message" : [
+      "<message>.<alternative> If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error."
+    ],
     "sqlState" : "22003"
   },
   "CANNOT_CAST_DATATYPE" : {
-    "message" : [ "Cannot cast <sourceType> to <targetType>." ],
+    "message" : [
+      "Cannot cast <sourceType> to <targetType>."
+    ],
     "sqlState" : "22005"
   },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
-    "message" : [ "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error." ],
+    "message" : [
+      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
+    ],
     "sqlState" : "22005"
   },
   "CANNOT_PARSE_DECIMAL" : {
-    "message" : [ "Cannot parse decimal" ],
+    "message" : [
+      "Cannot parse decimal"
+    ],
     "sqlState" : "42000"
   },
   "CANNOT_UP_CAST_DATATYPE" : {
-    "message" : [ "Cannot up cast <value> from <sourceType> to <targetType>.\n<details>" ]
+    "message" : [
+      "Cannot up cast <value> from <sourceType> to <targetType>.",
+      "<details>"
+    ]
   },
   "CAST_INVALID_INPUT" : {
-    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error." ],
+    "message" : [
+      "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error."
+    ],
     "sqlState" : "42000"
   },
   "CAST_OVERFLOW" : {
-    "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error." ],
+    "message" : [
+      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error."
+    ],
     "sqlState" : "22005"
   },
   "CONCURRENT_QUERY" : {
-    "message" : [ "Another instance of this query was just started by a concurrent session." ]
+    "message" : [
+      "Another instance of this query was just started by a concurrent session."
+    ]
   },
   "DATETIME_OVERFLOW" : {
-    "message" : [ "Datetime operation overflow: <operation>." ],
+    "message" : [
+      "Datetime operation overflow: <operation>."
+    ],
     "sqlState" : "22008"
   },
   "DIVIDE_BY_ZERO" : {
-    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error." ],
+    "message" : [
+      "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error."
+    ],
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
-    "message" : [ "Found duplicate keys <keyColumn>" ],
+    "message" : [
+      "Found duplicate keys <keyColumn>"
+    ],
     "sqlState" : "23000"
   },
   "FAILED_EXECUTE_UDF" : {
-    "message" : [ "Failed to execute user defined function (<functionName>: (<signature>) => <result>)" ]
+    "message" : [
+      "Failed to execute user defined function (<functionName>: (<signature>) => <result>)"
+    ]
   },
   "FAILED_RENAME_PATH" : {
-    "message" : [ "Failed to rename <sourcePath> to <targetPath> as destination already exists" ],
+    "message" : [
+      "Failed to rename <sourcePath> to <targetPath> as destination already exists"
+    ],
     "sqlState" : "22023"
   },
   "FORBIDDEN_OPERATION" : {
-    "message" : [ "The operation <statement> is not allowed on <objectType>: <objectName>" ]
+    "message" : [
+      "The operation <statement> is not allowed on <objectType>: <objectName>"
+    ]
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
-    "message" : [ "Invalid Graphite protocol: <protocol>" ]
+    "message" : [
+      "Invalid Graphite protocol: <protocol>"
+    ]
   },
   "GRAPHITE_SINK_PROPERTY_MISSING" : {
-    "message" : [ "Graphite sink requires '<property>' property." ]
+    "message" : [
+      "Graphite sink requires '<property>' property."
+    ]
   },
   "GROUPING_COLUMN_MISMATCH" : {
-    "message" : [ "Column of grouping (<grouping>) can't be found in grouping columns <groupingColumns>" ],
+    "message" : [
+      "Column of grouping (<grouping>) can't be found in grouping columns <groupingColumns>"
+    ],
     "sqlState" : "42000"
   },
   "GROUPING_ID_COLUMN_MISMATCH" : {
-    "message" : [ "Columns of grouping_id (<groupingIdColumn>) does not match grouping columns (<groupByColumns>)" ],
+    "message" : [
+      "Columns of grouping_id (<groupingIdColumn>) does not match grouping columns (<groupByColumns>)"
+    ],
     "sqlState" : "42000"
   },
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
-    "message" : [ "Grouping sets size cannot be greater than <maxSize>" ]
+    "message" : [
+      "Grouping sets size cannot be greater than <maxSize>"
+    ]
   },
   "INCOMPARABLE_PIVOT_COLUMN" : {
-    "message" : [ "Invalid pivot column <columnName>. Pivot columns must be comparable." ],
+    "message" : [
+      "Invalid pivot column <columnName>. Pivot columns must be comparable."
+    ],
     "sqlState" : "42000"
   },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
-    "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>" ]
+    "message" : [
+      "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
+    ]
   },
   "INCONSISTENT_BEHAVIOR_CROSS_VERSION" : {
-    "message" : [ "You may get a different result due to the upgrading to" ],
+    "message" : [
+      "You may get a different result due to the upgrading to"
+    ],
     "subClass" : {
       "DATETIME_PATTERN_RECOGNITION" : {
-        "message" : [ " Spark >= 3.0: \nFail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html" ]
+        "message" : [
+          "Spark >= 3.0:",
+          "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"
+        ]
       },
       "FORMAT_DATETIME_BY_NEW_PARSER" : {
-        "message" : [ " Spark >= 3.0: \nFail to format it to <resultCandidate> in the new formatter. You can set\n<config> to \"LEGACY\" to restore the behavior before\nSpark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string.\n" ]
+        "message" : [
+          "Spark >= 3.0:",
+          "Fail to format it to <resultCandidate> in the new formatter. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
+        ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
-        "message" : [ " Spark >= 3.0: \nFail to parse <datetime> in the new parser. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string." ]
+        "message" : [
+          "Spark >= 3.0:",
+          "Fail to parse <datetime> in the new parser. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
+        ]
       },
       "READ_ANCIENT_DATETIME" : {
-        "message" : [ " Spark >= 3.0: \nreading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z\nfrom <format> files can be ambiguous, as the files may be written by\nSpark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar\nthat is different from Spark 3.0+'s Proleptic Gregorian calendar.\nSee more details in SPARK-31404. You can set the SQL config <config> or\nthe datasource option <option> to \"LEGACY\" to rebase the datetime values\nw.r.t. the calendar difference during reading. To read the datetime values\nas it is, set the SQL config <config> or the datasource option <option>\nto \"CORRECTED\".\n" ]
+        "message" : [
+          "Spark >= 3.0:",
+          "reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z",
+          "from <format> files can be ambiguous, as the files may be written by",
+          "Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar",
+          "that is different from Spark 3.0+'s Proleptic Gregorian calendar.",
+          "See more details in SPARK-31404. You can set the SQL config <config> or",
+          "the datasource option <option> to \"LEGACY\" to rebase the datetime values",
+          "w.r.t. the calendar difference during reading. To read the datetime values",
+          "as it is, set the SQL config <config> or the datasource option <option>",
+          "to \"CORRECTED\"."
+        ]
       },
       "WRITE_ANCIENT_DATETIME" : {
-        "message" : [ " Spark >= 3.0: \nwriting dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z\ninto <format> files can be dangerous, as the files may be read by Spark 2.x\nor legacy versions of Hive later, which uses a legacy hybrid calendar that\nis different from Spark 3.0+'s Proleptic Gregorian calendar. See more\ndetails in SPARK-31404. You can set <config> to \"LEGACY\" to rebase the\ndatetime values w.r.t. the calendar difference during writing, to get maximum\ninteroperability. Or set <config> to \"CORRECTED\" to write the datetime\nvalues as it is, if you are sure that the written files will only be read by\nSpark 3.0+ or other systems that use Proleptic Gregorian calendar.\n" ]
+        "message" : [
+          "Spark >= 3.0:",
+          "writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z",
+          "into <format> files can be dangerous, as the files may be read by Spark 2.x",
+          "or legacy versions of Hive later, which uses a legacy hybrid calendar that",
+          "is different from Spark 3.0+'s Proleptic Gregorian calendar. See more",
+          "details in SPARK-31404. You can set <config> to \"LEGACY\" to rebase the",
+          "datetime values w.r.t. the calendar difference during writing, to get maximum",
+          "interoperability. Or set <config> to \"CORRECTED\" to write the datetime",
+          "values as it is, if you are sure that the written files will only be read by",
+          "Spark 3.0+ or other systems that use Proleptic Gregorian calendar."
+        ]
       }
     }
   },
   "INDEX_OUT_OF_BOUNDS" : {
-    "message" : [ "Index <indexValue> must be between 0 and the length of the ArrayData." ],
+    "message" : [
+      "Index <indexValue> must be between 0 and the length of the ArrayData."
+    ],
     "sqlState" : "22023"
   },
   "INTERNAL_ERROR" : {
-    "message" : [ "<message>" ]
+    "message" : [
+      "<message>"
+    ]
   },
   "INVALID_ARRAY_INDEX" : {
-    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to \"false\" to bypass this error." ]
+    "message" : [
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to \"false\" to bypass this error."
+    ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
-    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error." ]
+    "message" : [
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error."
+    ]
   },
   "INVALID_BUCKET_FILE" : {
-    "message" : [ "Invalid bucket file: <path>" ]
+    "message" : [
+      "Invalid bucket file: <path>"
+    ]
   },
   "INVALID_FIELD_NAME" : {
-    "message" : [ "Field name <fieldName> is invalid: <path> is not a struct." ],
+    "message" : [
+      "Field name <fieldName> is invalid: <path> is not a struct."
+    ],
     "sqlState" : "42000"
   },
   "INVALID_FRACTION_OF_SECOND" : {
-    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to \"false\" to bypass this error. " ],
+    "message" : [
+      "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to \"false\" to bypass this error."
+    ],
     "sqlState" : "22023"
   },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
-    "message" : [ "Input schema <jsonSchema> can only contain STRING as a key type for a MAP." ]
+    "message" : [
+      "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
+    ]
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
-    "message" : [ "The group aggregate pandas UDF <functionName> cannot be invoked together with as other, non-pandas aggregate functions." ]
+    "message" : [
+      "The group aggregate pandas UDF <functionName> cannot be invoked together with as other, non-pandas aggregate functions."
+    ]
   },
   "INVALID_PARAMETER_VALUE" : {
-    "message" : [ "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>" ],
+    "message" : [
+      "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>"
+    ],
     "sqlState" : "22023"
   },
   "INVALID_PROPERTY_KEY" : {
-    "message" : [ "<key> is an invalid property key, please use quotes, e.g. SET <key>=<value>" ]
+    "message" : [
+      "<key> is an invalid property key, please use quotes, e.g. SET <key>=<value>"
+    ]
   },
   "INVALID_PROPERTY_VALUE" : {
-    "message" : [ "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>" ]
+    "message" : [
+      "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
+    ]
   },
   "INVALID_SQL_SYNTAX" : {
-    "message" : [ "Invalid SQL syntax: <inputString>" ],
+    "message" : [
+      "Invalid SQL syntax: <inputString>"
+    ],
     "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key <keyValue> does not exist. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error." ]
+    "message" : [
+      "Key <keyValue> does not exist. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error."
+    ]
   },
   "MISSING_COLUMN" : {
-    "message" : [ "Column '<columnName>' does not exist. Did you mean one of the following? [<proposal>]" ],
+    "message" : [
+      "Column '<columnName>' does not exist. Did you mean one of the following? [<proposal>]"
+    ],
     "sqlState" : "42000"
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
-    "message" : [ "Unknown static partition column: <columnName>" ],
+    "message" : [
+      "Unknown static partition column: <columnName>"
+    ],
     "sqlState" : "42000"
   },
   "MULTI_UDF_INTERFACE_ERROR" : {
-    "message" : [ "Not allowed to implement multiple UDF interfaces, UDF class <class>" ]
+    "message" : [
+      "Not allowed to implement multiple UDF interfaces, UDF class <class>"
+    ]
   },
   "MULTI_VALUE_SUBQUERY_ERROR" : {
-    "message" : [ "more than one row returned by a subquery used as an expression: <plan>" ]
+    "message" : [
+      "more than one row returned by a subquery used as an expression: <plan>"
+    ]
   },
   "NON_LITERAL_PIVOT_VALUES" : {
-    "message" : [ "Literal expressions required for pivot values, found <expression>." ],
+    "message" : [
+      "Literal expressions required for pivot values, found <expression>."
+    ],
     "sqlState" : "42000"
   },
   "NON_PARTITION_COLUMN" : {
-    "message" : [ "PARTITION clause cannot contain the non-partition column: <columnName>." ],
+    "message" : [
+      "PARTITION clause cannot contain the non-partition column: <columnName>."
+    ],
     "sqlState" : "42000"
   },
   "NO_HANDLER_FOR_UDAF" : {
-    "message" : [ "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead." ]
+    "message" : [
+      "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
+    ]
   },
   "NO_UDF_INTERFACE_ERROR" : {
-    "message" : [ "UDF class <class> doesn't implement any UDF interface" ]
+    "message" : [
+      "UDF class <class> doesn't implement any UDF interface"
+    ]
   },
   "PARSE_CHAR_MISSING_LENGTH" : {
-    "message" : [ "DataType <type> requires a length parameter, for example <type>(10). Please specify the length." ],
+    "message" : [
+      "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
+    ],
     "sqlState" : "42000"
   },
   "PARSE_EMPTY_STATEMENT" : {
-    "message" : [ "Syntax error, unexpected empty statement" ],
+    "message" : [
+      "Syntax error, unexpected empty statement"
+    ],
     "sqlState" : "42000"
   },
   "PARSE_SYNTAX_ERROR" : {
-    "message" : [ "Syntax error at or near <error><hint>" ],
+    "message" : [
+      "Syntax error at or near <error><hint>"
+    ],
     "sqlState" : "42000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
-    "message" : [ "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>" ],
+    "message" : [
+      "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>"
+    ],
     "sqlState" : "42000"
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
-    "message" : [ "Failed to rename as <sourcePath> was not found" ],
+    "message" : [
+      "Failed to rename as <sourcePath> was not found"
+    ],
     "sqlState" : "22023"
   },
   "RESET_PERMISSION_TO_ORIGINAL" : {
-    "message" : [ "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>" ]
+    "message" : [
+      "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>"
+    ]
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
-    "message" : [ "The second argument of '<functionName>' function needs to be an integer." ],
+    "message" : [
+      "The second argument of '<functionName>' function needs to be an integer."
+    ],
     "sqlState" : "22023"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
-    "message" : [ "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>" ]
+    "message" : [
+      "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
+    ]
   },
   "UNRECOGNIZED_SQL_TYPE" : {
-    "message" : [ "Unrecognized SQL type <typeName>" ],
+    "message" : [
+      "Unrecognized SQL type <typeName>"
+    ],
     "sqlState" : "42000"
   },
   "UNSUPPORTED_DATATYPE" : {
-    "message" : [ "Unsupported data type <typeName>" ],
+    "message" : [
+      "Unsupported data type <typeName>"
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DESERIALIZER" : {
-    "message" : [ "The deserializer is not supported: " ],
+    "message" : [
+      "The deserializer is not supported:"
+    ],
     "subClass" : {
       "DATA_TYPE_MISMATCH" : {
-        "message" : [ "need <quantifier> <desiredType> field but got <dataType>." ]
+        "message" : [
+          "need <quantifier> <desiredType> field but got <dataType>."
+        ]
       },
       "FIELD_NUMBER_MISMATCH" : {
-        "message" : [ "try to map <schema> to Tuple<ordinal>, but failed as the number of fields does not line up." ]
+        "message" : [
+          "try to map <schema> to Tuple<ordinal>, but failed as the number of fields does not line up."
+        ]
       }
     }
   },
   "UNSUPPORTED_FEATURE" : {
-    "message" : [ "The feature is not supported: " ],
+    "message" : [
+      "The feature is not supported:"
+    ],
     "subClass" : {
       "AES_MODE" : {
-        "message" : [ "AES-<mode> with the padding <padding> by the <functionName> function." ]
+        "message" : [
+          "AES-<mode> with the padding <padding> by the <functionName> function."
+        ]
       },
       "DESC_TABLE_COLUMN_PARTITION" : {
-        "message" : [ "DESC TABLE COLUMN for a specific partition." ]
+        "message" : [
+          "DESC TABLE COLUMN for a specific partition."
+        ]
       },
       "DISTRIBUTE_BY" : {
-        "message" : [ "DISTRIBUTE BY clause." ]
+        "message" : [
+          "DISTRIBUTE BY clause."
+        ]
       },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
-        "message" : [ "INSERT INTO <tableName> IF NOT EXISTS in the PARTITION spec." ]
+        "message" : [
+          "INSERT INTO <tableName> IF NOT EXISTS in the PARTITION spec."
+        ]
       },
       "JDBC_TRANSACTION" : {
-        "message" : [ "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action." ]
+        "message" : [
+          "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
+        ]
       },
       "LATERAL_JOIN_OF_TYPE" : {
-        "message" : [ "<joinType> JOIN with LATERAL correlation." ]
+        "message" : [
+          "<joinType> JOIN with LATERAL correlation."
+        ]
       },
       "LATERAL_JOIN_USING" : {
-        "message" : [ "JOIN USING with LATERAL correlation." ]
+        "message" : [
+          "JOIN USING with LATERAL correlation."
+        ]
       },
       "LATERAL_NATURAL_JOIN" : {
-        "message" : [ "NATURAL join with LATERAL correlation." ]
+        "message" : [
+          "NATURAL join with LATERAL correlation."
+        ]
       },
       "LITERAL_TYPE" : {
-        "message" : [ "Literal for '<value>' of <type>." ]
+        "message" : [
+          "Literal for '<value>' of <type>."
+        ]
       },
       "NATURAL_CROSS_JOIN" : {
-        "message" : [ "NATURAL CROSS JOIN." ]
+        "message" : [
+          "NATURAL CROSS JOIN."
+        ]
       },
       "ORC_TYPE_CAST" : {
-        "message" : [ "Unable to convert <orcType> of Orc to data type <toType>." ]
+        "message" : [
+          "Unable to convert <orcType> of Orc to data type <toType>."
+        ]
       },
       "PANDAS_UDAF_IN_PIVOT" : {
-        "message" : [ "Pandas user defined aggregate function in the PIVOT clause." ]
+        "message" : [
+          "Pandas user defined aggregate function in the PIVOT clause."
+        ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
-        "message" : [ "PIVOT clause following a GROUP BY clause." ]
+        "message" : [
+          "PIVOT clause following a GROUP BY clause."
+        ]
       },
       "PIVOT_TYPE" : {
-        "message" : [ "Pivoting by the value '<value>' of the column data type <type>." ]
+        "message" : [
+          "Pivoting by the value '<value>' of the column data type <type>."
+        ]
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
-        "message" : [ "Python UDF in the ON clause of a <joinType> JOIN." ]
+        "message" : [
+          "Python UDF in the ON clause of a <joinType> JOIN."
+        ]
       },
       "REPEATED_PIVOT" : {
-        "message" : [ "Repeated PIVOT operation." ]
+        "message" : [
+          "Repeated PIVOT operation."
+        ]
       },
       "SET_NAMESPACE_PROPERTY" : {
-        "message" : [ "<property> is a reserved namespace property, <msg>." ]
+        "message" : [
+          "<property> is a reserved namespace property, <msg>."
+        ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
-        "message" : [ "set PROPERTIES and DBPROPERTIES at the same time." ]
+        "message" : [
+          "set PROPERTIES and DBPROPERTIES at the same time."
+        ]
       },
       "SET_TABLE_PROPERTY" : {
-        "message" : [ "<property> is a reserved table property, <msg>." ]
+        "message" : [
+          "<property> is a reserved table property, <msg>."
+        ]
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
-        "message" : [ "UDF class with <n> type arguments." ]
+        "message" : [
+          "UDF class with <n> type arguments."
+        ]
       },
       "TRANSFORM_DISTINCT_ALL" : {
-        "message" : [ "TRANSFORM with the DISTINCT/ALL clause." ]
+        "message" : [
+          "TRANSFORM with the DISTINCT/ALL clause."
+        ]
       },
       "TRANSFORM_NON_HIVE" : {
-        "message" : [ "TRANSFORM with SERDE is only supported in hive mode." ]
+        "message" : [
+          "TRANSFORM with SERDE is only supported in hive mode."
+        ]
       }
     },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_GENERATOR" : {
-    "message" : [ "The generator is not supported: " ],
+    "message" : [
+      "The generator is not supported:"
+    ],
     "subClass" : {
       "MULTI_GENERATOR" : {
-        "message" : [ "only one generator allowed per <clause> clause but found <size>: <generators>" ]
+        "message" : [
+          "only one generator allowed per <clause> clause but found <size>: <generators>"
+        ]
       },
       "NESTED_IN_EXPRESSIONS" : {
-        "message" : [ "nested in expressions <expressions>" ]
+        "message" : [
+          "nested in expressions <expressions>"
+        ]
       },
       "NOT_GENERATOR" : {
-        "message" : [ "<name> is expected to be a generator. However, its class is <classCanonicalName>, which is not a generator." ]
+        "message" : [
+          "<name> is expected to be a generator. However, its class is <classCanonicalName>, which is not a generator."
+        ]
       },
       "OUTSIDE_SELECT" : {
-        "message" : [ "outside the SELECT clause, found: <plan>" ]
+        "message" : [
+          "outside the SELECT clause, found: <plan>"
+        ]
       }
     }
   },
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
-    "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
+    "message" : [
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"
+    ]
   },
   "UNSUPPORTED_SAVE_MODE" : {
-    "message" : [ "The save mode <saveMode> is not supported for: " ],
+    "message" : [
+      "The save mode <saveMode> is not supported for:"
+    ],
     "subClass" : {
       "EXISTENT_PATH" : {
-        "message" : [ "an existent path." ]
+        "message" : [
+          "an existent path."
+        ]
       },
       "NON_EXISTENT_PATH" : {
-        "message" : [ "a non-existent path." ]
+        "message" : [
+          "a non-existent path."
+        ]
       }
     }
   },
   "UNTYPED_SCALA_UDF" : {
-    "message" : [ "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:\n1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive\n3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution" ]
+    "message" : [
+      "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:",
+      "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`",
+      "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive",
+      "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution"
+    ]
   },
   "WRITING_JOB_ABORTED" : {
-    "message" : [ "Writing job aborted" ],
+    "message" : [
+      "Writing job aborted"
+    ],
     "sqlState" : "40000"
   }
 }

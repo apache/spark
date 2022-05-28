@@ -2256,9 +2256,12 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             acc += 1
             return np.sum(x)
 
-        actual = psdf.groupby("d").apply(sum_with_acc_frame).sort_index()
+        actual = psdf.groupby("d").apply(sum_with_acc_frame)
         actual.columns = ["d", "v"]
-        self.assert_eq(actual, pdf.groupby("d").apply(sum).sort_index().reset_index(drop=True))
+        self.assert_eq(
+            actual.to_pandas().sort_index(),
+            pdf.groupby("d").apply(sum).sort_index().reset_index(drop=True),
+        )
         self.assert_eq(acc.value, 2)
 
         def sum_with_acc_series(x) -> np.float64:
@@ -2267,7 +2270,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             return np.sum(x)
 
         self.assert_eq(
-            psdf.groupby("d")["v"].apply(sum_with_acc_series).sort_index(),
+            psdf.groupby("d")["v"].apply(sum_with_acc_series).to_pandas().sort_index(),
             pdf.groupby("d")["v"].apply(sum).sort_index().reset_index(drop=True),
         )
         self.assert_eq(acc.value, 4)
