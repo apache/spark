@@ -83,22 +83,22 @@ class TaskInfo(
     _accumulables = newAccumulables
   }
 
-  private[spark] var successRecords = 0L
-  private[spark] var successRunTime = 0L
+  private[scheduler] var totalRecordsRead = 0L
+  private[scheduler] var totalExecutorRunTime = 0L
 
-  private[spark] def setRecords(records: Long): Unit = {
-    successRecords = records
+  private[scheduler] def setTotalRecordsRead(totalRecordsRead: Long): Unit = {
+    this.totalRecordsRead = totalRecordsRead
   }
 
-  private[spark] def setRunTime(runTime: Long): Unit = {
-    successRunTime = runTime
+  private[scheduler] def setTotalExecutorRunTime(totalExecutorRunTime: Long): Unit = {
+    this.totalExecutorRunTime = totalExecutorRunTime
   }
 
-  @volatile private[spark] var taskProgressRate = 0.0D
+  @volatile private[scheduler] var taskProgressRate = 0.0D
 
-  private[spark] def getTaskProgressRate(): Double = taskProgressRate
+  private[scheduler] def getTaskProgressRate(): Double = taskProgressRate
 
-  private[spark] def setRunTaskProgressRate(taskProgressRate: Double): Unit = {
+  private[scheduler] def setRunTaskProgressRate(taskProgressRate: Double): Unit = {
     if (!finished) {
       this.taskProgressRate = taskProgressRate
     }

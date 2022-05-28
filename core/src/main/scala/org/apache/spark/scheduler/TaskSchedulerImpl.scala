@@ -105,7 +105,7 @@ private[spark] class TaskSchedulerImpl(
   val MIN_TIME_TO_SPECULATION = conf.get(SPECULATION_MIN_THRESHOLD)
 
   private val calculateTaskProgressRate = conf.get(SPECULATION_ENABLED) &&
-    conf.get(SPECULATION_INEFFICIENT_ENABLE)
+    conf.get(SPECULATION_EFFICIENCY_ENABLE)
 
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
@@ -885,7 +885,7 @@ private[spark] class TaskSchedulerImpl(
      }
      acc.toInfo(Some(acc.value), None)
    }
-   val taskProgressRate = if (calculateTaskProgressRate && runTime > 0) {
+   val taskProgressRate = if (calculateTaskProgressRate && runTime > 0 && records > 0) {
      records / (runTime / 1000.0)
    } else {
      0.0D

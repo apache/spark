@@ -2051,47 +2051,6 @@ package object config {
       .doubleConf
       .createWithDefault(0.75)
 
-  private[spark] val SPECULATION_INEFFICIENT_ENABLE =
-    ConfigBuilder("spark.speculation.inefficient.enabled")
-      .doc("When set to true, spark will evaluate the efficiency of task processing through the " +
-        "stage task metrics and only need to speculate the inefficient tasks.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(true)
-
-  private[spark] val SPECULATION_TASK_PROGRESS_MULTIPLIER =
-    ConfigBuilder("spark.speculation.inefficient.progress.multiplier")
-      .doc("A multiplier for evaluating the efficiency of task processing. A task will be " +
-        "evaluated an inefficient one when it's progress rate is less than the " +
-        "successTaskProgressRate * multiplier")
-      .version("3.4.0")
-      .doubleConf
-      .createWithDefault(1.0)
-
-  private[spark] val SPECULATION_TASK_DURATION_FACTOR =
-    ConfigBuilder("spark.speculation.inefficient.duration.factor")
-      .doc("When a task runtime is bigger than the factor * threshold, it should be considered " +
-        "for speculation to avoid that it is too late to launch a necessary speculation.")
-      .version("3.4.0")
-      .doubleConf
-      .createWithDefault(2.0)
-
-  private[spark] val SPECULATION_TASK_STATS_CACHE_DURATION =
-    ConfigBuilder("spark.speculation.inefficient.stats.cache.duration")
-      .doc("The interval of time between recompute success task progress to avoid scanning " +
-        "repeatedly.")
-      .version("3.4.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("1000ms")
-
-  private[spark] val SPECULATION_SINGLE_TASK_DURATION_THRESHOLD =
-    ConfigBuilder("spark.speculation.singleTask.duration.threshold")
-      .doc("Only one task in a TasksSet should speculative if it is taking longer time than the " +
-        "threshold.")
-      .version("3.4.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("10min")
-
   private[spark] val SPECULATION_MIN_THRESHOLD =
     ConfigBuilder("spark.speculation.minTaskRuntime")
       .doc("Minimum amount of time a task runs before being considered for speculation. " +
@@ -2113,6 +2072,41 @@ package object config {
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val SPECULATION_EFFICIENCY_ENABLE =
+    ConfigBuilder("spark.speculation.efficiency.enabled")
+      .doc("When set to true, spark will evaluate the efficiency of task processing through the " +
+        "stage task metrics and only need to speculate the inefficient tasks.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SPECULATION_TASK_PROGRESS_MULTIPLIER =
+    ConfigBuilder("spark.speculation.efficiency.progress.multiplier")
+      .doc("A multiplier for evaluating the efficiency of task processing. A task will be " +
+        "evaluated an inefficient one when it's progress rate is less than the average progress " +
+        "rate of successful ones multiplied by it.")
+      .version("3.4.0")
+      .doubleConf
+      .createWithDefault(0.75)
+
+  private[spark] val SPECULATION_TASK_DURATION_FACTOR =
+    ConfigBuilder("spark.speculation.efficiency.duration.factor")
+      .doc(s"When a task duration is large than the factor multiplied by the threshold which " +
+        s"may be ${SPECULATION_MULTIPLIER.key} * successfulTaskDurations.median or " +
+        s"${SPECULATION_TASK_DURATION_THRESHOLD.key}, and it should be considered for " +
+        s"speculation to avoid that it is too late to launch a necessary speculation.")
+      .version("3.4.0")
+      .doubleConf
+      .createWithDefault(2.0)
+
+  private[spark] val SPECULATION_TASK_STATS_CACHE_DURATION =
+    ConfigBuilder("spark.speculation.efficiency.stats.cache.duration")
+      .doc("The interval of time between recompute success task progress to avoid scanning " +
+        "repeatedly.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("1000ms")
 
   private[spark] val DECOMMISSION_ENABLED =
     ConfigBuilder("spark.decommission.enabled")

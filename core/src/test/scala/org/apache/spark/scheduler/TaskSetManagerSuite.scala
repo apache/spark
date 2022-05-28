@@ -2283,7 +2283,7 @@ class TaskSetManagerSuite
     val taskSet = FakeTask.createTaskSet(4)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-    val inefficientTask = manager.inefficientTaskCalculator
+    val inefficientTask = manager.inefficientTaskCalculator.get
     inefficientTask.maybeRecompute(clock.getTimeMillis())
     assert(inefficientTask.taskProgressThreshold <= 0.0)
     assert(!inefficientTask.updateSealed)
@@ -2350,7 +2350,6 @@ class TaskSetManagerSuite
       .set(config.SPECULATION_MULTIPLIER.key, "0.0")
       .set(config.SPECULATION_ENABLED, true)
       .set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
-      .set(config.SPECULATION_SINGLE_TASK_DURATION_THRESHOLD.key, "15")
     sc = new SparkContext("local", "test", conf)
     Seq(0, 15).foreach { duration =>
       sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, duration.toString)

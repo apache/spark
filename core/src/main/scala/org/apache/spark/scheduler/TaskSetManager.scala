@@ -84,8 +84,6 @@ private[spark] class TaskSetManager(
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
   private val speculationTaskProgressMultiplier = conf.get(SPECULATION_TASK_PROGRESS_MULTIPLIER)
   private val speculationTaskDurationFactor = conf.get(SPECULATION_TASK_DURATION_FACTOR)
-  private val speculationSingleTaskDurationThreshold =
-    conf.get(SPECULATION_SINGLE_TASK_DURATION_THRESHOLD)
   private val speculationTaskStatsCacheInterval = conf.get(SPECULATION_TASK_STATS_CACHE_DURATION)
 
   // Quantile of tasks at which to start speculation
@@ -119,10 +117,10 @@ private[spark] class TaskSetManager(
     conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(TimeUnit.SECONDS.toMillis)
 
   private[scheduler] val inefficientTaskCalculator =
-    if (conf.get(SPECULATION_ENABLED) && conf.get(SPECULATION_INEFFICIENT_ENABLE)) {
-      new InefficientTaskCalculator()
+    if (conf.get(SPECULATION_ENABLED) && conf.get(SPECULATION_EFFICIENCY_ENABLE)) {
+      Some(new InefficientTaskCalculator())
     } else {
-      null
+      None
     }
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
@@ -789,20 +787,20 @@ private[spark] class TaskSetManager(
   def setTaskRecordsAndRunTime(
       info: TaskInfo,
       result: DirectTaskResult[_]): Unit = {
-    var records = 0L
-    var runTime = 0L
+    var totalRecordsRead = 0L
+    var totalExecutorRunTime = 0L
     result.accumUpdates.foreach { a =>
       if (a.name == Some(shuffleRead.RECORDS_READ) ||
         a.name == Some(input.RECORDS_READ)) {
         val acc = a.asInstanceOf[LongAccumulator]
-        records += acc.value
+        totalRecordsRead += acc.value
       } else if (a.name == Some(InternalAccumulator.EXECUTOR_RUN_TIME)) {
         val acc = a.asInstanceOf[LongAccumulator]
-        runTime = acc.value
+        totalExecutorRunTime = acc.value
       }
     }
-    info.setRecords(records)
-    info.setRunTime(runTime)
+    info.setTotalRecordsRead(totalRecordsRead)
+    info.setTotalExecutorRunTime(totalExecutorRunTime)
   }
 
   /**
@@ -833,7 +831,7 @@ private[spark] class TaskSetManager(
       return
     }
 
-    if (inefficientTaskCalculator != null) {
+    if (inefficientTaskCalculator.isDefined) {
       setTaskRecordsAndRunTime(info, result)
     }
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
@@ -1121,16 +1119,16 @@ private[spark] class TaskSetManager(
         val runtimeMs = info.timeRunning(currentTimeMillis)
 
         def checkMaySpeculate(): Boolean = {
-          if (customizedThreshold || inefficientTaskCalculator == null) {
+          if (customizedThreshold || !inefficientTaskCalculator.isDefined) {
             true
           } else {
             if (recomputeInefficientTasks && numSuccessfulTasks > 0) {
-              inefficientTaskCalculator.maybeRecompute(currentTimeMillis)
+              inefficientTaskCalculator.get.maybeRecompute(currentTimeMillis)
               recomputeInefficientTasks = false
             }
             val longTimeTask = (numTasks <= 1) ||
               runtimeMs > speculationTaskDurationFactor * threshold
-            longTimeTask || inefficientTaskCalculator.maySpeculateTask(tid, runtimeMs, info)
+            longTimeTask || inefficientTaskCalculator.get.maySpeculateTask(tid, runtimeMs, info)
           }
         }
 
@@ -1190,12 +1188,8 @@ private[spark] class TaskSetManager(
     val numSuccessfulTasks = successfulTaskDurations.size()
     val timeMs = clock.getTimeMillis()
     if (numSuccessfulTasks >= minFinishedForSpeculation || numTasks == 1) {
-      val threshold = if (numSuccessfulTasks <= 0) {
-        if (isSpeculationThresholdSpecified) {
-          max(speculationTaskDurationThresOpt.get, speculationSingleTaskDurationThreshold)
-        } else {
-          speculationSingleTaskDurationThreshold
-        }
+      val threshold = if (numSuccessfulTasks <= 0 && isSpeculationThresholdSpecified) {
+        speculationTaskDurationThresOpt.get
       } else {
         val medianDuration = successfulTaskDurations.median
         speculationMultiplier * medianDuration
@@ -1303,16 +1297,16 @@ private[spark] class TaskSetManager(
     def maybeRecompute(nowMs: Long): Unit = {
       if (!updateSealed && (lastComputeMs <= 0 ||
         nowMs > lastComputeMs + speculationTaskStatsCacheInterval)) {
-        var successRecords = 0L
-        var successRunTime = 0L
+        var allTotalRecordsRead = 0L
+        var allTotalExecutorRunTime = 0L
         var numSuccessTasks = 0L
-        taskInfos.values.filter(_.status == "SUCCESS").foreach { taskInfo =>
-          successRecords += taskInfo.successRecords
-          successRunTime += taskInfo.successRunTime
+        taskInfos.values.filter(_.successful).foreach { taskInfo =>
+          allTotalRecordsRead += taskInfo.totalRecordsRead
+          allTotalExecutorRunTime += taskInfo.totalExecutorRunTime
           numSuccessTasks += 1
         }
-        val progressRate = if (successRunTime > 0) {
-          successRecords / (successRunTime / 1000.0)
+        val progressRate = if (allTotalRecordsRead > 0 && allTotalExecutorRunTime > 0) {
+          allTotalRecordsRead / (allTotalExecutorRunTime / 1000.0)
         } else {
           0.0
         }
