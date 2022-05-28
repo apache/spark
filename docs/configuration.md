@@ -2719,7 +2719,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.shuffleTracking.enabled</code></td>
   <td><code>false</code></td>
   <td>
-    Experimental. Enables shuffle file tracking for executors, which allows dynamic allocation
+    Enables shuffle file tracking for executors, which allows dynamic allocation
     without the need for an external shuffle service. This option will try to keep alive executors
     that are storing shuffle data for active jobs.
   </td>
