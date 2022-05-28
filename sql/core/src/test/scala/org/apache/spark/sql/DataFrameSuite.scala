@@ -3055,21 +3055,6 @@ class DataFrameSuite extends QueryTest
     assert(df2.isLocal)
   }
 
-  test("SPARK-35886: PromotePrecision should be subexpr replaced") {
-    withTable("tbl") {
-      sql(
-        """
-          |CREATE TABLE tbl (
-          |  c1 DECIMAL(18,6),
-          |  c2 DECIMAL(18,6),
-          |  c3 DECIMAL(18,6))
-          |USING parquet;
-          |""".stripMargin)
-      sql("INSERT INTO tbl SELECT 1, 1, 1")
-      checkAnswer(sql("SELECT sum(c1 * c3) + sum(c2 * c3) FROM tbl"), Row(2.00000000000) :: Nil)
-    }
-  }
-
   test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
     val ids = spark.range(10).repartition(5)
       .withSequenceColumn("default_index").collect().map(_.getLong(0))
