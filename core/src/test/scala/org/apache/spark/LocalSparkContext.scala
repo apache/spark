@@ -31,6 +31,8 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    // Clear default profile, just in case default profile is not cleaned in other suites.
+    ResourceProfile.clearDefaultProfile()
     InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE)
   }
 
