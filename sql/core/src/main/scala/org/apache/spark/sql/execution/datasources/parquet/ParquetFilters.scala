@@ -768,7 +768,7 @@ class ParquetFilters(
             makeEq.lift(fieldType).map(_(fieldNames, v))
           }.reduceLeftOption(FilterApi.or)
         } else {
-          makeInPredicate.lift(fieldType).map(_ (fieldNames, values))
+          makeInPredicate.lift(fieldType).map(_(fieldNames, values))
         }
 
       case sources.StringStartsWith(name, prefix)
