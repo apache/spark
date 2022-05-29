@@ -761,8 +761,15 @@ class ParquetFilters(
 
       case sources.In(name, values) if pushDownInFilterThreshold > 0 && values.nonEmpty &&
           canMakeFilterOn(name, values.head) =>
-        makeInPredicate.lift(nameToParquetField(name).fieldType)
-          .map(_(nameToParquetField(name).fieldNames, values))
+        val fieldType = nameToParquetField(name).fieldType
+        val fieldNames = nameToParquetField(name).fieldNames
+        if (values.length <= pushDownInFilterThreshold) {
+          values.distinct.flatMap { v =>
+            makeEq.lift(fieldType).map(_(fieldNames, v))
+          }.reduceLeftOption(FilterApi.or)
+        } else {
+          makeInPredicate.lift(fieldType).map(_ (fieldNames, values))
+        }
 
       case sources.StringStartsWith(name, prefix)
           if pushDownStringPredicate && canMakeFilterOn(name, prefix) =>
