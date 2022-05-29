@@ -296,14 +296,14 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns the intercept of the univariate linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
-     Examples:
-       > SELECT _FUNC_(y, x) FROM VALUES (1,1), (2,2), (3,3) AS tab(y, x);
-        0.0
-       > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
-        NULL
-       > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
-        NULL
-   """,
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1,1), (2,2), (3,3) AS tab(y, x);
+       0.0
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
+  """,
   group = "agg_funcs",
   since = "3.4.0")
 // scalastyle:on line.size.limit
