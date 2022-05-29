@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.sql.Date
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -370,5 +372,28 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-39069: Infer predicate from literal") {
+    val relation = LocalRelation($"a".long, $"b".date, $"c".date)
+    val dateLit = Literal(Date.valueOf("2022-04-05"))
+    val originalQuery = relation.where('b >= DateSub('c, Literal(2)) && 'b <= 'c && 'c === dateLit)
+      .analyze
+
+    val correctAnswer = relation
+      .where('c.isNotNull && 'b.isNotNull && 'b <= dateLit && 'b >= DateSub(dateLit, Literal(2)) &&
+        'b >= DateSub('c, Literal(2)) && 'b <= 'c && 'c === dateLit)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("SPARK-39069: Do not infer predicate from literal if it is EqualNullSafe") {
+    val originalQuery = testRelation.where('a === 2000 && 'b === 2000 && 'a <=> 'b)
+      .analyze
+
+    val correctAnswer = testRelation
+      .where('a.isNotNull && 'b.isNotNull && 'a === 2000 && 'b === 2000 && 'a <=> 'b)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 }

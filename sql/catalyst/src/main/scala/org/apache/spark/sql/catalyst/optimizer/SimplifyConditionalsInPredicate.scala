@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CaseWhen, Coalesce, EqualTo, Expression, If, Literal, Not, Or, PredicateHelper, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Coalesce, Expression, If, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AND_OR, CASE_WHEN, IF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF}
 import org.apache.spark.sql.types.BooleanType
 
 /**
@@ -41,22 +41,16 @@ import org.apache.spark.sql.types.BooleanType
  * - CASE WHEN cond THEN trueVal ELSE true END  => OR(NOT(cond), trueVal)
  * - CASE WHEN cond THEN false ELSE elseVal END => AND(NOT(cond), elseVal)
  * - CASE WHEN cond THEN true ELSE elseVal END  => OR(cond, elseVal)
- * - EqualTo(Attribute1, Literal) AND GreaterThan(Attribute2, Attribute1) =>
- *     EqualTo(Attribute1, Literal) AND GreaterThan(Attribute2, Literal)
  */
-object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] with PredicateHelper {
+object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(CASE_WHEN, IF, AND_OR), ruleId) {
-    case f @ Filter(cond, _) => f.copy(condition = transformConditional(simplifyConditional(cond)))
-    case j @ Join(_, _, _, Some(cond), _) =>
-      j.copy(condition = Some(transformConditional(simplifyConditional(cond))))
-    case rd @ ReplaceData(_, cond, _, _, _) =>
-      rd.copy(condition = transformConditional(simplifyConditional(cond)))
-    case d @ DeleteFromTable(_, cond) =>
-      d.copy(condition = transformConditional(simplifyConditional(cond)))
-    case u @ UpdateTable(_, _, Some(cond)) =>
-      u.copy(condition = Some(transformConditional(simplifyConditional(cond))))
+    _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
+    case f @ Filter(cond, _) => f.copy(condition = simplifyConditional(cond))
+    case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(simplifyConditional(cond)))
+    case rd @ ReplaceData(_, cond, _, _, _) => rd.copy(condition = simplifyConditional(cond))
+    case d @ DeleteFromTable(_, cond) => d.copy(condition = simplifyConditional(cond))
+    case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(simplifyConditional(cond)))
   }
 
   private def simplifyConditional(e: Expression): Expression = e match {
@@ -76,35 +70,11 @@ object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] with PredicateH
       And(Not(Coalesce(Seq(cond, FalseLiteral))), elseValue)
     case CaseWhen(Seq((cond, TrueLiteral)), Some(elseValue)) =>
       Or(cond, elseValue)
-    case EqualTo(l: Literal, r: Attribute) => EqualTo(r, l)
     case e if e.dataType == BooleanType => e
     case e =>
       assert(e.dataType != BooleanType,
       "Expected a Boolean type expression in SimplifyConditionalsInPredicate, " +
         s"but got the type `${e.dataType.catalogString}` in `${e.sql}`.")
       e
-  }
-
-  private def transformConditional(condition: Expression): Expression = {
-    val predicates = splitConjunctivePredicates(condition)
-
-    val equalTos = predicates.flatMap {
-      case eq @ EqualTo(_: Attribute, _: Literal) => eq :: Nil
-      case _ => Nil
-    }
-
-    if (equalTos.nonEmpty) {
-      predicates.map {
-        case e: UnaryExpression => e // Do not replace UnaryExpressions. For example: IsNotNull
-        case e: EqualTo if equalTos.exists(_.semanticEquals(e)) => e
-        case e =>
-          e.transform {
-            case a: Attribute =>
-              equalTos.find(_.left.semanticEquals(a)).map(_.right).getOrElse(a)
-          }
-      }.reduceLeft(And)
-    } else {
-      condition
-    }
   }
 }

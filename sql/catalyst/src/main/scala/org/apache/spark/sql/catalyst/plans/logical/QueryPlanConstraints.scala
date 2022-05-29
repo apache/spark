@@ -62,6 +62,7 @@ trait ConstraintHelper {
    */
   def inferAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
     var inferredConstraints = ExpressionSet()
+    var participatedInferPredicates = ExpressionSet()
     // IsNotNull should be constructed by `constructIsNotNullConstraints`.
     val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
     predicates.foreach {
@@ -69,10 +70,24 @@ trait ConstraintHelper {
         val candidateConstraints = predicates - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+        participatedInferPredicates += eq
       case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
+        participatedInferPredicates += eq
       case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
+        participatedInferPredicates += eq
+      case _ => // No inference
+    }
+
+    // Remove have participated infer predicates to avoid repeatedly infer.
+    val participateInferFromLiteral =
+      predicates.filterNot(_.isInstanceOf[EqualNullSafe]) -- participatedInferPredicates
+    participateInferFromLiteral.foreach {
+      case eq @ EqualTo(l: Attribute, r: Literal) =>
+        inferredConstraints ++= replaceConstraints(participateInferFromLiteral - eq, l, r)
+      case eq @ EqualTo(l: Literal, r: Attribute) =>
+        inferredConstraints ++= replaceConstraints(participateInferFromLiteral - eq, r, l)
       case _ => // No inference
     }
     inferredConstraints -- constraints
