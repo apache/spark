@@ -583,7 +583,10 @@ class MasterSuite extends SparkFunSuite
       rp1 -> 1,
       rp2 -> 2
     )
-    master.self.askSync[Boolean](RequestExecutors(appInfo.id, requests))
+    eventually(timeout(10.seconds)) {
+      master.self.askSync[Boolean](RequestExecutors(appInfo.id, requests))
+      assert(appInfo.executors.size === workers.map(_.launchedExecutors.size).sum)
+    }
 
     if (withMaxCores) {
       assert(appInfo.executors.size === 3)
