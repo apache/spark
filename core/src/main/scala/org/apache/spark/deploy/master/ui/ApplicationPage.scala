@@ -43,8 +43,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       return UIUtils.basicSparkPage(request, msg, "Not Found")
     }
 
-    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "Resources",
-      "State", "Logs")
+    val executorHeaders = Seq("ExecutorID", "Worker", "Resource Profile Id", "Cores", "Memory",
+      "Resources", "State", "Logs")
     val allExecutors = (app.executors.values ++ app.removedExecutors).toSet.toSeq
     // This includes executors that are either still running or have exited cleanly
     val executors = allExecutors.filter { exec =>
@@ -82,11 +82,11 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
               </span>
             </li>
             <li>
-              <strong>Executor Memory:</strong>
+              <strong>Executor Memory - Default Resource Profile:</strong>
               {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
             </li>
             <li>
-              <strong>Executor Resources:</strong>
+              <strong>Executor Resources - Default Resource Profile:</strong>
               {formatResourceRequirements(app.desc.resourceReqsPerExecutor)}
             </li>
             <li><strong>Submit Date:</strong> {UIUtils.formatDate(app.submitDate)}</li>
@@ -143,6 +143,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       <td>
         <a href={workerUrlRef}>{executor.worker.id}</a>
       </td>
+      <td>{executor.rpId}</td>
       <td>{executor.cores}</td>
       <td>{executor.memory}</td>
       <td>{formatResourcesAddresses(executor.resources)}</td>

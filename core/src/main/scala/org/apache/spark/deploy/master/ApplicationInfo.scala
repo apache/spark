@@ -193,12 +193,10 @@ private[spark] class ApplicationInfo(
   }
 
   /**
-   * Return the limit on the number of executors with default resource profile
-   * this application can have.
-   * For testing only.
+   * Return the total limit on the number of executors for all resource profiles.
    */
   private[deploy] def getExecutorLimit: Int = {
-    targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID)
+    targetNumExecutorsPerResourceProfileId.values.sum
   }
 
   def duration: Long = {
