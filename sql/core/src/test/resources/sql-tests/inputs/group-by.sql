@@ -273,3 +273,16 @@ SELECT
 FROM aggr
 GROUP BY k
 ORDER BY k;
+
+-- SPARK-39320: Add the MEDIAN() function
+SELECT
+  median(v),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr;
+SELECT
+  k,
+  median(v),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+GROUP BY k
+ORDER BY k;
