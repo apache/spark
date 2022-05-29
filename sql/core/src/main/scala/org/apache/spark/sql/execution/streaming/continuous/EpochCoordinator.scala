@@ -274,7 +274,7 @@ private[continuous] class EpochCoordinator(
     val numExecutors = session.conf.get(config.EXECUTOR_INSTANCES.key, "1").toInt
     val coresPerExecutor = session.conf.get(config.EXECUTOR_CORES.key, "1").toInt
     val cpusPerTask = session.conf.get(config.CPUS_PER_TASK.key, "1").toInt
-    val maxCores = session.conf.get(config.CORES_MAX.key).toInt
+    val maxCores = session.conf.getOption(config.CORES_MAX.key).map(_.toInt).getOrElse(Int.MaxValue)
     val totalRequestedCores = numExecutors * coresPerExecutor
     val totalAvailableCores = Math.min(totalRequestedCores, maxCores)
     val neededCores = numReaderPartitions * cpusPerTask
