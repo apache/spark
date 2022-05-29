@@ -52,6 +52,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     .add("id", IntegerType)
     .add("data", StringType)
 
+  override protected def sparkConf = {
+    super.sparkConf.set("spark.executor.cores", "2")
+  }
+
   test("ordered distribution and sort with same exprs: append") {
     checkOrderedDistributionAndSortWithSameExprs("append")
   }
