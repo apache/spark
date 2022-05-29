@@ -1572,7 +1572,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTableT {
         sql("alter table t add columns (" +
           "s boolean default true, " +
-          "t byte default cast('a' as byte), " +
+          "t byte default cast(null as byte), " +
           "u short default cast(42 as short), " +
           "v float default 0, " +
           "w double default 0, " +
