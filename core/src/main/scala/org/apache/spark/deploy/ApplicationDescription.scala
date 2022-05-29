@@ -40,7 +40,7 @@ private[spark] case class ApplicationDescription(
   def coresPerExecutor: Option[Int] = defaultProfile.getExecutorCores
   def resourceReqsPerExecutor: Seq[ResourceRequirement] =
     ResourceUtils.executorResourceRequestToRequirement(
-      getCustomExecutorResources(defaultProfile).values.toSeq)
+      getCustomExecutorResources(defaultProfile).values.toSeq.sortBy(_.resourceName))
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }
