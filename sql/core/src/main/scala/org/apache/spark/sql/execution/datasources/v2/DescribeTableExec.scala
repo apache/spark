@@ -45,17 +45,18 @@ case class DescribeTableExec(
     rows += toCatalystRow("# Detailed Table Information", "", "")
     rows += toCatalystRow("Name", table.name(), "")
 
-    CatalogV2Util.TABLE_RESERVED_PROPERTIES.foreach(propKey => {
-      if (table.properties.containsKey(propKey)) {
-        rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
+    val (reservedProperties, nonReservedProperties) =
+      table.properties.asScala.partition { case (key, value) =>
+        CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
       }
-    })
-    val properties =
-      table.properties.asScala.toList
-        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-        .sortBy(_._1).map {
-        case (key, value) => key + "=" + value
-      }.mkString("[", ",", "]")
+
+    reservedProperties.foreach { case (key, value) =>
+      rows += toCatalystRow(key.capitalize, value, "")
+    }
+
+    val properties = nonReservedProperties.toList.sortBy(_._1).map {
+      case (key, value) => key + "=" + value
+    }.mkString("[", ",", "]")
     rows += toCatalystRow("Table Properties", properties, "")
   }
 
