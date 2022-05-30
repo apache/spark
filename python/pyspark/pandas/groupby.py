@@ -753,7 +753,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             bool_to_numeric=True,
         )
 
-
     # TODO: 'axis', 'skipna', 'level' parameter should be implemented.
     def mad(self) -> FrameLike:
         """
@@ -783,35 +782,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
-
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
-        groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
-
-        agg_columns = []
-        for psser in self._agg_columns:
-            if isinstance(psser.spark.data_type, BooleanType):
-                agg_columns.append(psser.astype(int))
-            elif isinstance(psser.spark.data_type, NumericType):
-                agg_columns.append(psser)
-
-        sdf = self._psdf._internal.spark_frame.select(
-            *groupkey_scols, *[psser.spark.column for psser in agg_columns]
-        )
-
-        internal = InternalFrame(
-            spark_frame=sdf,
-            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
-            index_names=[psser._column_label for psser in self._groupkeys],
-            index_fields=[
-                psser._internal.data_fields[0].copy(name=name)
-                for psser, name in zip(self._groupkeys, groupkey_names)
-            ],
-            data_spark_columns=[
-                scol_for(sdf, psser._internal.data_spark_column_names[0]) for psser in agg_columns
-            ],
-            column_labels=[psser._column_label for psser in agg_columns],
-            data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
-            column_label_names=self._psdf._internal.column_label_names,
+        internal, agg_columns, sdf = self._prepare_reduce(
+            groupkey_names=groupkey_names,
+            accepted_spark_types=(NumericType, BooleanType),
+            bool_to_numeric=False,
         )
         psdf: DataFrame = DataFrame(internal)
 
@@ -824,15 +799,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             for agg_column in agg_columns:
                 agg_column_name = agg_column._internal.data_spark_column_names[0]
                 new_agg_column_name = "__tmp_agg_col_{}__".format(agg_column_name)
+                casted_agg_scol = F.col(agg_column_name).cast("double")
                 new_agg_scols[new_agg_column_name] = F.abs(
-                    F.col(agg_column_name) - F.avg(agg_column_name).over(window)
+                    casted_agg_scol - F.avg(casted_agg_scol).over(window)
                 )
                 new_stat_scols.append(F.avg(F.col(new_agg_column_name)).alias(agg_column_name))
 
             sdf = (
                 psdf._internal.spark_frame.withColumns(new_agg_scols)
-                    .groupby(groupkey_names)
-                    .agg(*new_stat_scols)
+                .groupby(groupkey_names)
+                .agg(*new_stat_scols)
             )
         else:
             sdf = sdf.select(*groupkey_names).distinct()
@@ -843,10 +819,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
             data_fields=None,
         )
-        psdf = DataFrame(internal)
 
-        return self._cleanup_and_return(psdf)
-
+        return self._prepare_return(DataFrame(internal))
 
     def all(self, skipna: bool = True) -> FrameLike:
         """
@@ -900,7 +874,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5  False
         """
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
-        internal, sdf = self._prepare_reduce(groupkey_names)
+        internal, _, sdf = self._prepare_reduce(groupkey_names)
         psdf: DataFrame = DataFrame(internal)
 
         def sfun(scol: Column, scol_type: DataType) -> Column:
@@ -3117,7 +3091,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                          `accepted_spark_types`.
         """
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
-        internal, sdf = self._prepare_reduce(groupkey_names, accepted_spark_types, bool_to_numeric)
+        internal, _, sdf = self._prepare_reduce(
+            groupkey_names, accepted_spark_types, bool_to_numeric
+        )
         psdf: DataFrame = DataFrame(internal)
 
         if len(psdf._internal.column_labels) > 0:
@@ -3167,7 +3143,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_names: List,
         accepted_spark_types: Optional[Tuple[Type[DataType], ...]] = None,
         bool_to_numeric: bool = False,
-    ) -> Tuple[InternalFrame, SparkDataFrame]:
+    ) -> Tuple[InternalFrame, List[Series], SparkDataFrame]:
         groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
         agg_columns = []
         for psser in self._agg_columns:
@@ -3195,7 +3171,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
             column_label_names=self._psdf._internal.column_label_names,
         )
-        return internal, sdf
+        return internal, agg_columns, sdf
 
     @staticmethod
     def _resolve_grouping_from_diff_dataframes(
