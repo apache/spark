@@ -310,11 +310,7 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 case class RegrIntercept(left: Expression, right: Expression) extends DeclarativeAggregate
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  private val avgY = Average(left)
-
   private val regrSlope = RegrSlope(left, right)
-
-  private val avgX = Average(right)
 
   override def nullable: Boolean = true
 
@@ -322,27 +318,21 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
 
   override def inputTypes: Seq[DoubleType] = Seq(DoubleType, DoubleType)
 
-  override lazy val aggBufferAttributes: Seq[AttributeReference] =
-    avgY.aggBufferAttributes ++ regrSlope.aggBufferAttributes ++ avgX.aggBufferAttributes
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = regrSlope.aggBufferAttributes
 
-  override lazy val initialValues: Seq[Expression] =
-    avgY.initialValues ++ regrSlope.initialValues ++ avgX.initialValues
+  override lazy val initialValues: Seq[Expression] = regrSlope.initialValues
 
-  override lazy val updateExpressions: Seq[Expression] =
-    avgY.updateExpressions ++ regrSlope.updateExpressions ++ avgX.updateExpressions
+  override lazy val updateExpressions: Seq[Expression] = regrSlope.updateExpressions
 
-  override lazy val mergeExpressions: Seq[Expression] =
-    avgY.mergeExpressions ++ regrSlope.mergeExpressions ++ avgX.mergeExpressions
+  override lazy val mergeExpressions: Seq[Expression] = regrSlope.mergeExpressions
 
   override lazy val evaluateExpression: Expression = {
     If(regrSlope.covarPop.n === 0.0, Literal.create(null, DoubleType),
-      avgY.evaluateExpression -
-        (regrSlope.covarPop.ck / regrSlope.varPop.m2) * avgX.evaluateExpression)
+      regrSlope.covarPop.yAvg - regrSlope.evaluateExpression * regrSlope.covarPop.xAvg)
   }
 
   override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
-    avgY.inputAggBufferAttributes ++ regrSlope.inputAggBufferAttributes ++
-      avgX.inputAggBufferAttributes
+    regrSlope.inputAggBufferAttributes
 
   override def prettyName: String = "regr_intercept"
 

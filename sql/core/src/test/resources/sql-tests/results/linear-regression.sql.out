@@ -251,7 +251,7 @@ SELECT regr_intercept(y, x) FROM testRegression
 -- !query schema
 struct<regr_intercept(y, x):double>
 -- !query output
-0.15473441108544606
+1.1547344110854496
 
 
 -- !query
@@ -259,7 +259,7 @@ SELECT regr_intercept(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT
 -- !query schema
 struct<regr_intercept(y, x):double>
 -- !query output
-1.154734411085446
+1.1547344110854496
 
 
 -- !query
@@ -268,7 +268,7 @@ SELECT k, regr_intercept(y, x) FROM testRegression GROUP BY k
 struct<k:int,regr_intercept(y, x):double>
 -- !query output
 1	NULL
-2	2.404734411085446
+2	1.1547344110854496
 
 
 -- !query
@@ -276,4 +276,4 @@ SELECT k, regr_intercept(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS 
 -- !query schema
 struct<k:int,regr_intercept(y, x):double>
 -- !query output
-2	1.154734411085446
+2	1.1547344110854496
