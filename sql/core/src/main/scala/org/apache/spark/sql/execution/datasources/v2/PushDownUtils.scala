@@ -25,9 +25,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.datasources.PushableColumnWithoutNestedColumn
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnNoLegacy}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -86,7 +84,7 @@ object PushDownUtils extends PredicateHelper {
       groupBy: Seq[Expression]): Option[Aggregation] = {
 
     def columnAsString(e: Expression): Option[FieldReference] = e match {
-      case PushableColumnWithoutNestedColumn(name) =>
+      case PushableColumnNoLegacy(name) =>
         Some(FieldReference.column(name).asInstanceOf[FieldReference])
       case _ => None
     }
