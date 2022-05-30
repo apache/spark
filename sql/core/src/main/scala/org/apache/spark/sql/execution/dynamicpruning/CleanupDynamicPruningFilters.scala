@@ -54,7 +54,8 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
         val newCondition = condition.transformWithPruning(
           _.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
           case dynamicPruning: DynamicPruningSubquery
-              if unnecessaryPruningKeys.contains(dynamicPruning.pruningKey) =>
+              if unnecessaryPruningKeys.contains(dynamicPruning.pruningKey) ||
+                dynamicPruning.pruningKey.references.isEmpty =>
             TrueLiteral
         }
         f.copy(condition = newCondition)
