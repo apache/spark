@@ -336,7 +336,6 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             ([psdf[["C", "A"]], psdf], [pdf[["C", "A"]], pdf]),
             # only one Series
             ([psdf, psdf["C"]], [pdf, pdf["C"]]),
-            # only one Series
             ([psdf["C"], psdf], [pdf["C"], pdf]),
             # more than two Series
             ([psdf["C"], psdf, psdf["A"]], [pdf["C"], pdf, pdf["A"]]),
