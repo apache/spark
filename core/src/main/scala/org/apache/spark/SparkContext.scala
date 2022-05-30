@@ -275,8 +275,14 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def createSparkEnv(
       conf: SparkConf,
       isLocal: Boolean,
-      listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master, conf))
+      listenerBus: LiveListenerBus,
+      driverOutputCommitCoordinator: OutputCommitCoordinator): SparkEnv = {
+    SparkEnv.createDriverEnv(
+      conf,
+      isLocal,
+      listenerBus,
+      SparkContext.numDriverCores(master, conf),
+      Option(driverOutputCommitCoordinator))
   }
 
   private[spark] def env: SparkEnv = _env
@@ -461,7 +467,8 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.addToStatusQueue(_statusStore.listener.get)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
-    _env = createSparkEnv(_conf, isLocal, listenerBus)
+    _env = createSparkEnv(_conf, isLocal, listenerBus,
+        new OutputCommitCoordinator(conf, true, Option(this)))
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.

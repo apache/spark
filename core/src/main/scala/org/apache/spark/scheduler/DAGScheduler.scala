@@ -2588,6 +2588,14 @@ private[spark] class DAGScheduler(
     runningStages -= stage
   }
 
+  private[scheduler] def abortStage(stageId: Int, reason: String): Unit = {
+    if (!stageIdToStage.contains(stageId)) {
+      // Skip all the actions if the stage has been removed.
+      return
+    }
+    abortStage(stageIdToStage(stageId), reason, None)
+  }
+
   /**
    * Aborts all jobs depending on a particular Stage. This is called in response to a task set
    * being canceled by the TaskScheduler. Use taskSetFailed() to inject this event from outside.

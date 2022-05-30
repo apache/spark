@@ -85,8 +85,9 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       override private[spark] def createSparkEnv(
           conf: SparkConf,
           isLocal: Boolean,
-          listenerBus: LiveListenerBus): SparkEnv = {
-        outputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
+          listenerBus: LiveListenerBus,
+          driverOutputCommitCoordinator: OutputCommitCoordinator): SparkEnv = {
+        outputCommitCoordinator = spy(driverOutputCommitCoordinator)
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
         SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
@@ -269,24 +270,6 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(sc.env.outputCommitCoordinator, times(2))
       .stageStart(meq(retriedStage.head), any())
     verify(sc.env.outputCommitCoordinator).stageEnd(meq(retriedStage.head))
-  }
-
-  test("SPARK-39195: Spark should use two step update of outputCommitCoordinator") {
-    var stage = 1
-    val taskAttempt = 1
-    val partition = 1
-
-    // Test receive CommitOutputSuccess but task failed.
-    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
-    assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
-    assert(!outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt + 1))
-    outputCommitCoordinator.commitSuccess(stage, 1, partition, taskAttempt)
-    val e1 = intercept[SparkException] {
-      outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
-        ExecutorLostFailure("0", exitCausedByApp = true, None))
-    }.getMessage
-    assert(e1.contains("Authorized committer (attemptNumber=1, stage=1, partition=1) failed; " +
-      "but task commit success, should fail the job"))
   }
 }
 
