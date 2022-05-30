@@ -35,6 +35,6 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
         Array(supportedV2Sort, unsupportedV2Sort),
         LocalRelation.apply(AttributeReference("a", StringType)()))
     }
-    assert(exc.message.contains("Transform v2Fun(a) is not currently supported"))
+    assert(exc.message.contains("v2Fun(a) ASC NULLS FIRST is not currently supported"))
   }
 }
