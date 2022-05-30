@@ -74,10 +74,8 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
  * Computes the current date and time to make sure we return the same result in a single query.
  */
 object ComputeCurrentTime extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = applyWithTimestamp(plan, Instant.now())
-
-  /** Required to build custom rules for commands that do not keep sub-plans as children in Delta */
-  def applyWithTimestamp(plan: LogicalPlan, instant: Instant): LogicalPlan = {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val instant = Instant.now()
     val currentTimestampMicros = instantToMicros(instant)
     val currentTime = Literal.create(currentTimestampMicros, TimestampType)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
