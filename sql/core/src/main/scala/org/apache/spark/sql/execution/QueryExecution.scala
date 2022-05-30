@@ -180,23 +180,8 @@ class QueryExecution(
       Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
   }
 
-  // Catches asserts and illegal state exceptions, and converts them to internal errors.
-  private def withInternalError[T](msg: String)(block: => T): T = {
-    try {
-      block
-    } catch {
-      case e: SparkThrowable => throw e
-      case e @ (_: java.lang.IllegalStateException | _: java.lang.AssertionError) =>
-        throw new SparkException(
-          errorClass = "INTERNAL_ERROR",
-          messageParameters = Array(msg),
-          cause = e)
-      case e: Throwable => throw e
-    }
-  }
-
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
-    withInternalError(s"The Spark SQL phase $phase failed with an internal error. " +
+    QueryExecution.withInternalError(s"The Spark SQL phase $phase failed with an internal error. " +
       "Please, fill in a bug report and provide the full stack trace.") {
       tracker.measurePhase(phase)(block)
     }
@@ -504,5 +489,22 @@ object QueryExecution {
     val sparkPlan = createSparkPlan(session, session.sessionState.planner, plan.clone())
     val preparationRules = preparations(session, Option(InsertAdaptiveSparkPlan(context)), true)
     prepareForExecution(preparationRules, sparkPlan.clone())
+  }
+
+  /**
+   * Catches asserts and illegal state exceptions, and converts them to internal errors.
+   */
+  private[sql] def withInternalError[T](msg: String)(block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: SparkThrowable => throw e
+      case e @ (_: java.lang.IllegalStateException | _: java.lang.AssertionError) =>
+        throw new SparkException(
+          errorClass = "INTERNAL_ERROR",
+          messageParameters = Array(msg),
+          cause = e)
+      case e: Throwable => throw e
+    }
   }
 }
