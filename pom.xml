@@ -1404,7 +1404,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-</artifactId>
+        <artifactId>hadoop-minikdc</artifactId>
         <version>${hadoop.version}</version>
         <scope>test</scope>
         <exclusions>
