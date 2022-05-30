@@ -106,7 +106,8 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       .filter(_.totalTasks >= minTasks)
     val sortedList = policy match {
       case ExecutorRollPolicy.ID =>
-        listWithoutDriver.sortBy(_.id)
+        // We can convert to integer because EXECUTOR_ID_COUNTER uses AtomicInteger.
+        listWithoutDriver.sortBy(_.id.toInt)
       case ExecutorRollPolicy.ADD_TIME =>
         listWithoutDriver.sortBy(_.addTime)
       case ExecutorRollPolicy.TOTAL_GC_TIME =>

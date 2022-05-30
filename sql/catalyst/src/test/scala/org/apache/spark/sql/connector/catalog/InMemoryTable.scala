@@ -348,7 +348,8 @@ class InMemoryTable(
       override def overwrite(filters: Array[Filter]): WriteBuilder = {
         assert(writer == Append)
         writer = new Overwrite(filters)
-        streamingWriter = new StreamingNotSupportedOperation(s"overwrite ($filters)")
+        streamingWriter = new StreamingNotSupportedOperation(
+          s"overwrite (${filters.mkString("filters(", ", ", ")")})")
         this
       }
 

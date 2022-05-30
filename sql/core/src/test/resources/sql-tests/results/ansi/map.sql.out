@@ -9,7 +9,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
 [MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. To return NULL instead, use `try_element_at`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 select element_at(map(1, 'a', 2, 'b'), 5)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -21,7 +21,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
 [MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. To return NULL instead, use `try_element_at`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 select map(1, 'a', 2, 'b')[5]
        ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -115,7 +115,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
 [MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. To return NULL instead, use `try_element_at`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 select element_at(map(1, 'a', 2, 'b'), 5)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -127,6 +127,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
 [MAP_KEY_DOES_NOT_EXIST] Key 'c' does not exist. To return NULL instead, use `try_element_at`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 7) ==
+== SQL(line 1, position 8) ==
 select element_at(map('a', 1, 'b', 2), 'c')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
