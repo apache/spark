@@ -52,7 +52,8 @@ class InMemoryTable(
     override val properties: util.Map[String, String],
     val distribution: Distribution = Distributions.unspecified(),
     val ordering: Array[SortOrder] = Array.empty,
-    val numPartitions: Option[Int] = None)
+    val numPartitions: Option[Int] = None,
+    val isDistributionStrictlyRequired: Boolean = true)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
@@ -362,6 +363,8 @@ class InMemoryTable(
 
       override def build(): Write = new Write with RequiresDistributionAndOrdering {
         override def requiredDistribution: Distribution = distribution
+
+        override def distributionStrictlyRequired = isDistributionStrictlyRequired
 
         override def requiredOrdering: Array[SortOrder] = ordering
 

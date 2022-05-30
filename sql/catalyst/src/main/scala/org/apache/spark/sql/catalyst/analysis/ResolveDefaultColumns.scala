@@ -512,7 +512,7 @@ case class ResolveDefaultColumns(
       case r: UnresolvedCatalogRelation => r
     }
     // Check if the target table is already resolved. If so, return the computed schema.
-    source.map { r =>
+    source.foreach { r =>
       if (r.schema.fields.nonEmpty) {
         return Some(r.schema)
       }
