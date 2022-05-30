@@ -753,10 +753,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             bool_to_numeric=True,
         )
 
-    # TODO: skipna should be implemented.
-    def all(self) -> FrameLike:
+    def all(self, skipna: bool = True) -> FrameLike:
         """
         Returns True if all values in the group are truthful, else False.
+
+        Parameters
+        ----------
+        skipna : bool, default True
+            Flag to ignore NA(nan/null) values during truth testing.
 
         See Also
         --------
@@ -790,10 +794,52 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         3  False
         4   True
         5  False
+
+        >>> df.groupby('A').all(skipna=False).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+               B
+        A
+        1   True
+        2  False
+        3  False
+        4  False
+        5  False
         """
-        return self._reduce_for_stat_function(
-            lambda col: F.min(F.coalesce(col.cast("boolean"), SF.lit(True)))
+        groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
+        internal, sdf = self._prepare_reduce(groupkey_names)
+        psdf: DataFrame = DataFrame(internal)
+
+        def sfun(scol: Column, scol_type: DataType) -> Column:
+            if isinstance(scol_type, NumericType) or skipna:
+                # np.nan takes no effect to the result; None takes no effect if `skipna`
+                all_col = F.min(F.coalesce(scol.cast("boolean"), SF.lit(True)))
+            else:
+                # Take None as False when not `skipna`
+                all_col = F.min(
+                    F.when(scol.isNull(), SF.lit(False)).otherwise(scol.cast("boolean"))
+                )
+            return all_col
+
+        if len(psdf._internal.column_labels) > 0:
+            stat_exprs = []
+            for label in psdf._internal.column_labels:
+                psser = psdf._psser_for(label)
+                stat_exprs.append(
+                    sfun(
+                        psser._dtype_op.nan_to_null(psser).spark.column, psser.spark.data_type
+                    ).alias(psser._internal.data_spark_column_names[0])
+                )
+            sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
+        else:
+            sdf = sdf.select(*groupkey_names).distinct()
+
+        internal = internal.copy(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
+            data_fields=None,
         )
+
+        return self._prepare_return(DataFrame(internal))
 
     # TODO: skipna should be implemented.
     def any(self) -> FrameLike:
@@ -1435,7 +1481,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 pser_or_pdf = grouped[name].apply(pandas_apply, *args, **kwargs)
             else:
                 pser_or_pdf = grouped.apply(pandas_apply, *args, **kwargs)
-            psser_or_psdf = ps.from_pandas(pser_or_pdf)
+            psser_or_psdf = ps.from_pandas(pser_or_pdf.infer_objects())
 
             if len(pdf) <= limit:
                 if isinstance(psser_or_psdf, ps.Series) and is_series_groupby:
@@ -2976,36 +3022,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                          `accepted_spark_types`.
         """
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
-        groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
-
-        agg_columns = []
-        for psser in self._agg_columns:
-            if bool_to_numeric and isinstance(psser.spark.data_type, BooleanType):
-                agg_columns.append(psser.astype(int))
-            elif (accepted_spark_types is None) or isinstance(
-                psser.spark.data_type, accepted_spark_types
-            ):
-                agg_columns.append(psser)
-
-        sdf = self._psdf._internal.spark_frame.select(
-            *groupkey_scols, *[psser.spark.column for psser in agg_columns]
-        )
-
-        internal = InternalFrame(
-            spark_frame=sdf,
-            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
-            index_names=[psser._column_label for psser in self._groupkeys],
-            index_fields=[
-                psser._internal.data_fields[0].copy(name=name)
-                for psser, name in zip(self._groupkeys, groupkey_names)
-            ],
-            data_spark_columns=[
-                scol_for(sdf, psser._internal.data_spark_column_names[0]) for psser in agg_columns
-            ],
-            column_labels=[psser._column_label for psser in agg_columns],
-            data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
-            column_label_names=self._psdf._internal.column_label_names,
-        )
+        internal, sdf = self._prepare_reduce(groupkey_names, accepted_spark_types, bool_to_numeric)
         psdf: DataFrame = DataFrame(internal)
 
         if len(psdf._internal.column_labels) > 0:
@@ -3029,6 +3046,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
         psdf = DataFrame(internal)
 
+        return self._prepare_return(psdf)
+
+    def _prepare_return(self, psdf: DataFrame) -> FrameLike:
         if self._dropna:
             psdf = DataFrame(
                 psdf._internal.with_new_sdf(
@@ -3037,7 +3057,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     )
                 )
             )
-
         if not self._as_index:
             should_drop_index = set(
                 i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
@@ -3047,6 +3066,41 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
         return self._cleanup_and_return(psdf)
+
+    def _prepare_reduce(
+        self,
+        groupkey_names: List,
+        accepted_spark_types: Optional[Tuple[Type[DataType], ...]] = None,
+        bool_to_numeric: bool = False,
+    ) -> Tuple[InternalFrame, SparkDataFrame]:
+        groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
+        agg_columns = []
+        for psser in self._agg_columns:
+            if bool_to_numeric and isinstance(psser.spark.data_type, BooleanType):
+                agg_columns.append(psser.astype(int))
+            elif (accepted_spark_types is None) or isinstance(
+                psser.spark.data_type, accepted_spark_types
+            ):
+                agg_columns.append(psser)
+        sdf = self._psdf._internal.spark_frame.select(
+            *groupkey_scols, *[psser.spark.column for psser in agg_columns]
+        )
+        internal = InternalFrame(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            index_names=[psser._column_label for psser in self._groupkeys],
+            index_fields=[
+                psser._internal.data_fields[0].copy(name=name)
+                for psser, name in zip(self._groupkeys, groupkey_names)
+            ],
+            data_spark_columns=[
+                scol_for(sdf, psser._internal.data_spark_column_names[0]) for psser in agg_columns
+            ],
+            column_labels=[psser._column_label for psser in agg_columns],
+            data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
+            column_label_names=self._psdf._internal.column_label_names,
+        )
+        return internal, sdf
 
     @staticmethod
     def _resolve_grouping_from_diff_dataframes(

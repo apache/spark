@@ -819,7 +819,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.25</version>
+        <version>0.9.28</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1419,6 +1419,10 @@
           <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
