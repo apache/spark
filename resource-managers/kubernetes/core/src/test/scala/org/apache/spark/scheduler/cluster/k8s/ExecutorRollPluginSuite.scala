@@ -109,9 +109,17 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
 
+  val execWithTwoDigitID = new ExecutorSummary("10", "host:port", true, 1,
+    10, 10, 1, 1, 1,
+    4, 0, 2, 280,
+    30, 100, 100,
+    10, false, 20, new Date(1639300001000L),
+    Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+    false, Set())
+
   val list = Seq(driverSummary, execWithSmallestID, execWithSmallestAddTime,
     execWithBiggestTotalGCTime, execWithBiggestTotalDuration, execWithBiggestFailedTasks,
-    execWithBiggestAverageDuration, execWithoutTasks, execNormal)
+    execWithBiggestAverageDuration, execWithoutTasks, execNormal, execWithTwoDigitID)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -147,6 +155,8 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Policy: ID") {
     assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.ID)).contains("1"))
+    assert(plugin.invokePrivate(_choose(list.filter(_.id != "1"), ExecutorRollPolicy.ID))
+      .contains("2"))
   }
 
   test("Policy: ADD_TIME") {

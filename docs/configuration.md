@@ -2091,23 +2091,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.1</td>
 </tr>
 <tr>
-  <td><code>spark.rpc.numRetries</code></td>
-  <td>3</td>
-  <td>
-    Number of times to retry before an RPC task gives up.
-    An RPC task will run at most times of this number.
-  </td>
-  <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.rpc.retry.wait</code></td>
-  <td>3s</td>
-  <td>
-    Duration for an RPC ask operation to wait before retrying.
-  </td>
-  <td>1.4.0</td>
-</tr>
-<tr>
   <td><code>spark.rpc.askTimeout</code></td>
   <td><code>spark.network.timeout</code></td>
   <td>
@@ -2736,7 +2719,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.shuffleTracking.enabled</code></td>
   <td><code>false</code></td>
   <td>
-    Experimental. Enables shuffle file tracking for executors, which allows dynamic allocation
+    Enables shuffle file tracking for executors, which allows dynamic allocation
     without the need for an external shuffle service. This option will try to keep alive executors
     that are storing shuffle data for active jobs.
   </td>

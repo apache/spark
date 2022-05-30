@@ -39,11 +39,7 @@ public class ByteArrayMethods {
 
   public static long roundNumberOfBytesToNearestWord(long numBytes) {
     long remainder = numBytes & 0x07;  // This is equivalent to `numBytes % 8`
-    if (remainder == 0) {
-      return numBytes;
-    } else {
-      return numBytes + (8 - remainder);
-    }
+    return numBytes + ((8 - remainder) & 0x7);
   }
 
   // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat smaller.

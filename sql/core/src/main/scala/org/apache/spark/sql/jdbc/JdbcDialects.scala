@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
@@ -251,6 +252,24 @@ abstract class JdbcDialect extends Serializable with Logging{
           s"${this.getClass.getSimpleName} does not support function: $funcName")
       }
     }
+
+    override def visitOverlay(inputs: Array[String]): String = {
+      if (isSupportedFunction("OVERLAY")) {
+        super.visitOverlay(inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+      }
+    }
+
+    override def visitTrim(direction: String, inputs: Array[String]): String = {
+      if (isSupportedFunction("TRIM")) {
+        super.visitTrim(direction, inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: TRIM")
+      }
+    }
   }
 
   /**
@@ -304,6 +323,12 @@ abstract class JdbcDialect extends Serializable with Logging{
       case _ => None
     }
   }
+
+  /**
+   * List the user-defined functions in jdbc dialect.
+   * @return a sequence of tuple from function name to user-defined function.
+   */
+  def functions: Seq[(String, UnboundFunction)] = Nil
 
   /**
    * Create schema with an optional comment. Empty string means no comment.
