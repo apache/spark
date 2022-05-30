@@ -541,7 +541,8 @@ private[spark] class TaskSetManager(
     val tName = taskName(taskId)
     logInfo(s"Starting $tName ($host, executor ${info.executorId}, " +
       s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
-      s"taskResourceAssignments ${taskResourceAssignments}")
+      (if (taskResourceAssignments.nonEmpty) s"taskResourceAssignments ${taskResourceAssignments}"
+      else ""))
 
     sched.dagScheduler.taskStarted(task, info)
     new TaskDescription(

@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
@@ -1297,7 +1298,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // values but not completely follow because we can't do static type checking due to
                 // the reason that the parser has erased the type info of static partition values
                 // and converted them to string.
-                Some(Alias(AnsiCast(Literal(staticValue), col.dataType), col.name)())
+                val cast = Cast(Literal(staticValue), col.dataType, ansiEnabled = true)
+                cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+                Some(Alias(cast, col.name)())
               case _ if queryColumns.hasNext =>
                 Some(queryColumns.next)
               case _ =>
@@ -1552,7 +1555,14 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def resolveMergeExprOrFail(e: Expression, p: LogicalPlan): Expression = {
       val resolved = resolveExpressionByPlanChildren(e, p)
-      resolved.references.filter(!_.resolved).foreach { a =>
+      resolved.references.filter { attribute: Attribute =>
+        !attribute.resolved &&
+          // We exclude attribute references named "DEFAULT" from consideration since they are
+          // handled exclusively by the ResolveDefaultColumns analysis rule. That rule checks the
+          // MERGE command for such references and either replaces each one with a corresponding
+          // value, or returns a custom error message.
+          normalizeFieldName(attribute.name) != normalizeFieldName(CURRENT_DEFAULT_COLUMN_NAME)
+      }.foreach { a =>
         // Note: This will throw error only on unresolved attribute issues,
         // not other resolution errors like mismatched data types.
         val cols = p.inputSet.toSeq.map(_.sql).mkString(", ")
@@ -2237,6 +2247,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             val aggFunc = agg match {
               case first: First => first.copy(ignoreNulls = u.ignoreNulls)
               case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
+              case any_value: AnyValue => any_value.copy(ignoreNulls = u.ignoreNulls)
               case _ =>
                 throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
                   agg.prettyName, "IGNORE NULLS")
@@ -3373,7 +3384,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             assignment.value
           }
           val casted = if (assignment.key.dataType != nullHandled.dataType) {
-            AnsiCast(nullHandled, assignment.key.dataType)
+            val cast = Cast(nullHandled, assignment.key.dataType, ansiEnabled = true)
+            cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+            cast
           } else {
             nullHandled
           }

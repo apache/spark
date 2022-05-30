@@ -720,13 +720,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue1)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue1}L to "INT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue1}L of the type "BIGINT" cannot be cast to "INT""""))
 
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
         msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue2)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue2}L to "INT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue2}L of the type "BIGINT" cannot be cast to "INT""""))
       }
     }
   }
@@ -740,13 +742,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue1}D to "BIGINT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue1}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue2}D to "BIGINT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue2}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
       }
     }
   }
@@ -1509,6 +1513,125 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         sql("alter table t alter column i set default false")
       }.getMessage.contains("Can't find column `i` given table data columns [`s`, `q`]"))
+    }
+  }
+
+  test("INSERT rows, ALTER TABLE ADD COLUMNS with DEFAULTs, then SELECT them") {
+    case class Config(
+        sqlConf: Option[(String, String)],
+        insertNullsToStorage: Boolean = true)
+    def runTest(dataSource: String, config: Config): Unit = {
+      def withTableT(f: => Unit): Unit = {
+        sql(s"create table t(a string, i int) using $dataSource")
+        sql("insert into t values('xyz', 42)")
+        withTable("t") { f }
+      }
+      // Positive tests:
+      // Adding a column with a valid default value into a table containing existing data works
+      // successfully. Querying data from the altered table returns the new value.
+      withTableT {
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef"))
+        checkAnswer(sql("select i, s from t"), Row(42, "abcdef"))
+        // Now alter the column to change the default value. This still returns the previous value,
+        // not the new value, since the behavior semantics are the same as if the first command had
+        // performed a backfill of the new default value in the existing rows.
+        sql("alter table t alter column s set default concat('ghi', 'jkl')")
+        checkAnswer(sql("select i, s from t"), Row(42, "abcdef"))
+      }
+      // Adding a column with a default value and then inserting explicit NULL values works.
+      // Querying data back from the table differentiates between the explicit NULL values and
+      // default values.
+      withTableT {
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        sql("insert into t values(null, null, null)")
+        sql("alter table t add column (x boolean default true)")
+        // By default, INSERT commands into some tables (such as JSON) do not store NULL values.
+        // Therefore, if such destination columns have DEFAULT values, SELECTing the same columns
+        // will return the default values (instead of NULL) since nothing is present in storage.
+        val insertedSColumn = if (config.insertNullsToStorage) null else "abcdef"
+        checkAnswer(spark.table("t"),
+          Seq(
+            Row("xyz", 42, "abcdef", true),
+            Row(null, null, insertedSColumn, true)))
+        checkAnswer(sql("select i, s, x from t"),
+          Seq(
+            Row(42, "abcdef", true),
+            Row(null, insertedSColumn, true)))
+      }
+      // Adding two columns where only the first has a valid default value works successfully.
+      // Querying data from the altered table returns the default value as well as NULL for the
+      // second column.
+      withTableT {
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        sql("alter table t add column (x string)")
+        checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef", null))
+        checkAnswer(sql("select i, s, x from t"), Row(42, "abcdef", null))
+      }
+      // Test other supported data types.
+      withTableT {
+        sql("alter table t add columns (" +
+          "s boolean default true, " +
+          "t byte default cast(null as byte), " +
+          "u short default cast(42 as short), " +
+          "v float default 0, " +
+          "w double default 0, " +
+          "x date default date'0000', " +
+          "y timestamp default timestamp'0000', " +
+          "z timestamp_ntz default cast(timestamp'0000' as timestamp_ntz), " +
+          "a1 timestamp_ltz default cast(timestamp'0000' as timestamp_ltz), " +
+          "a2 decimal(5, 2) default 123.45)")
+        checkAnswer(sql("select s, t, u, v, w, x is not null, " +
+          "y is not null, z is not null, a1 is not null, a2 is not null from t"),
+          Row(true, null, 42, 0.0f, 0.0d, true, true, true, true, true))
+      }
+    }
+
+    // This represents one test configuration over a data source.
+    case class TestCase(
+        dataSource: String,
+        configs: Seq[Config])
+    // Run the test several times using each configuration.
+    Seq(
+      TestCase(
+        dataSource = "csv",
+        Seq(
+          Config(
+            None),
+          Config(
+            Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))),
+      TestCase(
+        dataSource = "json",
+        Seq(
+          Config(
+            None,
+            insertNullsToStorage = false),
+          Config(
+            Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")))),
+      TestCase(
+        dataSource = "orc",
+        Seq(
+          Config(
+            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false"),
+            insertNullsToStorage = false))),
+      TestCase(
+        dataSource = "parquet",
+        Seq(
+          Config(
+            Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"),
+            insertNullsToStorage = false)))
+    ).foreach { testCase: TestCase =>
+      testCase.configs.foreach { config: Config =>
+        config.sqlConf.map { kv: (String, String) =>
+          withSQLConf(kv) {
+            // Run the test with the pair of custom SQLConf values.
+            runTest(testCase.dataSource, config)
+          }
+        }.getOrElse {
+          // Run the test with default settings.
+          runTest(testCase.dataSource, config)
+        }
+      }
     }
   }
 
