@@ -53,10 +53,11 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
    * Converts the array of input V2 [[V2SortOrder]] into their counterparts in catalyst.
    */
   def toCatalystOrdering(ordering: Array[V2SortOrder], query: LogicalPlan): Seq[SortOrder] = {
-    ordering.map(toCatalystOpt(_, query).get.asInstanceOf[SortOrder])
+    ordering.map(toCatalyst(_, query).asInstanceOf[SortOrder])
   }
 
-  def toCatalyst(expr: V2Expression,
+  def toCatalyst(
+      expr: V2Expression,
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Expression =
     toCatalystOpt(expr, query, funCatalogOpt)
