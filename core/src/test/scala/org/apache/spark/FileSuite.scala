@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
+import scala.util.control.NonFatal
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -137,13 +138,16 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   // Hadoop "gzip" and "zstd" codecs require native library installed for sequence files
   private val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")) ++ {
-    scala.util.Try {
+    try {
       // See HADOOP-17125. Hadoop lower than 3.3.1 can throw an exception when its native
       // library for Snappy is unavailable. Here it calls `SnappyCodec.getCompressorType`
       // to indirectly test if the Snappy native library is available in lower Hadoop versions.
       new SnappyCodec().getCompressorType
-      (new SnappyCodec(), "snappy")
-    }.toOption
+      Some(new SnappyCodec(), "snappy")
+    } catch {
+      case _: LinkageError => None
+      case NonFatal(_) => None
+    }
   } ++ {
     if (VersionUtils.isHadoop3) Seq((new Lz4Codec(), "lz4")) else Seq.empty
   }

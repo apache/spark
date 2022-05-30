@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, ExpressionDescription, If, ImplicitCastInputTypes, IsNotNull, IsNull, Literal, Or, RuntimeReplaceableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Expression, ExpressionDescription, If, ImplicitCastInputTypes, IsNotNull, IsNull, Literal, Or, RuntimeReplaceableAggregate}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.types.{AbstractDataType, DoubleType, NumericType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, NumericType}
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -236,4 +236,58 @@ case class RegrSYY(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrSYY =
     this.copy(left = newLeft, right = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(y, x) - Returns the slope of the linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1,1), (2,2), (3,3) AS tab(y, x);
+       1.0
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
+  """,
+  group = "agg_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAggregate
+  with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  private val covarPop = new CovPopulation(right, left)
+
+  private val varPop = new VariancePop(right)
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = DoubleType
+
+  override def inputTypes: Seq[DoubleType] = Seq(DoubleType, DoubleType)
+
+  override lazy val aggBufferAttributes: Seq[AttributeReference] =
+    covarPop.aggBufferAttributes ++ varPop.aggBufferAttributes
+
+  override lazy val initialValues: Seq[Expression] =
+    covarPop.initialValues ++ varPop.initialValues
+
+  override lazy val updateExpressions: Seq[Expression] =
+    covarPop.updateExpressions ++ varPop.updateExpressions
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    covarPop.mergeExpressions ++ varPop.mergeExpressions
+
+  override lazy val evaluateExpression: Expression = {
+    If(covarPop.n === 0.0, Literal.create(null, DoubleType), covarPop.ck / varPop.m2)
+  }
+
+  override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+    covarPop.inputAggBufferAttributes ++ varPop.inputAggBufferAttributes
+
+  override def prettyName: String = "regr_slope"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RegrSlope =
+    copy(left = newLeft, right = newRight)
 }

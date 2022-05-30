@@ -6438,13 +6438,28 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psmidx = ps.from_pandas(pmidx)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+            if LooseVersion(pd.__version__) not in (LooseVersion("1.4.1"), LooseVersion("1.4.2")):
+                self.assert_eq(psmidx.dtypes, pmidx.dtypes)
         else:
             expected = pd.Series(
                 [np.dtype("int64"), np.dtype("O")],
                 index=pd.Index([("zero", "first"), ("one", "second")]),
             )
             self.assert_eq(psmidx.dtypes, expected)
+
+    def test_multi_index_dtypes_not_unique_name(self):
+        # Regression test for https://github.com/pandas-dev/pandas/issues/45174
+        pmidx = pd.MultiIndex.from_arrays([[1], [2]], names=[1, 1])
+        psmidx = ps.from_pandas(pmidx)
+
+        if LooseVersion(pd.__version__) < LooseVersion("1.4"):
+            expected = pd.Series(
+                [np.dtype("int64"), np.dtype("int64")],
+                index=[1, 1],
+            )
+            self.assert_eq(psmidx.dtypes, expected)
+        else:
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
 
     def test_cov(self):
         # SPARK-36396: Implement DataFrame.cov
