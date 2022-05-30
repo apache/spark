@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
@@ -1230,6 +1230,7 @@ class JDBCSuite extends QueryTest
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
     assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
+    assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
   private def assertEmptyQuery(sqlString: String): Unit = {
@@ -1879,5 +1880,27 @@ class JDBCSuite extends QueryTest
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)
-   }
+  }
+
+  test("TimestampNTZType support") {
+    val tableName = "timestamp_ntz_table"
+
+    val df = Seq(
+      (LocalDateTime.parse("2021-12-03T10:50:12"), false),
+      (null, true)).toDF("col1", "col2")
+
+    df.write.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName).save()
+
+    val resWithoutTZ = spark.read.format("jdbc")
+      .option("inferTimestampNTZType", "true")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName)
+      .load()
+
+    checkAnswer(resWithoutTZ, Seq(
+      Row(LocalDateTime.parse("2021-12-03T10:50:12"), false),
+      Row(null, true)))
+  }
 }
