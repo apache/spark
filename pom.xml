@@ -1404,7 +1404,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-minikdc</artifactId>
+        <artifactId>hadoop-</artifactId>
         <version>${hadoop.version}</version>
         <scope>test</scope>
         <exclusions>
@@ -1418,7 +1418,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
+            <artifactId>slf4j-reload4j</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
