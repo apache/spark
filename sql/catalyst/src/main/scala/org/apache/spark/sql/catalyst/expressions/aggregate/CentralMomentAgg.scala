@@ -59,7 +59,7 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
 
   protected val n = AttributeReference("n", DoubleType, nullable = false)()
   protected val avg = AttributeReference("avg", DoubleType, nullable = false)()
-  protected val m2 = AttributeReference("m2", DoubleType, nullable = false)()
+  protected[sql] val m2 = AttributeReference("m2", DoubleType, nullable = false)()
   protected val m3 = AttributeReference("m3", DoubleType, nullable = false)()
   protected val m4 = AttributeReference("m4", DoubleType, nullable = false)()
 

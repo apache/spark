@@ -188,7 +188,7 @@ object ResolveDefaultColumns {
         val expr = try {
           val expr = CatalystSqlParser.parseExpression(text)
           expr match {
-            case _: ExprLiteral | _: AnsiCast | _: Cast => expr
+            case _: ExprLiteral | _: Cast => expr
           }
         } catch {
           case _: ParseException | _: MatchError =>

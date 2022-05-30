@@ -28,7 +28,7 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
@@ -1115,9 +1115,10 @@ class PlanResolutionSuite extends AnalysisTest {
             // Note that when resolving DEFAULT column references, the analyzer will insert literal
             // NULL values if the corresponding table does not define an explicit default value for
             // that column. This is intended.
-            Assignment(i: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
-            Assignment(s: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
-          None) =>
+            Assignment(i: AttributeReference, cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
+            Assignment(s: AttributeReference, cast2 @ Cast(Literal(null, _), StringType, _, true))),
+          None) if cast1.getTagValue(Cast.BY_TABLE_INSERTION).isDefined &&
+          cast2.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
           assert(i.name == "i")
           assert(s.name == "s")
 
@@ -1145,8 +1146,8 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed9 match {
         case UpdateTable(
         _,
-        Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
-        None) =>
+        Seq(Assignment(i: AttributeReference, cast @ Cast(Literal(null, _), StringType, _, true))),
+        None) if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
           assert(i.name == "i")
 
         case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
@@ -1192,7 +1193,9 @@ class PlanResolutionSuite extends AnalysisTest {
         u.assignments(1).value match {
           case s: StaticInvoke =>
             assert(s.arguments.length == 2)
-            assert(s.arguments.head.isInstanceOf[AnsiCast])
+            assert(s.arguments.head.isInstanceOf[Cast])
+            val cast = s.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
             assert(s.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect StaticInvoke, but got: " + other)
         }
@@ -1632,16 +1635,22 @@ class PlanResolutionSuite extends AnalysisTest {
             second match {
               case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
                 Seq(
-                  Assignment(_: AttributeReference, AnsiCast(Literal(null, _), StringType, _)),
-                  Assignment(_: AttributeReference, _: AttributeReference))) =>
+                  Assignment(_: AttributeReference,
+                    cast @ Cast(Literal(null, _), StringType, _, true)),
+                  Assignment(_: AttributeReference, _: AttributeReference)))
+                if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
               case other => fail("unexpected second matched action " + other)
             }
             assert(m.notMatchedActions.length == 1)
             val negative = m.notMatchedActions(0)
             negative match {
               case InsertAction(Some(EqualTo(_: AttributeReference, StringLiteral("insert"))),
-              Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
-              Assignment(s: AttributeReference, AnsiCast(Literal(null, _), StringType, _)))) =>
+              Seq(Assignment(i: AttributeReference,
+                cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
+              Assignment(s: AttributeReference,
+                cast2 @ Cast(Literal(null, _), StringType, _, true))))
+                if cast1.getTagValue(Cast.BY_TABLE_INSERTION).isDefined &&
+                  cast2.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
                 assert(i.name == "i")
                 assert(s.name == "s")
               case other => fail("unexpected not matched action " + other)
@@ -1928,7 +1937,9 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s1.arguments.length == 2)
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
-            assert(s2.arguments.head.isInstanceOf[AnsiCast])
+            assert(s2.arguments.head.isInstanceOf[Cast])
+            val cast = s2.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
             assert(s2.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect UpdateAction, but got: " + other)
         }
@@ -1939,7 +1950,9 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s1.arguments.length == 2)
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
-            assert(s2.arguments.head.isInstanceOf[AnsiCast])
+            assert(s2.arguments.head.isInstanceOf[Cast])
+            val cast = s2.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
             assert(s2.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect UpdateAction, but got: " + other)
         }
