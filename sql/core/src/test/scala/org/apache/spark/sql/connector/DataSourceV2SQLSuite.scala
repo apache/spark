@@ -147,10 +147,10 @@ class DataSourceV2SQLSuite
       Array("", "", ""),
       Array("# Detailed Table Information", "", ""),
       Array("Name", "testcat.table_name", ""),
-      Array("Comment", "this is a test table", ""),
-      Array("Location", "file:/tmp/testcat/table_name", ""),
-      Array("Provider", "foo", ""),
       Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
+      Array("Provider", "foo", ""),
+      Array("Location", "file:/tmp/testcat/table_name", ""),
+      Array("Comment", "this is a test table", ""),
       Array("Table Properties", "[bar=baz]", "")))
   }
 
