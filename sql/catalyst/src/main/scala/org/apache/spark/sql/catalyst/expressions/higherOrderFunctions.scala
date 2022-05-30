@@ -826,7 +826,7 @@ case class ArrayAggregate(
       var i = 0
       while (i < arr.numElements()) {
         elementVar.value.set(arr.get(i, elementVar.dataType))
-        accForMergeVar.value.set(mergeForEval.eval(input))
+        accForMergeVar.value.set(InternalRow.copyValue(mergeForEval.eval(input)))
         i += 1
       }
       accForFinishVar.value.set(accForMergeVar.value.get)

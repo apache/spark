@@ -41,7 +41,6 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
-from pyspark import SparkContext
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -1518,8 +1517,7 @@ class Frame(object, metaclass=ABCMeta):
                     )
                 )
 
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-            return Column(sql_utils.pandasSkewness(spark_column._jc))
+            return SF.skew(spark_column)
 
         return self._reduce_for_stat_function(
             skew,
@@ -1588,8 +1586,7 @@ class Frame(object, metaclass=ABCMeta):
                     )
                 )
 
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-            return Column(sql_utils.pandasKurtosis(spark_column._jc))
+            return SF.kurt(spark_column)
 
         return self._reduce_for_stat_function(
             kurtosis,
@@ -3367,12 +3364,13 @@ class Frame(object, metaclass=ABCMeta):
 
     pad = ffill
 
-    # TODO: add 'axis', 'inplace', 'limit_area', 'downcast'
+    # TODO: add 'axis', 'inplace', 'downcast'
     def interpolate(
         self: FrameLike,
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> FrameLike:
         """
         Fill NaN values using an interpolation method.
@@ -3399,6 +3397,13 @@ class Frame(object, metaclass=ABCMeta):
         limit_direction : str, default None
             Consecutive NaNs will be filled in this direction.
             One of {{'forward', 'backward', 'both'}}.
+
+        limit_area : str, default None
+            If limit is specified, consecutive NaNs will be filled with this restriction. One of:
+
+            * None: No fill restriction.
+            * 'inside': Only fill NaNs surrounded by valid values (interpolate).
+            * 'outside': Only fill NaNs outside valid values (extrapolate).
 
         Returns
         -------
@@ -3454,7 +3459,9 @@ class Frame(object, metaclass=ABCMeta):
         2  2.0  3.0 -3.0   9.0
         3  2.0  4.0 -4.0  16.0
         """
-        return self.interpolate(method=method, limit=limit, limit_direction=limit_direction)
+        return self.interpolate(
+            method=method, limit=limit, limit_direction=limit_direction, limit_area=limit_area
+        )
 
     @property
     def at(self) -> AtIndexer:
