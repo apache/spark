@@ -2340,6 +2340,18 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         with ps.option_context("compute.shortcut_limit", 2):
             self.test_apply_return_series()
 
+    def test_apply_explicitly_infer(self):
+        # SPARK-39317
+        from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
+
+        def plus_min(x):
+            return x + x.min()
+
+        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+            df = ps.DataFrame({"A": ["a", "a", "b"], "B": [1, 2, 3]}, columns=["A", "B"])
+            g = df.groupby("A")
+            g.apply(plus_min).sort_index()
+
     def test_transform(self):
         pdf = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},

@@ -1481,7 +1481,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 pser_or_pdf = grouped[name].apply(pandas_apply, *args, **kwargs)
             else:
                 pser_or_pdf = grouped.apply(pandas_apply, *args, **kwargs)
-            psser_or_psdf = ps.from_pandas(pser_or_pdf)
+            psser_or_psdf = ps.from_pandas(pser_or_pdf.infer_objects())
 
             if len(pdf) <= limit:
                 if isinstance(psser_or_psdf, ps.Series) and is_series_groupby:
