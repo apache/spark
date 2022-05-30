@@ -1882,7 +1882,7 @@ class JDBCSuite extends QueryTest
     assert(fields(0).dataType === StringType)
   }
 
-  test("TimestampNTZType support") {
+  test("SPARK-39339: TimestampNTZType support") {
     val tableName = "timestamp_ntz_table"
 
     val df = Seq(
