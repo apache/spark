@@ -46,7 +46,7 @@ case class DescribeTableExec(
     rows += toCatalystRow("Name", table.name(), "")
 
     val (reservedProperties, nonReservedProperties) =
-      table.properties.asScala.partition { case (key, value) =>
+      table.properties.asScala.partition { case (key, _) =>
         CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
       }
 
