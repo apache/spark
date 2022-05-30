@@ -970,6 +970,19 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                 sort(pdf.groupby(("X", "A"), as_index=as_index).any()),
             )
 
+        # Test skipna
+        pdf = pd.DataFrame({"A": [True, True], "B": [1, np.nan], "C": [True, None]})
+        pdf.name = "x"
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            psdf.groupby("A").all(skipna=False).sort_index(),
+            pdf.groupby("A").all(skipna=False).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby("A").all(skipna=True).sort_index(),
+            pdf.groupby("A").all(skipna=True).sort_index(),
+        )
+
     def test_raises(self):
         psdf = ps.DataFrame(
             {"a": [1, 2, 6, 4, 4, 6, 4, 3, 7], "b": [4, 2, 7, 3, 3, 1, 1, 1, 2]},
