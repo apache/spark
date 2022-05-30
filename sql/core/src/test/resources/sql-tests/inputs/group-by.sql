@@ -7,9 +7,6 @@
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
 AS testData(a, b);
-CREATE OR REPLACE TEMPORARY VIEW testRegression AS SELECT * FROM VALUES
-(1, 10, null), (2, 10, 11), (2, 20, 22), (2, 25, null), (2, 30, 35)
-AS testRegression(k, y, x);
 CREATE OR REPLACE TEMPORARY VIEW aggr AS SELECT * FROM VALUES
 (0, 0), (0, 10), (0, 20), (0, 30), (0, 40), (1, 10), (1, 20), (2, 10), (2, 20), (2, 25), (2, 30), (3, 60), (4, null)
 AS aggr(k, v);
@@ -237,19 +234,6 @@ FROM VALUES (CAST(NULL AS DOUBLE)), (CAST(NULL AS DOUBLE)), (CAST(NULL AS DOUBLE
 SELECT histogram_numeric(col, 3)
 FROM VALUES (CAST(NULL AS INT)), (CAST(NULL AS INT)), (CAST(NULL AS INT)) AS tab(col);
 
-
--- SPARK-37613: Support ANSI Aggregate Function: regr_count
-SELECT regr_count(y, x) FROM testRegression;
-SELECT regr_count(y, x) FROM testRegression WHERE x IS NOT NULL;
-SELECT k, count(*), regr_count(y, x) FROM testRegression GROUP BY k;
-SELECT k, count(*) FILTER (WHERE x IS NOT NULL), regr_count(y, x) FROM testRegression GROUP BY k;
-
--- SPARK-37613: Support ANSI Aggregate Function: regr_r2
-SELECT regr_r2(y, x) FROM testRegression;
-SELECT regr_r2(y, x) FROM testRegression WHERE x IS NOT NULL;
-SELECT k, corr(y, x), regr_r2(y, x) FROM testRegression GROUP BY k;
-SELECT k, corr(y, x) FILTER (WHERE x IS NOT NULL), regr_r2(y, x) FROM testRegression GROUP BY k;
-
 -- SPARK-27974: Support ANSI Aggregate Function: array_agg
 SELECT
   collect_list(col),
@@ -263,30 +247,6 @@ SELECT
 FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a;
-
--- SPARK-37614: Support ANSI Aggregate Function: regr_avgx & regr_avgy
-SELECT regr_avgx(y, x), regr_avgy(y, x) FROM testRegression;
-SELECT regr_avgx(y, x), regr_avgy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
-SELECT k, avg(x), avg(y), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k;
-SELECT k, avg(x) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), avg(y) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k;
-
--- SPARK-37672: Support ANSI Aggregate Function: regr_sxx
-SELECT regr_sxx(y, x) FROM testRegression;
-SELECT regr_sxx(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
-SELECT k, regr_sxx(y, x) FROM testRegression GROUP BY k;
-SELECT k, regr_sxx(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
-
--- SPARK-37681: Support ANSI Aggregate Function: regr_sxy
-SELECT regr_sxy(y, x) FROM testRegression;
-SELECT regr_sxy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
-SELECT k, regr_sxy(y, x) FROM testRegression GROUP BY k;
-SELECT k, regr_sxy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
-
--- SPARK-37702: Support ANSI Aggregate Function: regr_syy
-SELECT regr_syy(y, x) FROM testRegression;
-SELECT regr_syy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
-SELECT k, regr_syy(y, x) FROM testRegression GROUP BY k;
-SELECT k, regr_syy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
 
 -- SPARK-37676: Support ANSI Aggregation Function: percentile_cont
 SELECT

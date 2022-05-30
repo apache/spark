@@ -1018,6 +1018,8 @@ private[spark] class TaskSchedulerImpl(
       logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
     case ExecutorKilled =>
       logInfo(s"Executor $executorId on $hostPort killed by driver.")
+    case _: ExecutorDecommission =>
+      logInfo(s"Executor $executorId on $hostPort is decommissioned.")
     case _ =>
       logError(s"Lost executor $executorId on $hostPort: $reason")
   }

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
@@ -322,6 +323,12 @@ abstract class JdbcDialect extends Serializable with Logging{
       case _ => None
     }
   }
+
+  /**
+   * List the user-defined functions in jdbc dialect.
+   * @return a sequence of tuple from function name to user-defined function.
+   */
+  def functions: Seq[(String, UnboundFunction)] = Nil
 
   /**
    * Create schema with an optional comment. Empty string means no comment.

@@ -1448,7 +1448,8 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),
           KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
-        withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
+        withClue(s"minPartitions = $minPartitions generated factories " +
+          s"${inputPartitions.mkString("inputPartitions(", ", ", ")")}\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
         }
       }
