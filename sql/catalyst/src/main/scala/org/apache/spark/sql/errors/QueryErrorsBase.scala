@@ -19,8 +19,8 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL}
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
 /**
@@ -39,6 +39,8 @@ import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
  *   For example: "spark.sql.ansi.enabled".
  * 6. Any values of datasource options or SQL configs shall be double quoted.
  *   For example: "true", "CORRECTED".
+ * 7. SQL expressions shall be wrapped by double quotes.
+ *   For example: "earnings + 1".
  */
 trait QueryErrorsBase {
   // Converts an error class parameter to its SQL representation
@@ -87,5 +89,9 @@ trait QueryErrorsBase {
 
   def toDSOption(option: String): String = {
     quoteByDefault(option)
+  }
+
+  def toSQLExpr(e: Expression): String = {
+    quoteByDefault(toPrettySQL(e))
   }
 }
