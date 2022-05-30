@@ -402,6 +402,8 @@ package object dsl {
 
       def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
 
+      def offset(offsetExpr: Expression): LogicalPlan = Offset(offsetExpr, logicalPlan)
+
       def join(
         otherPlan: LogicalPlan,
         joinType: JoinType = Inner,
@@ -460,6 +462,7 @@ package object dsl {
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
       def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
+      def subquery(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
       def except(otherPlan: LogicalPlan, isAll: Boolean): LogicalPlan =
         Except(logicalPlan, otherPlan, isAll)

@@ -897,7 +897,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[ArithmeticException] {
               sql("SELECT * FROM v5").collect()
             }.getMessage
-            assert(e.contains("divide by zero"))
+            assert(e.contains("Division by zero"))
           }
         }
 
@@ -907,7 +907,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         val e = intercept[ArithmeticException] {
           sql("SELECT * FROM v1").collect()
         }.getMessage
-        assert(e.contains("divide by zero"))
+        assert(e.contains("Division by zero"))
       }
     }
   }

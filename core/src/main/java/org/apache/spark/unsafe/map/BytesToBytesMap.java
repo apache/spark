@@ -941,7 +941,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Returns the average number of probes per key lookup.
    */
-  public double getAvgHashProbesPerKey() {
+  public double getAvgHashProbeBucketListIterations() {
     return (1.0 * numProbes) / numKeyLookups;
   }
 

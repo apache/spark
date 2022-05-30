@@ -103,6 +103,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       mockTime.scheduler,
       new BrokerTopicStats(),
       mockTime,
+      maxTransactionTimeoutMs = 5 * 60 * 1000, // KAFKA-13221
       Int.MaxValue,
       Int.MaxValue,
       logDirFailureChannel,

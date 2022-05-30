@@ -342,6 +342,38 @@ object GeneratorNestedColumnAliasing {
     // need to prune nested columns through Project and under Generate. The difference is
     // when `nestedSchemaPruningEnabled` is on, nested columns will be pruned further at
     // file format readers if it is supported.
+
+    // There are [[ExtractValue]] expressions on or not on the output of the generator. Generator
+    // can also have different types:
+    // 1. For [[ExtractValue]]s not on the output of the generator, theoretically speaking, there
+    //    lots of expressions that we can push down, including non ExtractValues and GetArrayItem
+    //    and GetMapValue. But to be safe, we only handle GetStructField and GetArrayStructFields.
+    // 2. For [[ExtractValue]]s on the output of the generator, the situation depends on the type
+    //    of the generator expression. *For now, we only support Explode*.
+    //   2.1 Inline
+    //       Inline takes an input of ARRAY<STRUCT<field1, field2>>, and returns an output of
+    //       STRUCT<field1, field2>, the output field can be directly accessed by name "field1".
+    //       In this case, we should not try to push down the ExtractValue expressions to the
+    //       input of the Inline. For example:
+    //       Project[field1.x AS x]
+    //       - Generate[ARRAY<STRUCT<field1: STRUCT<x: int>, field2:int>>, ..., field1, field2]
+    //       It is incorrect to push down the .x to the input of the Inline.
+    //       A valid field pruning would be to extract all the fields that are accessed by the
+    //       Project, and manually reconstruct an expression using those fields.
+    //   2.2 Explode
+    //       Explode takes an input of ARRAY<some_type> and returns an output of
+    //       STRUCT<col: some_type>. The default field name "col" can be overwritten.
+    //       If the input is MAP<key, value>, it returns STRUCT<key: key_type, value: value_type>.
+    //       For the array case, it is only valid to push down GetStructField. After push down,
+    //       the GetStructField becomes a GetArrayStructFields. Note that we cannot push down
+    //       GetArrayStructFields, since the pushed down expression will operate on an array of
+    //       array which is invalid.
+    //   2.3 Stack
+    //       Stack takes a sequence of expressions, and returns an output of
+    //       STRUCT<col0: some_type, col1: some_type, ...>
+    //       The push down is doable but more complicated in this case as the expression that
+    //       operates on the col_i of the output needs to pushed down to every (kn+i)-th input
+    //       expression where n is the total number of columns (or struct fields) of the output.
     case Project(projectList, g: Generate) if (SQLConf.get.nestedPruningOnExpressions ||
         SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
       // On top on `Generate`, a `Project` that might have nested column accessors.
@@ -364,6 +396,10 @@ object GeneratorNestedColumnAliasing {
         case _: MapType => return Some(pushedThrough)
         case ArrayType(_: ArrayType, _) => return Some(pushedThrough)
         case _ =>
+      }
+
+      if (!g.generator.isInstanceOf[ExplodeBase]) {
+        return Some(pushedThrough)
       }
 
       // This function collects all GetStructField*(attribute) from the passed in expression.

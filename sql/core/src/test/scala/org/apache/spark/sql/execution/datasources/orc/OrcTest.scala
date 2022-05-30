@@ -127,7 +127,8 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
         } else {
           assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
           val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
-          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for ${o.pushedFilters}")
+          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for " +
+            s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         }
 
       case _ =>

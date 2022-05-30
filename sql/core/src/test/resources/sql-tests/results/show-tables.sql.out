@@ -168,7 +168,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near end of input(line 1, pos 19)
+[PARSE_SYNTAX_ERROR] Syntax error at or near end of input(line 1, pos 19)
 
 == SQL ==
 SHOW TABLE EXTENDED
@@ -193,7 +193,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near 'PARTITION'(line 1, pos 20)
+[PARSE_SYNTAX_ERROR] Syntax error at or near 'PARTITION'(line 1, pos 20)
 
 == SQL ==
 SHOW TABLE EXTENDED PARTITION(c='Us', d=1)

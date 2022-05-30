@@ -57,7 +57,7 @@ object CustomMetrics {
     currentMetricsValues.foreach { metric =>
       val metricName = metric.name()
       val metricValue = metric.value()
-      customMetrics.get(metricName).map(_.set(metricValue))
+      customMetrics.get(metricName).foreach(_.set(metricValue))
 
       if (BUILTIN_OUTPUT_METRICS.contains(metricName)) {
         Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>

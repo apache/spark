@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, Log
 import org.apache.spark.sql.connector.catalog.{SupportsDelete, SupportsRowLevelOperations, TruncatableTable}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -51,9 +50,6 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
         case DataSourceV2Relation(_: SupportsDelete, _, _, _, _) =>
           // don't rewrite as the table supports deletes only with filters
           d
-
-        case DataSourceV2Relation(t, _, _, _, _) =>
-          throw QueryCompilationErrors.tableDoesNotSupportDeletesError(t)
 
         case _ =>
           d

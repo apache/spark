@@ -24,3 +24,10 @@ select timestampdiff(QUARTER, timestamp_ntz'2022-01-01 01:02:03', timestamp_ntz'
 select timestampdiff(HOUR, timestamp_ntz'2022-02-14 01:02:03', timestamp_ltz'2022-02-14 02:03:04');
 select timestampdiff(YEAR, date'2022-02-15', timestamp_ntz'2023-02-15 10:11:12');
 select timestampdiff(MILLISECOND, timestamp_ntz'2022-02-14 23:59:59.123', date'2022-02-15');
+
+select timestamp_ntz'2022-01-01 00:00:00' = date'2022-01-01';
+select timestamp_ntz'2022-01-01 00:00:00' > date'2022-01-01';
+select timestamp_ntz'2022-01-01 00:00:00' < date'2022-01-01';
+select timestamp_ntz'2022-01-01 00:00:00' = timestamp_ltz'2022-01-01 00:00:00';
+select timestamp_ntz'2022-01-01 00:00:00' > timestamp_ltz'2022-01-01 00:00:00';
+select timestamp_ntz'2022-01-01 00:00:00' < timestamp_ltz'2022-01-01 00:00:00';
