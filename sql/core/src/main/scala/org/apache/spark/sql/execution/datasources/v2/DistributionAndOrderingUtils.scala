@@ -32,7 +32,7 @@ object DistributionAndOrderingUtils {
 
       val distribution = write.requiredDistribution match {
         case d: OrderedDistribution => toCatalystOrdering(d.ordering(), query)
-        case d: ClusteredDistribution => d.clustering.map(e => toCatalyst(e, query).get).toSeq
+        case d: ClusteredDistribution => d.clustering.map(e => toCatalyst(e, query)).toSeq
         case _: UnspecifiedDistribution => Seq.empty[Expression]
       }
 
