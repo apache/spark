@@ -619,7 +619,7 @@ class SymmetricHashJoinStateManager(
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair = valueRowConverter.convertValue(stateStore.get(keyWithIndex))
             if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
-              skippedNullValueCount.map(_ += 1L)
+              skippedNullValueCount.foreach(_ += 1L)
               index += 1
             } else {
               keyWithIndexAndValue.withNew(key, index, valuePair)

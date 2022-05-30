@@ -970,6 +970,19 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                 sort(pdf.groupby(("X", "A"), as_index=as_index).any()),
             )
 
+        # Test skipna
+        pdf = pd.DataFrame({"A": [True, True], "B": [1, np.nan], "C": [True, None]})
+        pdf.name = "x"
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            psdf.groupby("A").all(skipna=False).sort_index(),
+            pdf.groupby("A").all(skipna=False).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby("A").all(skipna=True).sort_index(),
+            pdf.groupby("A").all(skipna=True).sort_index(),
+        )
+
     def test_raises(self):
         psdf = ps.DataFrame(
             {"a": [1, 2, 6, 4, 4, 6, 4, 3, 7], "b": [4, 2, 7, 3, 3, 1, 1, 1, 2]},
@@ -2326,6 +2339,18 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         # SPARK-36907: Fix DataFrameGroupBy.apply without shortcut.
         with ps.option_context("compute.shortcut_limit", 2):
             self.test_apply_return_series()
+
+    def test_apply_explicitly_infer(self):
+        # SPARK-39317
+        from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
+
+        def plus_min(x):
+            return x + x.min()
+
+        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+            df = ps.DataFrame({"A": ["a", "a", "b"], "B": [1, 2, 3]}, columns=["A", "B"])
+            g = df.groupby("A")
+            g.apply(plus_min).sort_index()
 
     def test_transform(self):
         pdf = pd.DataFrame(
