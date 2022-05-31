@@ -211,8 +211,7 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 }
 
 /**
- * The child class should override decimalType method to report the result data type which must
- * follow the description of `DecimalPrecision`.
+ * The child class should override decimalType method to report the result data type.
  *
  * When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
  * needed are out of the range of available values, the scale is reduced up to 6, in order to
