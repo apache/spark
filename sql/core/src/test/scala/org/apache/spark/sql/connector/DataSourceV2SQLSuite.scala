@@ -123,7 +123,7 @@ class DataSourceV2SQLSuite
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
       " USING foo" +
       " PARTITIONED BY (id)" +
-      " TBLPROPERTIES ('bar'='baz')" +
+      " TBLPROPERTIES ('bar'='baz', 'password' = 'password')" +
       " COMMENT 'this is a test table'" +
       " LOCATION 'file:/tmp/testcat/table_name'")
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
@@ -151,7 +151,7 @@ class DataSourceV2SQLSuite
       Array("Location", "file:/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
       Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
-      Array("Table Properties", "[bar=baz]", "")))
+      Array("Table Properties", "[bar=baz,password=*********(redacted)]", "")))
   }
 
   test("Describe column for v2 catalog") {
