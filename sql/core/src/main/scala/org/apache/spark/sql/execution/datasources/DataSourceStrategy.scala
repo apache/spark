@@ -701,19 +701,19 @@ object DataSourceStrategy
   protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
     if (aggregates.filter.isEmpty) {
       aggregates.aggregateFunction match {
-        case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
+        case aggregate.Min(PushableColumnNoLegacy(name)) =>
           Some(new Min(FieldReference.column(name)))
-        case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
+        case aggregate.Max(PushableColumnNoLegacy(name)) =>
           Some(new Max(FieldReference.column(name)))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
             // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
             case Literal(_, _) => Some(new CountStar())
-            case PushableColumnWithoutNestedColumn(name) =>
+            case PushableColumnNoLegacy(name) =>
               Some(new Count(FieldReference.column(name), aggregates.isDistinct))
             case _ => None
           }
-        case aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
+        case aggregate.Sum(PushableColumnNoLegacy(name), _) =>
           Some(new Sum(FieldReference.column(name), aggregates.isDistinct))
         case _ => None
       }
@@ -745,6 +745,7 @@ object DataSourceStrategy
  */
 abstract class PushableColumnBase {
   val nestedPredicatePushdownEnabled: Boolean
+  val allowDotInAttrName: Boolean
 
   def unapply(e: Expression): Option[String] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
@@ -756,9 +757,9 @@ abstract class PushableColumnBase {
   }
 
   private def extractTopLevelCol(e: Expression): Option[String] = e match {
-    // Attribute that contains dot "." in name is supported only when nested predicate pushdown
-    // is enabled.
-    case a: Attribute if !a.name.contains(".") => Some(a.name)
+    // To keep backward compatibility, we can't push down filters with column name containing dot,
+    // as the underlying data source may mistakenly think it's a nested column.
+    case a: Attribute if !a.name.contains(".") || allowDotInAttrName => Some(a.name)
     case _ => None
   }
 
@@ -782,8 +783,15 @@ object PushableColumn {
 
 object PushableColumnAndNestedColumn extends PushableColumnBase {
   override val nestedPredicatePushdownEnabled = true
+  override val allowDotInAttrName = true
 }
 
 object PushableColumnWithoutNestedColumn extends PushableColumnBase {
   override val nestedPredicatePushdownEnabled = false
+  override val allowDotInAttrName = false
+}
+
+object PushableColumnNoLegacy extends PushableColumnBase {
+  override val nestedPredicatePushdownEnabled = false
+  override val allowDotInAttrName = true
 }
