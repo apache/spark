@@ -844,6 +844,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // path option in storage properties, to avoid exposing this concept externally.
     val storageWithLocation = {
       val tableLocation = getLocationFromStorageProps(table).map { path =>
+        // Before SPARK-19257, created data source table does not use absolute uri.
+        // This makes Spark can't read these tables across HDFS clusters.
+        // Rewrite table path to absolute uri based on location uri (The location uri has been
+        // rewritten by HiveClientImpl.convertHiveTableToCatalogTable) to fix this issue.
         toAbsoluteURI(CatalogUtils.stringToURI(path), table.storage.locationUri)
       }
       // We pass None as `newPath` here, to remove the path option in storage properties.
@@ -1435,10 +1439,11 @@ object HiveExternalCatalog {
     case _ => true
   }
 
-  // Rewrite uri to absolute location. For example:
-  //   uri: /user/hive/warehouse/test_table
-  //   absoluteUri: viewfs://clusterA/user/hive/warehouse/
-  //   The result is: viewfs://clusterA/user/hive/warehouse/test_table
+  /** Rewrite uri to absolute location. For example:
+   *    uri: /user/hive/warehouse/test_table
+   *    absoluteUri: viewfs://clusterA/user/hive/warehouse/
+   *    The result is: viewfs://clusterA/user/hive/warehouse/test_table
+   */
   private[spark] def toAbsoluteURI(uri: URI, absoluteUri: Option[URI]): URI = {
     if (!uri.isAbsolute && absoluteUri.isDefined) {
       val aUri = absoluteUri.get

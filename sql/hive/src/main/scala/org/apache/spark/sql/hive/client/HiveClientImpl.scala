@@ -522,7 +522,10 @@ private[hive] class HiveClientImpl(
       storage = CatalogStorageFormat(
         locationUri = shim.getDataLocation(h).map { loc =>
           val tableUri = stringToURI(loc)
-          val absoluteUri = Option(tableUri).filter(!_.isAbsolute)
+          // Before SPARK-19257, created data source table does not use absolute uri.
+          // This makes Spark can't read these tables across HDFS clusters.
+          // Rewrite table location to absolute uri based on database uri to fix this issue.
+          val absoluteUri = Option(tableUri).filterNot(_.isAbsolute)
             .map(_ => stringToURI(client.getDatabase(h.getDbName).getLocationUri))
           HiveExternalCatalog.toAbsoluteURI(tableUri, absoluteUri)
         },
@@ -760,7 +763,7 @@ private[hive] class HiveClientImpl(
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
         s
     }
-    val absoluteUri = shim.getDataLocation(hiveTable).map(stringToURI).filter(!_.isAbsolute)
+    val absoluteUri = shim.getDataLocation(hiveTable).map(stringToURI).filterNot(_.isAbsolute)
       .map(_ => stringToURI(client.getDatabase(hiveTable.getDbName).getLocationUri))
     val parts = shim.getPartitions(client, hiveTable, partSpec.asJava)
       .map(fromHivePartition(_, absoluteUri))
