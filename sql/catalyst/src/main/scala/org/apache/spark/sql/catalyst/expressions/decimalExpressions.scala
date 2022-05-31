@@ -233,6 +233,8 @@ case class DecimalAddNoOverflowCheck(
   override def inputType: AbstractDataType = DecimalType
   override def symbol: String = "+"
   override def decimalMethod: String = "$plus"
+  override protected def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType =
+    dataType.asInstanceOf[DecimalType]
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 

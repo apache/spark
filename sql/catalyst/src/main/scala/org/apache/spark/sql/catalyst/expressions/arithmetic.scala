@@ -234,15 +234,11 @@ trait DecimalArithmeticSupport extends BinaryArithmetic {
   }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
-  protected def decimalMethod: String =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("DecimalArithmetic",
-      "decimalMethod", "genCode")
-  protected def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("DecimalArithmetic",
-      "decimalType", "dataType")
+  protected def decimalMethod: String
+  protected def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType
 
   override def nullable: Boolean = dataType match {
-    case _: DecimalType => nullOnOverflow
+    case _: DecimalType => true
     case _ => super.nullable
   }
 
@@ -941,6 +937,9 @@ case class Pmod(
   override def inputType: AbstractDataType = NumericType
 
   override def nullable: Boolean = true
+
+  // not used
+  override protected def decimalMethod: String = "remainder"
 
   // This follows Remainder rule
   override def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
