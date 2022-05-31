@@ -723,7 +723,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
       checkKeywordsExistsInExplain(
         df1.select("j"),
-        "Bucketed: false (bucket column(s) not read)")
+        "Bucketed: false (disabled by query planner)")
     }
   }
 
