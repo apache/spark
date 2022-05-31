@@ -497,7 +497,6 @@ object QueryExecution {
     try {
       block
     } catch {
-      case e: SparkThrowable => throw e
       case e @ (_: java.lang.IllegalStateException | _: java.lang.AssertionError) =>
         throw new SparkException(
           errorClass = "INTERNAL_ERROR",
