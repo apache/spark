@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.bucketing
 
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -99,7 +99,8 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
           _, withInterestingPartition, true, withAllowedNode))
       case scan: FileSourceScanExec =>
         if (scan.bucketedScan) {
-          if (!withInterestingPartition || (withExchange && withAllowedNode)) {
+          if (scan.outputPartitioning.isInstanceOf[UnknownPartitioning] ||
+            !withInterestingPartition || (withExchange && withAllowedNode)) {
             val nonBucketedScan = scan.copy(disableBucketedScan = true)
             scan.logicalLink.foreach(nonBucketedScan.setLogicalLink)
             nonBucketedScan

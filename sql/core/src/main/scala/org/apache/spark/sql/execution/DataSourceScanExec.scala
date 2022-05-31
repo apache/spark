@@ -293,16 +293,9 @@ trait FileSourceScanLike extends DataSourceScanExec {
     output.find(_.name == colName)
 
   // exposed for testing
-  lazy val bucketedScan: Boolean = {
-    if (relation.sparkSession.sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined
-      && !disableBucketedScan) {
-      val spec = relation.bucketSpec.get
-      val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
-      bucketColumns.size == spec.bucketColumnNames.size
-    } else {
-      false
-    }
-  }
+  lazy val bucketedScan: Boolean =
+    relation.sparkSession.sessionState.conf.bucketingEnabled &&
+      relation.bucketSpec.isDefined && !disableBucketedScan
 
   override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     if (bucketedScan) {
@@ -326,39 +319,43 @@ trait FileSourceScanLike extends DataSourceScanExec {
       // above
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
-      val numPartitions = optionalNumCoalescedBuckets.getOrElse(spec.numBuckets)
-      val partitioning = HashPartitioning(bucketColumns, numPartitions)
-      val sortColumns =
-        spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
-      val shouldCalculateSortOrder =
-        conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
-          sortColumns.nonEmpty &&
-          !hasPartitionsAvailableAtRunTime
+      if (bucketColumns.size == spec.bucketColumnNames.size) {
+        val numPartitions = optionalNumCoalescedBuckets.getOrElse(spec.numBuckets)
+        val partitioning = HashPartitioning(bucketColumns, numPartitions)
+        val sortColumns =
+          spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
+        val shouldCalculateSortOrder =
+          conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
+            sortColumns.nonEmpty &&
+            !hasPartitionsAvailableAtRunTime
 
-      val sortOrder = if (shouldCalculateSortOrder) {
-        // In case of bucketing, its possible to have multiple files belonging to the
-        // same bucket in a given relation. Each of these files are locally sorted
-        // but those files combined together are not globally sorted. Given that,
-        // the RDD partition will not be sorted even if the relation has sort columns set
-        // Current solution is to check if all the buckets have a single file in it
+        val sortOrder = if (shouldCalculateSortOrder) {
+          // In case of bucketing, its possible to have multiple files belonging to the
+          // same bucket in a given relation. Each of these files are locally sorted
+          // but those files combined together are not globally sorted. Given that,
+          // the RDD partition will not be sorted even if the relation has sort columns set
+          // Current solution is to check if all the buckets have a single file in it
 
-        val files = selectedPartitions.flatMap(partition => partition.files)
-        val bucketToFilesGrouping =
-          files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
-        val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
+          val files = selectedPartitions.flatMap(partition => partition.files)
+          val bucketToFilesGrouping =
+            files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
+          val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
 
-        // TODO SPARK-24528 Sort order is currently ignored if buckets are coalesced.
-        if (singleFilePartitions && optionalNumCoalescedBuckets.isEmpty) {
-          // TODO Currently Spark does not support writing columns sorting in descending order
-          // so using Ascending order. This can be fixed in future
-          sortColumns.map(attribute => SortOrder(attribute, Ascending))
+          // TODO SPARK-24528 Sort order is currently ignored if buckets are coalesced.
+          if (singleFilePartitions && optionalNumCoalescedBuckets.isEmpty) {
+            // TODO Currently Spark does not support writing columns sorting in descending order
+            // so using Ascending order. This can be fixed in future
+            sortColumns.map(attribute => SortOrder(attribute, Ascending))
+          } else {
+            Nil
+          }
         } else {
           Nil
         }
+        (partitioning, sortOrder)
       } else {
-        Nil
+        (UnknownPartitioning(0), Nil)
       }
-      (partitioning, sortOrder)
     } else {
       (UnknownPartitioning(0), Nil)
     }

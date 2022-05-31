@@ -829,16 +829,24 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
   }
 
   test("disable bucketing when the output doesn't contain all bucketing columns") {
-    withTable("bucketed_table") {
-      df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
+    Seq(true, false).foreach { autoBucketedScanEnabled =>
+      // SPARK-39344: Only disable bucketing when autoBucketedScan is enabled
+      // if bucket columns are not in scan output
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> autoBucketedScanEnabled.toString) {
+        withTable("bucketed_table") {
+          df1.write.format("parquet").bucketBy(8, "i")
+            .saveAsTable("bucketed_table")
+          val scanDF = spark.table("bucketed_table").select("j")
+          assert(getFileScan(scanDF.queryExecution.executedPlan).bucketedScan !=
+            autoBucketedScanEnabled)
+          checkAnswer(scanDF, df1.select("j"))
 
-      val scanDF = spark.table("bucketed_table").select("j")
-      assert(!getFileScan(scanDF.queryExecution.executedPlan).bucketedScan)
-      checkAnswer(scanDF, df1.select("j"))
-
-      val aggDF = spark.table("bucketed_table").groupBy("j").agg(max("k"))
-      assert(!getFileScan(aggDF.queryExecution.executedPlan).bucketedScan)
-      checkAnswer(aggDF, df1.groupBy("j").agg(max("k")))
+          val aggDF = spark.table("bucketed_table").groupBy("j").agg(max("k"))
+          assert(getFileScan(aggDF.queryExecution.executedPlan).bucketedScan !=
+            autoBucketedScanEnabled)
+          checkAnswer(aggDF, df1.groupBy("j").agg(max("k")))
+        }
+      }
     }
   }
 

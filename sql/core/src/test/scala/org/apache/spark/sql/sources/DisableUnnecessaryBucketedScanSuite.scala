@@ -93,7 +93,9 @@ abstract class DisableUnnecessaryBucketedScanSuite
         // Read bucketed table
         ("SELECT * FROM t1", 0, 1),
         ("SELECT i FROM t1", 0, 1),
-        ("SELECT j FROM t1", 0, 0),
+        // SPARK-39344: Only disable bucketing when autoBucketedScan is enabled
+        // if bucket columns are not in scan output
+        ("SELECT j FROM t1", 0, 1),
         // Filter on bucketed column
         ("SELECT * FROM t1 WHERE i = 1", 0, 1),
         // Filter on non-bucketed column
@@ -190,7 +192,9 @@ abstract class DisableUnnecessaryBucketedScanSuite
         ("SELECT /*+ merge(t1)*/ * FROM t1 JOIN t2 ON t1.i = t2.i", 0, 2),
         // Aggregate on bucketed columns
         ("SELECT i, j, COUNT(*) FROM t1 GROUP BY i, j", 1, 1),
-        ("SELECT i, COUNT(i) FROM t1 GROUP BY i", 0, 0),
+        // SPARK-39344: Only disable bucketing when autoBucketedScan is enabled
+        // if bucket columns are not in scan output
+        ("SELECT i, COUNT(i) FROM t1 GROUP BY i", 0, 1),
         ("SELECT i, COUNT(j) FROM t1 GROUP BY i", 0, 1)
       ).foreach { case (query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled) =>
         checkDisableBucketedScan(query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled)
@@ -228,11 +232,13 @@ abstract class DisableUnnecessaryBucketedScanSuite
          GROUP BY j
          """.stripMargin, 0, 1),
         // No bucketed table scan in plan
+        // SPARK-39344: Only disable bucketing when autoBucketedScan is enabled
+        // if bucket columns are not in scan output
         ("""
          SELECT j, COUNT(*)
          FROM (SELECT t1.j FROM t1 JOIN t3 ON t1.j = t3.j)
          GROUP BY j
-         """.stripMargin, 0, 0)
+         """.stripMargin, 0, 1)
       ).foreach { case (query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled) =>
         checkDisableBucketedScan(query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled)
       }
