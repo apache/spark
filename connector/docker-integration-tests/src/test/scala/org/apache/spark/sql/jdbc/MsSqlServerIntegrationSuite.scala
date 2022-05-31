@@ -21,6 +21,7 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -373,5 +374,59 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.length == 1)
     val filtered = df.where(col("c") === 0).collect()
     assert(filtered.length == 0)
+  }
+
+  test("SPARK-37259: prepareQuery and query JDBC options") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val prepareQuery = "WITH t AS (SELECT x, y FROM tbl)"
+    val query = "SELECT * FROM t WHERE x > 10"
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("prepareQuery", prepareQuery)
+      .option("query", query)
+      .load()
+    assert(df.collect.toSet === expectedResult)
+  }
+
+  test("SPARK-37259: prepareQuery and dbtable JDBC options") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val prepareQuery = "WITH t AS (SELECT x, y FROM tbl WHERE x > 10)"
+    val dbtable = "t"
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("prepareQuery", prepareQuery)
+      .option("dbtable", dbtable)
+      .load()
+    assert(df.collect.toSet === expectedResult)
+  }
+
+  test("SPARK-37259: temp table prepareQuery and query JDBC options") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val prepareQuery = "(SELECT * INTO #TempTable FROM (SELECT * FROM tbl) t)"
+    val query = "SELECT * FROM #TempTable"
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("prepareQuery", prepareQuery)
+      .option("query", query)
+      .load()
+    assert(df.collect.toSet === expectedResult)
   }
 }

@@ -118,11 +118,13 @@ from pyspark.pandas.typedef import (
     SeriesType,
     create_type_for_series_type,
 )
+from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
 
     from pyspark.pandas.groupby import SeriesGroupBy
+    from pyspark.pandas.resample import SeriesResampler
     from pyspark.pandas.indexes import Index
     from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 
@@ -2174,14 +2176,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> "Series":
-        return self._interpolate(method=method, limit=limit, limit_direction=limit_direction)
+        return self._interpolate(
+            method=method, limit=limit, limit_direction=limit_direction, limit_area=limit_area
+        )
 
     def _interpolate(
         self,
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> "Series":
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
@@ -2191,6 +2197,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             limit_direction not in ["forward", "backward", "both"]
         ):
             raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
+        if (limit_area is not None) and (limit_area not in ["inside", "outside"]):
+            raise ValueError("invalid limit_area: '{}'".format(limit_area))
 
         if not self.spark.nullable and not isinstance(
             self.spark.data_type, (FloatType, DoubleType)
@@ -2257,6 +2265,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
                 pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
                 pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
+
+        if limit_area == "inside":
+            pad_head_cond = SF.lit(False)
+            pad_tail_cond = SF.lit(False)
+        elif limit_area == "outside":
+            fill_cond = SF.lit(False)
 
         cond = self.isnull().spark.column
         scol = (
@@ -3279,20 +3293,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
-        tmp_col = "__tmp_col__"
-        tmp_lag_col = "__tmp_lag_col__"
-        scol = self.spark.column.alias(tmp_col)
+        scol = self.spark.column
         if periods == 0:
-            lag_col = scol.alias(tmp_lag_col)
+            corr = self._internal.spark_frame.select(F.corr(scol, scol)).head()[0]
         else:
-            window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME)
-            lag_col = F.lag(scol, periods).over(window).alias(tmp_lag_col)
-
-        return (
-            self._internal.spark_frame.select([scol, lag_col])
-            .dropna("any")
-            .corr(tmp_col, tmp_lag_col)
-        )
+            lag_scol = F.lag(scol, periods).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
+            tmp_lag_col = "__tmp_lag_col__"
+            corr = (
+                self._internal.spark_frame.withColumn(tmp_lag_col, lag_scol)
+                .select(F.corr(scol, F.col(tmp_lag_col)))
+                .head()[0]
+            )
+        return np.nan if corr is None else corr
 
     def corr(self, other: "Series", method: str = "pearson") -> float:
         """
@@ -6237,12 +6249,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: SF.lit(-1))]),
         )
 
-    def argmax(self) -> int:
+    def argmax(self, axis: Axis = None, skipna: bool = True) -> int:
         """
         Return int position of the largest value in the Series.
 
         If the maximum is achieved in multiple locations,
         the first row position is returned.
+
+        Parameters
+        ----------
+        axis : {{None}}
+            Dummy argument for consistency with Series.
+        skipna : bool, default True
+            Exclude NA/null values. If the entire Series is NA, the result
+            will be NA.
 
         Returns
         -------
@@ -6253,36 +6273,50 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Consider dataset containing cereal calories
 
-        >>> s = ps.Series({'Corn Flakes': 100.0, 'Almond Delight': 110.0,
+        >>> s = ps.Series({'Corn Flakes': 100.0, 'Almond Delight': 110.0, 'Unknown': np.nan,
         ...                'Cinnamon Toast Crunch': 120.0, 'Cocoa Puff': 110.0})
-        >>> s  # doctest: +SKIP
+        >>> s
         Corn Flakes              100.0
         Almond Delight           110.0
+        Unknown                    NaN
         Cinnamon Toast Crunch    120.0
         Cocoa Puff               110.0
         dtype: float64
 
-        >>> s.argmax()  # doctest: +SKIP
-        2
+        >>> s.argmax()
+        3
+
+        >>> s.argmax(skipna=False)
+        -1
         """
+        axis = validate_axis(axis, none_axis=0)
+        if axis == 1:
+            raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
+        seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
+        sdf = InternalFrame.attach_distributed_sequence_column(
+            sdf,
+            seq_col_name,
+        )
+        scol = scol_for(sdf, self._internal.data_spark_column_names[0])
+
+        if skipna:
+            sdf = sdf.orderBy(scol.desc_nulls_last(), NATURAL_ORDER_COLUMN_NAME)
+        else:
+            sdf = sdf.orderBy(scol.desc_nulls_first(), NATURAL_ORDER_COLUMN_NAME)
+
         max_value = sdf.select(
-            F.max(scol_for(sdf, self._internal.data_spark_column_names[0])),
+            F.first(scol),
             F.first(NATURAL_ORDER_COLUMN_NAME),
         ).head()
+
         if max_value[1] is None:
             raise ValueError("attempt to get argmax of an empty sequence")
         elif max_value[0] is None:
             return -1
-        # We should remember the natural sequence started from 0
-        seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf = InternalFrame.attach_distributed_sequence_column(
-            sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
-        )
+
         # If the maximum is achieved in multiple locations, the first row position is returned.
-        return sdf.filter(
-            scol_for(sdf, self._internal.data_spark_column_names[0]) == max_value[0]
-        ).head()[0]
+        return sdf.filter(scol == max_value[0]).head()[0]
 
     def argmin(self) -> int:
         """
@@ -6849,6 +6883,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
+        skipna: bool = True,
         **kwargs: Any,
     ) -> Scalar:
         """
@@ -6859,13 +6894,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sfun : the stats function to be used for aggregation
         name : original pandas API name.
         axis : used only for sanity check because series only support index axis.
-        numeric_only : not used by this implementation, but passed down by stats functions
+        numeric_only : not used by this implementation, but passed down by stats functions.
+        skipna: exclude NA/null values when computing the result.
         """
         axis = validate_axis(axis)
         if axis == 1:
             raise NotImplementedError("Series does not support columns axis.")
 
-        scol = sfun(self)
+        if not skipna and get_option("compute.eager_check") and self.hasnans:
+            scol = F.first(F.lit(np.nan))
+        else:
+            scol = sfun(self)
 
         min_count = kwargs.get("min_count", 0)
         if min_count > 0:
@@ -6894,6 +6933,139 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         from pyspark.pandas.groupby import SeriesGroupBy
 
         return SeriesGroupBy._build(self, by, as_index=as_index, dropna=dropna)
+
+    def resample(
+        self,
+        rule: str_type,
+        closed: Optional[str_type] = None,
+        label: Optional[str_type] = None,
+        on: Optional["Series"] = None,
+    ) -> "SeriesResampler":
+        """
+        Resample time-series data.
+
+        Convenience method for frequency conversion and resampling of time series.
+        The object must have a datetime-like index (only support `DatetimeIndex` for now),
+        or the caller must pass the label of a datetime-like
+        series/index to the ``on`` keyword parameter.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        rule : str
+            The offset string or object representing target conversion.
+            Currently, supported units are {'Y', 'A', 'M', 'D', 'H',
+            'T', 'MIN', 'S'}.
+        closed : {{'right', 'left'}}, default None
+            Which side of bin interval is closed. The default is 'left'
+            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            have a default of 'right'.
+        label : {{'right', 'left'}}, default None
+            Which bin edge label to label bucket with. The default is 'left'
+            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            have a default of 'right'.
+        on : Series, optional
+            For a DataFrame, column to use instead of index for resampling.
+            Column must be datetime-like.
+
+        Returns
+        -------
+        SeriesResampler
+
+
+        Examples
+        --------
+        Start by creating a series with 9 one minute timestamps.
+
+        >>> index = pd.date_range('1/1/2000', periods=9, freq='T')
+        >>> series = ps.Series(range(9), index=index, name='V')
+        >>> series
+        2000-01-01 00:00:00    0
+        2000-01-01 00:01:00    1
+        2000-01-01 00:02:00    2
+        2000-01-01 00:03:00    3
+        2000-01-01 00:04:00    4
+        2000-01-01 00:05:00    5
+        2000-01-01 00:06:00    6
+        2000-01-01 00:07:00    7
+        2000-01-01 00:08:00    8
+        Name: V, dtype: int64
+
+        Downsample the series into 3 minute bins and sum the values
+        of the timestamps falling into a bin.
+
+        >>> series.resample('3T').sum().sort_index()
+        2000-01-01 00:00:00     3.0
+        2000-01-01 00:03:00    12.0
+        2000-01-01 00:06:00    21.0
+        Name: V, dtype: float64
+
+        Downsample the series into 3 minute bins as above, but label each
+        bin using the right edge instead of the left. Please note that the
+        value in the bucket used as the label is not included in the bucket,
+        which it labels. For example, in the original series the
+        bucket ``2000-01-01 00:03:00`` contains the value 3, but the summed
+        value in the resampled bucket with the label ``2000-01-01 00:03:00``
+        does not include 3 (if it did, the summed value would be 6, not 3).
+        To include this value close the right side of the bin interval as
+        illustrated in the example below this one.
+
+        >>> series.resample('3T', label='right').sum().sort_index()
+        2000-01-01 00:03:00     3.0
+        2000-01-01 00:06:00    12.0
+        2000-01-01 00:09:00    21.0
+        Name: V, dtype: float64
+
+        Downsample the series into 3 minute bins as above, but close the right
+        side of the bin interval.
+
+        >>> series.resample('3T', label='right', closed='right').sum().sort_index()
+        2000-01-01 00:00:00     0.0
+        2000-01-01 00:03:00     6.0
+        2000-01-01 00:06:00    15.0
+        2000-01-01 00:09:00    15.0
+        Name: V, dtype: float64
+
+        Upsample the series into 30 second bins.
+
+        >>> series.resample('30S').sum().sort_index()[0:5]   # Select first 5 rows
+        2000-01-01 00:00:00    0.0
+        2000-01-01 00:00:30    0.0
+        2000-01-01 00:01:00    1.0
+        2000-01-01 00:01:30    0.0
+        2000-01-01 00:02:00    2.0
+        Name: V, dtype: float64
+
+        See Also
+        --------
+        DataFrame.resample : Resample a DataFrame.
+        groupby : Group by mapping, function, label, or list of labels.
+        """
+        from pyspark.pandas.indexes import DatetimeIndex
+        from pyspark.pandas.resample import SeriesResampler
+
+        if on is None and not isinstance(self.index, DatetimeIndex):
+            raise NotImplementedError("resample currently works only for DatetimeIndex")
+        if on is not None and not isinstance(as_spark_type(on.dtype), TimestampType):
+            raise NotImplementedError("resample currently works only for TimestampType")
+
+        agg_columns: List[ps.Series] = []
+        column_label = self._internal.column_labels[0]
+        if isinstance(self._internal.spark_type_for(column_label), (NumericType, BooleanType)):
+            agg_columns.append(self)
+
+        if len(agg_columns) == 0:
+            raise ValueError("No available aggregation columns!")
+
+        return SeriesResampler(
+            psdf=self._psdf,
+            resamplekey=on,
+            rule=rule,
+            closed=closed,
+            label=label,
+            agg_columns=agg_columns,
+        )
 
     def __getitem__(self, key: Any) -> Any:
         try:

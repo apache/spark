@@ -49,17 +49,25 @@ trait QueryErrorsSuiteBase extends SharedSparkSession {
       errorSubClass: Option[String] = None,
       sqlState: String,
       message: String): Unit = {
-    val e = intercept[ParseException] {
+    val exception = intercept[ParseException] {
       sql(sqlText)
     }
+    checkParsingError(exception, errorClass, errorSubClass, sqlState, message)
+  }
 
+  def checkParsingError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      errorSubClass: Option[String] = None,
+      sqlState: String,
+      message: String): Unit = {
     val fullErrorClass = if (errorSubClass.isDefined) {
       errorClass + "." + errorSubClass.get
     } else {
       errorClass
     }
-    assert(e.getErrorClass === errorClass)
-    assert(e.getSqlState === sqlState)
-    assert(e.getMessage === s"""\n[$fullErrorClass] """ + message)
+    assert(exception.getErrorClass === errorClass)
+    assert(exception.getSqlState === sqlState)
+    assert(exception.getMessage === s"""\n[$fullErrorClass] """ + message)
   }
 }

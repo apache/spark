@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Abs, Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, Ceil, Coalesce, Contains, Divide, EndsWith, EqualTo, Exp, Expression, Floor, In, InSet, IsNotNull, IsNull, Literal, Log, Multiply, Not, Or, Pow, Predicate, Remainder, Sqrt, StartsWith, StringPredicate, Subtract, UnaryMinus, WidthBucket}
+import org.apache.spark.sql.catalyst.expressions.{Abs, Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, Ceil, Coalesce, Contains, Divide, EndsWith, EqualTo, Exp, Expression, Floor, In, InSet, IsNotNull, IsNull, Literal, Log, Lower, Multiply, Not, Or, Overlay, Pow, Predicate, Remainder, Sqrt, StartsWith, StringPredicate, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, Substring, Subtract, UnaryMinus, Upper, WidthBucket}
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableColumn
@@ -197,6 +197,65 @@ class V2ExpressionBuilder(
           // The children looks like [condition1, value1, ..., conditionN, valueN]
           Some(new V2Predicate("CASE_WHEN", branchExpressions.toArray[V2Expression]))
         }
+      } else {
+        None
+      }
+    case substring: Substring =>
+      val children = if (substring.len == Literal(Integer.MAX_VALUE)) {
+        Seq(substring.str, substring.pos)
+      } else {
+        substring.children
+      }
+      val childrenExpressions = children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == children.length) {
+        Some(new GeneralScalarExpression("SUBSTRING",
+          childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case Upper(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("UPPER", Array[V2Expression](v)))
+    case Lower(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("LOWER", Array[V2Expression](v)))
+    case translate: StringTranslate =>
+      val childrenExpressions = translate.children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == translate.children.length) {
+        Some(new GeneralScalarExpression("TRANSLATE",
+          childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case trim: StringTrim =>
+      val childrenExpressions = trim.children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == trim.children.length) {
+        Some(new GeneralScalarExpression("TRIM", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case trim: StringTrimLeft =>
+      val childrenExpressions = trim.children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == trim.children.length) {
+        Some(new GeneralScalarExpression("LTRIM", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case trim: StringTrimRight =>
+      val childrenExpressions = trim.children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == trim.children.length) {
+        Some(new GeneralScalarExpression("RTRIM", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case overlay: Overlay =>
+      val children = if (overlay.len == Literal(-1)) {
+        Seq(overlay.input, overlay.replace, overlay.pos)
+      } else {
+        overlay.children
+      }
+      val childrenExpressions = children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == children.length) {
+        Some(new GeneralScalarExpression("OVERLAY",
+          childrenExpressions.toArray[V2Expression]))
       } else {
         None
       }

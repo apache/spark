@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
@@ -81,7 +81,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
   override lazy val validConstraints: ExpressionSet =
@@ -985,7 +985,7 @@ case class Aggregate(
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
@@ -1303,35 +1303,28 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
-object LimitAndOffset {
-  def unapply(p: GlobalLimitAndOffset): Option[(Expression, Expression, LogicalPlan)] = {
+object OffsetAndLimit {
+  def unapply(p: GlobalLimit): Option[(Int, Int, LogicalPlan)] = {
     p match {
-      case GlobalLimitAndOffset(le1, le2, LocalLimit(le3, child)) if le1.eval().asInstanceOf[Int]
-        + le2.eval().asInstanceOf[Int] == le3.eval().asInstanceOf[Int] =>
-        Some((le1, le2, child))
+      // Optimizer pushes local limit through offset, so we need to match the plan this way.
+      case GlobalLimit(IntegerLiteral(globalLimit),
+             Offset(IntegerLiteral(offset),
+               LocalLimit(IntegerLiteral(localLimit), child)))
+          if globalLimit + offset == localLimit =>
+        Some((offset, globalLimit, child))
       case _ => None
     }
   }
 }
 
-/**
- * A global (coordinated) limit with offset. This operator can skip at most `offsetExpr` number and
- * emit at most `limitExpr` number in total. For example, if we have LIMIT 10 OFFSET 5, we impose a
- * total limit of 10 + 5 = 15 rows and then discard the first 5, leaving 10 rows remaining.
- */
-case class GlobalLimitAndOffset(
-    limitExpr: Expression,
-    offsetExpr: Expression,
-    child: LogicalPlan) extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = {
-    limitExpr match {
-      case IntegerLiteral(limit) => Some(limit)
+object LimitAndOffset {
+  def unapply(p: Offset): Option[(Int, Int, LogicalPlan)] = {
+    p match {
+      case Offset(IntegerLiteral(offset), Limit(IntegerLiteral(limit), child)) =>
+        Some((limit, offset, child))
       case _ => None
     }
   }
-  override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimitAndOffset =
-    copy(child = newChild)
 }
 
 /**
@@ -1493,6 +1486,35 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
     copy(child = newChild)
 }
 
+trait HasPartitionExpressions extends SQLConfHelper {
+
+  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+
+  def partitionExpressions: Seq[Expression]
+
+  def optNumPartitions: Option[Int]
+
+  protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
+    RoundRobinPartitioning(numPartitions)
+  } else {
+    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+        s"""
+           |SortOrder: $sortOrder
+           |NonSortOrder: $nonSortOrder
+       """.stripMargin)
+    if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+    } else {
+      HashPartitioning(partitionExpressions, numPartitions)
+    }
+  }
+}
+
 /**
  * This method repartitions data using [[Expression]]s into `optNumPartitions`, and receives
  * information about the number of partitions during execution. Used when a specific ordering or
@@ -1503,31 +1525,13 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int]) extends RepartitionOperation {
-
-  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
-  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+    optNumPartitions: Option[Int]) extends RepartitionOperation with HasPartitionExpressions {
 
   override val partitioning: Partitioning = {
-    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
-
-    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
-        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
-        "means `HashPartitioning`. In this case we have:" +
-      s"""
-         |SortOrder: $sortOrder
-         |NonSortOrder: $nonSortOrder
-       """.stripMargin)
-
     if (numPartitions == 1) {
       SinglePartition
-    } else if (sortOrder.nonEmpty) {
-      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
-    } else if (nonSortOrder.nonEmpty) {
-      HashPartitioning(nonSortOrder, numPartitions)
     } else {
-      RoundRobinPartitioning(numPartitions)
+      super.partitioning
     }
   }
 
@@ -1558,19 +1562,12 @@ object RepartitionByExpression {
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    initialNumPartitionOpt: Option[Int] = None) extends UnaryNode {
+    optNumPartitions: Option[Int] = None) extends UnaryNode with HasPartitionExpressions {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
 
-  def partitioning: Partitioning = {
-    val initialNumPartitions = initialNumPartitionOpt.getOrElse(conf.numShufflePartitions)
-    if (partitionExpressions.isEmpty) {
-      RoundRobinPartitioning(initialNumPartitions)
-    } else {
-      HashPartitioning(partitionExpressions, initialNumPartitions)
-    }
-  }
+  override val partitioning: Partitioning = super.partitioning
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
     copy(child = newChild)

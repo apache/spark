@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -582,8 +582,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}
                """.stripMargin)
 
-          case _: UnresolvedHint =>
-            throw QueryExecutionErrors.logicalHintOperatorNotRemovedDuringAnalysisError
+          case _: UnresolvedHint => throw new IllegalStateException(
+            "Logical hint operator should be removed during analysis.")
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
@@ -608,7 +608,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         }
     }
     checkCollectedMetrics(plan)
-    checkOffsetOperator(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -702,7 +701,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
-  private def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+  def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
         query: LogicalPlan, agg: Aggregate): Unit = {
@@ -746,8 +745,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       expressions.exists(_.exists(_.semanticEquals(expr)))
     }
 
+    def checkOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = p match {
+      case f: Filter =>
+        if (hasOuterReferences(expr.plan)) {
+          expr.plan.expressions.foreach(_.foreachUp {
+            case o: OuterReference =>
+              p.children.foreach(e =>
+                if (!e.output.exists(_.exprId == o.exprId)) {
+                  failAnalysis("outer attribute not found")
+                })
+            case _ =>
+          })
+        }
+      case _ =>
+    }
+
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
+
+    // Check if there is outer attribute that cannot be found from the plan.
+    checkOuterReference(plan, expr)
 
     expr match {
       case ScalarSubquery(query, outerAttrs, _, _) =>
@@ -849,30 +866,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       })
     }
     check(plan)
-  }
-
-  /**
-   * Validate whether the [[Offset]] is valid.
-   */
-  private def checkOffsetOperator(plan: LogicalPlan): Unit = {
-    plan.foreachUp {
-      case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
-        && o.children.exists(_.isInstanceOf[Offset]) =>
-        failAnalysis(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
-      case _ =>
-    }
-    plan match {
-      case Offset(offsetExpr, _) =>
-        checkLimitLikeClause("offset", offsetExpr)
-        failAnalysis(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause is found to be the outermost node.""".stripMargin.replace("\n", " "))
-      case _ =>
-    }
   }
 
   /**
@@ -1135,7 +1128,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
+      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _, _) =>
         val fieldName = col.name.quoted
         if (a.dataType.isDefined) {
           val field = CharVarcharUtils.getRawType(col.field.metadata)

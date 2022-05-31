@@ -816,8 +816,8 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected WritableColumnVector(int capacity, DataType type) {
-    super(type);
+  protected WritableColumnVector(int capacity, DataType dataType) {
+    super(dataType);
     this.capacity = capacity;
 
     if (isArray()) {

@@ -1511,12 +1511,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(sx);
   }
 
+  @Override
   public void writeExternal(ObjectOutput out) throws IOException {
     byte[] bytes = getBytes();
     out.writeInt(bytes.length);
     out.write(bytes);
   }
 
+  @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     offset = BYTE_ARRAY_OFFSET;
     numBytes = in.readInt();

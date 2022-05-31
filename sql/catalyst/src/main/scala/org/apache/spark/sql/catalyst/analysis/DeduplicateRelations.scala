@@ -125,9 +125,18 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           }
         }
 
+        val planWithNewSubquery = plan.transformExpressions {
+          case subquery: SubqueryExpression =>
+            val (renewed, collected, changed) = renewDuplicatedRelations(
+              existingRelations ++ relations, subquery.plan)
+            relations ++= collected
+            if (changed) planChanged = true
+            subquery.withNewPlan(renewed)
+        }
+
         if (planChanged) {
-          if (plan.childrenResolved) {
-            val planWithNewChildren = plan.withNewChildren(newChildren.toSeq)
+          if (planWithNewSubquery.childrenResolved) {
+            val planWithNewChildren = planWithNewSubquery.withNewChildren(newChildren.toSeq)
             val attrMap = AttributeMap(
               plan
                 .children
@@ -140,7 +149,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
               planWithNewChildren.rewriteAttrs(attrMap)
             }
           } else {
-            plan.withNewChildren(newChildren.toSeq)
+            planWithNewSubquery.withNewChildren(newChildren.toSeq)
           }
         } else {
           plan
@@ -148,16 +157,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       } else {
         plan
       }
-
-      val planWithNewSubquery = newPlan.transformExpressions {
-        case subquery: SubqueryExpression =>
-          val (renewed, collected, changed) = renewDuplicatedRelations(
-            existingRelations ++ relations, subquery.plan)
-          relations ++= collected
-          if (changed) planChanged = true
-          subquery.withNewPlan(renewed)
-      }
-      (planWithNewSubquery, relations, planChanged)
+      (newPlan, relations, planChanged)
   }
 
   /**

@@ -339,7 +339,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[NON_LITERAL_PIVOT_VALUES] Literal expressions required for pivot values, found 'course#x'
+[NON_LITERAL_PIVOT_VALUES] Literal expressions required for pivot values, found "course".
 
 
 -- !query

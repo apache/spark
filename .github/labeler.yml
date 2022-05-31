@@ -130,6 +130,8 @@ STRUCTURED STREAMING:
 PYTHON:
   - "bin/pyspark*"
   - "**/python/**/*"
+PANDAS API ON SPARK:
+  - "python/pyspark/pandas/**/*"
 R:
   - "**/r/**/*"
   - "**/R/**/*"

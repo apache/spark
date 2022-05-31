@@ -24,12 +24,14 @@ import java.time.{Duration, Period}
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
+
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
@@ -52,7 +54,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ResetSystemProperties
 
 @ExtendedSQLTest
@@ -4310,6 +4312,90 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-39166: Query context of binary arithmetic should be serialized to executors" +
+    " when WSCG is off") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("create table t(i int, j int) using parquet")
+        sql("insert into t values(2147483647, 10)")
+        Seq(
+          "select i + j from t",
+          "select -i - j from t",
+          "select i * j from t",
+          "select i / (j - 10) from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
+      }
+    }
+  }
+
+  test("SPARK-39175: Query context of Cast should be serialized to executors" +
+    " when WSCG is off") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("create table t(s string) using parquet")
+        sql("insert into t values('a')")
+        Seq(
+          "select cast(s as int) from t",
+          "select cast(s as long) from t",
+          "select cast(s as double) from t",
+          "select cast(s as decimal(10, 2)) from t",
+          "select cast(s as date) from t",
+          "select cast(s as timestamp) from t",
+          "select cast(s as boolean) from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
+      }
+    }
+  }
+
+  test("SPARK-39177: Query context of getting map value should be serialized to executors" +
+    " when WSCG is off") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("create table t(m map<string, string>) using parquet")
+        sql("insert into t values map('a', 'b')")
+        Seq(
+          "select m['foo'] from t",
+          "select element_at(m, 'foo') from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
+      }
+    }
+  }
+
+  test("SPARK-39190,SPARK-39208,SPARK-39210: Query context of decimal overflow error should " +
+    "be serialized to executors when WSCG is off") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("create table t(d decimal(38, 0)) using parquet")
+        sql("insert into t values (6e37BD),(6e37BD)")
+        Seq(
+          "select d / 0.1 from t",
+          "select sum(d) from t",
+          "select avg(d) from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
+      }
+    }
+  }
+
   test("SPARK-38589: try_avg should return null if overflow happens before merging") {
     val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
       .map(Period.ofMonths)
@@ -4320,6 +4406,55 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     Seq(yearMonthDf, dayTimeDf).foreach { df =>
       checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_avg(v)"), Row(null))
     }
+  }
+
+  test("SPARK-39012: SparkSQL cast partition value does not support all data types") {
+    withTempDir { dir =>
+      val binary1 = Hex.hex(UTF8String.fromString("Spark").getBytes).getBytes
+      val binary2 = Hex.hex(UTF8String.fromString("SQL").getBytes).getBytes
+      val data = Seq[(Int, Boolean, Array[Byte])](
+        (1, false, binary1),
+        (2, true, binary2)
+      )
+      data.toDF("a", "b", "c")
+        .write
+        .mode("overwrite")
+        .partitionBy("b", "c")
+        .parquet(dir.getCanonicalPath)
+      val res = spark.read
+        .schema("a INT, b BOOLEAN, c BINARY")
+        .parquet(dir.getCanonicalPath)
+      checkAnswer(res,
+        Seq(
+          Row(1, false, mutable.WrappedArray.make(binary1)),
+          Row(2, true, mutable.WrappedArray.make(binary2))
+        ))
+    }
+  }
+
+  test("SPARK-39216: Don't collapse projects in CombineUnions if it hasCorrelatedSubquery") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT (SELECT IF(x, 1, 0)) AS a
+          |FROM (SELECT true) t(x)
+          |UNION
+          |SELECT 1 AS a
+        """.stripMargin),
+      Seq(Row(1)))
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT x + 1
+          |FROM   (SELECT id
+          |               + (SELECT Max(id)
+          |                  FROM   range(2)) AS x
+          |        FROM   range(1)) t
+          |UNION
+          |SELECT 1 AS a
+        """.stripMargin),
+      Seq(Row(2), Row(1)))
   }
 }
 

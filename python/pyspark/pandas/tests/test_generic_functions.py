@@ -36,15 +36,23 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(ValueError, "invalid limit_direction"):
             psdf.interpolate(limit_direction="jump")
 
+        with self.assertRaisesRegex(ValueError, "invalid limit_area"):
+            psdf.interpolate(limit_area="jump")
+
     def _test_interpolate(self, pobj):
         psobj = ps.from_pandas(pobj)
         self.assert_eq(psobj.interpolate(), pobj.interpolate())
         for limit in range(1, 5):
             for limit_direction in [None, "forward", "backward", "both"]:
-                self.assert_eq(
-                    psobj.interpolate(limit=limit, limit_direction=limit_direction),
-                    pobj.interpolate(limit=limit, limit_direction=limit_direction),
-                )
+                for limit_area in [None, "inside", "outside"]:
+                    self.assert_eq(
+                        psobj.interpolate(
+                            limit=limit, limit_direction=limit_direction, limit_area=limit_area
+                        ),
+                        pobj.interpolate(
+                            limit=limit, limit_direction=limit_direction, limit_area=limit_area
+                        ),
+                    )
 
     def test_interpolate(self):
         pser = pd.Series(
@@ -110,6 +118,48 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
             columns=list("abcde"),
         )
         self._test_interpolate(pdf)
+
+    def _test_stat_functions(self, stat_func):
+        pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2], "c": [1, 2, 3]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(stat_func(pdf.a), stat_func(psdf.a))
+        self.assert_eq(stat_func(pdf.b), stat_func(psdf.b))
+        self.assert_eq(stat_func(pdf), stat_func(psdf))
+
+    # Fix skew and kurtosis and re-enable tests below
+    def test_stat_functions(self):
+        self._test_stat_functions(lambda x: x.sum())
+        self._test_stat_functions(lambda x: x.sum(skipna=False))
+        self._test_stat_functions(lambda x: x.mean())
+        self._test_stat_functions(lambda x: x.mean(skipna=False))
+        self._test_stat_functions(lambda x: x.product())
+        self._test_stat_functions(lambda x: x.product(skipna=False))
+        self._test_stat_functions(lambda x: x.min())
+        self._test_stat_functions(lambda x: x.min(skipna=False))
+        self._test_stat_functions(lambda x: x.max())
+        self._test_stat_functions(lambda x: x.max(skipna=False))
+        self._test_stat_functions(lambda x: x.std())
+        self._test_stat_functions(lambda x: x.std(skipna=False))
+        self._test_stat_functions(lambda x: x.sem())
+        self._test_stat_functions(lambda x: x.sem(skipna=False))
+        # self._test_stat_functions(lambda x: x.skew())
+        self._test_stat_functions(lambda x: x.skew(skipna=False))
+
+        # Test cases below return differently from pandas (either by design or to be fixed)
+        pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2], "c": [1, 2, 3]})
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(pdf.a.median(), psdf.a.median())
+        self.assert_eq(pdf.a.median(skipna=False), psdf.a.median(skipna=False))
+        self.assert_eq(1.0, psdf.b.median())
+        self.assert_eq(pdf.b.median(skipna=False), psdf.b.median(skipna=False))
+        self.assert_eq(pdf.c.median(), psdf.c.median())
+
+        self.assert_eq(pdf.a.kurtosis(skipna=False), psdf.a.kurtosis(skipna=False))
+        self.assert_eq(pdf.a.kurtosis(), psdf.a.kurtosis())
+        self.assert_eq(pdf.b.kurtosis(skipna=False), psdf.b.kurtosis(skipna=False))
+        self.assert_eq(pdf.b.kurtosis(), psdf.b.kurtosis())
+        self.assert_eq(pdf.c.kurtosis(), psdf.c.kurtosis())
 
 
 if __name__ == "__main__":

@@ -582,4 +582,152 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
           |---------------------------^^^
           |""".stripMargin)
   }
+
+  test("INVALID_SQL_SYNTAX: show table partition key must set value") {
+    validateParsingError(
+      sqlText = "SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: Partition key `grade` must set value (can't be empty).(line 1, pos 47)
+          |
+          |== SQL ==
+          |SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)
+          |-----------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: expected a column reference for transform bucket") {
+    validateParsingError(
+      sqlText =
+        "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: Expected a column reference for transform `bucket`: 66(line 1, pos 67)
+          |
+          |== SQL ==
+          |CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))
+          |-------------------------------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: DESC TABLE COLUMN for a specific partition") {
+    validateParsingError(
+      sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age",
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("DESC_TABLE_COLUMN_PARTITION"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: DESC TABLE COLUMN for a specific partition""" +
+        """.(line 1, pos 0)""" +
+        """|
+           |
+           |== SQL ==
+           |DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age
+           |^^^
+           |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: PARTITION specification is incomplete") {
+    validateParsingError(
+      sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade)",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: PARTITION specification is incomplete: `grade`(line 1, pos 0)
+          |
+          |== SQL ==
+          |DESCRIBE TABLE EXTENDED customer PARTITION (grade)
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: cannot set reserved namespace property") {
+    val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("SET_NAMESPACE_PROPERTY"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: location is a reserved namespace property, """ +
+        """please use the LOCATION clause to specify it.(line 1, pos 0)""" +
+        s"""
+          |
+          |== SQL ==
+          |$sql
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: cannot set reserved table property") {
+    val sql = "CREATE TABLE student (id INT, name STRING, age INT) " +
+      "USING PARQUET TBLPROPERTIES ('provider'='parquet')"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("SET_TABLE_PROPERTY"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: provider is a reserved table property, """ +
+        """please use the USING clause to specify it.(line 1, pos 66)""" +
+        s"""
+          |
+          |== SQL ==
+          |$sql
+          |------------------------------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_PROPERTY_KEY: invalid property key for set quoted configuration") {
+    val sql = "set =`value`"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "INVALID_PROPERTY_KEY",
+      sqlState = null,
+      message =
+        s""""" is an invalid property key, please use quotes, e.g. SET ""="value"(line 1, pos 0)
+          |
+          |== SQL ==
+          |$sql
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_PROPERTY_VALUE: invalid property value for set quoted configuration") {
+    val sql = "set `key`=1;2;;"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "INVALID_PROPERTY_VALUE",
+      sqlState = null,
+      message =
+        """"1;2;;" is an invalid property value, please use quotes, """ +
+        """e.g. SET "key"="1;2;;"(line 1, pos 0)""" +
+        s"""
+           |
+           |== SQL ==
+           |$sql
+           |^^^
+           |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: cannot set Properties and DbProperties at the same time") {
+    val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c') " +
+      "WITH DBPROPERTIES('a'='a', 'b'='b', 'c'='c')"
+    validateParsingError(
+      sqlText = sql,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("SET_PROPERTIES_AND_DBPROPERTIES"),
+      sqlState = "0A000",
+      message =
+        """The feature is not supported: set PROPERTIES and DBPROPERTIES at the same time.""" +
+        """(line 1, pos 0)""" +
+        s"""
+          |
+          |== SQL ==
+          |$sql
+          |^^^
+          |""".stripMargin)
+  }
 }

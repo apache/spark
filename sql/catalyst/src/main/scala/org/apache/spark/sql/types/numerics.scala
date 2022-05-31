@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import scala.math.Numeric._
-import scala.math.Ordering
 
 import org.apache.spark.sql.catalyst.util.{MathUtils, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors

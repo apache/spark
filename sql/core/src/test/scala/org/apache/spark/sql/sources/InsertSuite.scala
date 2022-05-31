@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -720,13 +720,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue1)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue1}L to "INT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue1}L of the type "BIGINT" cannot be cast to "INT""""))
 
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
         msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue2)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue2}L to "INT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue2}L of the type "BIGINT" cannot be cast to "INT""""))
       }
     }
   }
@@ -740,13 +742,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue1}D to "BIGINT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue1}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"""Casting ${outOfRangeValue2}D to "BIGINT" causes overflow"""))
+        assert(msg.contains(
+          s"""The value ${outOfRangeValue2}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
       }
     }
   }
@@ -1058,14 +1062,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t values(false, default + 1)")
-      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
+          .getMessage))
     }
     // Explicit default values may not participate in complex expressions in the SELECT query.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t select false, default + 1")
-      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
+          .getMessage))
     }
     // Explicit default values have a reasonable error path if the table is not found.
     withTable("t") {
@@ -1437,6 +1445,193 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         sql("insert into t values(1)")
       }.getMessage.contains("expected 3 columns but found"))
+    }
+  }
+
+  test("SPARK-38838 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: positive tests") {
+    withTable("t") {
+      sql("create table t(i boolean, s string, k bigint) using parquet")
+      // The default value for the DEFAULT keyword is the NULL literal.
+      sql("insert into t values(true, default, default)")
+      // There is a complex expression in the default value.
+      sql("alter table t alter column s set default concat('abc', 'def')")
+      sql("insert into t values(true, default, default)")
+      // The default value parses correctly and the provided value type is different but coercible.
+      sql("alter table t alter column k set default 42")
+      sql("insert into t values(true, default, default)")
+      // After dropping the default, inserting more values should add NULLs.
+      sql("alter table t alter column k drop default")
+      sql("insert into t values(true, default, default)")
+      checkAnswer(spark.table("t"),
+        Seq(
+          Row(true, null, null),
+          Row(true, "abcdef", null),
+          Row(true, "abcdef", 42),
+          Row(true, "abcdef", null)
+        ))
+    }
+  }
+
+  test("SPARK-38838 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
+    object Errors {
+      val COMMON_SUBSTRING = " has a DEFAULT value"
+      val BAD_SUBQUERY =
+        "cannot evaluate expression CAST(scalarsubquery() AS BIGINT) in inline table definition"
+    }
+    val createTable = "create table t(i boolean, s bigint) using parquet"
+    val insertDefaults = "insert into t values (default, default)"
+    withTable("t") {
+      sql(createTable)
+      // The default value fails to analyze.
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column s set default badvalue")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      // The default value analyzes to a table not in the catalog.
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column s set default (select min(x) from badtable)")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
+      // list at the INSERT INTO time.
+      sql("alter table t alter column s set default (select 42 as alias)")
+      assert(intercept[AnalysisException] {
+        sql(insertDefaults)
+      }.getMessage.contains(Errors.BAD_SUBQUERY))
+      // The default value parses but the type is not coercible.
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column s set default false")
+      }.getMessage.contains("provided a value of incompatible type"))
+      // The default value is disabled per configuration.
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        assert(intercept[ParseException] {
+          sql("alter table t alter column s set default 41 + 1")
+        }.getMessage.contains("Support for DEFAULT column values is not allowed"))
+      }
+    }
+    // Attempting to set a default value for a partitioning column is not allowed.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint, q int default 42) using parquet partitioned by (i)")
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column i set default false")
+      }.getMessage.contains("Can't find column `i` given table data columns [`s`, `q`]"))
+    }
+  }
+
+  test("INSERT rows, ALTER TABLE ADD COLUMNS with DEFAULTs, then SELECT them") {
+    case class Config(
+        sqlConf: Option[(String, String)],
+        insertNullsToStorage: Boolean = true)
+    def runTest(dataSource: String, config: Config): Unit = {
+      def withTableT(f: => Unit): Unit = {
+        sql(s"create table t(a string, i int) using $dataSource")
+        sql("insert into t values('xyz', 42)")
+        withTable("t") { f }
+      }
+      // Positive tests:
+      // Adding a column with a valid default value into a table containing existing data works
+      // successfully. Querying data from the altered table returns the new value.
+      withTableT {
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef"))
+        checkAnswer(sql("select i, s from t"), Row(42, "abcdef"))
+        // Now alter the column to change the default value. This still returns the previous value,
+        // not the new value, since the behavior semantics are the same as if the first command had
+        // performed a backfill of the new default value in the existing rows.
+        sql("alter table t alter column s set default concat('ghi', 'jkl')")
+        checkAnswer(sql("select i, s from t"), Row(42, "abcdef"))
+      }
+      // Adding a column with a default value and then inserting explicit NULL values works.
+      // Querying data back from the table differentiates between the explicit NULL values and
+      // default values.
+      withTableT {
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        sql("insert into t values(null, null, null)")
+        sql("alter table t add column (x boolean default true)")
+        // By default, INSERT commands into some tables (such as JSON) do not store NULL values.
+        // Therefore, if such destination columns have DEFAULT values, SELECTing the same columns
+        // will return the default values (instead of NULL) since nothing is present in storage.
+        val insertedSColumn = if (config.insertNullsToStorage) null else "abcdef"
+        checkAnswer(spark.table("t"),
+          Seq(
+            Row("xyz", 42, "abcdef", true),
+            Row(null, null, insertedSColumn, true)))
+        checkAnswer(sql("select i, s, x from t"),
+          Seq(
+            Row(42, "abcdef", true),
+            Row(null, insertedSColumn, true)))
+      }
+      // Adding two columns where only the first has a valid default value works successfully.
+      // Querying data from the altered table returns the default value as well as NULL for the
+      // second column.
+      withTableT {
+        sql("alter table t add column (s string default concat('abc', 'def'))")
+        sql("alter table t add column (x string)")
+        checkAnswer(spark.table("t"), Row("xyz", 42, "abcdef", null))
+        checkAnswer(sql("select i, s, x from t"), Row(42, "abcdef", null))
+      }
+      // Test other supported data types.
+      withTableT {
+        sql("alter table t add columns (" +
+          "s boolean default true, " +
+          "t byte default cast(null as byte), " +
+          "u short default cast(42 as short), " +
+          "v float default 0, " +
+          "w double default 0, " +
+          "x date default date'0000', " +
+          "y timestamp default timestamp'0000', " +
+          "z timestamp_ntz default cast(timestamp'0000' as timestamp_ntz), " +
+          "a1 timestamp_ltz default cast(timestamp'0000' as timestamp_ltz), " +
+          "a2 decimal(5, 2) default 123.45)")
+        checkAnswer(sql("select s, t, u, v, w, x is not null, " +
+          "y is not null, z is not null, a1 is not null, a2 is not null from t"),
+          Row(true, null, 42, 0.0f, 0.0d, true, true, true, true, true))
+      }
+    }
+
+    // This represents one test configuration over a data source.
+    case class TestCase(
+        dataSource: String,
+        configs: Seq[Config])
+    // Run the test several times using each configuration.
+    Seq(
+      TestCase(
+        dataSource = "csv",
+        Seq(
+          Config(
+            None),
+          Config(
+            Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))),
+      TestCase(
+        dataSource = "json",
+        Seq(
+          Config(
+            None,
+            insertNullsToStorage = false),
+          Config(
+            Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")))),
+      TestCase(
+        dataSource = "orc",
+        Seq(
+          Config(
+            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false"),
+            insertNullsToStorage = false))),
+      TestCase(
+        dataSource = "parquet",
+        Seq(
+          Config(
+            Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"),
+            insertNullsToStorage = false)))
+    ).foreach { testCase: TestCase =>
+      testCase.configs.foreach { config: Config =>
+        config.sqlConf.map { kv: (String, String) =>
+          withSQLConf(kv) {
+            // Run the test with the pair of custom SQLConf values.
+            runTest(testCase.dataSource, config)
+          }
+        }.getOrElse {
+          // Run the test with default settings.
+          runTest(testCase.dataSource, config)
+        }
+      }
     }
   }
 

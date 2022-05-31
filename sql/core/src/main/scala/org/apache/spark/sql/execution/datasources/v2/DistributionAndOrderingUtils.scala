@@ -19,16 +19,15 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartitions, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.distributions._
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils.sequenceToOption
 
 object DistributionAndOrderingUtils {
 
-  def prepareQuery(write: Write, query: LogicalPlan, conf: SQLConf): LogicalPlan = write match {
+  def prepareQuery(write: Write, query: LogicalPlan): LogicalPlan = write match {
     case write: RequiresDistributionAndOrdering =>
       val numPartitions = write.requiredNumPartitions()
 
@@ -41,15 +40,16 @@ object DistributionAndOrderingUtils {
       }
 
       val queryWithDistribution = if (distribution.nonEmpty) {
-        val finalNumPartitions = if (numPartitions > 0) {
-          numPartitions
-        } else {
-          conf.numShufflePartitions
-        }
+        val optNumPartitions = if (numPartitions > 0) Some(numPartitions) else None
         // the conversion to catalyst expressions above produces SortOrder expressions
         // for OrderedDistribution and generic expressions for ClusteredDistribution
-        // this allows RepartitionByExpression to pick either range or hash partitioning
-        RepartitionByExpression(distribution, query, finalNumPartitions)
+        // this allows RebalancePartitions/RepartitionByExpression to pick either
+        // range or hash partitioning
+        if (write.distributionStrictlyRequired()) {
+          RepartitionByExpression(distribution, query, optNumPartitions)
+        } else {
+          RebalancePartitions(distribution, query, optNumPartitions)
+        }
       } else if (numPartitions > 0) {
         throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
       } else {
