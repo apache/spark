@@ -181,8 +181,7 @@ class QueryExecution(
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
-    QueryExecution.withInternalError(s"The Spark SQL phase $phase failed with an internal error. " +
-      "Please, fill in a bug report and provide the full stack trace.") {
+    QueryExecution.withInternalError(s"The Spark SQL phase $phase failed with an internal error.") {
       tracker.measurePhase(phase)(block)
     }
   }
@@ -502,7 +501,8 @@ object QueryExecution {
       case e @ (_: java.lang.IllegalStateException | _: java.lang.AssertionError) =>
         throw new SparkException(
           errorClass = "INTERNAL_ERROR",
-          messageParameters = Array(msg),
+          messageParameters = Array(msg +
+            " Please, fill in a bug report and provide the full stack trace."),
           cause = e)
       case e: Throwable => throw e
     }
