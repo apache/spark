@@ -16,6 +16,8 @@
 #
 import random
 import unittest
+import tempfile
+import os
 
 from py4j.protocol import Py4JJavaError
 
@@ -64,13 +66,8 @@ class MergerTests(unittest.TestCase):
     def test_shuffle_data_with_multiple_locations(self):
         # SPARK-39179: Test shuffle of data with multiple location also check
         # shuffle locations get randomized
-        import tempfile
 
-        with tempfile.TemporaryDirectory(dir="/tmp") as tempdir1, tempfile.TemporaryDirectory(
-            dir="/tmp"
-        ) as tempdir2:
-            import os
-
+        with tempfile.TemporaryDirectory() as tempdir1, tempfile.TemporaryDirectory() as tempdir2:
             os.environ["SPARK_LOCAL_DIRS"] = tempdir1 + "," + tempdir2
             index_of_tempdir1 = [False, False]
             for idx in range(10):
@@ -83,6 +80,7 @@ class MergerTests(unittest.TestCase):
                 self.assertTrue(m.spills >= 1)
                 self.assertEqual(sum(sum(v) for k, v in m.items()), sum(range(self.N)))
             self.assertTrue(index_of_tempdir1[0] and (index_of_tempdir1[0] == index_of_tempdir1[1]))
+            del os.environ["SPARK_LOCAL_DIRS"]
 
     def test_simple_aggregator_with_medium_dataset(self):
         # SPARK-39179: Test Simple aggregator
@@ -193,10 +191,13 @@ class ExternalGroupByTests(unittest.TestCase):
     def test_dataset_with_keys_are_unsorted(self):
         # SPARK-39179: Test external group when numbers of keys are greater than SORT KEY Limit.
         m = ExternalGroupBy(self.agg, 5, partitions=3)
-        m.SORT_KEY_LIMIT = 1
-        m.mergeValues(self.data)
-        self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(sum(v) for k, v in m.items()), 2 * sum(range(self.N)))
+        try:
+            m.SORT_KEY_LIMIT = 1
+            m.mergeValues(self.data)
+            self.assertTrue(m.spills >= 1)
+            self.assertEqual(sum(sum(v) for k, v in m.items()), 2 * sum(range(self.N)))
+        finally:
+            m.SORT_KEY_LIMIT = 1000
 
 
 class SorterTests(unittest.TestCase):
