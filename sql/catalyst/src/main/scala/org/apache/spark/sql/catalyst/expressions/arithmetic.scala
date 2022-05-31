@@ -390,6 +390,9 @@ case class Add(
 
   override def decimalMethod: String = "$plus"
 
+  // *   Operation    Result Precision                        Result Scale
+  // *   ------------------------------------------------------------------------
+  // *   e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   override def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     val resultScale = max(s1, s2)
     if (allowPrecisionLoss) {
