@@ -303,7 +303,7 @@ object OrcUtils extends Logging {
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType): InternalRow = {
-    require(aggregation.groupByColumns.length == 0,
+    require(aggregation.groupByExpressions.length == 0,
       s"aggregate $aggregation with group-by column shouldn't be pushed down")
     var columnsStatistics: OrcColumnStatistics = null
     try {

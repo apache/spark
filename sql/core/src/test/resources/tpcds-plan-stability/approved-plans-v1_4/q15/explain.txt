@@ -124,7 +124,7 @@ Results [2]: [ca_zip#10, MakeDecimal(sum(UnscaledValue(cs_sales_price#2))#16,17,
 
 (22) TakeOrderedAndProject
 Input [2]: [ca_zip#10, sum(cs_sales_price)#17]
-Arguments: 100, 0, [ca_zip#10 ASC NULLS FIRST], [ca_zip#10, sum(cs_sales_price)#17]
+Arguments: 100, [ca_zip#10 ASC NULLS FIRST], [ca_zip#10, sum(cs_sales_price)#17]
 
 ===== Subqueries =====
 

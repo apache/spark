@@ -245,7 +245,7 @@ Input [3]: [ctr_customer_sk#11, c_customer_sk#30, c_customer_id#31]
 
 (43) TakeOrderedAndProject
 Input [1]: [c_customer_id#31]
-Arguments: 100, 0, [c_customer_id#31 ASC NULLS FIRST], [c_customer_id#31]
+Arguments: 100, [c_customer_id#31 ASC NULLS FIRST], [c_customer_id#31]
 
 ===== Subqueries =====
 

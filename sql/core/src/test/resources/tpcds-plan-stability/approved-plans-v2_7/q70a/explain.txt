@@ -324,7 +324,7 @@ Input [6]: [total_sum#30, s_state#8, s_county#7, lochierarchy#33, _w0#61, rank_w
 
 (56) TakeOrderedAndProject
 Input [5]: [total_sum#30, s_state#8, s_county#7, lochierarchy#33, rank_within_parent#63]
-Arguments: 100, 0, [lochierarchy#33 DESC NULLS LAST, CASE WHEN (lochierarchy#33 = 0) THEN s_state#8 END ASC NULLS FIRST, rank_within_parent#63 ASC NULLS FIRST], [total_sum#30, s_state#8, s_county#7, lochierarchy#33, rank_within_parent#63]
+Arguments: 100, [lochierarchy#33 DESC NULLS LAST, CASE WHEN (lochierarchy#33 = 0) THEN s_state#8 END ASC NULLS FIRST, rank_within_parent#63 ASC NULLS FIRST], [total_sum#30, s_state#8, s_county#7, lochierarchy#33, rank_within_parent#63]
 
 ===== Subqueries =====
 

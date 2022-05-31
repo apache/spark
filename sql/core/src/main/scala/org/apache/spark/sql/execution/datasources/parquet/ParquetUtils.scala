@@ -220,7 +220,7 @@ object ParquetUtils {
     val primitiveTypeBuilder = mutable.ArrayBuilder.make[PrimitiveType]
     val valuesBuilder = mutable.ArrayBuilder.make[Any]
 
-    assert(aggregation.groupByColumns.length == 0, "group by shouldn't be pushed down")
+    assert(aggregation.groupByExpressions.length == 0, "group by shouldn't be pushed down")
     aggregation.aggregateExpressions.foreach { agg =>
       var value: Any = None
       var rowCount = 0L

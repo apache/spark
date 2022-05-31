@@ -275,7 +275,7 @@ Results [5]: [null AS i_product_name#61, null AS i_brand#62, null AS i_class#63,
 
 (45) TakeOrderedAndProject
 Input [5]: [i_product_name#11, i_brand#8, i_class#9, i_category#10, qoh#27]
-Arguments: 100, 0, [qoh#27 ASC NULLS FIRST, i_product_name#11 ASC NULLS FIRST, i_brand#8 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_category#10 ASC NULLS FIRST], [i_product_name#11, i_brand#8, i_class#9, i_category#10, qoh#27]
+Arguments: 100, [qoh#27 ASC NULLS FIRST, i_product_name#11 ASC NULLS FIRST, i_brand#8 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_category#10 ASC NULLS FIRST], [i_product_name#11, i_brand#8, i_class#9, i_category#10, qoh#27]
 
 ===== Subqueries =====
 

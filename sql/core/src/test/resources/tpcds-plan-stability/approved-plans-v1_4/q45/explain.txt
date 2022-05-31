@@ -200,7 +200,7 @@ Results [3]: [ca_zip#12, ca_city#11, MakeDecimal(sum(UnscaledValue(ws_sales_pric
 
 (36) TakeOrderedAndProject
 Input [3]: [ca_zip#12, ca_city#11, sum(ws_sales_price)#25]
-Arguments: 100, 0, [ca_zip#12 ASC NULLS FIRST, ca_city#11 ASC NULLS FIRST], [ca_zip#12, ca_city#11, sum(ws_sales_price)#25]
+Arguments: 100, [ca_zip#12 ASC NULLS FIRST, ca_city#11 ASC NULLS FIRST], [ca_zip#12, ca_city#11, sum(ws_sales_price)#25]
 
 ===== Subqueries =====
 

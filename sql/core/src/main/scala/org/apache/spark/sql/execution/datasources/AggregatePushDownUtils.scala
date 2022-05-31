@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression}
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
@@ -82,7 +84,7 @@ object AggregatePushDownUtils {
       }
     }
 
-    if (aggregation.groupByColumns.nonEmpty || dataFilters.nonEmpty) {
+    if (dataFilters.nonEmpty) {
       // Parquet/ORC footer has max/min/count for columns
       // e.g. SELECT COUNT(col1) FROM t
       // but footer doesn't have max/min/count for a column if max/min/count
@@ -90,15 +92,27 @@ object AggregatePushDownUtils {
       // e.g. SELECT COUNT(col1) FROM t WHERE col2 = 8
       //      SELECT COUNT(col1) FROM t GROUP BY col2
       // However, if the filter is on partition column, max/min/count can still be pushed down
-      // Todo:  add support if groupby column is partition col
-      //        (https://issues.apache.org/jira/browse/SPARK-36646)
       return None
     }
-    aggregation.groupByColumns.foreach { col =>
+
+    if (aggregation.groupByExpressions.nonEmpty &&
+      partitionNames.size != aggregation.groupByExpressions.length) {
+      // If there are group by columns, we only push down if the group by columns are the same as
+      // the partition columns. In theory, if group by columns are a subset of partition columns,
+      // we should still be able to push down. e.g. if table t has partition columns p1, p2, and p3,
+      // SELECT MAX(c) FROM t GROUP BY p1, p2 should still be able to push down. However, the
+      // partial aggregation pushed down to data source needs to be
+      // SELECT p1, p2, p3, MAX(c) FROM t GROUP BY p1, p2, p3, and Spark layer
+      // needs to have a final aggregation such as SELECT MAX(c) FROM t GROUP BY p1, p2, then the
+      // pushed down query schema is different from the query schema at Spark. We will keep
+      // aggregate push down simple and don't handle this complicate case for now.
+      return None
+    }
+    aggregation.groupByExpressions.map(extractColName).foreach { colName =>
       // don't push down if the group by columns are not the same as the partition columns (orders
       // doesn't matter because reorder can be done at data source layer)
-      if (col.fieldNames.length != 1 || !isPartitionCol(col.fieldNames.head)) return None
-      finalSchema = finalSchema.add(getStructFieldForCol(col.fieldNames.head))
+      if (colName.isEmpty || !isPartitionCol(colName.get)) return None
+      finalSchema = finalSchema.add(getStructFieldForCol(colName.get))
     }
 
     aggregation.aggregateExpressions.foreach {
@@ -125,7 +139,8 @@ object AggregatePushDownUtils {
   def equivalentAggregations(a: Aggregation, b: Aggregation): Boolean = {
     a.aggregateExpressions.sortBy(_.hashCode())
       .sameElements(b.aggregateExpressions.sortBy(_.hashCode())) &&
-      a.groupByColumns.sortBy(_.hashCode()).sameElements(b.groupByColumns.sortBy(_.hashCode()))
+      a.groupByExpressions.sortBy(_.hashCode())
+        .sameElements(b.groupByExpressions.sortBy(_.hashCode()))
   }
 
   /**
@@ -144,5 +159,10 @@ object AggregatePushDownUtils {
     }
     converter.convert(aggregatesAsRow, columnVectors.toArray)
     new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)
+  }
+
+  private def extractColName(v2Expr: V2Expression): Option[String] = v2Expr match {
+    case f: FieldReference if f.fieldNames.length == 1 => Some(f.fieldNames.head)
+    case _ => None
   }
 }

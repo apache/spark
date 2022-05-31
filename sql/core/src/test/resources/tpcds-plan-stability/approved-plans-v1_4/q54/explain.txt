@@ -317,7 +317,7 @@ Results [3]: [segment#40, count(1)#44 AS num_customers#45, (segment#40 * 50) AS 
 
 (56) TakeOrderedAndProject
 Input [3]: [segment#40, num_customers#45, segment_base#46]
-Arguments: 100, 0, [segment#40 ASC NULLS FIRST, num_customers#45 ASC NULLS FIRST], [segment#40, num_customers#45, segment_base#46]
+Arguments: 100, [segment#40 ASC NULLS FIRST, num_customers#45 ASC NULLS FIRST], [segment#40, num_customers#45, segment_base#46]
 
 ===== Subqueries =====
 

@@ -129,7 +129,7 @@ Results [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, avg(inv_
 
 (23) TakeOrderedAndProject
 Input [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, qoh#26]
-Arguments: 100, 0, [qoh#26 ASC NULLS FIRST, i_product_name#15 ASC NULLS FIRST, i_brand#16 ASC NULLS FIRST, i_class#17 ASC NULLS FIRST, i_category#18 ASC NULLS FIRST], [i_product_name#15, i_brand#16, i_class#17, i_category#18, qoh#26]
+Arguments: 100, [qoh#26 ASC NULLS FIRST, i_product_name#15 ASC NULLS FIRST, i_brand#16 ASC NULLS FIRST, i_class#17 ASC NULLS FIRST, i_category#18 ASC NULLS FIRST], [i_product_name#15, i_brand#16, i_class#17, i_category#18, qoh#26]
 
 ===== Subqueries =====
 

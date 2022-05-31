@@ -484,7 +484,7 @@ Results [3]: [c_last_name#60, c_first_name#59, sum(CheckOverflow((promote_precis
 
 (87) TakeOrderedAndProject
 Input [3]: [c_last_name#41, c_first_name#40, sales#51]
-Arguments: 100, 0, [c_last_name#41 ASC NULLS FIRST, c_first_name#40 ASC NULLS FIRST, sales#51 ASC NULLS FIRST], [c_last_name#41, c_first_name#40, sales#51]
+Arguments: 100, [c_last_name#41 ASC NULLS FIRST, c_first_name#40 ASC NULLS FIRST, sales#51 ASC NULLS FIRST], [c_last_name#41, c_first_name#40, sales#51]
 
 ===== Subqueries =====
 

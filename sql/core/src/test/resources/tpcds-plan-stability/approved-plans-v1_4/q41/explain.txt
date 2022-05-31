@@ -116,5 +116,5 @@ Results [1]: [i_product_name#3]
 
 (20) TakeOrderedAndProject
 Input [1]: [i_product_name#3]
-Arguments: 100, 0, [i_product_name#3 ASC NULLS FIRST], [i_product_name#3]
+Arguments: 100, [i_product_name#3 ASC NULLS FIRST], [i_product_name#3]
 

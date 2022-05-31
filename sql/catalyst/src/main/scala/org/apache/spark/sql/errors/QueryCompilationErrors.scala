@@ -2371,8 +2371,4 @@ object QueryCompilationErrors {
       messageParameters = Array(fieldName.quoted, path.quoted),
       origin = context)
   }
-
-  def noSuchFunctionError(database: String, funcInfo: String): Throwable = {
-    new AnalysisException(s"$database does not support function: $funcInfo")
-  }
 }

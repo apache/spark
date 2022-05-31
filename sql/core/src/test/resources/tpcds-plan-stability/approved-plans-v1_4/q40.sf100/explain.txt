@@ -182,7 +182,7 @@ Results [4]: [w_state#20, i_item_id#14, sum(CASE WHEN (d_date#18 < 2000-03-11) T
 
 (33) TakeOrderedAndProject
 Input [4]: [w_state#20, i_item_id#14, sales_before#33, sales_after#34]
-Arguments: 100, 0, [w_state#20 ASC NULLS FIRST, i_item_id#14 ASC NULLS FIRST], [w_state#20, i_item_id#14, sales_before#33, sales_after#34]
+Arguments: 100, [w_state#20 ASC NULLS FIRST, i_item_id#14 ASC NULLS FIRST], [w_state#20, i_item_id#14, sales_before#33, sales_after#34]
 
 ===== Subqueries =====
 

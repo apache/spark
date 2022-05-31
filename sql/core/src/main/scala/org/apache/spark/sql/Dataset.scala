@@ -1956,6 +1956,16 @@ class Dataset[T] private[sql](
     Limit(Literal(end - start), Offset(Literal(start), logicalPlan))
   }
   /**
+   * Returns a new Dataset by skipping the first `m` rows.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def offset(n: Int): Dataset[T] = withTypedPlan {
+    Offset(Literal(n), logicalPlan)
+  }
+
+  /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
    *
    * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
