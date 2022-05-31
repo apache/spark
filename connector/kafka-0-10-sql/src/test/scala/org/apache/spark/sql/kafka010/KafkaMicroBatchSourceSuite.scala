@@ -625,6 +625,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
+  protected def expectOffsetChange(): ExpectFailure[_]
+
   test("subscribe topic by pattern with topic recreation between batches") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-good"
@@ -667,11 +669,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         testUtils.sendMessages(topic2, Array("6"))
       },
       StartStream(),
-      ExpectFailure[SparkException](e => {
-        assert(e.asInstanceOf[SparkThrowable].getErrorClass === "INTERNAL_ERROR")
-        // The offset of `topic2` should be changed from 2 to 1
-        assert(e.getCause.getMessage.contains("was changed from 2 to 1"))
-      })
+      expectOffsetChange()
     )
   }
 
@@ -1378,6 +1376,13 @@ class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       classOf[KafkaSourceProvider].getCanonicalName)
   }
 
+  override def expectOffsetChange(): ExpectFailure[_] = {
+    ExpectFailure[IllegalStateException](e => {
+      // The offset of `topic2` should be changed from 2 to 1
+      assert(e.getMessage.contains("was changed from 2 to 1"))
+    })
+  }
+
   test("V1 Source is used when disabled through SQLConf") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 5)
@@ -1402,6 +1407,14 @@ class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
 }
 
 class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
+
+  override def expectOffsetChange(): ExpectFailure[_] = {
+    ExpectFailure[SparkException](e => {
+      assert(e.asInstanceOf[SparkThrowable].getErrorClass === "INTERNAL_ERROR")
+      // The offset of `topic2` should be changed from 2 to 1
+      assert(e.getCause.getMessage.contains("was changed from 2 to 1"))
+    })
+  }
 
   test("V2 Source is used by default") {
     val topic = newTopic()
