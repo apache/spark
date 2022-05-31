@@ -220,9 +220,9 @@ case class CheckOverflowInSum(
 /**
  * An add expression which is only used for internal add with decimal type.
  *
- * Nota that, `DecimalAdd` does not check overflow which is different with `Add`.
+ * Nota that, this expression does not check overflow which is different with `Add`.
  */
-case class DecimalAdd(
+case class DecimalAddNoOverflowCheck(
     left: Expression,
     right: Expression,
     override val dataType: DataType,
@@ -243,6 +243,6 @@ case class DecimalAdd(
     defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): DecimalAdd =
+      newLeft: Expression, newRight: Expression): DecimalAddNoOverflowCheck =
     copy(left = newLeft, right = newRight)
 }

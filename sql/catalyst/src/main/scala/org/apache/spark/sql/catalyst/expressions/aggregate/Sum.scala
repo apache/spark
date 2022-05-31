@@ -64,7 +64,8 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
   private lazy val zero = Literal.default(resultType)
 
   private def add(left: Expression, right: Expression): Expression = left.dataType match {
-    case _: DecimalType => DecimalAdd(left, right, left.dataType, failOnError = useAnsiAdd)
+    case _: DecimalType =>
+      DecimalAddNoOverflowCheck(left, right, left.dataType, failOnError = useAnsiAdd)
     case _ => Add(left, right, useAnsiAdd)
   }
 
