@@ -82,9 +82,11 @@ private[spark] class TaskSetManager(
   val copiesRunning = new Array[Int](numTasks)
 
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
-  private val speculationTaskProgressMultiplier = conf.get(SPECULATION_TASK_PROGRESS_MULTIPLIER)
-  private val speculationTaskDurationFactor = conf.get(SPECULATION_TASK_DURATION_FACTOR)
-  private val speculationTaskStatsCacheInterval = conf.get(SPECULATION_TASK_STATS_CACHE_DURATION)
+  private val efficientTaskProgressMultiplier =
+    conf.get(SPECULATION_EFFICIENCY_TASK_PROGRESS_MULTIPLIER)
+  private val efficientTaskDurationFactor = conf.get(SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR)
+  private val efficientTaskStatsCacheInterval =
+    conf.get(SPECULATION_EFFICIENCY_TASK_STATS_CACHE_DURATION)
 
   // Quantile of tasks at which to start speculation
   val speculationQuantile = conf.get(SPECULATION_QUANTILE)
@@ -117,7 +119,7 @@ private[spark] class TaskSetManager(
     conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(TimeUnit.SECONDS.toMillis)
 
   private[scheduler] val inefficientTaskCalculator =
-    if (conf.get(SPECULATION_ENABLED) && conf.get(SPECULATION_EFFICIENCY_ENABLE)) {
+    if (sched.efficientTaskCalcualtionEnabled) {
       Some(new InefficientTaskCalculator())
     } else {
       None
@@ -831,7 +833,7 @@ private[spark] class TaskSetManager(
       return
     }
 
-    if (inefficientTaskCalculator.isDefined) {
+    if (sched.efficientTaskCalcualtionEnabled) {
       setTaskRecordsAndRunTime(info, result)
     }
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
@@ -1127,7 +1129,7 @@ private[spark] class TaskSetManager(
               recomputeInefficientTasks = false
             }
             val longTimeTask = (numTasks <= 1) ||
-              runtimeMs > speculationTaskDurationFactor * threshold
+              runtimeMs > efficientTaskDurationFactor * threshold
             longTimeTask || inefficientTaskCalculator.get.maySpeculateTask(tid, runtimeMs, info)
           }
         }
@@ -1296,7 +1298,7 @@ private[spark] class TaskSetManager(
 
     def maybeRecompute(nowMs: Long): Unit = {
       if (!updateSealed && (lastComputeMs <= 0 ||
-        nowMs > lastComputeMs + speculationTaskStatsCacheInterval)) {
+        nowMs > lastComputeMs + efficientTaskStatsCacheInterval)) {
         var allTotalRecordsRead = 0L
         var allTotalExecutorRunTime = 0L
         var numSuccessTasks = 0L
@@ -1311,7 +1313,7 @@ private[spark] class TaskSetManager(
           0.0
         }
         if (progressRate > 0.0) {
-          taskProgressThreshold = progressRate * speculationTaskProgressMultiplier
+          taskProgressThreshold = progressRate * efficientTaskProgressMultiplier
           if (numSuccessTasks >= minFinishedForSpeculation) {
             updateSealed = true
           }

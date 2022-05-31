@@ -104,7 +104,7 @@ private[spark] class TaskSchedulerImpl(
   // of tasks that are very short.
   val MIN_TIME_TO_SPECULATION = conf.get(SPECULATION_MIN_THRESHOLD)
 
-  private val calculateTaskProgressRate = conf.get(SPECULATION_ENABLED) &&
+  private[scheduler] val efficientTaskCalcualtionEnabled = conf.get(SPECULATION_ENABLED) &&
     conf.get(SPECULATION_EFFICIENCY_ENABLE)
 
   private val speculationScheduler =
@@ -859,7 +859,7 @@ private[spark] class TaskSchedulerImpl(
       accumUpdates.flatMap { case (id, updates) =>
         Option(taskIdToTaskSetManager.get(id)).map { taskSetMgr =>
           val (accInfos, taskProgressRate) = getTaskAccumulableInfosAndProgressRate(updates)
-          if (calculateTaskProgressRate && taskProgressRate > 0.0) {
+          if (efficientTaskCalcualtionEnabled && taskProgressRate > 0.0) {
             taskSetMgr.taskInfos.get(id).foreach(_.setRunTaskProgressRate(taskProgressRate))
           }
           (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
@@ -875,7 +875,7 @@ private[spark] class TaskSchedulerImpl(
    var records = 0L
    var runTime = 0L
    val accInfos = updates.map { acc =>
-     if (calculateTaskProgressRate && acc.name.isDefined) {
+     if (efficientTaskCalcualtionEnabled && acc.name.isDefined) {
        val name = acc.name.get
        if (name == shuffleRead.RECORDS_READ || name == input.RECORDS_READ) {
          records += acc.value.asInstanceOf[Long]
@@ -885,7 +885,7 @@ private[spark] class TaskSchedulerImpl(
      }
      acc.toInfo(Some(acc.value), None)
    }
-   val taskProgressRate = if (calculateTaskProgressRate && runTime > 0 && records > 0) {
+   val taskProgressRate = if (efficientTaskCalcualtionEnabled && runTime > 0 && records > 0) {
      records / (runTime / 1000.0)
    } else {
      0.0D

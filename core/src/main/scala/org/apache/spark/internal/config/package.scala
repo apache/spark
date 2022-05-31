@@ -2076,21 +2076,23 @@ package object config {
   private[spark] val SPECULATION_EFFICIENCY_ENABLE =
     ConfigBuilder("spark.speculation.efficiency.enabled")
       .doc("When set to true, spark will evaluate the efficiency of task processing through the " +
-        "stage task metrics and only need to speculate the inefficient tasks.")
+        "stage task metrics and only need to speculate the inefficient tasks. A task is " +
+        "inefficient when its data process rate is less than the average data process " +
+        "rate of all successful tasks in the stage multiplied by a multiplier.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val SPECULATION_TASK_PROGRESS_MULTIPLIER =
+  private[spark] val SPECULATION_EFFICIENCY_TASK_PROGRESS_MULTIPLIER =
     ConfigBuilder("spark.speculation.efficiency.progress.multiplier")
-      .doc("A multiplier for evaluating the efficiency of task processing. A task will be " +
-        "evaluated an inefficient one when it's progress rate is less than the average progress " +
-        "rate of successful ones multiplied by it.")
+      .doc("A multiplier for evaluating the efficiency of task processing. A task is inefficient " +
+        "when its data process rate is less than the average data process rate of all " +
+        "successful tasks in the stage multiplied by the multiplier.")
       .version("3.4.0")
       .doubleConf
       .createWithDefault(0.75)
 
-  private[spark] val SPECULATION_TASK_DURATION_FACTOR =
+  private[spark] val SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR =
     ConfigBuilder("spark.speculation.efficiency.duration.factor")
       .doc(s"When a task duration is large than the factor multiplied by the threshold which " +
         s"may be ${SPECULATION_MULTIPLIER.key} * successfulTaskDurations.median or " +
@@ -2100,7 +2102,7 @@ package object config {
       .doubleConf
       .createWithDefault(2.0)
 
-  private[spark] val SPECULATION_TASK_STATS_CACHE_DURATION =
+  private[spark] val SPECULATION_EFFICIENCY_TASK_STATS_CACHE_DURATION =
     ConfigBuilder("spark.speculation.efficiency.stats.cache.duration")
       .doc("The interval of time between recompute success task progress to avoid scanning " +
         "repeatedly.")
