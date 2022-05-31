@@ -455,7 +455,8 @@ private[spark] class Client(
     var destPath = srcPath
     if (force || !compareFs(srcFs, destFs) || "file".equals(srcFs.getScheme)) {
       destPath = new Path(destDir, destName.getOrElse(srcPath.getName()))
-      logInfo(s"Uploading resource $srcPath -> $destPath")
+      val resolvedSrcPath = new Path(Paths.get(srcPath.toUri.getPath).toRealPath().toUri)
+      logInfo(s"Uploading resource $resolvedSrcPath -> $destPath")
       try {
         FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
       } catch {
