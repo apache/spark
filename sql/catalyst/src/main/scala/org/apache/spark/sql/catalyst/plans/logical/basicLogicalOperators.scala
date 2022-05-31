@@ -1001,7 +1001,7 @@ case class Aggregate(
   final override val nodePatterns : Seq[TreePattern] = Seq(AGGREGATE)
 
   override lazy val validConstraints: ExpressionSet = {
-    val nonAgg = aggregateExpressions.filter(!_.exists(_.isInstanceOf[AggregateExpression]))
+    val nonAgg = aggregateExpressions.filterNot(_.exists(_.isInstanceOf[AggregateExpression]))
     getAllValidConstraints(nonAgg)
   }
 

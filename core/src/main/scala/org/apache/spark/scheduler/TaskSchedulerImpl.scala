@@ -897,7 +897,7 @@ private[spark] class TaskSchedulerImpl(
    * getting marked as successful.
    */
   private[scheduler] def handlePartitionCompleted(stageId: Int, partitionId: Int) = synchronized {
-    taskSetsByStageIdAndAttempt.get(stageId).foreach(_.values.filter(!_.isZombie).foreach { tsm =>
+    taskSetsByStageIdAndAttempt.get(stageId).foreach(_.values.filterNot(_.isZombie).foreach { tsm =>
       tsm.markPartitionCompleted(partitionId)
     })
   }

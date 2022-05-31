@@ -2240,7 +2240,7 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
     case a @ Aggregate(grouping, _, _) if grouping.nonEmpty =>
-      val newGrouping = grouping.filter(!_.foldable)
+      val newGrouping = grouping.filterNot(_.foldable)
       if (newGrouping.nonEmpty) {
         a.copy(groupingExpressions = newGrouping)
       } else {

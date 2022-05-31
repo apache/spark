@@ -79,10 +79,10 @@ class KryoSerializer(conf: SparkConf)
   private val registrationRequired = conf.get(KRYO_REGISTRATION_REQUIRED)
   private val userRegistrators = conf.get(KRYO_USER_REGISTRATORS)
     .map(_.trim)
-    .filter(!_.isEmpty)
+    .filterNot(_.isEmpty)
   private val classesToRegister = conf.get(KRYO_CLASSES_TO_REGISTER)
     .map(_.trim)
-    .filter(!_.isEmpty)
+    .filterNot(_.isEmpty)
 
   private val avroSchemas = conf.getAvroSchema
   // whether to use unsafe based IO for serialization

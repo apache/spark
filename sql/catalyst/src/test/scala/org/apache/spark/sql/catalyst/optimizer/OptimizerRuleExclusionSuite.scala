@@ -31,7 +31,7 @@ class OptimizerRuleExclusionSuite extends PlanTest {
   private def verifyExcludedRules(optimizer: Optimizer, rulesToExclude: Seq[String]): Unit = {
     val nonExcludableRules = optimizer.nonExcludableRules
 
-    val excludedRuleNames = rulesToExclude.filter(!nonExcludableRules.contains(_))
+    val excludedRuleNames = rulesToExclude.filterNot(nonExcludableRules.contains(_))
     // Batches whose rules are all to be excluded should be removed as a whole.
     val excludedBatchNames = optimizer.batches
       .filter(batch => batch.rules.forall(rule => excludedRuleNames.contains(rule.ruleName)))

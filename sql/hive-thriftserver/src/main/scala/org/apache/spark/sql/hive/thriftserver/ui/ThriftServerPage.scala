@@ -389,7 +389,7 @@ private[ui] class SqlStatsTableDataSource(
   private def sqlStatsTableRow(executionInfo: ExecutionInfo): SqlStatsTableRow = {
     val duration = executionInfo.totalTime(executionInfo.closeTimestamp)
     val executionTime = executionInfo.totalTime(executionInfo.finishTimestamp)
-    val detail = Option(executionInfo.detail).filter(!_.isEmpty)
+    val detail = Option(executionInfo.detail).filterNot(_.isEmpty)
       .getOrElse(executionInfo.executePlan)
     val jobId = executionInfo.jobId.toSeq.sorted
 

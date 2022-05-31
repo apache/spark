@@ -2028,7 +2028,7 @@ abstract class RDD[T: ClassTag](
   // From performance concern, cache the value to avoid repeatedly compute `isBarrier()` on a long
   // RDD chain.
   @transient protected lazy val isBarrier_ : Boolean =
-    dependencies.filter(!_.isInstanceOf[ShuffleDependency[_, _, _]]).exists(_.rdd.isBarrier())
+    dependencies.filterNot(_.isInstanceOf[ShuffleDependency[_, _, _]]).exists(_.rdd.isBarrier())
 
   private final lazy val _outputDeterministicLevel: DeterministicLevel.Value =
     getOutputDeterministicLevel

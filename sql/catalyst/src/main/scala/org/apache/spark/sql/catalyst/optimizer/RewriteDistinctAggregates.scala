@@ -219,7 +219,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
     // Extract distinct aggregate expressions.
     val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
-        val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
+        val unfoldableChildren = e.aggregateFunction.children.filterNot(_.foldable).toSet
         if (unfoldableChildren.nonEmpty) {
           // Only expand the unfoldable children
           unfoldableChildren
@@ -311,7 +311,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggExprs = aggExpressions
         .filter(e => !e.isDistinct && e.children.exists(!_.foldable))
       val regularAggFunChildren = regularAggExprs
-        .flatMap(_.aggregateFunction.children.filter(!_.foldable))
+        .flatMap(_.aggregateFunction.children.filterNot(_.foldable))
       val regularAggFilterAttrs = regularAggExprs.flatMap(_.filterAttributes)
       val regularAggChildren = (regularAggFunChildren ++ regularAggFilterAttrs).distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)

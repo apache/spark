@@ -132,10 +132,12 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
         throw new Exception("Unexpected number of sequences of reduced values")
       }
       // Getting reduced values "old time steps" that will be removed from current window
-      val oldValues = (1 to numOldValues).map(i => arrayOfValues(i)).filter(!_.isEmpty).map(_.head)
+      val oldValues = (1 to numOldValues).map(i => arrayOfValues(i))
+        .filterNot(_.isEmpty).map(_.head)
       // Getting reduced values "new time steps"
       val newValues =
-        (1 to numNewValues).map(i => arrayOfValues(numOldValues + i)).filter(!_.isEmpty).map(_.head)
+        (1 to numNewValues).map(i => arrayOfValues(numOldValues + i))
+          .filterNot(_.isEmpty).map(_.head)
 
       if (arrayOfValues(0).isEmpty) {
         // If previous window's reduce value does not exist, then at least new values should exist

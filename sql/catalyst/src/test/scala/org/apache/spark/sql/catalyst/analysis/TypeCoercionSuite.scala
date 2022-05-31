@@ -216,8 +216,9 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
   test("implicit type cast between two Map types") {
     val sourceType = MapType(IntegerType, IntegerType, true)
-    val castableTypes = numericTypes ++ Seq(StringType).filter(!Cast.forceNullable(IntegerType, _))
-    val targetTypes = numericTypes.filter(!Cast.forceNullable(IntegerType, _)).map { t =>
+    val castableTypes = numericTypes ++ Seq(StringType)
+      .filterNot(Cast.forceNullable(IntegerType, _))
+    val targetTypes = numericTypes.filterNot(Cast.forceNullable(IntegerType, _)).map { t =>
       MapType(t, sourceType.valueType, valueContainsNull = true)
     }
     val nonCastableTargetTypes = allTypes.filterNot(castableTypes.contains(_)).map {t =>

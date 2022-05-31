@@ -2822,7 +2822,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 MultiAlias(newGenerator, names)
               }
               projectExprs(idx) = newAliasedGenerator
-              newGenChildren.filter(!_.foldable).asInstanceOf[Seq[NamedExpression]]
+              newGenChildren.filterNot(_.foldable).asInstanceOf[Seq[NamedExpression]]
             case (other, idx) =>
               projectExprs(idx) = other.toAttribute
               other :: Nil

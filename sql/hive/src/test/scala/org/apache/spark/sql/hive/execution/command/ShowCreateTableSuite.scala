@@ -32,7 +32,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
   override def commandVersion: String = super[ShowCreateTableSuiteBase].commandVersion
 
   override def getShowCreateDDL(table: String, serde: Boolean = false): Array[String] = {
-    super.getShowCreateDDL(table, serde).filter(!_.startsWith("'transient_lastDdlTime'"))
+    super.getShowCreateDDL(table, serde).filterNot(_.startsWith("'transient_lastDdlTime'"))
   }
 
   test("simple hive table") {

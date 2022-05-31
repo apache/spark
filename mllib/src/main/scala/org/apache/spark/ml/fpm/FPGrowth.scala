@@ -290,7 +290,7 @@ class FPGrowthModel private[ml] (
       if (items != null) {
         val itemset = items.toSet
         brRules.value.filter(_._1.forall(itemset.contains))
-          .flatMap(_._2.filter(!itemset.contains(_))).distinct
+          .flatMap(_._2.filterNot(itemset.contains)).distinct
       } else {
         Seq.empty
       }},

@@ -507,7 +507,7 @@ class RocksDBFileManager(
    * List all the RocksDB files that need be synced or recovered.
    */
   private def listRocksDBFiles(localDir: File): (Seq[File], Seq[File]) = {
-    val topLevelFiles = localDir.listFiles.filter(!_.isDirectory)
+    val topLevelFiles = localDir.listFiles.filterNot(_.isDirectory)
     val archivedLogFiles =
       Option(new File(localDir, LOG_FILES_LOCAL_SUBDIR).listFiles())
         .getOrElse(Array[File]())

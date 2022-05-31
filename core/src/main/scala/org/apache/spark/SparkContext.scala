@@ -1420,7 +1420,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Build the union of a list of RDDs. */
   def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = withScope {
-    val nonEmptyRdds = rdds.filter(!_.partitions.isEmpty)
+    val nonEmptyRdds = rdds.filterNot(_.partitions.isEmpty)
     val partitioners = nonEmptyRdds.flatMap(_.partitioner).toSet
     if (nonEmptyRdds.forall(_.partitioner.isDefined) && partitioners.size == 1) {
       new PartitionerAwareUnionRDD(this, nonEmptyRdds)

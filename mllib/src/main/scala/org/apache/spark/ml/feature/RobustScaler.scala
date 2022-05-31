@@ -202,7 +202,7 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
         val p = pid % scale
         iter.flatMap { vec =>
           Iterator.tabulate(numFeatures)(i => ((p, i), vec(i)))
-        }.filter(!_._2.isNaN)
+        }.filterNot(_._2.isNaN)
       }.aggregateByKey(
         new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))(
         seqOp = (s, v) => s.insert(v),

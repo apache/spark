@@ -600,7 +600,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val condition = replaceOuterReferences(joinCond, mapping).reduceOption(And)
               val domainJoin = DomainJoin(domainAttrs, agg, LeftOuter, condition)
               // Original domain attributes preserved through Aggregate are no longer needed.
-              val newProjectList = projectList.filter(!referencesToAdd.contains(_))
+              val newProjectList = projectList.filterNot(referencesToAdd.contains)
               val project = Project(newProjectList ++ domainAttrs, domainJoin)
               val newJoinCond = outerAttrs.zip(domainAttrs).map { case (outer, inner) =>
                 EqualNullSafe(inner, OuterReference(outer))

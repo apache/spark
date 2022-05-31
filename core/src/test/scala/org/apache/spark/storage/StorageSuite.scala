@@ -150,7 +150,7 @@ class StorageSuite extends SparkFunSuite {
     def actualDiskUsed: Long = status.blocks.values.map(_.diskSize).sum
 
     def actualOnHeapMemUsed: Long =
-      status.blocks.values.filter(!_.storageLevel.useOffHeap).map(_.memSize).sum
+      status.blocks.values.filterNot(_.storageLevel.useOffHeap).map(_.memSize).sum
     def actualOffHeapMemUsed: Long =
       status.blocks.values.filter(_.storageLevel.useOffHeap).map(_.memSize).sum
 

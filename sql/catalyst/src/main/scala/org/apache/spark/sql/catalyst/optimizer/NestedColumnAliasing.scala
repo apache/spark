@@ -261,7 +261,7 @@ object NestedColumnAliasing {
 
     // Remove cosmetic variations when we group extractors by their references
     nestedFieldReferences
-      .filter(!_.references.subsetOf(exclusiveAttrSet))
+      .filterNot(_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head.canonicalized.asInstanceOf[Attribute])
       .flatMap { case (attr: Attribute, nestedFields: collection.Seq[ExtractValue]) =>
 

@@ -413,7 +413,7 @@ class SQLAppStatusListener(
       if (other != exec) other.stages else Nil
     }.toSet
     stageMetrics.keySet().asScala
-      .filter(!activeStages.contains(_))
+      .diff(activeStages)
       .foreach(stageMetrics.remove)
   }
 

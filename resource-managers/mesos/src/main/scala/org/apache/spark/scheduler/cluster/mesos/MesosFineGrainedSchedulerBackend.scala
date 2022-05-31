@@ -307,7 +307,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       val agentsIdsOfAcceptedOffers = HashSet[String]()
 
       // Call into the TaskSchedulerImpl
-      val acceptedOffers = scheduler.resourceOffers(workerOffers).filter(!_.isEmpty)
+      val acceptedOffers = scheduler.resourceOffers(workerOffers).filterNot(_.isEmpty)
       acceptedOffers
         .foreach { offer =>
           offer.foreach { taskDesc =>

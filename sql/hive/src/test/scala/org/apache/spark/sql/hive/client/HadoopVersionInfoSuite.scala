@@ -54,7 +54,7 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
       val jars = client.classLoader.getParent.asInstanceOf[URLClassLoader].getURLs
         .map(u => new File(u.toURI))
         // Drop all Hadoop jars to use the existing Hadoop jars on the classpath
-        .filter(!_.getName.startsWith("org.apache.hadoop_hadoop-"))
+        .filterNot(_.getName.startsWith("org.apache.hadoop_hadoop-"))
 
       val sparkConf = new SparkConf()
       sparkConf.set(HiveUtils.HIVE_METASTORE_VERSION, "2.0")

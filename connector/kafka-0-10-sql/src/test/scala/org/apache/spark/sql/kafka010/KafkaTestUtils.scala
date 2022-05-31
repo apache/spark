@@ -180,7 +180,7 @@ class KafkaTestUtils(
         s + addedConfig
       } else {
         s
-      }).filter(!_.trim.startsWith("#")).mkString(System.lineSeparator())
+      }).filterNot(_.trim.startsWith("#")).mkString(System.lineSeparator())
 
     val krb5confStr = if (!rewritten) {
       "[libdefaults]" + addedConfig + System.lineSeparator() +

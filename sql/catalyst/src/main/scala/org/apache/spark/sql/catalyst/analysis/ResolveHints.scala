@@ -193,7 +193,7 @@ object ResolveHints {
         if (sortOrders.nonEmpty) {
           throw QueryCompilationErrors.invalidRepartitionExpressionsError(sortOrders)
         }
-        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+        val invalidParams = partitionExprs.filterNot(_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
           throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
         }
@@ -228,7 +228,7 @@ object ResolveHints {
 
       def createRepartitionByExpression(
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
-        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+        val invalidParams = partitionExprs.filterNot(_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
           throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
         }
@@ -252,7 +252,7 @@ object ResolveHints {
     private def createRebalance(hint: UnresolvedHint): LogicalPlan = {
       def createRebalancePartitions(
           partitionExprs: Seq[Any], initialNumPartitions: Option[Int]): RebalancePartitions = {
-        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+        val invalidParams = partitionExprs.filterNot(_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
           val hintName = hint.name.toUpperCase(Locale.ROOT)
           throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)

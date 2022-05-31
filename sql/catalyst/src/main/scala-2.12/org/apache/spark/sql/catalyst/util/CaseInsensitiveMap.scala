@@ -40,7 +40,7 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Ma
     keyLowerCasedMap.contains(k.toLowerCase(Locale.ROOT))
 
   override def +[B1 >: T](kv: (String, B1)): CaseInsensitiveMap[B1] = {
-    new CaseInsensitiveMap(originalMap.filter(!_._1.equalsIgnoreCase(kv._1)) + kv)
+    new CaseInsensitiveMap(originalMap.filterNot(_._1.equalsIgnoreCase(kv._1)) + kv)
   }
 
   def ++(xs: TraversableOnce[(String, T)]): CaseInsensitiveMap[T] = {
@@ -50,7 +50,7 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Ma
   override def iterator: Iterator[(String, T)] = keyLowerCasedMap.iterator
 
   override def -(key: String): Map[String, T] = {
-    new CaseInsensitiveMap(originalMap.filter(!_._1.equalsIgnoreCase(key)))
+    new CaseInsensitiveMap(originalMap.filterNot(_._1.equalsIgnoreCase(key)))
   }
 
   def toMap: Map[String, T] = originalMap

@@ -171,7 +171,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     })
 
     // struct couldn't be constant, sweep it out
-    val constantExprs = data.filter(!_.dataType.isInstanceOf[StructType])
+    val constantExprs = data.filterNot(_.dataType.isInstanceOf[StructType])
     val constantTypes = constantExprs.map(_.dataType)
     val constantData = constantExprs.map(_.eval())
     val constantNullData = constantData.map(_ => null)

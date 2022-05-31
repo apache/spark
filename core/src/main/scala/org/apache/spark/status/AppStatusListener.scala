@@ -263,7 +263,7 @@ private[spark] class AppStatusListener(
               rdd.diskUsed = addDeltaToValue(rdd.diskUsed,
                 (partition.diskUsed / partition.executors.length) * -1)
               partition.update(
-                partition.executors.filter(!_.equals(event.executorId)),
+                partition.executors.filterNot(_.equals(event.executorId)),
                 addDeltaToValue(partition.memoryUsed,
                   (partition.memoryUsed / partition.executors.length) * -1),
                 addDeltaToValue(partition.diskUsed,

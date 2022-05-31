@@ -202,7 +202,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   def registerKryoClasses(classes: Array[Class[_]]): SparkConf = {
     val allClassNames = new LinkedHashSet[String]()
     allClassNames ++= get(KRYO_CLASSES_TO_REGISTER).map(_.trim)
-      .filter(!_.isEmpty)
+      .filterNot(_.isEmpty)
     allClassNames ++= classes.map(_.getName)
 
     set(KRYO_CLASSES_TO_REGISTER, allClassNames.toSeq)

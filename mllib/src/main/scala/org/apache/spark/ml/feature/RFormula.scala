@@ -475,12 +475,12 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
     this(Identifiable.randomUID("columnPruner"), columnsToPrune)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
+    val columnsToKeep = dataset.columns.filterNot(columnsToPrune.contains)
     dataset.select(columnsToKeep.map(dataset.col): _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
+    StructType(schema.fields.filterNot(col => columnsToPrune.contains(col.name)))
   }
 
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
