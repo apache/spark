@@ -242,7 +242,7 @@ trait DecimalArithmeticSupport extends BinaryArithmetic {
       "decimalType", "dataType")
 
   override def nullable: Boolean = dataType match {
-    case _: DecimalType => true
+    case _: DecimalType => nullOnOverflow
     case _ => super.nullable
   }
 
@@ -621,18 +621,18 @@ trait DivModLike extends BinaryArithmetic with DecimalArithmeticSupport {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    val checkOverflow = if (operandsDataType.isInstanceOf[DecimalType]) {
+    val errorContext = if (nullOnOverflow) {
+      "\"\""
+    } else {
+      ctx.addReferenceObj("errCtx", queryContext)
+    }
+    val operation = if (operandsDataType.isInstanceOf[DecimalType]) {
       val decimal = super.dataType.asInstanceOf[DecimalType]
-      val errorContextCode = if (nullOnOverflow) {
-        "\"\""
-      } else {
-        ctx.addReferenceObj("errCtx", queryContext)
-      }
       val decimalValue = ctx.freshName("decimalValue")
       // scalastyle:off line.size.limit
       s"""
          |${CodeGenerator.javaType(decimal)} $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-         |  ${decimal.precision}, ${decimal.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
+         |  ${decimal.precision}, ${decimal.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContext);
          |if ($decimalValue != null) {
          |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
          |} else {
@@ -642,7 +642,6 @@ trait DivModLike extends BinaryArithmetic with DecimalArithmeticSupport {
     } else {
       s"${ev.value} = ($javaType)(${eval1.value} $symbol ${eval2.value});"
     }
-    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
       s"""
         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
@@ -668,7 +667,7 @@ trait DivModLike extends BinaryArithmetic with DecimalArithmeticSupport {
         } else {
           ${eval1.code}
           $checkIntegralDivideOverflow
-          $checkOverflow
+          $operation
         }""")
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
@@ -690,7 +689,7 @@ trait DivModLike extends BinaryArithmetic with DecimalArithmeticSupport {
           } else {
             $failOnErrorBranch
             $checkIntegralDivideOverflow
-            $checkOverflow
+            $operation
           }
         }""")
     }
@@ -1005,17 +1004,15 @@ case class Pmod(
         } else {
           errorContext
         }
-        val value = ctx.freshName("value")
         val decimalAdd = "$plus"
         s"""
-           |$javaType $value = ${CodeGenerator.defaultValue(dataType)};
            |$javaType $remainder = ${eval1.value}.remainder(${eval2.value});
            |if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
-           |  $value=($remainder.$decimalAdd(${eval2.value})).remainder(${eval2.value});
+           |  ${ev.value}=($remainder.$decimalAdd(${eval2.value})).remainder(${eval2.value});
            |} else {
-           |  $value=$remainder;
+           |  ${ev.value}=$remainder;
            |}
-           |${ev.value} = $value.toPrecision(
+           |${ev.value} = ${ev.value}.toPrecision(
            |  $precision, $scale, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
            |""".stripMargin
 
