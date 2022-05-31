@@ -222,7 +222,7 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
  * or not. If not, if `nullOnOverflow` is `true`, it returns `null`; otherwise an
  * `ArithmeticException` is thrown.
  */
-trait DecimalArithmetic extends BinaryArithmetic {
+trait DecimalArithmeticSupport extends BinaryArithmetic {
   protected val nullOnOverflow: Boolean = !failOnError
   protected val allowPrecisionLoss: Boolean = SQLConf.get.decimalOperationsAllowPrecisionLoss
 
@@ -241,6 +241,11 @@ trait DecimalArithmetic extends BinaryArithmetic {
   protected def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType =
     throw QueryExecutionErrors.notOverrideExpectedMethodsError("DecimalArithmetic",
       "decimalType", "dataType")
+
+  override def nullable: Boolean = dataType match {
+    case _: DecimalType => true
+    case _ => super.nullable
+  }
 
   override def dataType: DataType = (left, right) match {
     case (DecimalType.Expression(p1, s1), DecimalType.Expression(p2, s2)) =>
@@ -265,13 +270,11 @@ trait DecimalArithmetic extends BinaryArithmetic {
         ctx.addReferenceObj("errCtx", queryContext)
       }
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val javaType = CodeGenerator.javaType(dataType)
-        val value = ctx.freshName("value")
         // scalastyle:off line.size.limit
         s"""
-           |$javaType $value = $eval1.$decimalMethod($eval2);
-           |${ev.value} = $value.toPrecision(
+           |${ev.value} = $eval1.$decimalMethod($eval2).toPrecision(
            |  ${decimalType.precision}, ${decimalType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
+           |${ev.isNull} = ${ev.value} == null;
        """.stripMargin
         // scalastyle:on line.size.limit
       })
@@ -311,7 +314,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
-      throw QueryExecutionErrors.unsupportedTypeError(dataType)
+      throw QueryExecutionErrors.cannotEvalDecimalTypeError()
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
@@ -380,7 +383,7 @@ case class Add(
     left: Expression,
     right: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends BinaryArithmetic with DecimalArithmetic {
+  extends BinaryArithmetic with DecimalArithmeticSupport {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -390,16 +393,20 @@ case class Add(
 
   override def decimalMethod: String = "$plus"
 
-  // *   Operation    Result Precision                        Result Scale
-  // *   ------------------------------------------------------------------------
-  // *   e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: max(s1, s2) + max(p1-s1, p2-s2) + 1
+  // Result Scale:     max(s1, s2)
+  // scalastyle:on
   override def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     val resultScale = max(s1, s2)
+    val resultPrecision = max(p1 - s1, p2 - s2) + resultScale + 1
     if (allowPrecisionLoss) {
-      DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
-        resultScale)
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
     } else {
-      DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
+      DecimalType.bounded(resultPrecision, resultScale)
     }
   }
 
@@ -447,7 +454,7 @@ case class Subtract(
     left: Expression,
     right: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends BinaryArithmetic with DecimalArithmetic {
+  extends BinaryArithmetic with DecimalArithmeticSupport {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -457,13 +464,20 @@ case class Subtract(
 
   override def decimalMethod: String = "$minus"
 
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: max(s1, s2) + max(p1-s1, p2-s2) + 1
+  // Result Scale:     max(s1, s2)
+  // scalastyle:on
   override def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     val resultScale = max(s1, s2)
+    val resultPrecision = max(p1 - s1, p2 - s2) + resultScale + 1
     if (allowPrecisionLoss) {
-      DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
-        resultScale)
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
     } else {
-      DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
+      DecimalType.bounded(resultPrecision, resultScale)
     }
   }
 
@@ -511,7 +525,7 @@ case class Multiply(
     left: Expression,
     right: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends BinaryArithmetic with DecimalArithmetic {
+  extends BinaryArithmetic with DecimalArithmeticSupport {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -520,11 +534,20 @@ case class Multiply(
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
 
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: p1 + p2 + 1
+  // Result Scale:     s1 + s2
+  // scalastyle:on
   override def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val resultScale = s1 + s2
+    val resultPrecision = p1 + p2 + 1
     if (allowPrecisionLoss) {
-      DecimalType.adjustPrecisionScale(p1 + p2 + 1, s1 + s2)
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
     } else {
-      DecimalType.bounded(p1 + p2 + 1, s1 + s2)
+      DecimalType.bounded(resultPrecision, resultScale)
     }
   }
 
@@ -548,7 +571,7 @@ case class Multiply(
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
-trait DivModLike extends BinaryArithmetic with DecimalArithmetic {
+trait DivModLike extends BinaryArithmetic with DecimalArithmeticSupport {
 
   protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
 
@@ -599,31 +622,26 @@ trait DivModLike extends BinaryArithmetic with DecimalArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    val (checkOverflow, operation) = if (operandsDataType.isInstanceOf[DecimalType]) {
+    val checkOverflow = if (operandsDataType.isInstanceOf[DecimalType]) {
       val decimal = super.dataType.asInstanceOf[DecimalType]
       val errorContextCode = if (nullOnOverflow) {
         "\"\""
       } else {
         ctx.addReferenceObj("errCtx", queryContext)
       }
-      val decimalType = CodeGenerator.javaType(decimal)
       val decimalValue = ctx.freshName("decimalValue")
-      val operationValue = ctx.freshName("operationValue")
       // scalastyle:off line.size.limit
-      (s"""
-          |$decimalType $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-          |  ${decimal.precision}, ${decimal.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-          |$javaType $operationValue = ${CodeGenerator.defaultValue(dataType)};
-          |if ($decimalValue != null) {
-          |  $operationValue = ${decimalToDataTypeCodeGen(s"$decimalValue")};
-          |} else {
-          |  ${ev.isNull} = true;
-          |}
-          |""".stripMargin,
-        operationValue)
-      // scalastyle:on line.size.limit
+      s"""
+         |${CodeGenerator.javaType(decimal)} $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
+         |  ${decimal.precision}, ${decimal.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
+         |if ($decimalValue != null) {
+         |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+         |} else {
+         |  ${ev.isNull} = true;
+         |}
+         |""".stripMargin
     } else {
-      ("", s"($javaType)(${eval1.value} $symbol ${eval2.value})")
+      s"${ev.value} = ($javaType)(${eval1.value} $symbol ${eval2.value});"
     }
     lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
@@ -652,7 +670,6 @@ trait DivModLike extends BinaryArithmetic with DecimalArithmetic {
           ${eval1.code}
           $checkIntegralDivideOverflow
           $checkOverflow
-          ${ev.value} = $operation;
         }""")
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
@@ -675,7 +692,6 @@ trait DivModLike extends BinaryArithmetic with DecimalArithmetic {
             $failOnErrorBranch
             $checkIntegralDivideOverflow
             $checkOverflow
-            ${ev.value} = $operation;
           }
         }""")
     }
@@ -707,6 +723,13 @@ case class Divide(
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
 
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
+  // Result Scale:     max(6, s1 + p2 + 1)
+  // scalastyle:on
   override def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     if (allowPrecisionLoss) {
       // Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
@@ -729,9 +752,9 @@ case class Divide(
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case decimalType: DecimalType => (l, r) => {
-        val value = decimalType.fractional.asInstanceOf[Fractional[Any]].div(l, r)
-        checkOverflow(value.asInstanceOf[Decimal], decimalType)
-      }
+      val value = decimalType.fractional.asInstanceOf[Fractional[Any]].div(l, r)
+      checkOverflow(value.asInstanceOf[Decimal], decimalType)
+    }
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
   }
 
@@ -838,11 +861,20 @@ case class Remainder(
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
 
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: min(p1-s1, p2-s2) + max(s1, s2)
+  // Result Scale:     max(s1, s2)
+  // scalastyle:on
   override def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val resultScale = max(s1, s2)
+    val resultPrecision = min(p1 - s1, p2 - s2) + resultScale
     if (allowPrecisionLoss) {
-      DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
     } else {
-      DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+      DecimalType.bounded(resultPrecision, resultScale)
     }
   }
 
@@ -897,7 +929,7 @@ case class Pmod(
     left: Expression,
     right: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends BinaryArithmetic with DecimalArithmetic {
+  extends BinaryArithmetic with DecimalArithmeticSupport {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -912,11 +944,14 @@ case class Pmod(
 
   override def nullable: Boolean = true
 
+  // This follows Remainder rule
   override def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val resultScale = max(s1, s2)
+    val resultPrecision = min(p1 - s1, p2 - s2) + resultScale
     if (allowPrecisionLoss) {
-      DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
     } else {
-      DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+      DecimalType.bounded(resultPrecision, resultScale)
     }
   }
 

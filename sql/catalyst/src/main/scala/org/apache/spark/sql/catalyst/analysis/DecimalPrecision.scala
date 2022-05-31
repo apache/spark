@@ -34,11 +34,6 @@ import org.apache.spark.sql.types._
  *
  *   Operation    Result Precision                        Result Scale
  *   ------------------------------------------------------------------------
- *   e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
- *   e1 - e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
- *   e1 * e2      p1 + p2 + 1                             s1 + s2
- *   e1 / e2      p1 - s1 + s2 + max(6, s1 + p2 + 1)      max(6, s1 + p2 + 1)
- *   e1 % e2      min(p1-s1, p2-s2) + max(s1, s2)         max(s1, s2)
  *   e1 union e2  max(s1, s2) + max(p1-s1, p2-s2)         max(s1, s2)
  *
  * To implement the rules for fixed-precision types, we introduce casts to turn them to unlimited
@@ -53,9 +48,6 @@ import org.apache.spark.sql.types._
  * - LONG gets turned into DECIMAL(20, 0)
  * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE
  * - Literals INT and LONG get turned into DECIMAL with the precision strictly needed by the value
- *
- * Note that, after SPARK-39316 all binary decimal arithmetic expressions report decimal type in
- * their own class. See [[DecimalArithmetic]].
  */
 // scalastyle:on
 object DecimalPrecision extends TypeCoercionRule {

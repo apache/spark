@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DecimalArithmeticSupport, Expression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -59,7 +59,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.CircularBuffer
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
@@ -175,6 +175,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       outputType: String, e: Throwable): Throwable = {
     new SparkException(errorClass = "FAILED_EXECUTE_UDF",
       messageParameters = Array(funcCls, inputTypes, outputType), e)
+  }
+
+  def cannotEvalDecimalTypeError(): Throwable = {
+    new IllegalStateException(s"Decimal type must be handled at " +
+      s"${Utils.getSimpleName(classOf[DecimalArithmeticSupport])}.")
   }
 
   def divideByZeroError(context: String): ArithmeticException = {

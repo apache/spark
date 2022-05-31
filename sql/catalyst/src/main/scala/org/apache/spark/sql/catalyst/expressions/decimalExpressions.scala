@@ -218,7 +218,7 @@ case class CheckOverflowInSum(
 }
 
 /**
- * An add expression which is only used for internal add with decimal type.
+ * An add expression which is only used internally by Sum/Avg.
  *
  * Nota that, this expression does not check overflow which is different with `Add`.
  */
@@ -227,7 +227,7 @@ case class DecimalAddNoOverflowCheck(
     right: Expression,
     override val dataType: DataType,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends BinaryArithmetic with DecimalArithmetic {
+  extends BinaryArithmetic with DecimalArithmeticSupport {
   require(dataType.isInstanceOf[DecimalType])
 
   override def inputType: AbstractDataType = DecimalType
