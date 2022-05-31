@@ -17,6 +17,7 @@
 
 import sys
 import warnings
+from collections.abc import Sized
 from functools import reduce
 from threading import RLock
 from types import TracebackType
@@ -611,8 +612,8 @@ class SparkSession(SparkConversionMixin):
         :class:`pyspark.sql.types.StructType`
         """
         first = rdd.first()
-        if not first:
-            raise ValueError("The first row in RDD is empty, " "can not infer schema")
+        if isinstance(first, Sized) and len(first) == 0:
+            raise ValueError("The first row in RDD is empty, can not infer schema")
 
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
         infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()

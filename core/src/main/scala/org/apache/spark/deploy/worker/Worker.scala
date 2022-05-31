@@ -516,7 +516,8 @@ private[deploy] class Worker(
         val cleanupFuture: concurrent.Future[Unit] = concurrent.Future {
           val appDirs = workDir.listFiles()
           if (appDirs == null) {
-            throw new IOException("ERROR: Failed to list files in " + appDirs)
+            throw new IOException(
+              s"ERROR: Failed to list files in ${appDirs.mkString("dirs(", ", ", ")")}")
           }
           appDirs.filter { dir =>
             // the directory is used by an application - check that the application is not running

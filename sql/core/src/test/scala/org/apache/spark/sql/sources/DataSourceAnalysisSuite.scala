@@ -22,7 +22,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.DataSourceAnalysis
 import org.apache.spark.sql.internal.SQLConf
@@ -63,7 +63,9 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
     def cast(e: Expression, dt: DataType): Expression = {
       SQLConf.get.storeAssignmentPolicy match {
         case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
-          AnsiCast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
+          val cast = Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone), ansiEnabled = true)
+          cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+          cast
         case _ =>
           Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
       }
