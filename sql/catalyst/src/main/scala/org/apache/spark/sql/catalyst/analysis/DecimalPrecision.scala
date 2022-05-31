@@ -53,6 +53,9 @@ import org.apache.spark.sql.types._
  * - LONG gets turned into DECIMAL(20, 0)
  * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE
  * - Literals INT and LONG get turned into DECIMAL with the precision strictly needed by the value
+ *
+ * Note that, after SPARK-39316 all binary decimal arithmetic expressions report decimal type in
+ * their own class. See [[DecimalArithmetic]].
  */
 // scalastyle:on
 object DecimalPrecision extends TypeCoercionRule {
