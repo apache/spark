@@ -226,7 +226,8 @@ case class DecimalAdd(
     left: Expression,
     right: Expression,
     override val dataType: DataType,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DecimalArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends BinaryArithmetic with DecimalArithmetic {
   require(dataType.isInstanceOf[DecimalType])
 
   override def inputType: AbstractDataType = DecimalType

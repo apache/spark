@@ -222,7 +222,7 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
  * or not. If not, if `nullOnOverflow` is `true`, it returns `null`; otherwise an
  * `ArithmeticException` is thrown.
  */
-abstract class DecimalArithmetic extends BinaryArithmetic {
+trait DecimalArithmetic extends BinaryArithmetic {
   protected val nullOnOverflow: Boolean = !failOnError
   protected val allowPrecisionLoss: Boolean = SQLConf.get.decimalOperationsAllowPrecisionLoss
 
@@ -235,10 +235,10 @@ abstract class DecimalArithmetic extends BinaryArithmetic {
   }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
-  def decimalMethod: String =
+  protected def decimalMethod: String =
     throw QueryExecutionErrors.notOverrideExpectedMethodsError("DecimalArithmetic",
       "decimalMethod", "genCode")
-  def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType =
+  protected def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType =
     throw QueryExecutionErrors.notOverrideExpectedMethodsError("DecimalArithmetic",
       "decimalType", "dataType")
 
@@ -379,7 +379,8 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DecimalArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends BinaryArithmetic with DecimalArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -442,7 +443,8 @@ case class Add(
 case class Subtract(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DecimalArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends BinaryArithmetic with DecimalArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -505,7 +507,8 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DecimalArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends BinaryArithmetic with DecimalArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -542,7 +545,7 @@ case class Multiply(
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
-trait DivModLike extends DecimalArithmetic {
+trait DivModLike extends BinaryArithmetic with DecimalArithmetic {
 
   protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
 
@@ -890,7 +893,8 @@ case class Remainder(
 case class Pmod(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DecimalArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends BinaryArithmetic with DecimalArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
