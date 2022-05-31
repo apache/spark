@@ -256,9 +256,9 @@ case class RegrSYY(
 case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAggregate
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  private[sql] val covarPop = new CovPopulation(right, left)
+  private val covarPop = new CovPopulation(right, left)
 
-  private[sql] val varPop = new VariancePop(right)
+  private val varPop = new VariancePop(right)
 
   override def nullable: Boolean = true
 
@@ -269,8 +269,7 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
   override lazy val aggBufferAttributes: Seq[AttributeReference] =
     covarPop.aggBufferAttributes ++ varPop.aggBufferAttributes
 
-  override lazy val initialValues: Seq[Expression] =
-    covarPop.initialValues ++ varPop.initialValues
+  override lazy val initialValues: Seq[Expression] = covarPop.initialValues ++ varPop.initialValues
 
   override lazy val updateExpressions: Seq[Expression] =
     covarPop.updateExpressions ++ varPop.updateExpressions
@@ -310,7 +309,9 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 case class RegrIntercept(left: Expression, right: Expression) extends DeclarativeAggregate
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  private val regrSlope = RegrSlope(left, right)
+  private val covarPop = new CovPopulation(right, left)
+
+  private val varPop = new VariancePop(right)
 
   override def nullable: Boolean = true
 
@@ -318,21 +319,24 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
 
   override def inputTypes: Seq[DoubleType] = Seq(DoubleType, DoubleType)
 
-  override lazy val aggBufferAttributes: Seq[AttributeReference] = regrSlope.aggBufferAttributes
+  override lazy val aggBufferAttributes: Seq[AttributeReference] =
+    covarPop.aggBufferAttributes ++ varPop.aggBufferAttributes
 
-  override lazy val initialValues: Seq[Expression] = regrSlope.initialValues
+  override lazy val initialValues: Seq[Expression] = covarPop.initialValues ++ varPop.initialValues
 
-  override lazy val updateExpressions: Seq[Expression] = regrSlope.updateExpressions
+  override lazy val updateExpressions: Seq[Expression] =
+    covarPop.updateExpressions ++ varPop.updateExpressions
 
-  override lazy val mergeExpressions: Seq[Expression] = regrSlope.mergeExpressions
+  override lazy val mergeExpressions: Seq[Expression] =
+    covarPop.mergeExpressions ++ varPop.mergeExpressions
 
   override lazy val evaluateExpression: Expression = {
-    If(regrSlope.covarPop.n === 0.0, Literal.create(null, DoubleType),
-      regrSlope.covarPop.yAvg - regrSlope.evaluateExpression * regrSlope.covarPop.xAvg)
+    If(covarPop.n === 0.0, Literal.create(null, DoubleType),
+      covarPop.yAvg - covarPop.ck / varPop.m2 * covarPop.xAvg)
   }
 
   override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
-    regrSlope.inputAggBufferAttributes
+    covarPop.inputAggBufferAttributes ++ varPop.inputAggBufferAttributes
 
   override def prettyName: String = "regr_intercept"
 
