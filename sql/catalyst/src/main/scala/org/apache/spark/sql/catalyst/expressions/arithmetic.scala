@@ -238,7 +238,7 @@ trait DecimalArithmeticSupport extends BinaryArithmetic {
   protected def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType
 
   override def nullable: Boolean = dataType match {
-    case _: DecimalType => true
+    case _: DecimalType => nullOnOverflow
     case _ => super.nullable
   }
 
@@ -264,12 +264,17 @@ trait DecimalArithmeticSupport extends BinaryArithmetic {
       } else {
         ctx.addReferenceObj("errCtx", queryContext)
       }
+      val isNull = if (nullOnOverflow) {
+        s"${ev.isNull} = ${ev.value} == null;"
+      } else {
+        ""
+      }
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         // scalastyle:off line.size.limit
         s"""
            |${ev.value} = $eval1.$decimalMethod($eval2).toPrecision(
            |  ${decimalType.precision}, ${decimalType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-           |${ev.isNull} = ${ev.value} == null;
+           |$isNull
        """.stripMargin
         // scalastyle:on line.size.limit
       })
