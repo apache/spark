@@ -3920,7 +3920,10 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * The windows are calculated as below:
    * maxNumOverlapping <- ceil(windowDuration / slideDuration)
    * for (i <- 0 until maxNumOverlapping)
-   *   lastStart <- timestamp - (timestamp - startTime + slideDuration) % slideDuration
+   *   remainder <- (timestamp - startTime) % slideDuration
+   *   lastStart <-
+   *     if (remainder < 0) timestamp - remainder - slideDuration
+   *     else timestamp - remainder
    *   windowStart <- lastStart - i * slideDuration
    *   windowEnd <- windowStart + windowDuration
    *   return windowStart, windowEnd
@@ -3963,8 +3966,10 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         def getWindow(i: Int, dataType: DataType): Expression = {
           val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
-          val lastStart = timestamp - (timestamp - window.startTime
-            + window.slideDuration) % window.slideDuration
+          val remainder = (timestamp - window.startTime) % window.slideDuration
+          val lastStart = CaseWhen(
+            Seq((LessThan(remainder, 0), timestamp - remainder - window.slideDuration))
+            , Some(timestamp - remainder))
           val windowStart = lastStart - i * window.slideDuration
           val windowEnd = windowStart + window.windowDuration
 

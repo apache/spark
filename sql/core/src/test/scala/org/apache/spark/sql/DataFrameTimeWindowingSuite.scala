@@ -314,6 +314,24 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           Row("1970-01-01 00:00:05", "1970-01-01 00:00:15", 2))
       )
     }
+
+    val df3 = Seq(
+      ("1969-12-31 00:00:02", 1),
+      ("1969-12-31 00:00:12", 2)).toDF("time", "value")
+    val df4 = Seq(
+      (LocalDateTime.parse("1969-12-31T00:00:02"), 1),
+      (LocalDateTime.parse("1969-12-31T00:00:12"), 2)).toDF("time", "value")
+
+    Seq(df3, df4).foreach { df =>
+      checkAnswer(
+        df.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("1969-12-30 23:59:55", "1969-12-31 00:00:05", 1),
+          Row("1969-12-31 00:00:05", "1969-12-31 00:00:15", 2))
+      )
+    }
   }
 
   test("multiple time windows in a single operator throws nice exception") {
