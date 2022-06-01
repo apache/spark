@@ -1612,10 +1612,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         dataSource = "orc",
         Seq(
           Config(
-            None),
-          Config(
-            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false"),
-            insertNullsToStorage = false))),
+            None))),
       TestCase(
         dataSource = "parquet",
         Seq(
