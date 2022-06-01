@@ -48,7 +48,7 @@ class ConstantFoldingSuite extends PlanTest {
   test("eliminate subqueries") {
     val originalQuery =
       testRelation
-        .subquery(Symbol("y"))
+        .subquery("y")
         .select($"a")
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -67,27 +67,27 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select(
-          Literal(2) + Literal(3) + Literal(4) as Symbol("2+3+4"),
-          Literal(2) * Literal(3) + Literal(4) as Symbol("2*3+4"),
-          Literal(2) * (Literal(3) + Literal(4)) as Symbol("2*(3+4)"))
+          Literal(2) + Literal(3) + Literal(4) as "2+3+4",
+          Literal(2) * Literal(3) + Literal(4) as "2*3+4",
+          Literal(2) * (Literal(3) + Literal(4)) as "2*(3+4)")
         .where(
           Literal(1) === Literal(1) &&
           Literal(2) > Literal(3) ||
           Literal(3) > Literal(2) )
         .groupBy(
           Literal(2) * Literal(3) - Literal(6) / (Literal(4) - Literal(2))
-        )(Literal(9) / Literal(3) as Symbol("9/3"))
+        )(Literal(9) / Literal(3) as "9/3")
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
         .select(
-          Literal(9) as Symbol("2+3+4"),
-          Literal(10) as Symbol("2*3+4"),
-          Literal(14) as Symbol("2*(3+4)"))
+          Literal(9) as "2+3+4",
+          Literal(10) as "2*3+4",
+          Literal(14) as "2*(3+4)")
         .where(Literal(true))
-        .groupBy(Literal(3.0))(Literal(3.0) as Symbol("9/3"))
+        .groupBy(Literal(3.0))(Literal(3.0) as "9/3")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -98,20 +98,20 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select(
-          Literal(2) + Literal(3) + $"a" as Symbol("c1"),
-          $"a" + Literal(2) + Literal(3) as Symbol("c2"),
-          Literal(2) * $"a" + Literal(4) as Symbol("c3"),
-          $"a" * (Literal(3) + Literal(4)) as Symbol("c4"))
+          Literal(2) + Literal(3) + $"a" as "c1",
+          $"a" + Literal(2) + Literal(3) as "c2",
+          Literal(2) * $"a" + Literal(4) as "c3",
+          $"a" * (Literal(3) + Literal(4)) as "c4")
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
         .select(
-          Literal(5) + $"a" as Symbol("c1"),
-          $"a" + Literal(2) + Literal(3) as Symbol("c2"),
-          Literal(2) * $"a" + Literal(4) as Symbol("c3"),
-          $"a" * Literal(7) as Symbol("c4"))
+          Literal(5) + $"a" as "c1",
+          $"a" + Literal(2) + Literal(3) as "c2",
+          Literal(2) * $"a" + Literal(4) as "c3",
+          $"a" * Literal(7) as "c4")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -145,16 +145,16 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select(
-          Cast(Literal("2"), IntegerType) + Literal(3) + $"a" as Symbol("c1"),
-          Coalesce(Seq(TryCast(Literal("abc"), IntegerType), Literal(3))) as Symbol("c2"))
+          Cast(Literal("2"), IntegerType) + Literal(3) + $"a" as "c1",
+          Coalesce(Seq(TryCast(Literal("abc"), IntegerType), Literal(3))) as "c2")
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
         .select(
-          Literal(5) + $"a" as Symbol("c1"),
-          Literal(3) as Symbol("c2"))
+          Literal(5) + $"a" as "c1",
+          Literal(3) as "c2")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -164,16 +164,16 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select(
-          Rand(5L) + Literal(1) as Symbol("c1"),
-          sum($"a") as Symbol("c2"))
+          Rand(5L) + Literal(1) as "c1",
+          sum($"a") as "c2")
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
         .select(
-          Rand(5L) + Literal(1.0) as Symbol("c1"),
-          sum($"a") as Symbol("c2"))
+          Rand(5L) + Literal(1.0) as "c1",
+          sum($"a") as "c2")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -181,38 +181,38 @@ class ConstantFoldingSuite extends PlanTest {
 
   test("Constant folding test: expressions have null literals") {
     val originalQuery = testRelation.select(
-      IsNull(Literal(null)) as Symbol("c1"),
-      IsNotNull(Literal(null)) as Symbol("c2"),
+      IsNull(Literal(null)) as "c1",
+      IsNotNull(Literal(null)) as "c2",
 
-      UnresolvedExtractValue(Literal.create(null, ArrayType(IntegerType)), 1) as Symbol("c3"),
+      UnresolvedExtractValue(Literal.create(null, ArrayType(IntegerType)), 1) as "c3",
       UnresolvedExtractValue(
         Literal.create(Seq(1), ArrayType(IntegerType)),
-        Literal.create(null, IntegerType)) as Symbol("c4"),
+        Literal.create(null, IntegerType)) as "c4",
       UnresolvedExtractValue(
         Literal.create(null, StructType(Seq(StructField("a", IntegerType, true)))),
-        "a") as Symbol("c5"),
+        "a") as "c5",
 
-      UnaryMinus(Literal.create(null, IntegerType)) as Symbol("c6"),
-      Cast(Literal(null), IntegerType) as Symbol("c7"),
-      Not(Literal.create(null, BooleanType)) as Symbol("c8"),
+      UnaryMinus(Literal.create(null, IntegerType)) as "c6",
+      Cast(Literal(null), IntegerType) as "c7",
+      Not(Literal.create(null, BooleanType)) as "c8",
 
-      Add(Literal.create(null, IntegerType), 1) as Symbol("c9"),
-      Add(1, Literal.create(null, IntegerType)) as Symbol("c10"),
+      Add(Literal.create(null, IntegerType), 1) as "c9",
+      Add(1, Literal.create(null, IntegerType)) as "c10",
 
-      EqualTo(Literal.create(null, IntegerType), 1) as Symbol("c11"),
-      EqualTo(1, Literal.create(null, IntegerType)) as Symbol("c12"),
+      EqualTo(Literal.create(null, IntegerType), 1) as "c11",
+      EqualTo(1, Literal.create(null, IntegerType)) as "c12",
 
-      new Like(Literal.create(null, StringType), "abc") as Symbol("c13"),
-      new Like("abc", Literal.create(null, StringType)) as Symbol("c14"),
+      new Like(Literal.create(null, StringType), "abc") as "c13",
+      new Like("abc", Literal.create(null, StringType)) as "c14",
 
-      Upper(Literal.create(null, StringType)) as Symbol("c15"),
+      Upper(Literal.create(null, StringType)) as "c15",
 
-      Substring(Literal.create(null, StringType), 0, 1) as Symbol("c16"),
-      Substring("abc", Literal.create(null, IntegerType), 1) as Symbol("c17"),
-      Substring("abc", 0, Literal.create(null, IntegerType)) as Symbol("c18"),
+      Substring(Literal.create(null, StringType), 0, 1) as "c16",
+      Substring("abc", Literal.create(null, IntegerType), 1) as "c17",
+      Substring("abc", 0, Literal.create(null, IntegerType)) as "c18",
 
-      Contains(Literal.create(null, StringType), "abc") as Symbol("c19"),
-      Contains("abc", Literal.create(null, StringType)) as Symbol("c20")
+      Contains(Literal.create(null, StringType), "abc") as "c19",
+      Contains("abc", Literal.create(null, StringType)) as "c20"
     )
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -220,34 +220,34 @@ class ConstantFoldingSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select(
-          Literal(true) as Symbol("c1"),
-          Literal(false) as Symbol("c2"),
+          Literal(true) as "c1",
+          Literal(false) as "c2",
 
-          Literal.create(null, IntegerType) as Symbol("c3"),
-          Literal.create(null, IntegerType) as Symbol("c4"),
-          Literal.create(null, IntegerType) as Symbol("c5"),
+          Literal.create(null, IntegerType) as "c3",
+          Literal.create(null, IntegerType) as "c4",
+          Literal.create(null, IntegerType) as "c5",
 
-          Literal.create(null, IntegerType) as Symbol("c6"),
-          Literal.create(null, IntegerType) as Symbol("c7"),
-          Literal.create(null, BooleanType) as Symbol("c8"),
+          Literal.create(null, IntegerType) as "c6",
+          Literal.create(null, IntegerType) as "c7",
+          Literal.create(null, BooleanType) as "c8",
 
-          Literal.create(null, IntegerType) as Symbol("c9"),
-          Literal.create(null, IntegerType) as Symbol("c10"),
+          Literal.create(null, IntegerType) as "c9",
+          Literal.create(null, IntegerType) as "c10",
 
-          Literal.create(null, BooleanType) as Symbol("c11"),
-          Literal.create(null, BooleanType) as Symbol("c12"),
+          Literal.create(null, BooleanType) as "c11",
+          Literal.create(null, BooleanType) as "c12",
 
-          Literal.create(null, BooleanType) as Symbol("c13"),
-          Literal.create(null, BooleanType) as Symbol("c14"),
+          Literal.create(null, BooleanType) as "c13",
+          Literal.create(null, BooleanType) as "c14",
 
-          Literal.create(null, StringType) as Symbol("c15"),
+          Literal.create(null, StringType) as "c15",
 
-          Literal.create(null, StringType) as Symbol("c16"),
-          Literal.create(null, StringType) as Symbol("c17"),
-          Literal.create(null, StringType) as Symbol("c18"),
+          Literal.create(null, StringType) as "c16",
+          Literal.create(null, StringType) as "c17",
+          Literal.create(null, StringType) as "c18",
 
-          Literal.create(null, BooleanType) as Symbol("c19"),
-          Literal.create(null, BooleanType) as Symbol("c20")
+          Literal.create(null, BooleanType) as "c19",
+          Literal.create(null, BooleanType) as "c20"
         ).analyze
 
     comparePlans(optimized, correctAnswer)
