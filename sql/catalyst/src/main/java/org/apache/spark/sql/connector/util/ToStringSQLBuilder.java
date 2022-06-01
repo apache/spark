@@ -27,7 +27,7 @@ public class ToStringSQLBuilder extends V2ExpressionSQLBuilder {
 
   @Override
   protected String visitUserDefinedFunction(
-       String funcName, String canonicalName, String[] inputs) {
+      String funcName, String canonicalName, String[] inputs) {
     return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
   }
 }
