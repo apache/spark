@@ -491,20 +491,28 @@ object QueryExecution {
   }
 
   /**
+   * Converts asserts, null pointer, illegal state exceptions to internal errors.
+   */
+  private[sql] def toInternalError(msg: String, e: Throwable): Throwable = e match {
+    case e @ (_: java.lang.IllegalStateException | _: java.lang.NullPointerException |
+              _: java.lang.AssertionError) =>
+      new SparkException(
+        errorClass = "INTERNAL_ERROR",
+        messageParameters = Array(msg +
+          " Please, fill a bug report in, and provide the full stack trace."),
+        cause = e)
+    case e: Throwable =>
+      e
+  }
+
+  /**
    * Catches asserts, null pointer, illegal state exceptions, and converts them to internal errors.
    */
   private[sql] def withInternalError[T](msg: String)(block: => T): T = {
     try {
       block
     } catch {
-      case e @ (_: java.lang.IllegalStateException | _: java.lang.NullPointerException |
-                _: java.lang.AssertionError) =>
-        throw new SparkException(
-          errorClass = "INTERNAL_ERROR",
-          messageParameters = Array(msg +
-            " Please, fill in a bug report and provide the full stack trace."),
-          cause = e)
-      case e: Throwable => throw e
+      case e: Throwable => throw toInternalError(msg, e)
     }
   }
 }
