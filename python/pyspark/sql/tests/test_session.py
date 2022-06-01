@@ -377,6 +377,44 @@ class SparkExtensionsTest(unittest.TestCase):
         )
 
 
+class CreateDataFrame(unittest.TestCase):
+    def test_from_numpy_array(self):
+        spark = SparkSession.builder.master("local").getOrCreate()
+        try:
+            import numpy as np
+
+            activeSession = SparkSession.getActiveSession()
+            data_collected_dtypes = [
+                (np.array([1, 2]), [Row(value=1), Row(value=2)], [("value", "bigint")]),
+                (
+                    np.array([1, 2]).astype(np.int8),
+                    [Row(value=0.1), Row(value=0.2)],
+                    [("value", "tinyint")],
+                ),
+                (
+                    np.array([1, 2]).astype(np.int32),
+                    [Row(value=0.1), Row(value=0.2)],
+                    [("value", "int")],
+                ),
+                (
+                    np.array([1, 2]).astype(np.int64),
+                    [Row(value=0.1), Row(value=0.2)],
+                    [("value", "bigint")],
+                ),
+                (
+                    np.array([1, 2]).astype(np.float32),
+                    [Row(value=0.1), Row(value=0.2)],
+                    [("value", "float")],
+                ),
+            ]
+            for data, collected, dtypes in data_collected_dtypes:
+                df = activeSession.createDataFrame(data)
+                self.assertEqual(df.collect(), collected)
+                self.assertEqual(df.dtypes, dtypes)
+        finally:
+            spark.stop()
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.test_session import *  # noqa: F401
 

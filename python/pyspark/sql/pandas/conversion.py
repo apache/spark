@@ -543,7 +543,6 @@ class SparkConversionMixin:
         # Check if any columns need to be fixed for Spark to infer properly
         if len(np_records) > 0:
             record_dtype = self._get_numpy_record_dtype(np_records[0])
-            assert record_dtype == np.int64
             if record_dtype is not None:
                 return [r.astype(record_dtype).tolist() for r in np_records], record_dtype
 
