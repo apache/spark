@@ -232,7 +232,7 @@ case class DecimalAddNoOverflowCheck(
   override def nullable: Boolean = super[BinaryArithmetic].nullable
   override def inputType: AbstractDataType = DecimalType
   override def symbol: String = "+"
-  private val decimalMethod: String = "$plus"
+  private def decimalMethod: String = "$plus"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
