@@ -288,14 +288,14 @@ class ColumnPruningSuite extends PlanTest {
 
     val originalQuery =
       testRelation
-        .groupBy($"a")($"a" as Symbol("c"), count($"b"))
+        .groupBy($"a")($"a" as "c", count($"b"))
         .select($"c")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select($"a")
-        .groupBy($"a")($"a" as Symbol("c")).analyze
+        .groupBy($"a")($"a" as "c").analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -320,7 +320,7 @@ class ColumnPruningSuite extends PlanTest {
 
   test("push down project past sort") {
     val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
-    val x = testRelation.subquery(Symbol("x"))
+    val x = testRelation.subquery("x")
 
     // push down valid
     val originalQuery = {
@@ -358,7 +358,7 @@ class ColumnPruningSuite extends PlanTest {
     val winExpr = windowExpr(count($"d"), winSpec)
 
     val originalQuery = input.groupBy($"a", $"c", $"d")($"a", $"c", $"d",
-      winExpr.as(Symbol("window"))).select($"a", $"c")
+      winExpr.as("window")).select($"a", $"c")
     val correctAnswer = input.select($"a", $"c", $"d").groupBy($"a", $"c", $"d")($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -371,11 +371,11 @@ class ColumnPruningSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     val originalQuery =
-      input.select($"a", $"b", $"c", $"d", winExpr.as(Symbol("window")))
+      input.select($"a", $"b", $"c", $"d", winExpr.as("window"))
         .where($"window" > 1).select($"a", $"c")
     val correctAnswer =
       input.select($"a", $"b", $"c")
-        .window(winExpr.as(Symbol("window")) :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+        .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
         .where($"window" > 1).select($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -388,7 +388,7 @@ class ColumnPruningSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     val originalQuery = input.select($"a", $"b", $"c", $"d",
-      winExpr.as(Symbol("window"))).select($"a", $"c")
+      winExpr.as("window")).select($"a", $"c")
     val correctAnswer = input.select($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -437,16 +437,16 @@ class ColumnPruningSuite extends PlanTest {
 
   test("push project down into sample") {
     val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
-    val x = testRelation.subquery(Symbol("x"))
+    val x = testRelation.subquery("x")
 
     val query1 = Sample(0.0, 0.6, false, 11L, x).select($"a")
     val optimized1 = Optimize.execute(query1.analyze)
     val expected1 = Sample(0.0, 0.6, false, 11L, x.select($"a"))
     comparePlans(optimized1, expected1.analyze)
 
-    val query2 = Sample(0.0, 0.6, false, 11L, x).select($"a" as Symbol("aa"))
+    val query2 = Sample(0.0, 0.6, false, 11L, x).select($"a" as "aa")
     val optimized2 = Optimize.execute(query2.analyze)
-    val expected2 = Sample(0.0, 0.6, false, 11L, x.select($"a" as Symbol("aa")))
+    val expected2 = Sample(0.0, 0.6, false, 11L, x.select($"a" as "aa"))
     comparePlans(optimized2, expected2.analyze)
   }
 

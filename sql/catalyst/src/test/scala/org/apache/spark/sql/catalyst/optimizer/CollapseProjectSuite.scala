@@ -38,25 +38,25 @@ class CollapseProjectSuite extends PlanTest {
 
   test("collapse two deterministic, independent projects into one") {
     val query = testRelation
-      .select(($"a" + 1).as(Symbol("a_plus_1")), $"b")
-      .select($"a_plus_1", ($"b" + 1).as(Symbol("b_plus_1")))
+      .select(($"a" + 1).as("a_plus_1"), $"b")
+      .select($"a_plus_1", ($"b" + 1).as("b_plus_1"))
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation.select(($"a" + 1).as(Symbol("a_plus_1")),
-      ($"b" + 1).as(Symbol("b_plus_1"))).analyze
+    val correctAnswer = testRelation.select(($"a" + 1).as("a_plus_1"),
+      ($"b" + 1).as("b_plus_1")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("collapse two deterministic, dependent projects into one") {
     val query = testRelation
-      .select(($"a" + 1).as(Symbol("a_plus_1")), $"b")
-      .select(($"a_plus_1" + 1).as(Symbol("a_plus_2")), $"b")
+      .select(($"a" + 1).as("a_plus_1"), $"b")
+      .select(($"a_plus_1" + 1).as("a_plus_2"), $"b")
 
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer = testRelation.select(
-      (($"a" + 1).as(Symbol("a_plus_1")) + 1).as(Symbol("a_plus_2")),
+      (($"a" + 1).as("a_plus_1") + 1).as("a_plus_2"),
       $"b").analyze
 
     comparePlans(optimized, correctAnswer)
@@ -64,8 +64,8 @@ class CollapseProjectSuite extends PlanTest {
 
   test("do not collapse nondeterministic projects") {
     val query = testRelation
-      .select(Rand(10).as(Symbol("rand")))
-      .select(($"rand" + 1).as(Symbol("rand1")), ($"rand" + 2).as(Symbol("rand2")))
+      .select(Rand(10).as("rand"))
+      .select(($"rand" + 1).as("rand1"), ($"rand" + 2).as("rand2"))
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = query.analyze
@@ -75,39 +75,39 @@ class CollapseProjectSuite extends PlanTest {
 
   test("collapse two nondeterministic, independent projects into one") {
     val query = testRelation
-      .select(Rand(10).as(Symbol("rand")))
-      .select(Rand(20).as(Symbol("rand2")))
+      .select(Rand(10).as("rand"))
+      .select(Rand(20).as("rand2"))
 
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer = testRelation
-      .select(Rand(20).as(Symbol("rand2"))).analyze
+      .select(Rand(20).as("rand2")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("collapse one nondeterministic, one deterministic, independent projects into one") {
     val query = testRelation
-      .select(Rand(10).as(Symbol("rand")), $"a")
-      .select(($"a" + 1).as(Symbol("a_plus_1")))
+      .select(Rand(10).as("rand"), $"a")
+      .select(($"a" + 1).as("a_plus_1"))
 
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer = testRelation
-      .select(($"a" + 1).as(Symbol("a_plus_1"))).analyze
+      .select(($"a" + 1).as("a_plus_1")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("collapse project into aggregate") {
     val query = testRelation
-      .groupBy($"a", $"b")(($"a" + 1).as(Symbol("a_plus_1")), $"b")
-      .select($"a_plus_1", ($"b" + 1).as(Symbol("b_plus_1")))
+      .groupBy($"a", $"b")(($"a" + 1).as("a_plus_1"), $"b")
+      .select($"a_plus_1", ($"b" + 1).as("b_plus_1"))
 
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer = testRelation
-      .groupBy($"a", $"b")(($"a" + 1).as(Symbol("a_plus_1")), ($"b" + 1).as(Symbol("b_plus_1")))
+      .groupBy($"a", $"b")(($"a" + 1).as("a_plus_1"), ($"b" + 1).as("b_plus_1"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -115,8 +115,8 @@ class CollapseProjectSuite extends PlanTest {
 
   test("do not collapse common nondeterministic project and aggregate") {
     val query = testRelation
-      .groupBy($"a")($"a", Rand(10).as(Symbol("rand")))
-      .select(($"rand" + 1).as(Symbol("rand1")), ($"rand" + 2).as(Symbol("rand2")))
+      .groupBy($"a")($"a", Rand(10).as("rand"))
+      .select(($"rand" + 1).as("rand1"), ($"rand" + 2).as("rand2"))
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = query.analyze
@@ -176,45 +176,45 @@ class CollapseProjectSuite extends PlanTest {
 
   test("collapse redundant alias through limit") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.select($"a" as Symbol("b")).limit(1).select($"b" as Symbol("c")).analyze
+    val query = relation.select($"a" as "b").limit(1).select($"b" as "c").analyze
     val optimized = Optimize.execute(query)
-    val expected = relation.select($"a" as Symbol("c")).limit(1).analyze
+    val expected = relation.select($"a" as "c").limit(1).analyze
     comparePlans(optimized, expected)
   }
 
   test("collapse redundant alias through local limit") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = LocalLimit(1, relation.select($"a" as Symbol("b")))
-      .select($"b" as Symbol("c")).analyze
+    val query = LocalLimit(1, relation.select($"a" as "b"))
+      .select($"b" as "c").analyze
     val optimized = Optimize.execute(query)
-    val expected = LocalLimit(1, relation.select($"a" as Symbol("c"))).analyze
+    val expected = LocalLimit(1, relation.select($"a" as "c")).analyze
     comparePlans(optimized, expected)
   }
 
   test("collapse redundant alias through repartition") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.select($"a" as Symbol("b")).repartition(1)
-      .select($"b" as Symbol("c")).analyze
+    val query = relation.select($"a" as "b").repartition(1)
+      .select($"b" as "c").analyze
     val optimized = Optimize.execute(query)
-    val expected = relation.select($"a" as Symbol("c")).repartition(1).analyze
+    val expected = relation.select($"a" as "c").repartition(1).analyze
     comparePlans(optimized, expected)
   }
 
   test("collapse redundant alias through sample") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = Sample(0.0, 0.6, false, 11L, relation.select($"a" as Symbol("b")))
-      .select($"b" as Symbol("c")).analyze
+    val query = Sample(0.0, 0.6, false, 11L, relation.select($"a" as "b"))
+      .select($"b" as "c").analyze
     val optimized = Optimize.execute(query)
-    val expected = Sample(0.0, 0.6, false, 11L, relation.select($"a" as Symbol("c"))).analyze
+    val expected = Sample(0.0, 0.6, false, 11L, relation.select($"a" as "c")).analyze
     comparePlans(optimized, expected)
   }
 
   test("SPARK-36086: CollapseProject should keep output schema name") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val select = relation.select(($"a" + $"b").as(Symbol("c"))).analyze
+    val select = relation.select(($"a" + $"b").as("c")).analyze
     val query = Project(Seq(select.output.head.withName("C")), select)
     val optimized = Optimize.execute(query)
-    val expected = relation.select(($"a" + $"b").as(Symbol("C"))).analyze
+    val expected = relation.select(($"a" + $"b").as("C")).analyze
     comparePlans(optimized, expected)
   }
 }
