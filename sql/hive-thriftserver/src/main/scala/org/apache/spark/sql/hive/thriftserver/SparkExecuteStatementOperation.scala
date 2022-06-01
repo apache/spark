@@ -29,6 +29,7 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TPrimitiveTypeEntry, TRowSet, TTableSchema, TTypeDesc, TTypeEntry, TTypeId, TTypeQualifiers, TTypeQualifierValue}
+import org.apache.hive.service.server.ThreadWithGarbageCleanup
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
@@ -177,6 +178,12 @@ private[hive] class SparkExecuteStatementOperation(
               setOperationException(new HiveSQLException(e))
               logError("Error running hive query as user : " +
                 sparkServiceUGI.getShortUserName(), e)
+          } finally {
+            Thread.currentThread() match {
+              case currentThread: ThreadWithGarbageCleanup =>
+                currentThread.cacheThreadLocalRawStore()
+              case _ =>
+            }
           }
         }
       }

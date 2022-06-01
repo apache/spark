@@ -18,12 +18,18 @@
 
 package org.apache.hive.service.server;
 
-import java.util.Map;
-
-import org.apache.hadoop.hive.metastore.HiveMetaStore;
-import org.apache.hadoop.hive.metastore.RawStore;
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalog;
+import org.apache.spark.sql.catalyst.catalog.InMemoryCatalog;
+import org.apache.spark.sql.hive.thriftserver.ReflectionUtils;
+import org.apache.spark.sql.hive.thriftserver.SparkSQLEnv;
+import org.apache.spark.sql.internal.SharedState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.Tuple2;
+import scala.collection.JavaConverters;
+
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * A HiveServer2 thread used to construct new server threads.
@@ -33,7 +39,7 @@ import org.slf4j.LoggerFactory;
 public class ThreadWithGarbageCleanup extends Thread {
   private static final Logger LOG = LoggerFactory.getLogger(ThreadWithGarbageCleanup.class);
 
-  Map<Long, RawStore> threadRawStoreMap =
+  Map<Long, Object> threadRawStoreMap =
       ThreadFactoryWithGarbageCleanup.getThreadRawStoreMap();
 
   public ThreadWithGarbageCleanup(Runnable runnable) {
@@ -45,18 +51,18 @@ public class ThreadWithGarbageCleanup extends Thread {
    * Currently, it shuts down the RawStore object for this thread if it is not null.
    */
   @Override
-  public void finalize() throws Throwable {
+  protected void finalize() throws Throwable {
     cleanRawStore();
     super.finalize();
   }
 
   private void cleanRawStore() {
     Long threadId = this.getId();
-    RawStore threadLocalRawStore = threadRawStoreMap.get(threadId);
+    Object threadLocalRawStore = threadRawStoreMap.get(threadId);
     if (threadLocalRawStore != null) {
       LOG.debug("RawStore: " + threadLocalRawStore + ", for the thread: " +
           this.getName()  +  " will be closed now.");
-      threadLocalRawStore.shutdown();
+      ReflectionUtils.invoke(threadLocalRawStore.getClass(), threadLocalRawStore,"shutdown", JavaConverters.asScalaBufferConverter(Collections.<Tuple2<Class<?>,Object>>emptyList()).asScala().toSeq());
       threadRawStoreMap.remove(threadId);
     }
   }
@@ -65,9 +71,19 @@ public class ThreadWithGarbageCleanup extends Thread {
    * Cache the ThreadLocal RawStore object. Called from the corresponding thread.
    */
   public void cacheThreadLocalRawStore() {
+    SharedState sharedState = SparkSQLEnv.sqlContext().sharedState();
+    ExternalCatalog externalCatalog = sharedState.externalCatalog().unwrapped();
+    if (externalCatalog instanceof InMemoryCatalog) {
+      return;
+    }
+
     Long threadId = this.getId();
-    RawStore threadLocalRawStore = HiveMetaStore.HMSHandler.getRawStore();
-    if (threadLocalRawStore != null && !threadRawStoreMap.containsKey(threadId)) {
+    Object threadLocalRawStore = sharedState.threadLocalMS().get();
+    if (threadLocalRawStore == null) {
+      LOG.debug("Thread Local RawStore is null, for the thread: " +
+              this.getName() + " and so removing entry from threadRawStoreMap.");
+      threadRawStoreMap.remove(threadId);
+    } else {
       LOG.debug("Adding RawStore: " + threadLocalRawStore + ", for the thread: " +
           this.getName() + " to threadRawStoreMap for future cleanup.");
       threadRawStoreMap.put(threadId, threadLocalRawStore);

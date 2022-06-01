@@ -22,8 +22,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
 
-import org.apache.hadoop.hive.metastore.RawStore;
-
 /**
  * A ThreadFactory for constructing new HiveServer2 threads that lets you plug
  * in custom cleanup code to be called before this thread is GC-ed.
@@ -42,7 +40,7 @@ import org.apache.hadoop.hive.metastore.RawStore;
  */
 public class ThreadFactoryWithGarbageCleanup implements ThreadFactory {
 
-  private static Map<Long, RawStore> threadRawStoreMap = new ConcurrentHashMap<Long, RawStore>();
+  private static Map<Long, Object> threadRawStoreMap = new ConcurrentHashMap<>();
 
   private final String namePrefix;
 
@@ -57,7 +55,7 @@ public class ThreadFactoryWithGarbageCleanup implements ThreadFactory {
     return newThread;
   }
 
-  public static Map<Long, RawStore> getThreadRawStoreMap() {
+  public static Map<Long, Object> getThreadRawStoreMap() {
     return threadRawStoreMap;
   }
 }

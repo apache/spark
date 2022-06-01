@@ -30,12 +30,13 @@ import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, _}
 import org.apache.spark.sql.diagnostic.DiagnosticListener
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
+import org.apache.spark.sql.internal.SharedState.HIVE_EXTERNAL_CATALOG_CLASS_NAME
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.status.ElementTrackingStore
@@ -167,6 +168,17 @@ private[sql] class SharedState(
     wrapped.addListener((event: ExternalCatalogEvent) => sparkContext.listenerBus.post(event))
 
     wrapped
+  }
+
+  lazy val threadLocalMS: ThreadLocal[Object] = {
+    val clazz = Utils.classForName(HIVE_EXTERNAL_CATALOG_CLASS_NAME)
+    val client = clazz.getDeclaredMethod("client").invoke(externalCatalog.unwrapped)
+    val hmsHandlerClass = client.getClass.getClassLoader.loadClass(
+      "org.apache.hadoop.hive.metastore.HiveMetaStore$HMSHandler")
+
+    val threadLocalMSField = hmsHandlerClass.getDeclaredField("threadLocalMS")
+    threadLocalMSField.setAccessible(true)
+    threadLocalMSField.get(null).asInstanceOf[ThreadLocal[Object]]
   }
 
   /**
