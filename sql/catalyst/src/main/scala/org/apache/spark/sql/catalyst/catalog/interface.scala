@@ -77,7 +77,7 @@ case class CatalogStorageFormat(
     val map = new mutable.LinkedHashMap[String, String]()
     locationUri.foreach(l => map.put("Location", l.toString))
     serde.foreach(map.put("Serde Library", _))
-    inputFormat.foreach(map.put("InputFormat", _))
+    inputFormat.foreach(map.put(org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat", _))
     outputFormat.foreach(map.put("OutputFormat", _))
     if (compressed) map.put("Compressed", "")
     SQLConf.get.redactOptions(properties) match {

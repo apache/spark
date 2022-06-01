@@ -1635,6 +1635,25 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
+    val unsupported = "data source type avro does not support assigning DEFAULT column values"
+    assert(intercept[AnalysisException] {
+      sql(s"create table t(a string) using avro")
+    }.getMessage.contains(unsupported))
+    assert(intercept[AnalysisException] {
+      sql(s"create table t(a string) using parquet")
+      sql(s"replace table t(a string) using avro")
+    }.getMessage.contains(unsupported))
+    assert(intercept[AnalysisException] {
+      sql(s"create table t(a string) using avro")
+      sql("alter table t add column(b int default 42)")
+    }.getMessage.contains(unsupported))
+    assert(intercept[AnalysisException] {
+      sql(s"create table t(a string) using avro")
+      sql("alter table t alter column b set default 42")
+    }.getMessage.contains(unsupported))
+  }
+
   test("Stop task set if FileAlreadyExistsException was thrown") {
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,

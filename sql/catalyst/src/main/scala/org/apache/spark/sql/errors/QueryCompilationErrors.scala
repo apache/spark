@@ -2449,4 +2449,10 @@ object QueryCompilationErrors extends QueryErrorsBase {
       s"Invalid DEFAULT value for column $fieldName: $defaultValue fails to parse as a valid " +
         "literal value")
   }
+
+  def defaultReferencesNotAllowedInDataSource(dataSource: String): Throwable = {
+    new AnalysisException(
+      s"Failed to execute command because target data source type $dataSource does not support " +
+        "assigning DEFAULT column values")
+  }
 }

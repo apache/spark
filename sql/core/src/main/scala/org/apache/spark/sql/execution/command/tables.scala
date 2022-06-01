@@ -231,6 +231,9 @@ case class AlterTableAddColumnsCommand(
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
     val colsWithProcessedDefaults = constantFoldCurrentDefaultsToExistDefaults(sparkSession)
+    if (colsWithProcessedDefaults.nonEmpty) {
+      ResolveDefaultColumns.checkDataSourceSupportsDefaultColumns(catalogTable)
+    }
 
     CommandUtils.uncacheTableOrView(sparkSession, table.quotedString)
     catalog.refreshTable(table)

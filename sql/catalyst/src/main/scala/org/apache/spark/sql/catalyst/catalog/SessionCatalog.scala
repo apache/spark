@@ -22,14 +22,11 @@ import java.util.Locale
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
-
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
-
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
@@ -39,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionI
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -349,6 +346,8 @@ class SessionCatalog(
     val tableIdentifier = TableIdentifier(table, Some(db))
     validateName(table)
 
+    ResolveDefaultColumns.checkDataSourceSupportsDefaultColumns(tableDefinition)
+
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
       // make the location of the table qualified.
@@ -427,6 +426,7 @@ class SessionCatalog(
       tableDefinition.copy(identifier = tableIdentifier)
     }
 
+    ResolveDefaultColumns.checkDataSourceSupportsDefaultColumns(tableDefinition)
     externalCatalog.alterTable(newTableDefinition)
   }
 
@@ -456,6 +456,7 @@ class SessionCatalog(
       throw QueryCompilationErrors.dropNonExistentColumnsNotSupportedError(nonExistentColumnNames)
     }
 
+    ResolveDefaultColumns.checkDataSourceSupportsDefaultColumns(catalogTable)
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)
   }
 
