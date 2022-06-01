@@ -100,7 +100,7 @@ class HiveSessionStateBuilder(
         RelationConversions(catalog) +:
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
-        DataSourceAnalysis +:
+        DataSourceAnalysis(session) +:
         HiveAnalysis +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules

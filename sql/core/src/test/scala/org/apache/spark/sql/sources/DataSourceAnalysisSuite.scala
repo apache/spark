@@ -70,7 +70,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
           Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
       }
     }
-    val rule = DataSourceAnalysis
+    val rule = DataSourceAnalysis(null)
     testRule(
       "convertStaticPartitions only handle INSERT having at least static partitions",
         caseSensitive) {
