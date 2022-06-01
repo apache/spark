@@ -2176,4 +2176,18 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-39355: UnresolvedAttribute should only use CatalystSqlParser if name contains dot") {
+    checkAnswer(
+      sql("""
+            |SELECT *
+            |FROM (
+            |    SELECT '2022-06-01' AS c1
+            |) a
+            |WHERE c1 IN (
+            |     SELECT date_add('2022-06-01', 0)
+            |)
+            |""".stripMargin),
+      Row("2022-06-01"))
+  }
 }

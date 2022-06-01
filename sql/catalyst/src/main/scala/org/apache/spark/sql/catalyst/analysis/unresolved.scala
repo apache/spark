@@ -158,7 +158,11 @@ object UnresolvedAttribute {
    * Creates an [[UnresolvedAttribute]], parsing segments separated by dots ('.').
    */
   def apply(name: String): UnresolvedAttribute =
-    new UnresolvedAttribute(CatalystSqlParser.parseMultipartIdentifier(name))
+    if (name.contains(".")) {
+      new UnresolvedAttribute(CatalystSqlParser.parseMultipartIdentifier(name))
+    } else {
+      new UnresolvedAttribute(Seq(name))
+    }
 
   /**
    * Creates an [[UnresolvedAttribute]], from a single quoted string (for example using backticks in
