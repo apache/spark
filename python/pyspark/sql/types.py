@@ -1312,7 +1312,10 @@ def _infer_type(
                 infer_array_from_first_element=infer_array_from_first_element,
             )
         except TypeError:
-            raise TypeError("not supported type: %s" % type(obj))
+            if isinstance(obj, np.dtype):
+                raise TypeError("not supported type: numpy.%s" % obj)
+            else:
+                raise TypeError("not supported type: %s" % type(obj))
 
 
 def _infer_schema(

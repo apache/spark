@@ -411,6 +411,9 @@ class CreateDataFrame(unittest.TestCase):
                 df = activeSession.createDataFrame(data)
                 self.assertEqual(df.collect(), collected)
                 self.assertEqual(df.dtypes, dtypes)
+            with self.assertRaisesRegex(TypeError, "not supported type: numpy.float64"):
+                activeSession.createDataFrame(np.array([0.1, 0.2]))
+
         finally:
             spark.stop()
 
