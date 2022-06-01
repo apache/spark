@@ -505,6 +505,7 @@ object FunctionRegistry {
     expression[RegrSXX]("regr_sxx"),
     expression[RegrSXY]("regr_sxy"),
     expression[RegrSYY]("regr_syy"),
+    expression[RegrSlope]("regr_slope"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -720,6 +721,7 @@ object FunctionRegistry {
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
+    expression[EqualNull]("equal_null"),
 
     // grouping sets
     expression[Grouping]("grouping"),
