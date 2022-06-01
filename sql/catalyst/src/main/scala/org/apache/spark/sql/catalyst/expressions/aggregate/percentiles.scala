@@ -380,7 +380,7 @@ case class Median(child: Expression)
   private lazy val percentile = new Percentile(child, Literal(0.5, DoubleType))
   override def replacement: Expression = percentile
   override def nodeName: String = "median"
-  override def inputTypes: Seq[AbstractDataType] = percentile.inputTypes
+  override def inputTypes: Seq[AbstractDataType] = percentile.inputTypes.take(1)
   override protected def withNewChildInternal(
       newChild: Expression): Median = this.copy(child = newChild)
 }
