@@ -860,7 +860,9 @@ private[spark] class TaskSchedulerImpl(
         Option(taskIdToTaskSetManager.get(id)).map { taskSetMgr =>
           val (accInfos, taskProgressRate) = getTaskAccumulableInfosAndProgressRate(updates)
           if (efficientTaskCalcualtionEnabled && taskProgressRate > 0.0) {
-            taskSetMgr.taskInfos.get(id).foreach(_.setRunTaskProgressRate(taskProgressRate))
+            taskSetMgr.inefficientTaskCalculator.foreach {
+              _.updateRuningTasksProgressRate(id, taskProgressRate)
+            }
           }
           (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
         }

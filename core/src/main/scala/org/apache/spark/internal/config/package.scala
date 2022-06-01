@@ -2090,6 +2090,7 @@ package object config {
         "successful tasks in the stage multiplied by the multiplier.")
       .version("3.4.0")
       .doubleConf
+      .checkValue(v => v > 0.0 && v <= 1.0, "multiplier must be in (0.0, 1.0]")
       .createWithDefault(0.75)
 
   private[spark] val SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR =
@@ -2100,15 +2101,8 @@ package object config {
         s"speculation to avoid that it is too late to launch a necessary speculation.")
       .version("3.4.0")
       .doubleConf
+      .checkValue(_ >= 1.0, "Duration factor must be >= 1.0")
       .createWithDefault(2.0)
-
-  private[spark] val SPECULATION_EFFICIENCY_TASK_STATS_CACHE_DURATION =
-    ConfigBuilder("spark.speculation.efficiency.stats.cache.duration")
-      .doc("The interval of time between recompute success task progress to avoid scanning " +
-        "repeatedly.")
-      .version("3.4.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("1000ms")
 
   private[spark] val DECOMMISSION_ENABLED =
     ConfigBuilder("spark.decommission.enabled")

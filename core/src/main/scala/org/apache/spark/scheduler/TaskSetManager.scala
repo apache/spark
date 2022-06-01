@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentLinkedQueue, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
 
 import scala.collection.immutable.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -85,8 +85,6 @@ private[spark] class TaskSetManager(
   private val efficientTaskProgressMultiplier =
     conf.get(SPECULATION_EFFICIENCY_TASK_PROGRESS_MULTIPLIER)
   private val efficientTaskDurationFactor = conf.get(SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR)
-  private val efficientTaskStatsCacheInterval =
-    conf.get(SPECULATION_EFFICIENCY_TASK_STATS_CACHE_DURATION)
 
   // Quantile of tasks at which to start speculation
   val speculationQuantile = conf.get(SPECULATION_QUANTILE)
@@ -786,25 +784,6 @@ private[spark] class TaskSetManager(
     }
   }
 
-  def setTaskRecordsAndRunTime(
-      info: TaskInfo,
-      result: DirectTaskResult[_]): Unit = {
-    var totalRecordsRead = 0L
-    var totalExecutorRunTime = 0L
-    result.accumUpdates.foreach { a =>
-      if (a.name == Some(shuffleRead.RECORDS_READ) ||
-        a.name == Some(input.RECORDS_READ)) {
-        val acc = a.asInstanceOf[LongAccumulator]
-        totalRecordsRead += acc.value
-      } else if (a.name == Some(InternalAccumulator.EXECUTOR_RUN_TIME)) {
-        val acc = a.asInstanceOf[LongAccumulator]
-        totalExecutorRunTime = acc.value
-      }
-    }
-    info.setTotalRecordsRead(totalRecordsRead)
-    info.setTotalExecutorRunTime(totalExecutorRunTime)
-  }
-
   /**
    * Marks a task as successful and notifies the DAGScheduler that the task has ended.
    */
@@ -833,12 +812,13 @@ private[spark] class TaskSetManager(
       return
     }
 
-    if (sched.efficientTaskCalcualtionEnabled) {
-      setTaskRecordsAndRunTime(info, result)
-    }
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
     if (speculationEnabled) {
       successfulTaskDurations.insert(info.duration)
+      inefficientTaskCalculator.foreach { inefficientTask =>
+        inefficientTask.updateTaskProgressThreshold(result)
+        inefficientTask.removeRuningTasksProgressRate(tid)
+      }
     }
     removeRunningTask(tid)
 
@@ -1113,7 +1093,6 @@ private[spark] class TaskSetManager(
       numSuccessfulTasks: Int,
       customizedThreshold: Boolean = false): Boolean = {
     var foundTasksResult = false
-    var recomputeInefficientTasks = true
     for (tid <- runningTasksSet) {
       val info = taskInfos(tid)
       val index = info.index
@@ -1124,10 +1103,6 @@ private[spark] class TaskSetManager(
           if (customizedThreshold || !inefficientTaskCalculator.isDefined) {
             true
           } else {
-            if (recomputeInefficientTasks && numSuccessfulTasks > 0) {
-              inefficientTaskCalculator.get.maybeRecompute(currentTimeMillis)
-              recomputeInefficientTasks = false
-            }
             val longTimeTask = (numTasks <= 1) ||
               runtimeMs > efficientTaskDurationFactor * threshold
             longTimeTask || inefficientTaskCalculator.get.maySpeculateTask(tid, runtimeMs, info)
@@ -1292,45 +1267,55 @@ private[spark] class TaskSetManager(
    * the tasks which may be speculated by the previous strategy.
    */
   private[scheduler] class InefficientTaskCalculator {
-    var taskProgressThreshold = 0.0
-    var updateSealed = false
-    private var lastComputeMs = -1L
+    private var allTotalRecordsRead = 0L
+    private var allTotalExecutorRunTime = 0L
+    @volatile private var successTaskProgressThreshold = 0.0D
+    private val runingTasksProgressRate = new ConcurrentHashMap[Long, Double]()
 
-    def maybeRecompute(nowMs: Long): Unit = {
-      if (!updateSealed && (lastComputeMs <= 0 ||
-        nowMs > lastComputeMs + efficientTaskStatsCacheInterval)) {
-        var allTotalRecordsRead = 0L
-        var allTotalExecutorRunTime = 0L
-        var numSuccessTasks = 0L
-        taskInfos.values.filter(_.successful).foreach { taskInfo =>
-          allTotalRecordsRead += taskInfo.totalRecordsRead
-          allTotalExecutorRunTime += taskInfo.totalExecutorRunTime
-          numSuccessTasks += 1
+    private[scheduler] def updateTaskProgressThreshold(result: DirectTaskResult[_]): Unit = {
+      var totalRecordsRead = 0L
+      var totalExecutorRunTime = 0L
+      result.accumUpdates.foreach { a =>
+        if (a.name == Some(shuffleRead.RECORDS_READ) ||
+          a.name == Some(input.RECORDS_READ)) {
+          val acc = a.asInstanceOf[LongAccumulator]
+          totalRecordsRead += acc.value
+        } else if (a.name == Some(InternalAccumulator.EXECUTOR_RUN_TIME)) {
+          val acc = a.asInstanceOf[LongAccumulator]
+          totalExecutorRunTime = acc.value
         }
-        val progressRate = if (allTotalRecordsRead > 0 && allTotalExecutorRunTime > 0) {
-          allTotalRecordsRead / (allTotalExecutorRunTime / 1000.0)
-        } else {
-          0.0
-        }
-        if (progressRate > 0.0) {
-          taskProgressThreshold = progressRate * efficientTaskProgressMultiplier
-          if (numSuccessTasks >= minFinishedForSpeculation) {
-            updateSealed = true
-          }
-          lastComputeMs = nowMs
-        }
+      }
+      allTotalRecordsRead += totalRecordsRead
+      allTotalExecutorRunTime += totalExecutorRunTime
+      if (allTotalRecordsRead > 0 && allTotalExecutorRunTime > 0) {
+        successTaskProgressThreshold = allTotalRecordsRead / (allTotalExecutorRunTime / 1000.0)
       }
     }
 
-    def maySpeculateTask(tid: Long, runtimeMs: Long, taskInfo: TaskInfo): Boolean = {
-      // Only check inefficient tasks when taskProgressThreshold > 0, because some stage
-      // tasks may have neither input records nor shuffleRead records, so the taskProgressThreshold
-      // may be zero all the time, this case we should make sure it can be speculated.
-      // eg: some spark-sql like that 'msck repair table' or 'drop table' and so on.
-      if (taskProgressThreshold <= 0.0) {
+    private[scheduler] def updateRuningTasksProgressRate(
+        taskId: Long,
+        taskProgressRate: Double): Unit = {
+      runingTasksProgressRate.put(taskId, taskProgressRate)
+    }
+
+    private[scheduler] def removeRuningTasksProgressRate(taskId: Long): Unit = {
+      runingTasksProgressRate.remove(taskId)
+    }
+
+    private[scheduler] def maySpeculateTask(
+        tid: Long,
+        runtimeMs: Long,
+        taskInfo: TaskInfo): Boolean = {
+      // Only check inefficient tasks when successTaskProgressThreshold > 0, because some stage
+      // tasks may have neither input records nor shuffleRead records, so the
+      // successTaskProgressThreshold may be zero all the time, this case we should make sure
+      // it can be speculated. eg: some spark-sql like that 'msck repair table' or 'drop table'
+      // and so on.
+      lazy val currentTaskProgressRate = runingTasksProgressRate.getOrDefault(tid, 0.0)
+      if (successTaskProgressThreshold <= 0.0 || currentTaskProgressRate <= 0.0) {
         true
       } else {
-        val currentTaskProgressRate = taskInfo.getTaskProgressRate()
+        val taskProgressThreshold = successTaskProgressThreshold * efficientTaskProgressMultiplier
         val isInefficientTask = currentTaskProgressRate < taskProgressThreshold
         if (isInefficientTask) {
           logInfo(s"Marking task ${taskInfo.index} in stage ${taskSet.id} " +

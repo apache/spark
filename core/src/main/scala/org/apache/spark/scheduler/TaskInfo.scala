@@ -83,27 +83,6 @@ class TaskInfo(
     _accumulables = newAccumulables
   }
 
-  private[scheduler] var totalRecordsRead = 0L
-  private[scheduler] var totalExecutorRunTime = 0L
-
-  private[scheduler] def setTotalRecordsRead(totalRecordsRead: Long): Unit = {
-    this.totalRecordsRead = totalRecordsRead
-  }
-
-  private[scheduler] def setTotalExecutorRunTime(totalExecutorRunTime: Long): Unit = {
-    this.totalExecutorRunTime = totalExecutorRunTime
-  }
-
-  @volatile private[scheduler] var taskProgressRate = 0.0D
-
-  private[scheduler] def getTaskProgressRate(): Double = taskProgressRate
-
-  private[scheduler] def setRunTaskProgressRate(taskProgressRate: Double): Unit = {
-    if (!finished) {
-      this.taskProgressRate = taskProgressRate
-    }
-  }
-
   /**
    * The time when the task has completed successfully (including the time to remotely fetch
    * results, if necessary).
