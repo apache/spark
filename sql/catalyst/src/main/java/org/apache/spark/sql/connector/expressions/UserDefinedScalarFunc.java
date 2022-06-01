@@ -20,9 +20,10 @@ package org.apache.spark.sql.connector.expressions;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
+import org.apache.spark.sql.connector.util.ToStringSQLBuilder;
 
 /**
  * The general representation of user defined scalar function, which contains the upper-cased
@@ -64,7 +65,7 @@ public class UserDefinedScalarFunc implements Expression, Serializable {
 
   @Override
   public String toString() {
-    V2ExpressionSQLBuilder builder = new V2ExpressionSQLBuilder();
+    ToStringSQLBuilder builder = new ToStringSQLBuilder();
     try {
       return builder.build(this);
     } catch (Throwable e) {

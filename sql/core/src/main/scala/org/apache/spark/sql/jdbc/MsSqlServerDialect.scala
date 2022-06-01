@@ -53,26 +53,28 @@ private object MsSqlServerDialect extends JdbcDialect {
   // scalastyle:off line.size.limit
   // See https://docs.microsoft.com/en-us/sql/t-sql/functions/aggregate-functions-transact-sql?view=sql-server-ver15
   // scalastyle:on line.size.limit
-  override def compileDialectAggregate(aggFunction: AggregateFunc): Option[String] = {
-    aggFunction match {
-      case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-        assert(f.children().length == 1)
-        val distinct = if (f.isDistinct) "DISTINCT " else ""
-        Some(s"VARP($distinct${f.children().head})")
-      case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-        assert(f.children().length == 1)
-        val distinct = if (f.isDistinct) "DISTINCT " else ""
-        Some(s"VAR($distinct${f.children().head})")
-      case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-        assert(f.children().length == 1)
-        val distinct = if (f.isDistinct) "DISTINCT " else ""
-        Some(s"STDEVP($distinct${f.children().head})")
-      case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-        assert(f.children().length == 1)
-        val distinct = if (f.isDistinct) "DISTINCT " else ""
-        Some(s"STDEV($distinct${f.children().head})")
-      case _ => None
-    }
+  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+    super.compileAggregate(aggFunction).orElse(
+      aggFunction match {
+        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
+          assert(f.children().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"VARP($distinct${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
+          assert(f.children().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"VAR($distinct${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
+          assert(f.children().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDEVP($distinct${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
+          assert(f.children().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDEV($distinct${f.children().head})")
+        case _ => None
+      }
+    )
   }
 
   override def getCatalystType(

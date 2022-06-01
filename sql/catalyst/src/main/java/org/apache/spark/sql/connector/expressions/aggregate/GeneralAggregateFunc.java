@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.util.ToStringSQLBuilder;
 
 /**
  * The general implementation of {@link AggregateFunc}, which contains the upper-cased function
@@ -61,13 +62,24 @@ public final class GeneralAggregateFunc implements AggregateFunc {
 
   @Override
   public String toString() {
-    String inputsString = Arrays.stream(children)
-      .map(Expression::describe)
-      .collect(Collectors.joining(", "));
-    if (isDistinct) {
-      return name + "(DISTINCT " + inputsString + ")";
-    } else {
-      return name + "(" + inputsString + ")";
+    ToStringSQLBuilder builder = new ToStringSQLBuilder();
+    try {
+      String inputsString = Arrays.stream(children)
+        .map(builder::build)
+        .collect(Collectors.joining(", "));
+      if (isDistinct) {
+        return name + "(DISTINCT " + inputsString + ")";
+      } else {
+        return name + "(" + inputsString + ")";
+      }
+    } catch (Throwable e) {
+      if (isDistinct) {
+        return name + "(DISTINCT " + Arrays.stream(children)
+          .map(child -> child.toString()).reduce((a,b) -> a + "," + b + ")").get();
+      } else {
+        return name + "(" + Arrays.stream(children)
+          .map(child -> child.toString()).reduce((a,b) -> a + "," + b + ")").get();
+      }
     }
   }
 }

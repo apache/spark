@@ -39,22 +39,24 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
 
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
-  override def compileDialectAggregate(aggFunction: AggregateFunc): Option[String] = {
-    aggFunction match {
-      case f: GeneralAggregateFunc if f.name() == "VAR_POP" && f.isDistinct == false =>
-        assert(f.children().length == 1)
-        Some(s"VAR_POP(${f.children().head})")
-      case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" && f.isDistinct == false =>
-        assert(f.children().length == 1)
-        Some(s"VAR_SAMP(${f.children().head})")
-      case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" && f.isDistinct == false =>
-        assert(f.children().length == 1)
-        Some(s"STDDEV_POP(${f.children().head})")
-      case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" && f.isDistinct == false =>
-        assert(f.children().length == 1)
-        Some(s"STDDEV_SAMP(${f.children().head})")
-      case _ => None
-    }
+  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+    super.compileAggregate(aggFunction).orElse(
+      aggFunction match {
+        case f: GeneralAggregateFunc if f.name() == "VAR_POP" && f.isDistinct == false =>
+          assert(f.children().length == 1)
+          Some(s"VAR_POP(${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" && f.isDistinct == false =>
+          assert(f.children().length == 1)
+          Some(s"VAR_SAMP(${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" && f.isDistinct == false =>
+          assert(f.children().length == 1)
+          Some(s"STDDEV_POP(${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" && f.isDistinct == false =>
+          assert(f.children().length == 1)
+          Some(s"STDDEV_SAMP(${f.children().head})")
+        case _ => None
+      }
+    )
   }
 
   override def getCatalystType(

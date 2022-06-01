@@ -253,7 +253,8 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitUserDefinedFunction(
       String funcName, String canonicalName, String[] inputs) {
-    return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+    throw new UnsupportedOperationException(
+      this.getClass().getSimpleName() + " does not support user defined function: " + funcName);
   }
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {

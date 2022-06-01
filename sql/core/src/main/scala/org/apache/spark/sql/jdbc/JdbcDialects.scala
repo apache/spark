@@ -270,12 +270,6 @@ abstract class JdbcDialect extends Serializable with Logging{
           s"${this.getClass.getSimpleName} does not support function: TRIM")
       }
     }
-
-    override def visitUserDefinedFunction(
-        funcName: String, canonicalName: String, inputs: Array[String]): String = {
-      throw new UnsupportedOperationException(
-        s"${this.getClass.getSimpleName} does not support user defined function: $funcName")
-    }
   }
 
   /**
@@ -310,11 +304,6 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   @Since("3.3.0")
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    compileCommonAggregate(aggFunction).orElse(compileDialectAggregate(aggFunction))
-      .orElse(compileUDAF(aggFunction))
-  }
-
-  private def compileCommonAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
         compileExpression(min.column).map(v => s"MIN($v)")
@@ -334,22 +323,6 @@ abstract class JdbcDialect extends Serializable with Logging{
       case _ => None
     }
   }
-
-  /**
-   * Converts aggregate function of dialect to String representing a SQL expression.
-   * @param aggFunction The aggregate function of dialect to be converted.
-   * @return Converted value.
-   */
-  @Since("3.4.0")
-  protected def compileDialectAggregate(aggFunction: AggregateFunc): Option[String] = None
-
-  /**
-   * Converts user defined aggregate function to String representing a SQL expression.
-   * @param aggFunction The user defined aggregate function to be converted.
-   * @return Converted value.
-   */
-  @Since("3.4.0")
-  protected def compileUDAF(aggFunction: AggregateFunc): Option[String] = None
 
   /**
    * List the user-defined functions in jdbc dialect.

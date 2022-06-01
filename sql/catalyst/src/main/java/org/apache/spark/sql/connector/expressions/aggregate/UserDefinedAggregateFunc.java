@@ -22,12 +22,13 @@ import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.util.ToStringSQLBuilder;
 
 /**
  * The general representation of user defined aggregate function, which implements
- * {@link AggregateFunc}, contains the upper-cased function name, the `isDistinct` flag and
- * all the inputs. Note that Spark cannot push down partial aggregate with this function to
- * the source, but can only push down the entire aggregate.
+ * {@link AggregateFunc}, contains the upper-cased function name, the canonical function name,
+ * the `isDistinct` flag and all the inputs. Note that Spark cannot push down aggregate with
+ * this function partially to the source, but can only push down the entire aggregate.
  *
  * @since 3.4.0
  */
@@ -55,13 +56,24 @@ public class UserDefinedAggregateFunc implements AggregateFunc {
 
   @Override
   public String toString() {
-    String inputsString = Arrays.stream(children)
-      .map(Expression::describe)
-      .collect(Collectors.joining(", "));
-    if (isDistinct) {
-      return name + "(DISTINCT " + inputsString + ")";
-    } else {
-      return name + "(" + inputsString + ")";
+    ToStringSQLBuilder builder = new ToStringSQLBuilder();
+    try {
+      String inputsString = Arrays.stream(children)
+        .map(builder::build)
+        .collect(Collectors.joining(", "));
+      if (isDistinct) {
+        return name + "(DISTINCT " + inputsString + ")";
+      } else {
+        return name + "(" + inputsString + ")";
+      }
+    } catch (Throwable e) {
+      if (isDistinct) {
+        return name + "(DISTINCT " + Arrays.stream(children)
+          .map(child -> child.toString()).reduce((a,b) -> a + "," + b + ")").get();
+      } else {
+        return name + "(" + Arrays.stream(children)
+          .map(child -> child.toString()).reduce((a,b) -> a + "," + b + ")").get();
+      }
     }
   }
 }
