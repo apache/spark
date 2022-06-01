@@ -18,6 +18,8 @@
 import os
 import unittest
 
+import numpy as np
+
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.sql.functions import col
@@ -378,32 +380,39 @@ class SparkExtensionsTest(unittest.TestCase):
 
 
 class CreateDataFrame(unittest.TestCase):
+    @property
+    def int_ndarr(self):
+        return np.array([1, 2])
+
+    @property
+    def float_ndarr(self):
+        return np.array([0.1, 0.2])
+
     def test_from_numpy_array(self):
         spark = SparkSession.builder.master("local").getOrCreate()
         try:
-            import numpy as np
 
             activeSession = SparkSession.getActiveSession()
             data_collected_dtypes = [
-                (np.array([1, 2]), [Row(value=1), Row(value=2)], [("value", "bigint")]),
+                (self.int_ndarr, [Row(value=1), Row(value=2)], [("value", "bigint")]),
                 (
-                    np.array([1, 2]).astype(np.int8),
-                    [Row(value=0.1), Row(value=0.2)],
+                    self.int_ndarr.astype(np.int8),
+                    [Row(value=1), Row(value=2)],
                     [("value", "tinyint")],
                 ),
                 (
-                    np.array([1, 2]).astype(np.int32),
-                    [Row(value=0.1), Row(value=0.2)],
+                    self.int_ndarr.astype(np.int32),
+                    [Row(value=1), Row(value=2)],
                     [("value", "int")],
                 ),
                 (
-                    np.array([1, 2]).astype(np.int64),
-                    [Row(value=0.1), Row(value=0.2)],
+                    self.int_ndarr.astype(np.int64),
+                    [Row(value=1), Row(value=2)],
                     [("value", "bigint")],
                 ),
                 (
-                    np.array([1, 2]).astype(np.float32),
-                    [Row(value=0.1), Row(value=0.2)],
+                    self.int_ndarr.astype(np.float32),
+                    [Row(value=1.0), Row(value=2.0)],
                     [("value", "float")],
                 ),
             ]
@@ -412,7 +421,17 @@ class CreateDataFrame(unittest.TestCase):
                 self.assertEqual(df.collect(), collected)
                 self.assertEqual(df.dtypes, dtypes)
             with self.assertRaisesRegex(TypeError, "not supported type: numpy.float64"):
-                activeSession.createDataFrame(np.array([0.1, 0.2]))
+                activeSession.createDataFrame(self.float_ndarr)
+
+            for schema in ["tinyint", "int", "bigint"]:
+                self.assertEqual(
+                    activeSession.createDataFrame(self.int_ndarr, schema=schema).dtypes,
+                    [("value", schema)],
+                )
+            self.assertEqual(
+                activeSession.createDataFrame(self.float_ndarr, schema="float").dtypes,
+                [("value", "float")],
+            )
 
         finally:
             spark.stop()
