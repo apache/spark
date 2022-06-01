@@ -15,9 +15,15 @@ CREATE TEMPORARY VIEW temp_Data_Source_View
 
 CREATE VIEW v AS SELECT * FROM t;
 
+CREATE DATABASE IF NOT EXISTS test_db COMMENT 'Test database'
+LOCATION '/path/to/db'
+WITH DBPROPERTIES ('id' = 'test_db', password = 'password');
+
 ALTER TABLE t SET TBLPROPERTIES (e = '3');
 
 ALTER TABLE t ADD PARTITION (c='Us', d=1);
+
+DESCRIBE NAMESPACE EXTENDED test_db;
 
 DESCRIBE t;
 
@@ -97,3 +103,5 @@ DROP VIEW temp_v;
 DROP VIEW temp_Data_Source_View;
 
 DROP VIEW v;
+
+DROP DATABASE IF EXISTS test_db;
