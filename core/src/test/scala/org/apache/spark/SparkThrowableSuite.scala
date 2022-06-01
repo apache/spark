@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.IllegalFormatException
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
@@ -89,7 +90,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       if (rewrittenString.trim != errorClassFileContents.trim) {
         val errorClassesFile = new File(errorClassDir, new File(errorClassesUrl.getPath).getName)
         logInfo(s"Regenerating error class file $errorClassesFile")
-        FileUtils.delete(errorClassesFile)
+        Files.delete(errorClassesFile.toPath)
         FileUtils.writeStringToFile(errorClassesFile, rewrittenString, StandardCharsets.UTF_8)
       }
     } else {

@@ -34,10 +34,10 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
   override def dataType: DataType = DoubleType
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
-  protected val n = AttributeReference("n", DoubleType, nullable = false)()
+  protected[sql] val n = AttributeReference("n", DoubleType, nullable = false)()
   protected val xAvg = AttributeReference("xAvg", DoubleType, nullable = false)()
   protected val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
-  protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
+  protected[sql] val ck = AttributeReference("ck", DoubleType, nullable = false)()
 
   protected def divideByZeroEvalResult: Expression = {
     if (nullOnDivideByZero) Literal.create(null, DoubleType) else Double.NaN

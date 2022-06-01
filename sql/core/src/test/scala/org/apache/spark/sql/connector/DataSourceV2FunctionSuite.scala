@@ -35,6 +35,84 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+object IntAverage extends AggregateFunction[(Int, Int), Int] {
+  override def name(): String = "iavg"
+  override def inputTypes(): Array[DataType] = Array(IntegerType)
+  override def resultType(): DataType = IntegerType
+
+  override def newAggregationState(): (Int, Int) = (0, 0)
+
+  override def update(state: (Int, Int), input: InternalRow): (Int, Int) = {
+    if (input.isNullAt(0)) {
+      state
+    } else {
+      val i = input.getInt(0)
+      state match {
+        case (_, 0) =>
+          (i, 1)
+        case (total, count) =>
+          (total + i, count + 1)
+      }
+    }
+  }
+
+  override def merge(leftState: (Int, Int), rightState: (Int, Int)): (Int, Int) = {
+    (leftState._1 + rightState._1, leftState._2 + rightState._2)
+  }
+
+  override def produceResult(state: (Int, Int)): Int = state._1 / state._2
+}
+
+object LongAverage extends AggregateFunction[(Long, Long), Long] {
+  override def name(): String = "iavg"
+  override def inputTypes(): Array[DataType] = Array(LongType)
+  override def resultType(): DataType = LongType
+
+  override def newAggregationState(): (Long, Long) = (0L, 0L)
+
+  override def update(state: (Long, Long), input: InternalRow): (Long, Long) = {
+    if (input.isNullAt(0)) {
+      state
+    } else {
+      val l = input.getLong(0)
+      state match {
+        case (_, 0L) =>
+          (l, 1)
+        case (total, count) =>
+          (total + l, count + 1L)
+      }
+    }
+  }
+
+  override def merge(leftState: (Long, Long), rightState: (Long, Long)): (Long, Long) = {
+    (leftState._1 + rightState._1, leftState._2 + rightState._2)
+  }
+
+  override def produceResult(state: (Long, Long)): Long = state._1 / state._2
+}
+
+object IntegralAverage extends UnboundFunction {
+  override def name(): String = "iavg"
+
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.fields.length > 1) {
+      throw new UnsupportedOperationException("Too many arguments")
+    }
+
+    inputType.fields(0).dataType match {
+      case _: IntegerType => IntAverage
+      case _: LongType => LongAverage
+      case dataType =>
+        throw new UnsupportedOperationException(s"Unsupported non-integral type: $dataType")
+    }
+  }
+
+  override def description(): String =
+    """iavg: produces an average using integer division, ignoring nulls
+      |  iavg(int) -> int
+      |  iavg(bigint) -> bigint""".stripMargin
+}
+
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 
@@ -535,84 +613,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "bad_bound_func"
-  }
-
-  object IntegralAverage extends UnboundFunction {
-    override def name(): String = "iavg"
-
-    override def bind(inputType: StructType): BoundFunction = {
-      if (inputType.fields.length > 1) {
-        throw new UnsupportedOperationException("Too many arguments")
-      }
-
-      inputType.fields(0).dataType match {
-        case _: IntegerType => IntAverage
-        case _: LongType => LongAverage
-        case dataType =>
-          throw new UnsupportedOperationException(s"Unsupported non-integral type: $dataType")
-      }
-    }
-
-    override def description(): String =
-      """iavg: produces an average using integer division, ignoring nulls
-        |  iavg(int) -> int
-        |  iavg(bigint) -> bigint""".stripMargin
-  }
-
-  object IntAverage extends AggregateFunction[(Int, Int), Int] {
-    override def name(): String = "iavg"
-    override def inputTypes(): Array[DataType] = Array(IntegerType)
-    override def resultType(): DataType = IntegerType
-
-    override def newAggregationState(): (Int, Int) = (0, 0)
-
-    override def update(state: (Int, Int), input: InternalRow): (Int, Int) = {
-      if (input.isNullAt(0)) {
-        state
-      } else {
-        val i = input.getInt(0)
-        state match {
-          case (_, 0) =>
-            (i, 1)
-          case (total, count) =>
-            (total + i, count + 1)
-        }
-      }
-    }
-
-    override def merge(leftState: (Int, Int), rightState: (Int, Int)): (Int, Int) = {
-      (leftState._1 + rightState._1, leftState._2 + rightState._2)
-    }
-
-    override def produceResult(state: (Int, Int)): Int = state._1 / state._2
-  }
-
-  object LongAverage extends AggregateFunction[(Long, Long), Long] {
-    override def name(): String = "iavg"
-    override def inputTypes(): Array[DataType] = Array(LongType)
-    override def resultType(): DataType = LongType
-
-    override def newAggregationState(): (Long, Long) = (0L, 0L)
-
-    override def update(state: (Long, Long), input: InternalRow): (Long, Long) = {
-      if (input.isNullAt(0)) {
-        state
-      } else {
-        val l = input.getLong(0)
-        state match {
-          case (_, 0L) =>
-            (l, 1)
-          case (total, count) =>
-            (total + l, count + 1L)
-        }
-      }
-    }
-
-    override def merge(leftState: (Long, Long), rightState: (Long, Long)): (Long, Long) = {
-      (leftState._1 + rightState._1, leftState._2 + rightState._2)
-    }
-
-    override def produceResult(state: (Long, Long)): Long = state._1 / state._2
   }
 
   object UnboundDecimalAverage extends UnboundFunction {

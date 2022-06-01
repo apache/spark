@@ -1572,7 +1572,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTableT {
         sql("alter table t add columns (" +
           "s boolean default true, " +
-          "t byte default cast('a' as byte), " +
+          "t byte default cast(null as byte), " +
           "u short default cast(42 as short), " +
           "v float default 0, " +
           "w double default 0, " +
@@ -1608,6 +1608,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             insertNullsToStorage = false),
           Config(
             Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")))),
+      TestCase(
+        dataSource = "orc",
+        Seq(
+          Config(
+            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false"),
+            insertNullsToStorage = false))),
       TestCase(
         dataSource = "parquet",
         Seq(
