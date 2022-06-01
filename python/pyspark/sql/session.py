@@ -690,8 +690,8 @@ class SparkSession(SparkConversionMixin):
         self, data: Iterable[Any], schema: Optional[Union[DataType, List[str]]]
     ) -> Tuple[RDD[Tuple], StructType]:
         """
-        Create an RDD for DataFrame from a list or pandas.DataFrame, returns
-        the RDD and schema.
+        Create an RDD for DataFrame from a list or pandas.DataFrame or a NumPy array,
+        returns the RDD and schema.
         """
         # make sure data could consumed multiple times
         if not isinstance(data, list):
@@ -951,19 +951,32 @@ class SparkSession(SparkConversionMixin):
             schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
 
         try:
+            import numpy
+
+            has_numpy = True
+        except Exception:
+            has_numpy = False
+
+        try:
             import pandas
 
             has_pandas = True
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
-            # Create a DataFrame from pandas DataFrame.
+            # Create a DataFrame from pandas DataFrame
             return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema
             )
-        return self._create_dataframe(
-            data, schema, samplingRatio, verifySchema  # type: ignore[arg-type]
-        )
+        elif has_numpy and isinstance(data, numpy.ndarray):
+            # Create a DataFrame from numpy ndarray
+            return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
+                data, schema, samplingRatio, verifySchema, fromPandas=False
+            )
+        else:
+            return self._create_dataframe(
+                data, schema, samplingRatio, verifySchema  # type: ignore[arg-type]
+            )
 
     def _create_dataframe(
         self,
