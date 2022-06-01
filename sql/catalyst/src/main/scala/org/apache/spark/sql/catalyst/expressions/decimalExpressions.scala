@@ -226,15 +226,13 @@ case class DecimalAddNoOverflowCheck(
     left: Expression,
     right: Expression,
     override val dataType: DataType,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends BinaryArithmetic with DecimalArithmeticSupport {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
   require(dataType.isInstanceOf[DecimalType])
 
+  override def nullable: Boolean = super[BinaryArithmetic].nullable
   override def inputType: AbstractDataType = DecimalType
   override def symbol: String = "+"
-  override def decimalMethod: String = "$plus"
-  override protected def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType =
-    dataType.asInstanceOf[DecimalType]
+  private val decimalMethod: String = "$plus"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 

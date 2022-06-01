@@ -29,6 +29,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.Utils
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
@@ -238,7 +239,7 @@ trait DecimalArithmeticSupport extends BinaryArithmetic {
   protected def decimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType
 
   override def nullable: Boolean = dataType match {
-    case _: DecimalType => nullOnOverflow
+    case _: DecimalType => nullOnOverflow || super.nullable
     case _ => super.nullable
   }
 
@@ -264,7 +265,7 @@ trait DecimalArithmeticSupport extends BinaryArithmetic {
       } else {
         ctx.addReferenceObj("errCtx", queryContext)
       }
-      val isNull = if (nullOnOverflow) {
+      val updateIsNull = if (nullable) {
         s"${ev.isNull} = ${ev.value} == null;"
       } else {
         ""
@@ -274,7 +275,7 @@ trait DecimalArithmeticSupport extends BinaryArithmetic {
         s"""
            |${ev.value} = $eval1.$decimalMethod($eval2).toPrecision(
            |  ${decimalType.precision}, ${decimalType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-           |$isNull
+           |$updateIsNull
        """.stripMargin
         // scalastyle:on line.size.limit
       })
@@ -314,7 +315,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
-      throw QueryExecutionErrors.cannotEvalDecimalTypeError()
+      throw new IllegalStateException(s"Decimal type must be handled at " +
+        s"${Utils.getSimpleName(classOf[DecimalArithmeticSupport])}.")
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
@@ -632,7 +634,7 @@ trait DivModLike extends BinaryArithmetic with DecimalArithmeticSupport {
       val decimalValue = ctx.freshName("decimalValue")
       // scalastyle:off line.size.limit
       s"""
-         |${CodeGenerator.javaType(decimal)} $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
+         |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
          |  ${decimal.precision}, ${decimal.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContext);
          |if ($decimalValue != null) {
          |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
@@ -943,7 +945,6 @@ case class Pmod(
 
   override def nullable: Boolean = true
 
-  // not used
   override protected def decimalMethod: String = "remainder"
 
   // This follows Remainder rule
@@ -1012,12 +1013,13 @@ case class Pmod(
         s"""
            |$javaType $remainder = ${eval1.value}.remainder(${eval2.value});
            |if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
-           |  ${ev.value}=($remainder.$decimalAdd(${eval2.value})).remainder(${eval2.value});
+           |  ${ev.value}=($remainder.$decimalAdd(${eval2.value})).$decimalMethod(${eval2.value});
            |} else {
            |  ${ev.value}=$remainder;
            |}
            |${ev.value} = ${ev.value}.toPrecision(
            |  $precision, $scale, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
+           |${ev.isNull} = ${ev.value} == null;
            |""".stripMargin
 
       // byte and short are casted into int when add, minus, times or divide
