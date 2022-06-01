@@ -31,6 +31,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkers, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.{ApplicationInfo, Master, WorkerInfo}
 import org.apache.spark.deploy.worker.Worker
+import org.apache.spark.internal.config.Tests
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
@@ -209,7 +210,12 @@ class DecommissionWorkerSuite
     sc = createSparkContext(
       config.Tests.TEST_NO_STAGE_RETRY.key -> "false",
       "spark.test.executor.decommission.initial.sleep.millis" -> initialSleepMillis.toString,
-      config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE.key -> "true")
+      config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE.key -> "true",
+      config.PUSH_BASED_SHUFFLE_ENABLED.key -> "true",
+      config.PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT.key -> "1",
+      Tests.IS_TESTING.key -> "true",
+      config.SERIALIZER.key -> "org.apache.spark.serializer.KryoSerializer"
+    )
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val executorIdToWorkerInfo = getExecutorToWorkerAssignments
