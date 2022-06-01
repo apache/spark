@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.orc;
 
 import java.io.IOException;
-import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
@@ -179,16 +178,14 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         if (colId == -1) {
           OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
           // Check if the missing column has an associated default value in the schema metadata.
-          // If so, fill the corresponding column vector with the value. Otherwise, assign NULL.
-          boolean hasDefaultValue = false;
-          if (requiredFields[i].getExistenceDefaultValue().isDefined()) {
-            Object defaultValue = requiredSchema.existenceDefaultValues()[i];
-            if (missingCol.appendObjects(capacity, defaultValue).isPresent()) {
-              hasDefaultValue = true;
-            }
-          }
-          if (!hasDefaultValue) {
+          // If so, fill the corresponding column vector with the value.
+          Object defaultValue = requiredSchema.existenceDefaultValues()[i];
+          if (defaultValue == null) {
             missingCol.putNulls(0, capacity);
+          } else if (!missingCol.appendObjects(capacity, defaultValue).isPresent()) {
+            throw new IllegalArgumentException("Cannot assign default column value to result " +
+              "column batch in vectorized Orc reader because the data type is not supported: " +
+              defaultValue);
           }
           missingCol.setIsConstant();
           orcVectorWrappers[i] = missingCol;
