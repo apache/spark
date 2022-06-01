@@ -44,12 +44,29 @@ private[sql] object H2Dialect extends JdbcDialect {
     supportedFunctions.contains(funcName)
 
   class H2SQLBuilder extends JDBCSQLBuilder {
-    override def visitUserDefinedFunction(
+    override def visitUserDefinedScalarFunction(
         funcName: String, canonicalName: String, inputs: Array[String]): String = {
       funcName match {
         case "CHAR_LENGTH" =>
           s"$funcName(${inputs.mkString(", ")})"
-        case _ => super.visitUserDefinedFunction(funcName, canonicalName, inputs)
+        case _ => super.visitUserDefinedScalarFunction(funcName, canonicalName, inputs)
+      }
+    }
+
+    override def visitUserDefinedAggregateFunction(
+        funcName: String,
+        canonicalName: String,
+        isDistinct: Boolean,
+        inputs: Array[String]): String = {
+      funcName match {
+        case "IAVG" =>
+          if (isDistinct) {
+            s"$funcName(DISTINCT ${inputs.mkString(", ")})"
+          } else {
+            s"$funcName(${inputs.mkString(", ")})"
+          }
+        case _ =>
+          super.visitUserDefinedAggregateFunction(funcName, canonicalName, isDistinct, inputs)
       }
     }
   }

@@ -26,8 +26,19 @@ import java.util.stream.Collectors;
 public class ToStringSQLBuilder extends V2ExpressionSQLBuilder {
 
   @Override
-  protected String visitUserDefinedFunction(
+  protected String visitUserDefinedScalarFunction(
       String funcName, String canonicalName, String[] inputs) {
     return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+  }
+
+  @Override
+  protected String visitUserDefinedAggregateFunction(
+      String funcName, String canonicalName, boolean isDistinct, String[] inputs) {
+    if (isDistinct) {
+      return funcName +
+        "(DISTINCT " + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+    } else {
+      return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+    }
   }
 }

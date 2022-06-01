@@ -64,14 +64,7 @@ public final class GeneralAggregateFunc implements AggregateFunc {
   public String toString() {
     ToStringSQLBuilder builder = new ToStringSQLBuilder();
     try {
-      String inputsString = Arrays.stream(children)
-        .map(builder::build)
-        .collect(Collectors.joining(", "));
-      if (isDistinct) {
-        return name + "(DISTINCT " + inputsString + ")";
-      } else {
-        return name + "(" + inputsString + ")";
-      }
+      return builder.build(this);
     } catch (Throwable e) {
       if (isDistinct) {
         return name + "(DISTINCT " + Arrays.stream(children)
