@@ -444,28 +444,18 @@ class ParquetFilters(
   }
 
   private val makeInPredicate:
-    PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
-    case ParquetBooleanType =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
-        val set = new HashSet[JBoolean]()
-        for (value <- values) {
-          set.add(value.asInstanceOf[JBoolean])
-        }
-        FilterApi.in(booleanColumn(n), set)
+    PartialFunction[ParquetSchemaType, (Array[String], Array[Any]) => FilterPredicate] = {
 
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[Integer]()
         for (value <- values) {
-          set.add(Option(value).map(toIntValue(_)).orNull)
+          set.add(toIntValue(value))
         }
         FilterApi.in(intColumn(n), set)
 
     case ParquetLongType =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[JLong]()
         for (value <- values) {
           set.add(toLongValue(value))
@@ -473,8 +463,7 @@ class ParquetFilters(
         FilterApi.in(longColumn(n), set)
 
     case ParquetFloatType =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[JFloat]()
         for (value <- values) {
           set.add(value.asInstanceOf[JFloat])
@@ -482,8 +471,7 @@ class ParquetFilters(
         FilterApi.in(floatColumn(n), set)
 
     case ParquetDoubleType =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[JDouble]()
         for (value <- values) {
           set.add(value.asInstanceOf[JDouble])
@@ -491,8 +479,7 @@ class ParquetFilters(
         FilterApi.in(doubleColumn(n), set)
 
     case ParquetStringType =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[Binary]()
         for (value <- values) {
           set.add(Option(value).map(s => Binary.fromString(s.asInstanceOf[String])).orNull)
@@ -500,8 +487,7 @@ class ParquetFilters(
         FilterApi.in(binaryColumn(n), set)
 
     case ParquetBinaryType =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[Binary]()
         for (value <- values) {
           set.add(Option(value)
@@ -510,8 +496,7 @@ class ParquetFilters(
         FilterApi.in(binaryColumn(n), set)
 
     case ParquetDateType if pushDownDate =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[Integer]()
         for (value <- values) {
           set.add(Option(value).map(date => dateToDays(date).asInstanceOf[Integer]).orNull)
@@ -519,8 +504,7 @@ class ParquetFilters(
         FilterApi.in(intColumn(n), set)
 
     case ParquetTimestampMicrosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[JLong]()
         for (value <- values) {
           set.add(Option(value).map(timestampToMicros).orNull)
@@ -528,8 +512,7 @@ class ParquetFilters(
         FilterApi.in(longColumn(n), set)
 
     case ParquetTimestampMillisType if pushDownTimestamp =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[JLong]()
         for (value <- values) {
           set.add(Option(value).map(timestampToMillis).orNull)
@@ -537,8 +520,7 @@ class ParquetFilters(
         FilterApi.in(longColumn(n), set)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[Integer]()
         for (value <- values) {
           set.add(Option(value).map(d => decimalToInt32(d.asInstanceOf[JBigDecimal])).orNull)
@@ -546,8 +528,7 @@ class ParquetFilters(
         FilterApi.in(intColumn(n), set)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT64, _) if pushDownDecimal =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[JLong]()
         for (value <- values) {
           set.add(Option(value).map(d => decimalToInt64(d.asInstanceOf[JBigDecimal])).orNull)
@@ -556,8 +537,7 @@ class ParquetFilters(
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, FIXED_LEN_BYTE_ARRAY, length)
       if pushDownDecimal =>
-      (n: Array[String], v: Any) =>
-        val values = Option(v).map(_.asInstanceOf[Array[Object]]).orNull
+      (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[Binary]()
         for (value <- values) {
           set.add(Option(value)
