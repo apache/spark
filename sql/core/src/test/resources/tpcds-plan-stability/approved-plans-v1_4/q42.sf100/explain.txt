@@ -96,7 +96,7 @@ Results [4]: [d_year#11, i_category_id#6, i_category#7, MakeDecimal(sum(Unscaled
 
 (17) TakeOrderedAndProject
 Input [4]: [d_year#11, i_category_id#6, i_category#7, sum(ss_ext_sales_price)#16]
-Arguments: 100, [sum(ss_ext_sales_price)#16 DESC NULLS LAST, d_year#11 ASC NULLS FIRST, i_category_id#6 ASC NULLS FIRST, i_category#7 ASC NULLS FIRST], [d_year#11, i_category_id#6, i_category#7, sum(ss_ext_sales_price)#16]
+Arguments: 100, 0, [sum(ss_ext_sales_price)#16 DESC NULLS LAST, d_year#11 ASC NULLS FIRST, i_category_id#6 ASC NULLS FIRST, i_category#7 ASC NULLS FIRST], [d_year#11, i_category_id#6, i_category#7, sum(ss_ext_sales_price)#16]
 
 ===== Subqueries =====
 

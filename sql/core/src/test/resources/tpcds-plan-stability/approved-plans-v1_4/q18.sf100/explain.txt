@@ -268,7 +268,7 @@ Results [11]: [i_item_id#35, ca_country#36, ca_state#37, ca_county#38, avg(cast(
 
 (49) TakeOrderedAndProject
 Input [11]: [i_item_id#35, ca_country#36, ca_state#37, ca_county#38, agg1#76, agg2#77, agg3#78, agg4#79, agg5#80, agg6#81, agg7#82]
-Arguments: 100, [ca_country#36 ASC NULLS FIRST, ca_state#37 ASC NULLS FIRST, ca_county#38 ASC NULLS FIRST, i_item_id#35 ASC NULLS FIRST], [i_item_id#35, ca_country#36, ca_state#37, ca_county#38, agg1#76, agg2#77, agg3#78, agg4#79, agg5#80, agg6#81, agg7#82]
+Arguments: 100, 0, [ca_country#36 ASC NULLS FIRST, ca_state#37 ASC NULLS FIRST, ca_county#38 ASC NULLS FIRST, i_item_id#35 ASC NULLS FIRST], [i_item_id#35, ca_country#36, ca_state#37, ca_county#38, agg1#76, agg2#77, agg3#78, agg4#79, agg5#80, agg6#81, agg7#82]
 
 ===== Subqueries =====
 

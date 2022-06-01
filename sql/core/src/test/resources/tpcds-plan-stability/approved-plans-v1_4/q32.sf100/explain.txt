@@ -150,7 +150,7 @@ Input [2]: [cs_sold_date_sk#19, d_date_sk#20]
 
 (27) CollectLimit
 Input [1]: [excess discount amount #21]
-Arguments: 100
+Arguments: 100, 0
 
 ===== Subqueries =====
 

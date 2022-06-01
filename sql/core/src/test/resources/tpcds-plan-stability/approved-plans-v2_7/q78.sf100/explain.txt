@@ -387,7 +387,7 @@ Input [15]: [ss_sold_year#26, ss_item_sk#1, ss_customer_sk#2, ss_qty#27, ss_wc#2
 
 (70) TakeOrderedAndProject
 Input [13]: [ratio#88, store_qty#89, store_wholesale_cost#90, store_sales_price#91, other_chan_qty#92, other_chan_wholesale_cost#93, other_chan_sales_price#94, ss_sold_year#26, ss_item_sk#1, ss_customer_sk#2, ss_qty#27, ss_wc#28, ss_sp#29]
-Arguments: 100, [ss_sold_year#26 ASC NULLS FIRST, ss_item_sk#1 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST, ss_qty#27 DESC NULLS LAST, ss_wc#28 DESC NULLS LAST, ss_sp#29 DESC NULLS LAST, other_chan_qty#92 ASC NULLS FIRST, other_chan_wholesale_cost#93 ASC NULLS FIRST, other_chan_sales_price#94 ASC NULLS FIRST, ratio#88 ASC NULLS FIRST], [ratio#88, store_qty#89, store_wholesale_cost#90, store_sales_price#91, other_chan_qty#92, other_chan_wholesale_cost#93, other_chan_sales_price#94]
+Arguments: 100, 0, [ss_sold_year#26 ASC NULLS FIRST, ss_item_sk#1 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST, ss_qty#27 DESC NULLS LAST, ss_wc#28 DESC NULLS LAST, ss_sp#29 DESC NULLS LAST, other_chan_qty#92 ASC NULLS FIRST, other_chan_wholesale_cost#93 ASC NULLS FIRST, other_chan_sales_price#94 ASC NULLS FIRST, ratio#88 ASC NULLS FIRST], [ratio#88, store_qty#89, store_wholesale_cost#90, store_sales_price#91, other_chan_qty#92, other_chan_wholesale_cost#93, other_chan_sales_price#94]
 
 ===== Subqueries =====
 

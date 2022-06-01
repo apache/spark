@@ -119,5 +119,5 @@ Results [9]: [s_store_name#10, s_store_id#9, MakeDecimal(sum(UnscaledValue(CASE 
 
 (21) TakeOrderedAndProject
 Input [9]: [s_store_name#10, s_store_id#9, sun_sales#35, mon_sales#36, tue_sales#37, wed_sales#38, thu_sales#39, fri_sales#40, sat_sales#41]
-Arguments: 100, [s_store_name#10 ASC NULLS FIRST, s_store_id#9 ASC NULLS FIRST, sun_sales#35 ASC NULLS FIRST, mon_sales#36 ASC NULLS FIRST, tue_sales#37 ASC NULLS FIRST, wed_sales#38 ASC NULLS FIRST, thu_sales#39 ASC NULLS FIRST, fri_sales#40 ASC NULLS FIRST, sat_sales#41 ASC NULLS FIRST], [s_store_name#10, s_store_id#9, sun_sales#35, mon_sales#36, tue_sales#37, wed_sales#38, thu_sales#39, fri_sales#40, sat_sales#41]
+Arguments: 100, 0, [s_store_name#10 ASC NULLS FIRST, s_store_id#9 ASC NULLS FIRST, sun_sales#35 ASC NULLS FIRST, mon_sales#36 ASC NULLS FIRST, tue_sales#37 ASC NULLS FIRST, wed_sales#38 ASC NULLS FIRST, thu_sales#39 ASC NULLS FIRST, fri_sales#40 ASC NULLS FIRST, sat_sales#41 ASC NULLS FIRST], [s_store_name#10, s_store_id#9, sun_sales#35, mon_sales#36, tue_sales#37, wed_sales#38, thu_sales#39, fri_sales#40, sat_sales#41]
 

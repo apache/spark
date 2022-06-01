@@ -393,16 +393,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 val offset = offsetExpr.eval().asInstanceOf[Int]
                 if (Int.MaxValue - limit < offset) {
                   failAnalysis(
-                    s"""
-                       |The sum of the LIMIT clause and the OFFSET clause must not be greater than
-                       |the maximum 32-bit integer value (2,147,483,647),
-                       |but found limit = $limit, offset = $offset.
-                       |""".stripMargin.replace("\n", " "))
+                    s"""The sum of limit and offset must not be greater than Int.MaxValue,
+                       | but found limit = $limit, offset = $offset.""".stripMargin)
                 }
               case _ =>
             }
 
           case Offset(offsetExpr, _) => checkLimitLikeClause("offset", offsetExpr)
+
+          case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
+            && o.children.exists(_.isInstanceOf[Offset]) =>
+            failAnalysis(
+              s"""Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET
+                 | clause found in: ${o.nodeName}.""".stripMargin)
 
           case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
@@ -564,6 +567,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         }
     }
     checkCollectedMetrics(plan)
+    checkOutermostOffset(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -572,6 +576,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
 
     plan.setAnalyzed()
+  }
+
+  /**
+   * Validate that the root node of query or subquery is [[Offset]].
+   */
+  private def checkOutermostOffset(plan: LogicalPlan): Unit = {
+    plan match {
+      case Offset(offsetExpr, _) =>
+        checkLimitLikeClause("limit", offsetExpr)
+        failAnalysis(
+          s"""Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET
+             | clause is found to be the outermost node.""".stripMargin)
+      case _ =>
+    }
   }
 
   /**

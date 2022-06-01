@@ -119,5 +119,5 @@ Results [3]: [i_brand_id#9 AS brand_id#17, i_brand#10 AS brand#18, MakeDecimal(s
 
 (21) TakeOrderedAndProject
 Input [3]: [brand_id#17, brand#18, ext_price#19]
-Arguments: 100, [ext_price#19 DESC NULLS LAST, brand_id#17 ASC NULLS FIRST], [brand_id#17, brand#18, ext_price#19]
+Arguments: 100, 0, [ext_price#19 DESC NULLS LAST, brand_id#17 ASC NULLS FIRST], [brand_id#17, brand#18, ext_price#19]
 

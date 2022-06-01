@@ -429,7 +429,7 @@ Results [5]: [channel#135, id#136, sum(sales#39)#151 AS sales#154, sum(returns#4
 
 (77) TakeOrderedAndProject
 Input [5]: [channel#135, id#136, sales#154, returns#155, profit#156]
-Arguments: 100, [channel#135 ASC NULLS FIRST, id#136 ASC NULLS FIRST], [channel#135, id#136, sales#154, returns#155, profit#156]
+Arguments: 100, 0, [channel#135 ASC NULLS FIRST, id#136 ASC NULLS FIRST], [channel#135, id#136, sales#154, returns#155, profit#156]
 
 ===== Subqueries =====
 

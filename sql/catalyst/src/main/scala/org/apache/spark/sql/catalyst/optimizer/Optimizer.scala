@@ -93,7 +93,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeWindowFunctions,
         CollapseWindow,
         CombineFilters,
-        EliminateOffsets,
+        RewriteOffsets,
         EliminateLimits,
         CombineUnions,
         // Constant folding and strength reduction
@@ -639,7 +639,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET and joins.
+ * Pushes down [[LocalLimit]] beneath UNION ALL and joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -709,9 +709,6 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // There is a Project between LocalLimit and Join if they do not have the same output.
     case LocalLimit(exp, project @ Project(_, join: Join)) =>
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
-    // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
-    case LocalLimit(le, Offset(oe, grandChild)) =>
-      Offset(oe, LocalLimit(Add(le, oe), grandChild))
   }
 }
 
@@ -1787,22 +1784,15 @@ object EliminateLimits extends Rule[LogicalPlan] {
 }
 
 /**
- * This rule optimizes Offset operators by:
- * 1. Eliminate [[Offset]] operators if offset == 0.
- * 2. Replace [[Offset]] operators to empty [[LocalRelation]]
- *    if [[Offset]]'s child max row <= offset.
- * 3. Combines two adjacent [[Offset]] operators into one, merging the
- *    expressions into one single expression.
+ * Rewrite [[Offset]] as [[Limit]] or combines two adjacent [[Offset]] operators into one,
+ *  merging the expressions into one single expression.
  */
-object EliminateOffsets extends Rule[LogicalPlan] {
+object RewriteOffsets extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Offset(oe, child) if oe.foldable && oe.eval().asInstanceOf[Int] == 0 =>
-      child
-    case Offset(oe, child)
-      if oe.foldable && child.maxRows.exists(_ <= oe.eval().asInstanceOf[Int]) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
-    case Offset(oe1, Offset(oe2, child)) =>
-      Offset(Add(oe1, oe2), child)
+    case GlobalLimit(le, Offset(oe, grandChild)) =>
+      GlobalLimitAndOffset(le, oe, grandChild)
+    case LocalLimit(le, Offset(oe, grandChild)) =>
+      Offset(oe, LocalLimit(Add(le, oe), grandChild))
   }
 }
 

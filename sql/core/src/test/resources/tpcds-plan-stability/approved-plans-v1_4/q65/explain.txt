@@ -220,7 +220,7 @@ Input [9]: [s_store_name#2, ss_store_sk#4, revenue#13, i_item_desc#16, i_current
 
 (38) TakeOrderedAndProject
 Input [6]: [s_store_name#2, i_item_desc#16, revenue#13, i_current_price#17, i_wholesale_cost#18, i_brand#19]
-Arguments: 100, [s_store_name#2 ASC NULLS FIRST, i_item_desc#16 ASC NULLS FIRST], [s_store_name#2, i_item_desc#16, revenue#13, i_current_price#17, i_wholesale_cost#18, i_brand#19]
+Arguments: 100, 0, [s_store_name#2 ASC NULLS FIRST, i_item_desc#16 ASC NULLS FIRST], [s_store_name#2, i_item_desc#16, revenue#13, i_current_price#17, i_wholesale_cost#18, i_brand#19]
 
 ===== Subqueries =====
 

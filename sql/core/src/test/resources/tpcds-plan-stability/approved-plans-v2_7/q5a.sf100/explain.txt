@@ -514,7 +514,7 @@ Results [5]: [channel#39, id#40, sales#151, returns#152, profit#153]
 
 (90) TakeOrderedAndProject
 Input [5]: [channel#39, id#40, sales#151, returns#152, profit#153]
-Arguments: 100, [channel#39 ASC NULLS FIRST, id#40 ASC NULLS FIRST], [channel#39, id#40, sales#151, returns#152, profit#153]
+Arguments: 100, 0, [channel#39 ASC NULLS FIRST, id#40 ASC NULLS FIRST], [channel#39, id#40, sales#151, returns#152, profit#153]
 
 ===== Subqueries =====
 

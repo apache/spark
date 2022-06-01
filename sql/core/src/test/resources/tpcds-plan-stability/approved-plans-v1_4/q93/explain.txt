@@ -132,5 +132,5 @@ Results [2]: [ss_customer_sk#2, sum(act_sales#17)#23 AS sumsales#24]
 
 (24) TakeOrderedAndProject
 Input [2]: [ss_customer_sk#2, sumsales#24]
-Arguments: 100, [sumsales#24 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST], [ss_customer_sk#2, sumsales#24]
+Arguments: 100, 0, [sumsales#24 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST], [ss_customer_sk#2, sumsales#24]
 
