@@ -260,7 +260,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     columnVectors = new ParquetColumnVector[sparkSchema.fields().length];
     for (int i = 0; i < columnVectors.length; i++) {
       columnVectors[i] = new ParquetColumnVector(parquetColumn.children().apply(i),
-        vectors[i], capacity, memMode, missingColumns,
+        vectors[i], capacity, memMode, missingColumns, true,
         sparkRequestedSchema.existenceDefaultValues()[i]);
     }
 

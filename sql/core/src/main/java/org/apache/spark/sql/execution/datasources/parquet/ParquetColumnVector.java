@@ -61,16 +61,6 @@ final class ParquetColumnVector {
       int capacity,
       MemoryMode memoryMode,
       Set<ParquetColumn> missingColumns,
-      Object defaultValue) {
-    this(column, vector, capacity, memoryMode, missingColumns, true, defaultValue);
-  }
-
-  ParquetColumnVector(
-      ParquetColumn column,
-      WritableColumnVector vector,
-      int capacity,
-      MemoryMode memoryMode,
-      Set<ParquetColumn> missingColumns,
       boolean isTopLevel,
       Object defaultValue) {
     DataType sparkType = column.sparkType();
@@ -116,7 +106,7 @@ final class ParquetColumnVector {
 
       for (int i = 0; i < column.children().size(); i++) {
         ParquetColumnVector childCv = new ParquetColumnVector(column.children().apply(i),
-          vector.getChild(i), capacity, memoryMode, missingColumns, false);
+          vector.getChild(i), capacity, memoryMode, missingColumns, false, null);
         children.add(childCv);
 
 
