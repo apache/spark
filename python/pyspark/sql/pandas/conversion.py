@@ -445,7 +445,8 @@ class SparkConversionMixin:
             converted_data = self._convert_from_pandas(data, schema, timezone)
         else:
             converted_data, dtype = self._convert_from_numpy(data, schema, timezone)
-            schema = _infer_type(dtype)
+            if schema is None:
+                schema = _infer_type(dtype)
 
         return self._create_dataframe(converted_data, schema, samplingRatio, verifySchema)
 
@@ -544,7 +545,9 @@ class SparkConversionMixin:
         if len(np_records) > 0:
             record_dtype = self._get_numpy_record_dtype(np_records[0])
             if record_dtype is not None:
-                return [r.astype(record_dtype).tolist() for r in np_records], record_dtype
+                return [
+                    r.astype(record_dtype).tolist() for r in np_records
+                ], record_dtype if schema is None else None
 
         # Convert list of numpy records to python lists
         return [r.tolist() for r in np_records], None
