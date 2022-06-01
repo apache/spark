@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import com.google.common.base.Preconditions;
@@ -88,21 +87,19 @@ final class ParquetColumnVector {
     if (missingColumns.contains(column)) {
       if (defaultValue == null) {
         vector.setAllNull();
-      } else {
-        // For Parquet tables whose columns have associated DEFAULT values, this reader must return
-        // those values instead of NULL when the corresponding columns are not present in storage.
-        // Here we write the 'defaultValue' to each element in the new WritableColumnVector using
-        // the appendObjects method. This delegates to some specific append* method depending on the
-        // type of 'defaultValue'; for example, if 'defaultValue' is a Float, then we call the
-        // appendFloats method.
-        Optional<Integer> appended = vector.appendObjects(capacity, defaultValue);
-        if (!appended.isPresent()) {
-          throw new IllegalArgumentException("Cannot assign default column value to result " +
-            "column batch in vectorized Parquet reader because the data type is not supported: " +
-            defaultValue);
-        }
+        return;
       }
-      return;
+      // For Parquet tables whose columns have associated DEFAULT values, this reader must return
+      // those values instead of NULL when the corresponding columns are not present in storage.
+      // Here we write the 'defaultValue' to each element in the new WritableColumnVector using
+      // the appendObjects method. This delegates to some specific append* method depending on the
+      // type of 'defaultValue'; for example, if 'defaultValue' is a Float, then we call the
+      // appendFloats method.
+      if (!vector.appendObjects(capacity, defaultValue).isPresent()) {
+        throw new IllegalArgumentException("Cannot assign default column value to result " +
+          "column batch in vectorized Parquet reader because the data type is not supported: " +
+          defaultValue);
+      }
     }
 
     if (isPrimitive) {
