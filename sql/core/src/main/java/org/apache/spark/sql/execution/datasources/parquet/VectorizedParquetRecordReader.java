@@ -44,7 +44,6 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.vectorized.ColumnVector;
 
 /**
  * A specialized RecordReader that reads into InternalRows or ColumnarBatches directly using the
@@ -240,7 +239,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private void initBatch(
       MemoryMode memMode,
       StructType partitionColumns,
-      InternalRow partitionValues) throws IOException {
+      InternalRow partitionValues) {
     StructType batchSchema = new StructType();
     for (StructField f: sparkSchema.fields()) {
       batchSchema = batchSchema.add(f);
@@ -257,11 +256,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     } else {
       vectors = OnHeapColumnVector.allocateColumns(capacity, batchSchema);
     }
+    columnarBatch = new ColumnarBatch(vectors);
 
     columnVectors = new ParquetColumnVector[sparkSchema.fields().length];
     for (int i = 0; i < columnVectors.length; i++) {
       columnVectors[i] = new ParquetColumnVector(parquetColumn.children().apply(i),
-        vectors[i], capacity, memMode, missingColumns);
+        vectors[i], capacity, memMode, missingColumns,
+        sparkRequestedSchema.existenceDefaultValues()[i]);
     }
 
     if (partitionColumns != null) {
@@ -271,40 +272,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         vectors[i + partitionIdx].setIsConstant();
       }
     }
-
-    // For Parquet tables whose columns have associated DEFAULT values, this reader must return
-    // those values instead of NULL when the corresponding columns are not present in storage (i.e.
-    // belong to the 'missingColumns' field in this class).
-    ColumnVector[] finalColumns = new ColumnVector[sparkSchema.fields().length];
-    for (int i = 0; i < columnVectors.length; i++) {
-      Object defaultValue = sparkRequestedSchema.existenceDefaultValues()[i];
-      if (defaultValue == null) {
-        finalColumns[i] = vectors[i];
-      } else {
-        WritableColumnVector writable;
-        if (memMode == MemoryMode.OFF_HEAP) {
-          writable = new OffHeapColumnVector(capacity, vectors[i].dataType());
-        } else {
-          writable = new OnHeapColumnVector(capacity, vectors[i].dataType());
-        }
-        Optional<Integer> appended = writable.appendObjects(capacity, defaultValue);
-        if (!appended.isPresent()) {
-          throw new IOException("Cannot assign default column value to result column batch in " +
-            "vectorized Parquet reader because the data type is not supported: " + defaultValue);
-        }
-        finalColumns[i] = writable;
-      }
-    }
-    columnarBatch = new ColumnarBatch(finalColumns);
   }
 
-  private void initBatch() throws IOException {
+  private void initBatch() {
     initBatch(MEMORY_MODE, null, null);
   }
 
-  public void initBatch(
-      StructType partitionColumns,
-      InternalRow partitionValues) throws IOException {
+  public void initBatch(StructType partitionColumns, InternalRow partitionValues) {
     initBatch(MEMORY_MODE, partitionColumns, partitionValues);
   }
 
@@ -313,7 +287,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * This object is reused. Calling this enables the vectorized reader. This should be called
    * before any calls to nextKeyValue/nextBatch.
    */
-  public ColumnarBatch resultBatch() throws IOException {
+  public ColumnarBatch resultBatch() {
     if (columnarBatch == null) initBatch();
     return columnarBatch;
   }

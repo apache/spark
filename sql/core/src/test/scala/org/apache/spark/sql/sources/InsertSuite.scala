@@ -1617,8 +1617,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         dataSource = "parquet",
         Seq(
           Config(
-            None,
-            insertNullsToStorage = false),
+            None),
           Config(
             Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"),
             insertNullsToStorage = false)))
