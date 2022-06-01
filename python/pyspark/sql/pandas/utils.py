@@ -41,6 +41,30 @@ def require_minimum_pandas_version() -> None:
         )
 
 
+def require_minimum_numpy_version() -> None:
+    """Raise ImportError if minimum version of NumPy is not installed"""
+    minimum_numpy_version = "1.15"
+
+    from distutils.version import LooseVersion
+
+    try:
+        import numpy
+
+        have_numpy = True
+    except ImportError as error:
+        have_numpy = False
+        raised_error = error
+    if not have_numpy:
+        raise ImportError(
+            "NumPy >= %s must be installed; however, " "it was not found." % minimum_numpy_version
+        ) from raised_error
+    if LooseVersion(numpy.__version__) < LooseVersion(minimum_numpy_version):
+        raise ImportError(
+            "NumPy >= %s must be installed; however, "
+            "your version was %s." % (minimum_numpy_version, numpy.__version__)
+        )
+
+
 def require_minimum_pyarrow_version() -> None:
     """Raise ImportError if minimum version of pyarrow is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
