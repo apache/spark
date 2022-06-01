@@ -44,6 +44,8 @@ from typing import (
     TypeVar,
 )
 
+import numpy as np
+
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
 
@@ -1118,6 +1120,14 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             raise ValueError("not supported type: %s" % tpe)
 
 
+_numpy_type_mappings = {
+    np.int64: LongType,
+    np.int32: IntegerType,
+    np.int8: ByteType,
+    np.float32: FloatType,
+}
+
+
 # Mapping Python types to Spark SQL DataType
 _type_mappings = {
     type(None): NullType,
@@ -1226,7 +1236,9 @@ def _infer_type(
     if hasattr(obj, "__UDT__"):
         return obj.__UDT__
 
-    dataType = _type_mappings.get(type(obj))
+    dataType = _numpy_type_mappings.get(obj)  # TODO: why always None
+    if dataType is None:
+        dataType = _type_mappings.get(type(obj))
     if dataType is DecimalType:
         # the precision and scale of `obj` may be different from row to row.
         return DecimalType(38, 18)

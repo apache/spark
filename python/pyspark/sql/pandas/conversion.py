@@ -16,7 +16,7 @@
 #
 import sys
 from collections import Counter
-from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING
+from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING, Tuple
 from warnings import catch_warnings, simplefilter, warn
 
 from pyspark.rdd import _load_from_socket
@@ -36,6 +36,7 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     StructType,
     DataType,
+    _infer_type,
 )
 from pyspark.sql.utils import is_timestamp_ntz_preferred
 from pyspark.traceback_utils import SCCallSiteSync
@@ -394,46 +395,58 @@ class SparkConversionMixin:
         schema: Optional[Union[StructType, List[str]]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True,
+        fromPandas: bool = True,
     ) -> "DataFrame":
         from pyspark.sql import SparkSession
 
         assert isinstance(self, SparkSession)
 
-        from pyspark.sql.pandas.utils import require_minimum_pandas_version
+        if fromPandas:
+            from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
-        require_minimum_pandas_version()
+            require_minimum_pandas_version()
+
+            # If no schema supplied by user then get the names of columns only
+            if schema is None:
+                schema = [str(x) if not isinstance(x, str) else x for x in data.columns]
+        else:
+            from pyspark.sql.pandas.utils import require_minimum_numpy_version
+
+            require_minimum_numpy_version()
 
         timezone = self._jconf.sessionLocalTimeZone()
 
-        # If no schema supplied by user then get the names of columns only
-        if schema is None:
-            schema = [str(x) if not isinstance(x, str) else x for x in data.columns]
+        if fromPandas:
+            if self._jconf.arrowPySparkEnabled() and len(data) > 0:
+                try:
+                    return self._create_from_pandas_with_arrow(data, schema, timezone)
+                except Exception as e:
+                    if self._jconf.arrowPySparkFallbackEnabled():
+                        msg = (
+                            "createDataFrame attempted Arrow optimization because "
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
+                            "failed by the reason below:\n  %s\n"
+                            "Attempting non-optimization as "
+                            "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
+                            "true." % str(e)
+                        )
+                        warn(msg)
+                    else:
+                        msg = (
+                            "createDataFrame attempted Arrow optimization because "
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                            "reached the error below and will not continue because automatic "
+                            "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
+                            "has been set to false.\n  %s" % str(e)
+                        )
+                        warn(msg)
+                        raise
 
-        if self._jconf.arrowPySparkEnabled() and len(data) > 0:
-            try:
-                return self._create_from_pandas_with_arrow(data, schema, timezone)
-            except Exception as e:
-                if self._jconf.arrowPySparkFallbackEnabled():
-                    msg = (
-                        "createDataFrame attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
-                        "failed by the reason below:\n  %s\n"
-                        "Attempting non-optimization as "
-                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
-                        "true." % str(e)
-                    )
-                    warn(msg)
-                else:
-                    msg = (
-                        "createDataFrame attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
-                        "reached the error below and will not continue because automatic "
-                        "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
-                        "has been set to false.\n  %s" % str(e)
-                    )
-                    warn(msg)
-                    raise
-        converted_data = self._convert_from_pandas(data, schema, timezone)
+            converted_data = self._convert_from_pandas(data, schema, timezone)
+        else:
+            converted_data, dtype = self._convert_from_numpy(data, schema, timezone)
+            schema = _infer_type(dtype)
+
         return self._create_dataframe(converted_data, schema, samplingRatio, verifySchema)
 
     def _convert_from_pandas(
@@ -508,9 +521,38 @@ class SparkConversionMixin:
         # Convert list of numpy records to python lists
         return [r.tolist() for r in np_records]
 
+    def _convert_from_numpy(
+            self, np_arr, schema: Union[StructType, str, List[str]], timezone: str
+    ) -> Tuple[List, Optional[type]]:
+        """
+        Convert a numpy.array to list of records that can be used to make a DataFrame
+
+        Returns
+        -------
+        list
+            list of records
+        type
+            optional type of records
+        """
+        import numpy as np
+        from pyspark.sql import SparkSession
+
+        assert isinstance(self, SparkSession)
+        # do with timezone
+        np_records = np_arr.view(np.recarray)
+        # Check if any columns need to be fixed for Spark to infer properly
+        if len(np_records) > 0:
+            record_dtype = self._get_numpy_record_dtype(np_records[0])
+            assert record_dtype == np.int64
+            if record_dtype is not None:
+                return [r.astype(record_dtype).tolist() for r in np_records], record_dtype
+
+        # Convert list of numpy records to python lists
+        return [r.tolist() for r in np_records], None
+
     def _get_numpy_record_dtype(self, rec: "np.recarray") -> Optional["np.dtype"]:
         """
-        Used when converting a pandas.DataFrame to Spark using to_records(), this will correct
+        Used when converting a numpy.ndarray to Spark using , this will correct
         the dtypes of fields in a record so they can be properly loaded into Spark.
 
         Parameters
@@ -525,20 +567,14 @@ class SparkConversionMixin:
         """
         import numpy as np
 
-        cur_dtypes = rec.dtype
-        col_names = cur_dtypes.names
-        record_type_list = []
-        has_rec_fix = False
-        for i in range(len(cur_dtypes)):
-            curr_type = cur_dtypes[i]
-            # If type is a datetime64 timestamp, convert to microseconds
-            # NOTE: if dtype is datetime[ns] then np.record.tolist() will output values as longs,
-            # conversion from [us] or lower will lead to py datetime objects, see SPARK-22417
-            if curr_type == np.dtype("datetime64[ns]"):
-                curr_type = "datetime64[us]"
-                has_rec_fix = True
-            record_type_list.append((str(col_names[i]), curr_type))
-        return np.dtype(record_type_list) if has_rec_fix else None
+        cur_dtype = rec.dtype
+
+        # If type is a datetime64 timestamp, convert to microseconds
+        # NOTE: if dtype is datetime[ns] then np.record.tolist() will output values as longs,
+        # conversion from [us] or lower will lead to py datetime objects, see SPARK-22417
+        if cur_dtype == np.dtype("datetime64[ns]"):
+            cur_type = "datetime64[us]"
+        return cur_dtype
 
     def _create_from_pandas_with_arrow(
         self, pdf: "PandasDataFrameLike", schema: Union[StructType, List[str]], timezone: str
