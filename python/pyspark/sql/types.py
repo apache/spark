@@ -1121,10 +1121,10 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
 
 
 _numpy_type_mappings = {
-    np.int64: LongType,
-    np.int32: IntegerType,
-    np.int8: ByteType,
-    np.float32: FloatType,
+    np.dtype("int64"): LongType,
+    np.dtype("int32"): IntegerType,
+    np.dtype("int8"): ByteType,
+    np.dtype("float32"): FloatType,
 }
 
 
@@ -1236,7 +1236,7 @@ def _infer_type(
     if hasattr(obj, "__UDT__"):
         return obj.__UDT__
 
-    dataType = _numpy_type_mappings.get(obj)  # TODO: why always None
+    dataType = _numpy_type_mappings.get(obj)
     if dataType is None:
         dataType = _type_mappings.get(type(obj))
     if dataType is DecimalType:

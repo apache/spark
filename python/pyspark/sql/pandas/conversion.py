@@ -522,8 +522,8 @@ class SparkConversionMixin:
         return [r.tolist() for r in np_records]
 
     def _convert_from_numpy(
-            self, np_arr, schema: Union[StructType, str, List[str]], timezone: str
-    ) -> Tuple[List, Optional[type]]:
+        self, np_arr, schema: Union[StructType, str, List[str]], timezone: str
+    ) -> Tuple[List, Optional["np.dtype"]]:
         """
         Convert a numpy.array to list of records that can be used to make a DataFrame
 
