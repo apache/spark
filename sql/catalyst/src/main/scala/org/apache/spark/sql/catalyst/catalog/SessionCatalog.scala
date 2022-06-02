@@ -458,7 +458,13 @@ class SessionCatalog(
       throw QueryCompilationErrors.dropNonExistentColumnsNotSupportedError(nonExistentColumnNames)
     }
 
-    ResolveDefaultColumns.checkDataSourceSupportsDefaultColumns(catalogTable)
+    if (newDataSchema.fields.map(_.metadata).exists { m =>
+      m.contains(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) ||
+        m.contains(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+    } && !ResolveDefaultColumns.isTableProviderValidForDefaultColumns(catalogTable)) {
+      throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(
+        catalogTable.provider.getOrElse(""))
+    }
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)
   }
 

@@ -237,13 +237,16 @@ object ResolveDefaultColumns {
     if (table.schema.fields.map(_.metadata).exists { m =>
       m.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) ||
         m.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
-    }) {
-      table.provider.getOrElse("").toLowerCase() match {
-        case "csv" | "json" | "parquet" | "orc" =>
-        case _ =>
-          throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(
-            table.provider.getOrElse(""))
-      }
+    } && !isTableProviderValidForDefaultColumns(table)) {
+      throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(
+        table.provider.getOrElse(""))
+    }
+  }
+
+  def isTableProviderValidForDefaultColumns(table: CatalogTable): Boolean = {
+    table.provider.getOrElse("").toLowerCase() match {
+      case "csv" | "json" | "parquet" | "orc" => true
+      case _ => false
     }
   }
 }
