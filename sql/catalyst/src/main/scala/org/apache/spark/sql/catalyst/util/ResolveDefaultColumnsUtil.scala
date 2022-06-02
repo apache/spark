@@ -245,7 +245,7 @@ object ResolveDefaultColumns {
 
   def isTableProviderValidForDefaultColumns(table: CatalogTable): Boolean = {
     table.provider.getOrElse("").toLowerCase() match {
-      case "csv" | "json" | "parquet" | "orc" => true
+      case "csv" | "hive" | "json" | "parquet" | "orc" => true
       case _ => false
     }
   }
