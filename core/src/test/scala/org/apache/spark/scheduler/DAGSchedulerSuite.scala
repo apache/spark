@@ -4346,7 +4346,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-38987: corrupted shuffle block FetchFailure should unregister merge result") {
+  test("SPARK-38987: corrupted merged shuffle block FetchFailure should unregister merge results") {
     initPushBasedShuffleConfs(conf)
     DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
@@ -4372,11 +4372,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
     scheduler.handleRegisterMergeStatuses(shuffleMapStage,
-      Seq((0, makeMergeStatus("hostA", shuffleDep.shuffleMergeId))))
+      Seq((0, makeMergeStatus("hostA", shuffleDep.shuffleMergeId, isShufflePushMerger = true))))
     scheduler.handleShuffleMergeFinalized(shuffleMapStage,
       shuffleMapStage.shuffleDep.shuffleMergeId)
     scheduler.handleRegisterMergeStatuses(shuffleMapStage,
-      Seq((1, makeMergeStatus("hostA", shuffleDep.shuffleMergeId))))
+      Seq((1, makeMergeStatus("hostA", shuffleDep.shuffleMergeId, isShufflePushMerger = true))))
 
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 1)
 
@@ -4384,7 +4384,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
       case (task, _) =>
         (FetchFailed(
-          makeBlockManagerId("hostA"),
+          makeBlockManagerId("hostA", isShufflePushMerger = true),
           shuffleDep.shuffleId, -1L, -1, 0, "corruption fetch failure"), null)
     }.toSeq)
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 0)
@@ -4501,12 +4501,20 @@ object DAGSchedulerSuite {
   def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2, mapTaskId: Long = -1): MapStatus =
     MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId)
 
-  def makeBlockManagerId(host: String): BlockManagerId = {
-    BlockManagerId(host + "-exec", host, 12345)
+  def makeBlockManagerId(host: String, isShufflePushMerger: Boolean = false): BlockManagerId = {
+    val execId = if (isShufflePushMerger) {
+      BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
+    } else {
+      host + "-exec"
+    }
+    BlockManagerId(execId, host, 12345)
   }
 
-  def makeMergeStatus(host: String, shuffleMergeId: Int, size: Long = 1000): MergeStatus =
-    MergeStatus(makeBlockManagerId(host), shuffleMergeId, mock(classOf[RoaringBitmap]), size)
+  def makeMergeStatus(host: String, shuffleMergeId: Int, size: Long = 1000,
+    isShufflePushMerger: Boolean = false): MergeStatus = {
+    MergeStatus(makeBlockManagerId(host, isShufflePushMerger),
+      shuffleMergeId, mock(classOf[RoaringBitmap]), size)
+  }
 
   def addMergerLocs(locs: Seq[String]): Unit = {
     locs.foreach { loc => mergerLocs.append(makeBlockManagerId(loc)) }
