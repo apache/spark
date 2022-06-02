@@ -39,8 +39,8 @@ If there is non-implemented pandas API or parameter you want, you can create an 
 JIRA <https://issues.apache.org/jira/projects/SPARK/summary>`__ to request or to contribute by
 your own.
 
-The API list is updated based on the `latest pandas official API reference
-<https://pandas.pydata.org/docs/reference/index.html#>`__.
+The API list is updated based on the `pandas 1.3 official API reference
+<https://pandas.pydata.org/pandas-docs/version/1.3/reference/index.html>`__.
 
 DataFrame API
 ------------------------
