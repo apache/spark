@@ -96,6 +96,11 @@ object ResolveDefaultColumns {
     if (SQLConf.get.enableDefaultColumns) {
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+          // Make sure that the target table has a provider that supports default column values.
+          tableProvider.getOrElse("").toLowerCase() match {
+            case "csv" | "hive" | "json" | "parquet" | "orc" =>
+            case p => throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(p)
+          }
           val analyzed: Expression = analyze(analyzer, field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
             .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
@@ -232,23 +237,6 @@ object ResolveDefaultColumns {
           row.update(i, schema.existenceDefaultValues(i))
         }
       }
-    }
-  }
-
-  def checkDataSourceSupportsDefaultColumns(table: CatalogTable): Unit = {
-    if (table.schema.fields.map(_.metadata).exists { m =>
-      m.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) ||
-        m.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
-    } && !isTableProviderValidForDefaultColumns(table)) {
-      throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(
-        table.provider.getOrElse(""))
-    }
-  }
-
-  def isTableProviderValidForDefaultColumns(table: CatalogTable): Boolean = {
-    table.provider.getOrElse("").toLowerCase() match {
-      case "csv" | "hive" | "json" | "parquet" | "orc" => true
-      case _ => false
     }
   }
 }

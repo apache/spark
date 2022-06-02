@@ -359,10 +359,6 @@ case class AlterTableChangeColumnCommand(
         // Create a new column from the origin column with the new current default value.
         if (newColumn.getCurrentDefaultValue().isDefined) {
           if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
-            if (!ResolveDefaultColumns.isTableProviderValidForDefaultColumns(table)) {
-              throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(
-                table.provider.getOrElse(""))
-            }
             val result: StructField =
               addCurrentDefaultValue(withNewComment, newColumn.getCurrentDefaultValue())
             // Check that the proposed default value parses and analyzes correctly, and that the
