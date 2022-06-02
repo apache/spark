@@ -304,7 +304,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
   test("catalog classes format in Dataset.show") {
     val db = new Database("nama", "descripta", "locata")
-    val table = new Table("nama", "databasa", "descripta", "typa", isTemporary = false)
+    val table = new Table("nama", "cataloa", Array("databasa"), "descripta", "typa",
+      isTemporary = false)
     val function = new Function("nama", "databasa", "descripta", "classa", isTemporary = false)
     val column = new Column(
       "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
@@ -313,9 +314,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val functionFields = ScalaReflection.getConstructorParameterValues(function)
     val columnFields = ScalaReflection.getConstructorParameterValues(column)
     assert(dbFields == Seq("nama", "descripta", "locata"))
-    assert(Seq(tableFields.apply(0), tableFields.apply(2), tableFields.apply(3),
-      tableFields.apply(4)) == Seq("nama", "descripta", "typa", false))
-    assert(tableFields.apply(1).asInstanceOf[Array[String]].deep == Array("databasa").deep)
+    assert(Seq(tableFields.apply(0), tableFields.apply(1), tableFields.apply(3),
+      tableFields.apply(4), tableFields.apply(5)) ==
+      Seq("nama", "cataloa", "descripta", "typa", false))
+    assert(tableFields.apply(2).asInstanceOf[Array[String]].deep == Array("databasa").deep)
     assert(functionFields == Seq("nama", "databasa", "descripta", "classa", false))
     assert(columnFields == Seq("nama", "descripta", "typa", false, true, true))
     val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
@@ -587,7 +589,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(df.schema.equals(tableSchema))
 
     val testCatalog =
-      spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+      spark.sessionState.catalogManager.catalog(catalogName).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
     assert(table.schema().equals(tableSchema))
     assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
@@ -617,6 +619,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
       assert(table.properties().get("comment").equals(description))
       assert(table.properties().get("path").equals(dir.getAbsolutePath))
+      assert(table.properties().get("external").equals("true"))
+      assert(table.properties().get("location").equals("file:" + dir.getAbsolutePath))
     }
   }
 

@@ -55,7 +55,8 @@ class Database(
  * A table in Spark, as returned by the `listTables` method in [[Catalog]].
  *
  * @param name name of the table.
- * @param database name of the database the table belongs to.
+ * @param catalog name of the catalog that the table belongs to.
+ * @param qualifier qualifier of the namespace that the table belongs to.
  * @param description description of the table.
  * @param tableType type of the table (e.g. view, table).
  * @param isTemporary whether the table is a temporary table.
@@ -64,7 +65,7 @@ class Database(
 @Stable
 class Table(
     val name: String,
-    @Nullable catalog: String,
+    @Nullable val catalog: String,
     @Nullable val qualifier: Array[String],
     @Nullable val description: String,
     val tableType: String,
@@ -76,9 +77,7 @@ class Table(
     this(name, null, Array(database), description, tableType, isTemporary)
   }
 
-  def database: String = parseQualifier
-
-  def parseQualifier: String = {
+  def database: String = {
     if (qualifier == null) {
       null
     } else if (qualifier.length == 2) {
@@ -93,6 +92,7 @@ class Table(
   override def toString: String = {
     "Table[" +
       s"name='$name', " +
+      Option(catalog).map { d => s"catalog='$d', " }.getOrElse("") +
       Option(database).map { d => s"database='$d', " }.getOrElse("") +
       Option(description).map { d => s"description='$d', " }.getOrElse("") +
       s"tableType='$tableType', " +
