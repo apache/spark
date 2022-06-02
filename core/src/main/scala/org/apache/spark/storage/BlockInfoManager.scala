@@ -422,23 +422,25 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   /**
-   * Release all lock held by the given task, clearing that task's pin bookkeeping
-   * structures and updating the global pin counts. This method should be called at the
-   * end of a task (either by a task completion handler or in `TaskRunner.run()`).
+   * Release all read lock held by the given task, clearing that task's pin bookkeeping
+   * structures and updating the global pin counts. This method does not release write locks,
+   * because that means the block modification is still in flight, and doing so puts the block
+   * into an inconsistent state. We do return the ids of the blocks that are still being modified
+   * for completeness.
    *
-   * @return the ids of blocks whose pins were released
+   * This method should be called at the end of a task (either by a task completion handler or in
+   * `TaskRunner.run()`).
+   *
+   * @return the ids of blocks whose read locks were releases, and the ids of blocks that are still
+   *         being modified.
    */
   def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
 
-    val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(Collections.emptySet)
-    writeLocks.forEach { blockId =>
-      blockInfo(blockId) { (info, condition) =>
-        assert(info.writerTask == taskAttemptId)
-        info.writerTask = BlockInfo.NO_WRITER
-        condition.signalAll()
-      }
-      blocksWithReleasedLocks += blockId
+    // Just report the blocks which are still being modified.
+    val writeLocks = writeLocksByTask.remove(taskAttemptId)
+    if (writeLocks != null) {
+      blocksWithReleasedLocks ++= writeLocks.asScala
     }
 
     val readLocks = Option(readLocksByTask.remove(taskAttemptId))
