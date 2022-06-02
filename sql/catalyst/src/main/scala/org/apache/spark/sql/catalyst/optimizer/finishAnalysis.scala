@@ -88,14 +88,12 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       case subQuery =>
         subQuery.transformAllExpressionsWithPruning(transformCondition) {
           case cd: CurrentDate =>
-            Literal.create(
-              DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId).asInstanceOf[Int],
-              DateType)
+            Literal.create(DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
           case CurrentTimestamp() | Now() => currentTime
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>
             val asDateTime = LocalDateTime.ofInstant(instant, localTimestamp.zoneId)
-            Literal.create(localDateTimeToMicros(asDateTime).asInstanceOf[Long], TimestampNTZType)
+            Literal.create(localDateTimeToMicros(asDateTime), TimestampNTZType)
         }
     }
   }
