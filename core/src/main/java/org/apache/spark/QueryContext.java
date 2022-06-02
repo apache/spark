@@ -20,7 +20,7 @@ package org.apache.spark;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * SQL Query context of a Spark throwable exception. It helps users understand where the error
+ * SQL Query context of a {@link SparkThrowable}. It helps users understand where the error
  * occurs within the SQL query.
  *
  * @since 3.4.0
