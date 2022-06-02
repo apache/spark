@@ -4384,7 +4384,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
       case (task, _) =>
         (FetchFailed(
-          makeBlockManagerId("hostA", isShufflePushMerger = true),
+          makeBlockManagerId("hostA", execId = Some(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)),
           shuffleDep.shuffleId, -1L, -1, 0, "corruption fetch failure"), null)
     }.toSeq)
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 0)
@@ -4501,18 +4501,18 @@ object DAGSchedulerSuite {
   def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2, mapTaskId: Long = -1): MapStatus =
     MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId)
 
-  def makeBlockManagerId(host: String, isShufflePushMerger: Boolean = false): BlockManagerId = {
-    val execId = if (isShufflePushMerger) {
-      BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
-    } else {
-      host + "-exec"
-    }
-    BlockManagerId(execId, host, 12345)
+  def makeBlockManagerId(host: String, execId: Option[String] = None): BlockManagerId = {
+    BlockManagerId(execId.getOrElse(host + "-exec"), host, 12345)
   }
 
   def makeMergeStatus(host: String, shuffleMergeId: Int, size: Long = 1000,
     isShufflePushMerger: Boolean = false): MergeStatus = {
-    MergeStatus(makeBlockManagerId(host, isShufflePushMerger),
+    val execId = if (isShufflePushMerger) {
+      Some(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    } else {
+      None
+    }
+    MergeStatus(makeBlockManagerId(host, execId),
       shuffleMergeId, mock(classOf[RoaringBitmap]), size)
   }
 
