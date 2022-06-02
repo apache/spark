@@ -16,36 +16,34 @@
     under the License.
 
 
-=====================
-Supported pandas APIs
-=====================
+====================
+Supported pandas API
+====================
 
 .. currentmodule:: pyspark.pandas
 
 The following table shows the pandas APIs that implemented or non-implemented from pandas API on
-Spark.
+Spark. Some pandas API do not implement full parameters, so the third column shows missing
+parameters for each API.
 
-Some pandas APIs do not implement full parameters, so the third column shows missing parameters for
-each API.
+* 'Y' in the second column means it's implemented including its whole parameter.
+* 'N' means it's not implemented yet.
+* 'P' means it's partially implemented with the missing of some parameters.
 
-'Y' in the second column means it's implemented including its whole parameter.
-'N' means it's not implemented yet.
-'P' means it's partially implemented with the missing of some parameters.
+All API in the list below computes the data with distributed execution except the ones that require
+the local execution by design. For example, `DataFrame.to_numpy() <https://spark.apache.org/docs/
+latest/api/python/reference/pyspark.pandas/api/pyspark.pandas.DataFrame.to_numpy.html>`__
+requires to collect the data to the driver side.
 
 If there is non-implemented pandas API or parameter you want, you can create an `Apache Spark
-JIRA <https://issues.apache.org/jira/projects/SPARK/summary>`__ to request or to contribute by your
-own.
+JIRA <https://issues.apache.org/jira/projects/SPARK/summary>`__ to request or to contribute by
+your own.
 
-The API list is updated based on the `pandas 1.3 official API
-reference <https://pandas.pydata.org/pandas-docs/version/1.3/reference/index.html>`__.
+The API list is updated based on the `pandas 1.3 official API reference
+<https://pandas.pydata.org/pandas-docs/version/1.3/reference/index.html>`__.
 
-All implemented APIs listed here are distributed except the ones that requires the local
-computation by design. For example, `DataFrame.to_numpy() <https://spark.apache.org
-/docs/latest/api/python/reference/pyspark.pandas/api/pyspark.pandas.DataFrame.
-to_numpy.html>`__ requires to collect the data to the driver side.
-
-Supported DataFrame APIs
-------------------------
+DataFrame API
+-------------
 
 .. currentmodule:: pyspark.pandas.DataFrame
 
@@ -528,8 +526,8 @@ Supported DataFrame APIs
 | :func:`xs`                                 | P           | ``drop_level``                       |
 +--------------------------------------------+-------------+--------------------------------------+
 
-Supported I/O APIs
-------------------
+I/O API
+-------
 
 .. currentmodule:: pyspark.pandas
 
@@ -631,8 +629,8 @@ Supported I/O APIs
 | DataFrame.to_stata             | N                  |                                           |
 +--------------------------------+--------------------+-------------------------------------------+
 
-Supported General Function APIs
--------------------------------
+General Function API
+--------------------
 
 +-----------------------------------------+--------------+----------------------------------------+
 | API                                     | Implemented  | Missing parameters                     |
@@ -694,8 +692,8 @@ Supported General Function APIs
 | eval                                    | N            |                                        |
 +-----------------------------------------+--------------+----------------------------------------+
 
-Supported Series APIs
----------------------
+Series API
+----------
 
 .. currentmodule:: pyspark.pandas.Series
 
@@ -1162,8 +1160,8 @@ Supported Series APIs
 | :func:`xs`                      | P                 | ``axis``, ``drop_level``                  |
 +---------------------------------+-------------------+-------------------------------------------+
 
-Supported Index APIs
---------------------
+Index API
+---------
 
 .. currentmodule:: pyspark.pandas.Index
 
@@ -1381,8 +1379,8 @@ Supported Index APIs
 | where                                   | N           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 
-Supported Window APIs
----------------------
+Window API
+----------
 
 .. currentmodule:: pyspark.pandas.window
 
@@ -1510,8 +1508,8 @@ Supported Window APIs
 | Expanding.window                                             | N           |                    |
 +--------------------------------------------------------------+-------------+--------------------+
 
-Supported GroupBy APIs
-----------------------
+GroupBy API
+-----------
 
 .. currentmodule:: pyspark.pandas.groupby
 
