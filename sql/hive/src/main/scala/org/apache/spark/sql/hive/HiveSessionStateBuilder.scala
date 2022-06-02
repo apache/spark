@@ -89,7 +89,7 @@ class HiveSessionStateBuilder(
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        new ResolveSessionCatalog(catalogManager) +:
+        new ResolveSessionCatalog(this) +:
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
         customResolutionRules
@@ -100,7 +100,7 @@ class HiveSessionStateBuilder(
         RelationConversions(catalog) +:
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
-        DataSourceAnalysis +:
+        DataSourceAnalysis(this) +:
         HiveAnalysis +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules

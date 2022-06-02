@@ -186,7 +186,7 @@ abstract class BaseSessionStateBuilder(
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        new ResolveSessionCatalog(catalogManager) +:
+        new ResolveSessionCatalog(this) +:
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
         customResolutionRules
@@ -195,7 +195,7 @@ abstract class BaseSessionStateBuilder(
       DetectAmbiguousSelfJoin +:
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
-        DataSourceAnalysis +:
+        DataSourceAnalysis(this) +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules
 

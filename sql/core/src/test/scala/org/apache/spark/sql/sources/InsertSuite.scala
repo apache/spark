@@ -1645,9 +1645,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(a string, b int) using parquet")
         assert(intercept[AnalysisException] {
-          sql("alter table t alter column b set default 42")
-        }.getMessage.contains(unsupported))
-        assert(intercept[AnalysisException] {
           sql("alter table t add column s bigint default 42")
         }.getMessage.contains(unsupported))
       }
