@@ -1029,24 +1029,22 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The default value fails to analyze.
     withTable("t") {
-      sql("create table t(i boolean, s bigint default badvalue) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (default, default)")
+        sql("create table t(i boolean, s bigint default badvalue) using parquet")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value analyzes to a table not in the catalog.
     withTable("t") {
-      sql("create table t(i boolean, s bigint default (select min(x) from badtable)) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (default, default)")
+        sql("create table t(i boolean, s bigint default (select min(x) from badtable)) " +
+          "using parquet")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value parses but refers to a table from the catalog.
     withTable("t", "other") {
       sql("create table other(x string) using parquet")
-      sql("create table t(i boolean, s bigint default (select min(x) from other)) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (default, default)")
+        sql("create table t(i boolean, s bigint default (select min(x) from other)) using parquet")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
@@ -1083,10 +1081,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The default value parses but the type is not coercible.
     withTable("t") {
-      sql("create table t(i boolean, s bigint default false) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (default, default)")
-      }.getMessage.contains("provided a value of incompatible type"))
+        sql("create table t(i boolean, s bigint default false) using parquet")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The number of columns in the INSERT INTO statement is greater than the number of columns in
     // the table.
