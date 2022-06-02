@@ -2177,7 +2177,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-39355: UnresolvedAttribute should only use CatalystSqlParser if name contains dot") {
+  test("SPARK-39355: Avoid UnresolvedAttribute.apply throwing ParseException") {
     checkAnswer(
       sql("""
             |SELECT *
