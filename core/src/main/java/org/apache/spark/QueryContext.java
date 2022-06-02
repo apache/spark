@@ -28,11 +28,14 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public interface QueryContext {
     // The object type of the SQL query which throws the exception.
-    // For example, it can be empty, or a "VIEW", or a SQL "FUNCTION".
+    // If the exception is directly from the main query, it should be an empty string.
+    // Otherwise, it should be the exact object type in upper case. For example, a "VIEW",
+    // or a SQL "FUNCTION".
     String objectType();
 
     // The object name of the SQL query which throws the exception.
-    // For example, it can be the name of a "VIEW".
+    // If the exception is directly from the main query, it should be an empty string.
+    // Otherwise, it should be the object name. For example, a view name "V1".
     String objectName();
 
     // The starting index in the SQL query text which throws the exception.

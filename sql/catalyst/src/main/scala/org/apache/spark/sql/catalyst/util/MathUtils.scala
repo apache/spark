@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.catalyst.trees.QueryContextImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
@@ -27,32 +27,32 @@ object MathUtils {
 
   def addExact(a: Int, b: Int): Int = withOverflow(Math.addExact(a, b))
 
-  def addExact(a: Int, b: Int, errorContext: Option[SQLQueryContext]): Int =
+  def addExact(a: Int, b: Int, errorContext: Option[QueryContextImpl]): Int =
     withOverflow(Math.addExact(a, b), hint = "try_add", errorContext = errorContext)
 
   def addExact(a: Long, b: Long): Long = withOverflow(Math.addExact(a, b))
 
-  def addExact(a: Long, b: Long, errorContext: Option[SQLQueryContext]): Long =
+  def addExact(a: Long, b: Long, errorContext: Option[QueryContextImpl]): Long =
     withOverflow(Math.addExact(a, b), hint = "try_add", errorContext = errorContext)
 
   def subtractExact(a: Int, b: Int): Int = withOverflow(Math.subtractExact(a, b))
 
-  def subtractExact(a: Int, b: Int, errorContext: Option[SQLQueryContext]): Int =
+  def subtractExact(a: Int, b: Int, errorContext: Option[QueryContextImpl]): Int =
     withOverflow(Math.subtractExact(a, b), hint = "try_subtract", errorContext = errorContext)
 
   def subtractExact(a: Long, b: Long): Long = withOverflow(Math.subtractExact(a, b))
 
-  def subtractExact(a: Long, b: Long, errorContext: Option[SQLQueryContext]): Long =
+  def subtractExact(a: Long, b: Long, errorContext: Option[QueryContextImpl]): Long =
     withOverflow(Math.subtractExact(a, b), hint = "try_subtract", errorContext = errorContext)
 
   def multiplyExact(a: Int, b: Int): Int = withOverflow(Math.multiplyExact(a, b))
 
-  def multiplyExact(a: Int, b: Int, errorContext: Option[SQLQueryContext]): Int =
+  def multiplyExact(a: Int, b: Int, errorContext: Option[QueryContextImpl]): Int =
     withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", errorContext = errorContext)
 
   def multiplyExact(a: Long, b: Long): Long = withOverflow(Math.multiplyExact(a, b))
 
-  def multiplyExact(a: Long, b: Long, errorContext: Option[SQLQueryContext]): Long =
+  def multiplyExact(a: Long, b: Long, errorContext: Option[QueryContextImpl]): Long =
     withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", errorContext = errorContext)
 
   def negateExact(a: Int): Int = withOverflow(Math.negateExact(a))
@@ -72,7 +72,7 @@ object MathUtils {
   private def withOverflow[A](
       f: => A,
       hint: String = "",
-      errorContext: Option[SQLQueryContext] = None): A = {
+      errorContext: Option[QueryContextImpl] = None): A = {
     try {
       f
     } catch {

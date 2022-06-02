@@ -22,7 +22,7 @@ import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, Roundin
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.catalyst.trees.QueryContextImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
@@ -365,7 +365,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       scale: Int,
       roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP,
       nullOnOverflow: Boolean = true,
-      context: Option[SQLQueryContext] = None): Decimal = {
+      context: Option[QueryContextImpl] = None): Decimal = {
     val copy = clone()
     if (copy.changePrecision(precision, scale, roundMode)) {
       copy
@@ -625,7 +625,7 @@ object Decimal {
   def fromStringANSI(
       str: UTF8String,
       to: DecimalType = DecimalType.USER_DEFAULT,
-      errorContext: Option[SQLQueryContext] = None): Decimal = {
+      errorContext: Option[QueryContextImpl] = None): Decimal = {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.

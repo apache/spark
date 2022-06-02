@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{QueryContextImpl, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -81,7 +81,7 @@ abstract class AverageBase
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
-  protected def getEvaluateExpression(queryContext: Option[SQLQueryContext]) = {
+  protected def getEvaluateExpression(queryContext: Option[QueryContextImpl]) = {
     child.dataType match {
       case _: DecimalType =>
         DecimalPrecision.decimalAndDecimal()(
@@ -138,7 +138,7 @@ case class Average(
 
   override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
 
-  override def initQueryContext(): Option[SQLQueryContext] = {
+  override def initQueryContext(): Option[QueryContextImpl] = {
     if (useAnsiAdd) {
       Some(origin.context)
     } else {

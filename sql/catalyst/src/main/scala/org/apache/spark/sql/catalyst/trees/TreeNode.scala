@@ -53,12 +53,13 @@ import org.apache.spark.util.collection.BitSet
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
-case class SQLQueryContext(
+case class QueryContextImpl(
     override val objectType: String,
     override val objectName: String,
     override val startIndex: Int,
     override val stopIndex: Int,
-    override val fragment: String) extends QueryContext
+    override val fragment: String,
+    val summary: String) extends QueryContext
 
 /**
  * Contexts of TreeNodes, including location, SQL text, object type and object name.
@@ -74,20 +75,22 @@ case class Origin(
   objectType: Option[String] = None,
   objectName: Option[String] = None) {
 
-  lazy val context: SQLQueryContext = SQLQueryContext(
+  lazy val context: QueryContextImpl = QueryContextImpl(
     objectType = objectType.getOrElse(""),
     objectName = objectName.getOrElse(""),
     startIndex = startIndex.getOrElse(-1),
     stopIndex = stopIndex.getOrElse(-1),
-    fragment = getFragment()
+    fragment = getFragment,
+    summary = getSummary
   )
+
   /**
-   * The SQL query context of current node. For example:
+   * The SQL query context summary of current node. For example:
    * == SQL of VIEW v1(line 1, position 25) ==
    * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
    *                          ^^^^^^^^^^^^^^^
    */
-  def getFragment(): String = {
+  def getSummary: String = {
     // If the query context is missing or incorrect, simply return an empty string.
     if (sqlText.isEmpty || startIndex.isEmpty || stopIndex.isEmpty ||
       startIndex.get < 0 || stopIndex.get >= sqlText.get.length || startIndex.get > stopIndex.get) {
@@ -160,6 +163,15 @@ case class Origin(
         builder ++= "\n"
       }
       builder.result()
+    }
+  }
+
+  def getFragment: String = {
+    if (sqlText.isEmpty || startIndex.isEmpty || stopIndex.isEmpty ||
+      startIndex.get < 0 || stopIndex.get >= sqlText.get.length || startIndex.get > stopIndex.get) {
+      ""
+    } else {
+      sqlText.get.substring(startIndex.get, stopIndex.get)
     }
   }
 }

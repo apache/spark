@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
-import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{QueryContextImpl, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -97,7 +97,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
       value: Decimal,
       decimalPrecision: Int,
       decimalScale: Int,
-      context: Option[SQLQueryContext]): ArithmeticException = {
+      context: Option[QueryContextImpl]): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       messageParameters = Array(
@@ -112,7 +112,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
       value: Any,
       from: DataType,
       to: DataType,
-      errorContext: Option[SQLQueryContext]): Throwable = {
+      errorContext: Option[QueryContextImpl]): Throwable = {
     new SparkDateTimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -125,7 +125,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidInputSyntaxForBooleanError(
       s: UTF8String,
-      errorContext: Option[SQLQueryContext]): SparkRuntimeException = {
+      errorContext: Option[QueryContextImpl]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -139,7 +139,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
-      errorContext: Option[SQLQueryContext]): SparkNumberFormatException = {
+      errorContext: Option[QueryContextImpl]): SparkNumberFormatException = {
     new SparkNumberFormatException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -177,7 +177,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(funcCls, inputTypes, outputType), e)
   }
 
-  def divideByZeroError(context: Option[SQLQueryContext] = None): ArithmeticException = {
+  def divideByZeroError(context: Option[QueryContextImpl] = None): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
@@ -217,7 +217,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def mapKeyNotExistError(
       key: Any,
       dataType: DataType,
-      context: Option[SQLQueryContext]): NoSuchElementException = {
+      context: Option[QueryContextImpl]): NoSuchElementException = {
     new SparkNoSuchElementException(
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(
@@ -260,11 +260,11 @@ object QueryExecutionErrors extends QueryErrorsBase {
     ansiIllegalArgumentError(e.getMessage)
   }
 
-  def overflowInSumOfDecimalError(context: Option[SQLQueryContext]): ArithmeticException = {
+  def overflowInSumOfDecimalError(context: Option[QueryContextImpl]): ArithmeticException = {
     arithmeticOverflowError("Overflow in sum of decimals", errorContext = context)
   }
 
-  def overflowInIntegralDivideError(context: Option[SQLQueryContext]): ArithmeticException = {
+  def overflowInIntegralDivideError(context: Option[QueryContextImpl]): ArithmeticException = {
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
@@ -479,7 +479,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def arithmeticOverflowError(
       message: String,
       hint: String = "",
-      errorContext: Option[SQLQueryContext] = None): ArithmeticException = {
+      errorContext: Option[QueryContextImpl] = None): ArithmeticException = {
     val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",

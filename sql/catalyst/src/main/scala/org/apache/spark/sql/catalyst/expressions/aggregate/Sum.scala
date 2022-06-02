@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{QueryContextImpl, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SUM, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -143,7 +143,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * So now, if ansi is enabled, then throw exception, if not then return null.
    * If sum is not null, then return the sum.
    */
-  protected def getEvaluateExpression(queryContext: Option[SQLQueryContext]): Expression = {
+  protected def getEvaluateExpression(queryContext: Option[QueryContextImpl]): Expression = {
     resultType match {
       case d: DecimalType =>
         val checkOverflowInSum =
@@ -191,7 +191,7 @@ case class Sum(
 
   override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
 
-  override def initQueryContext(): Option[SQLQueryContext] = {
+  override def initQueryContext(): Option[QueryContextImpl] = {
     if (useAnsiAdd) {
       Some(origin.context)
     } else {

@@ -42,7 +42,7 @@ public interface SparkThrowable {
     return SparkThrowableHelper.getSqlState(this.getErrorClass());
   }
 
-  default QueryContext getQueryContext() { return null; }
+  default QueryContext[] getQueryContext() { return new QueryContext[0]; }
 
   // True if this error is an internal error.
   default boolean isInternalError() {

@@ -94,7 +94,7 @@ private[spark] class SparkArithmeticException(
 
   override def getErrorClass: String = errorClass
 
-  override def getQueryContext: QueryContext = queryContext.orNull
+  override def getQueryContext: Array[QueryContext] = queryContext.toArray
 }
 
 /**
@@ -148,7 +148,7 @@ private[spark] class SparkDateTimeException(
 
   override def getErrorClass: String = errorClass
 
-  override def getQueryContext: QueryContext = queryContext.orNull
+  override def getQueryContext: Array[QueryContext] = queryContext.toArray
 }
 
 /**
@@ -188,7 +188,7 @@ private[spark] class SparkNumberFormatException(
 
   override def getErrorClass: String = errorClass
 
-  override def getQueryContext: QueryContext = queryContext.orNull
+  override def getQueryContext: Array[QueryContext] = queryContext.toArray
 }
 
 /**
@@ -250,7 +250,7 @@ private[spark] class SparkRuntimeException(
 
   override def getErrorClass: String = errorClass
 
-  override def getQueryContext: QueryContext = queryContext.orNull
+  override def getQueryContext: Array[QueryContext] = queryContext.toArray
 }
 
 /**
@@ -302,7 +302,7 @@ private[spark] class SparkNoSuchElementException(
 
   override def getErrorClass: String = errorClass
 
-  override def getQueryContext: QueryContext = queryContext.orNull
+  override def getQueryContext: Array[QueryContext] = queryContext.toArray
 }
 
 /**
