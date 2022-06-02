@@ -2462,4 +2462,24 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       }
     }
   }
+
+  test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
+    val unsupported = "does not support assigning DEFAULT column values"
+    assert(intercept[AnalysisException] {
+      sql(s"create table t(a string) using avro")
+    }.getMessage.contains(unsupported))
+    assert(intercept[AnalysisException] {
+      sql(s"create table t(a string) using parquet")
+      sql(s"replace table t(a string default 'abc') using avro")
+    }.getMessage.contains(unsupported))
+    assert(intercept[AnalysisException] {
+      sql(s"create table t(a string) using avro")
+      sql("alter table t add column(b int default 42)")
+    }.getMessage.contains(unsupported))
+    assert(intercept[AnalysisException] {
+      sql(s"create table t(a string, b int) using avro")
+      sql("alter table t alter column b set default 42")
+    }.getMessage.contains(unsupported))
+  }
+
 }

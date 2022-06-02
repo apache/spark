@@ -22,11 +22,14 @@ import java.util.Locale
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
+
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
@@ -346,8 +349,6 @@ class SessionCatalog(
     val tableIdentifier = TableIdentifier(table, Some(db))
     validateName(table)
 
-    ResolveDefaultColumns.checkDataSourceSupportsDefaultColumns(tableDefinition)
-
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
       // make the location of the table qualified.
@@ -369,6 +370,7 @@ class SessionCatalog(
       if (validateLocation) {
         validateTableLocation(newTableDefinition)
       }
+      ResolveDefaultColumns.checkDataSourceSupportsDefaultColumns(tableDefinition)
       externalCatalog.createTable(newTableDefinition, ignoreIfExists)
     }
   }
