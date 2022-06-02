@@ -68,5 +68,7 @@ class NamedExpressionSuite extends SparkFunSuite {
   test("SPARK-39355: UnresolvedAttribute should only use CatalystSqlParser if name contains dot") {
     val attr1 = UnresolvedAttribute("date_add(2022-06-01, 0)")
     assert(attr1.sql === "`date_add(2022-06-01, 0)`")
+    val attr2 = UnresolvedAttribute("date_add(c1.k1, 0)")
+    assert(attr2.sql === "`date_add(c1.k1, 0)`")
   }
 }
