@@ -42,7 +42,7 @@ your own.
 The API list is updated based on the `latest pandas official API reference
 <https://pandas.pydata.org/docs/reference/index.html#>`__.
 
-Supported DataFrame APIs
+DataFrame API
 ------------------------
 
 .. currentmodule:: pyspark.pandas.DataFrame
@@ -526,7 +526,7 @@ Supported DataFrame APIs
 | :func:`xs`                                 | P           | ``drop_level``                       |
 +--------------------------------------------+-------------+--------------------------------------+
 
-Supported I/O APIs
+I/O API
 ------------------
 
 .. currentmodule:: pyspark.pandas
@@ -629,7 +629,7 @@ Supported I/O APIs
 | DataFrame.to_stata             | N                  |                                           |
 +--------------------------------+--------------------+-------------------------------------------+
 
-Supported General Function APIs
+General Function API
 -------------------------------
 
 +-----------------------------------------+--------------+----------------------------------------+
@@ -692,7 +692,7 @@ Supported General Function APIs
 | eval                                    | N            |                                        |
 +-----------------------------------------+--------------+----------------------------------------+
 
-Supported Series APIs
+Series API
 ---------------------
 
 .. currentmodule:: pyspark.pandas.Series
@@ -1160,7 +1160,7 @@ Supported Series APIs
 | :func:`xs`                      | P                 | ``axis``, ``drop_level``                  |
 +---------------------------------+-------------------+-------------------------------------------+
 
-Supported Index APIs
+Index API
 --------------------
 
 .. currentmodule:: pyspark.pandas.Index
@@ -1379,7 +1379,7 @@ Supported Index APIs
 | where                                   | N           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 
-Supported Window APIs
+Window API
 ---------------------
 
 .. currentmodule:: pyspark.pandas.window
@@ -1508,7 +1508,7 @@ Supported Window APIs
 | Expanding.window                                             | N           |                    |
 +--------------------------------------------------------------+-------------+--------------------+
 
-Supported GroupBy APIs
+GroupBy API
 ----------------------
 
 .. currentmodule:: pyspark.pandas.groupby
