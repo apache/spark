@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import java.util.Arrays;
-import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;

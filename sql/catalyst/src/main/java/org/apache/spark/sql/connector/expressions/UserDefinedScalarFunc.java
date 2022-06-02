@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector.expressions;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.util.ToStringSQLBuilder;
