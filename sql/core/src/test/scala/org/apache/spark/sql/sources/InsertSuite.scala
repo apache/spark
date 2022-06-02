@@ -1635,6 +1635,25 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
+    // Update the SQLConf to exclude
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,json,orc") {
+      val unsupported = "does not support assigning DEFAULT column values"
+      assert(intercept[AnalysisException] {
+        sql(s"create table t(a string default 'abc') using parquet")
+      }.getMessage.contains(unsupported))
+      withTable("t") {
+        sql(s"create table t(a string, b int) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("alter table t alter column b set default 42")
+        }.getMessage.contains(unsupported))
+        assert(intercept[AnalysisException] {
+          sql("alter table t add column s bigint default 42")
+        }.getMessage.contains(unsupported))
+      }
+    }
+  }
+
   test("Stop task set if FileAlreadyExistsException was thrown") {
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,

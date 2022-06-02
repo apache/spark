@@ -96,9 +96,12 @@ object ResolveDefaultColumns {
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
           // Make sure that the target table has a provider that supports default column values.
-          tableProvider.getOrElse("").toLowerCase() match {
-            case "csv" | "hive" | "json" | "parquet" | "orc" =>
-            case p => throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(p)
+          val allowedProviders: Array[String] =
+            SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
+              .toLowerCase().split(",").map(_.trim)
+          val givenProvider: String = tableProvider.getOrElse("").toLowerCase()
+          if (!allowedProviders.contains(givenProvider)) {
+            throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(givenProvider)
           }
           val analyzed: Expression = analyze(analyzer, field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)

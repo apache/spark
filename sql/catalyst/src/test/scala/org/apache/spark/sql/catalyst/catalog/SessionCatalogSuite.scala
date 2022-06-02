@@ -122,7 +122,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   }
 
   test("create table with default columns") {
-    withBasicCatalog { catalog =>
+    if (!isHiveExternalCatalog) withBasicCatalog { catalog =>
       assert(catalog.externalCatalog.listTables("db1").isEmpty)
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
       catalog.createTable(newTable(
