@@ -2469,10 +2469,6 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       sql(s"create table t(a string default 'abc') using avro")
     }.getMessage.contains(unsupported))
     assert(intercept[AnalysisException] {
-      sql(s"create table t(a string) using parquet")
-      sql(s"replace table t(a string default 'abc') using avro")
-    }.getMessage.contains(unsupported))
-    assert(intercept[AnalysisException] {
       sql(s"create table t(a string) using avro")
       sql("alter table t add column(b int default 42)")
     }.getMessage.contains(unsupported))
