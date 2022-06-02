@@ -84,12 +84,14 @@ object ResolveDefaultColumns {
    *
    * @param analyzer      used for analyzing the result of parsing the expression stored as text.
    * @param tableSchema   represents the names and types of the columns of the statement to process.
+   * @param tableProvider provider of the target table to store default values for, if any.
    * @param statementType name of the statement being processed, such as INSERT; useful for errors.
    * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
    */
   def constantFoldCurrentDefaultsToExistDefaults(
       analyzer: Analyzer,
       tableSchema: StructType,
+      tableProvider: Option[String],
       statementType: String): StructType = {
     if (SQLConf.get.enableDefaultColumns) {
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
