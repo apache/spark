@@ -21,7 +21,9 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.DockerTest
 
@@ -139,6 +141,14 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         |'MULTILINESTRING((0 2, 1 1), (1 0, 1 1))',
         |'MULTIPOLYGON(((2 2, 2 -2, -2 -2, -2 2, 2 2)),((1 1, 3 1, 3 3, 1 3, 1 1)))',
         |'GEOMETRYCOLLECTION(LINESTRING(1 1, 3 5),POLYGON((-1 -1, -1 -5, -5 -5, -5 -1, -1 -1)))')
+      """.stripMargin).executeUpdate()
+    conn.prepareStatement(
+      """
+        |CREATE TABLE bits(a INT, b INT, c BIT)
+        |""".stripMargin).executeUpdate()
+    conn.prepareStatement(
+      """
+        |INSERT INTO bits VALUES (1, 2, 1)
       """.stripMargin).executeUpdate()
   }
 
@@ -356,5 +366,67 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         -16, -65, 0, 0, 0, 0, 0, 0, -16, -65, 2, 0, 0, 0, 1, 0, 0, 0, 0, 2, 2, 0, 0,
         0, 3, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0,
         0, 0, 0, 1, 0, 0, 0, 3))
+  }
+
+  test("SPARK-38889: MsSqlServerDialect should handle boolean filter push down") {
+    val df = spark.read.jdbc(jdbcUrl, "bits", new Properties)
+    val rows = df.collect()
+    assert(rows.length == 1)
+    val filtered = df.where(col("c") === 0).collect()
+    assert(filtered.length == 0)
+  }
+
+  test("SPARK-37259: prepareQuery and query JDBC options") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val prepareQuery = "WITH t AS (SELECT x, y FROM tbl)"
+    val query = "SELECT * FROM t WHERE x > 10"
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("prepareQuery", prepareQuery)
+      .option("query", query)
+      .load()
+    assert(df.collect.toSet === expectedResult)
+  }
+
+  test("SPARK-37259: prepareQuery and dbtable JDBC options") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val prepareQuery = "WITH t AS (SELECT x, y FROM tbl WHERE x > 10)"
+    val dbtable = "t"
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("prepareQuery", prepareQuery)
+      .option("dbtable", dbtable)
+      .load()
+    assert(df.collect.toSet === expectedResult)
+  }
+
+  test("SPARK-37259: temp table prepareQuery and query JDBC options") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val prepareQuery = "(SELECT * INTO #TempTable FROM (SELECT * FROM tbl) t)"
+    val query = "SELECT * FROM #TempTable"
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("prepareQuery", prepareQuery)
+      .option("query", query)
+      .load()
+    assert(df.collect.toSet === expectedResult)
   }
 }

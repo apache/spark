@@ -57,7 +57,6 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   private val existingSecretItemKey = kubernetesConf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
   private val krb5File = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
   private val krb5CMap = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
-  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf)
 
   KubernetesUtils.requireNandDefined(
     krb5File,

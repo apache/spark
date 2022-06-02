@@ -28,7 +28,7 @@
   <artifactId>spark-examples_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Examples</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
 
   <properties>
     <sbt.project.name>examples</sbt.project.name>

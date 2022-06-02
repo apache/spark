@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
@@ -573,7 +574,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     import testImplicits._
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = spark.range(10).select(Seq.tabulate(201) {i => (Symbol("id") + i).as(s"c$i")} : _*)
+      val df = spark.range(10).select(Seq.tabulate(201) {i => ($"id" + i).as(s"c$i")} : _*)
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
       withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "202",
@@ -590,7 +591,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("Control splitting consume function by operators with config") {
     import testImplicits._
-    val df = spark.range(10).select(Seq.tabulate(2) {i => (Symbol("id") + i).as(s"c$i")} : _*)
+    val df = spark.range(10).select(Seq.tabulate(2) {i => ($"id" + i).as(s"c$i")} : _*)
 
     Seq(true, false).foreach { config =>
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> s"$config") {
@@ -653,9 +654,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME.key -> "true") {
       // the same query run twice should produce identical code, which would imply a hit in
       // the generated code cache.
-      val ds1 = spark.range(3).select(Symbol("id") + 2)
+      val ds1 = spark.range(3).select($"id" + 2)
       val code1 = genCode(ds1)
-      val ds2 = spark.range(3).select(Symbol("id") + 2)
+      val ds2 = spark.range(3).select($"id" + 2)
       val code2 = genCode(ds2) // same query shape as above, deliberately
       assert(code1 == code2, "Should produce same code")
     }
@@ -762,10 +763,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           "SELECT AVG(v) FROM VALUES(1) t(v)",
           // Tet case with keys
           "SELECT k, AVG(v) FROM VALUES((1, 1)) t(k, v) GROUP BY k").foreach { query =>
-          val errMsg = intercept[IllegalStateException] {
+          val e = intercept[SparkException] {
             sql(query).collect
-          }.getMessage
-          assert(errMsg.contains(expectedErrMsg))
+          }
+          assert(e.getErrorClass === "INTERNAL_ERROR")
+          assert(e.getCause.getMessage.contains(expectedErrMsg))
         }
       }
     }
@@ -784,11 +786,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           // Tet case with keys
           "SELECT k, AVG(a + b), SUM(a + b + c) FROM VALUES((1, 1, 1, 1)) t(k, a, b, c) " +
             "GROUP BY k").foreach { query =>
-          val e = intercept[Exception] {
+          val e = intercept[SparkException] {
             sql(query).collect
           }
-          assert(e.isInstanceOf[IllegalStateException])
-          assert(e.getMessage.contains(expectedErrMsg))
+          assert(e.getErrorClass === "INTERNAL_ERROR")
+          assert(e.getCause.getMessage.contains(expectedErrMsg))
         }
       }
     }

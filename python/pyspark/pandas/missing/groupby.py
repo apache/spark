@@ -37,6 +37,8 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
 
 
 class MissingPandasLikeDataFrameGroupBy:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Properties
     corr = _unsupported_property("corr")
@@ -50,7 +52,6 @@ class MissingPandasLikeDataFrameGroupBy:
     ngroups = _unsupported_property("ngroups")
     plot = _unsupported_property("plot")
     quantile = _unsupported_property("quantile")
-    skew = _unsupported_property("skew")
     tshift = _unsupported_property("tshift")
 
     # Deprecated properties
@@ -69,6 +70,8 @@ class MissingPandasLikeDataFrameGroupBy:
 
 
 class MissingPandasLikeSeriesGroupBy:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Properties
     corr = _unsupported_property("corr")
@@ -83,7 +86,6 @@ class MissingPandasLikeSeriesGroupBy:
     ngroups = _unsupported_property("ngroups")
     plot = _unsupported_property("plot")
     quantile = _unsupported_property("quantile")
-    skew = _unsupported_property("skew")
     tshift = _unsupported_property("tshift")
 
     # Deprecated properties

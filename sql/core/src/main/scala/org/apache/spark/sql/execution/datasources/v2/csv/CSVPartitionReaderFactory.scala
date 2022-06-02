@@ -36,7 +36,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param dataSchema Schema of CSV files.
  * @param readDataSchema Required data schema in the batch scan.
  * @param partitionSchema Schema of partitions.
- * @param parsedOptions Options for parsing CSV files.
+ * @param options Options for parsing CSV files.
  */
 case class CSVPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -44,25 +44,25 @@ case class CSVPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    parsedOptions: CSVOptions,
+    options: CSVOptions,
     filters: Seq[Filter]) extends FilePartitionReaderFactory {
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
     val actualDataSchema = StructType(
-      dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      dataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
     val actualReadDataSchema = StructType(
-      readDataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      readDataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
     val parser = new UnivocityParser(
       actualDataSchema,
       actualReadDataSchema,
-      parsedOptions,
+      options,
       filters)
-    val schema = if (parsedOptions.columnPruning) actualReadDataSchema else actualDataSchema
+    val schema = if (options.columnPruning) actualReadDataSchema else actualDataSchema
     val isStartOfFile = file.start == 0
     val headerChecker = new CSVHeaderChecker(
-      schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
-    val iter = CSVDataSource(parsedOptions).readFile(
+      schema, options, source = s"CSV file: ${file.filePath}", isStartOfFile)
+    val iter = CSVDataSource(options).readFile(
       conf,
       file,
       parser,

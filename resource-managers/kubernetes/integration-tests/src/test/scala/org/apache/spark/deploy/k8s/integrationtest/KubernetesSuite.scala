@@ -156,8 +156,8 @@ class KubernetesSuite extends SparkFunSuite
       // Try the spark test home
       sys.props("spark.test.home")
     )
-    val sparkDirProp = possible_spark_dirs.filter(x =>
-      new File(Paths.get(x).toFile, "bin/spark-submit").exists).headOption.getOrElse(null)
+    val sparkDirProp = possible_spark_dirs.find(x =>
+      new File(Paths.get(x).toFile, "bin/spark-submit").exists).orNull
     require(sparkDirProp != null,
       s"Spark home directory must be provided in system properties tested $possible_spark_dirs")
     sparkHomeDir = Paths.get(sparkDirProp)
@@ -192,6 +192,12 @@ class KubernetesSuite extends SparkFunSuite
       .set("spark.kubernetes.driver.label.spark-app-locator", appLocator)
       .set("spark.kubernetes.executor.label.spark-app-locator", appLocator)
       .set(NETWORK_AUTH_ENABLED.key, "true")
+    sys.props.get(CONFIG_DRIVER_REQUEST_CORES).map { cpu =>
+      sparkAppConf.set("spark.kubernetes.driver.request.cores", cpu)
+    }
+    sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).map { cpu =>
+      sparkAppConf.set("spark.kubernetes.executor.request.cores", cpu)
+    }
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.createNamespace()
     }

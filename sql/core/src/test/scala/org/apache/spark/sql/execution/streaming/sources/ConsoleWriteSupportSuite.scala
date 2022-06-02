@@ -141,7 +141,7 @@ class ConsoleWriteSupportSuite extends StreamTest {
         .option("numPartitions", "1")
         .option("rowsPerSecond", "5")
         .load()
-        .select(Symbol("value"))
+        .select($"value")
 
       val query = input.writeStream.format("console").trigger(Trigger.Continuous(200)).start()
       assert(query.isActive)

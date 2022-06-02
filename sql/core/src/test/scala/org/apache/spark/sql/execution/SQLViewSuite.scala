@@ -596,7 +596,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       spark.range(10).write.saveAsTable("add_col")
       withView("v") {
         sql("CREATE VIEW v AS SELECT * FROM add_col")
-        spark.range(10).select(Symbol("id"), 'id as Symbol("a"))
+        spark.range(10).select($"id", $"id" as Symbol("a"))
           .write.mode("overwrite").saveAsTable("add_col")
         checkAnswer(sql("SELECT * FROM v"), spark.range(10).toDF())
       }
@@ -897,7 +897,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[ArithmeticException] {
               sql("SELECT * FROM v5").collect()
             }.getMessage
-            assert(e.contains("divide by zero"))
+            assert(e.contains("Division by zero"))
           }
         }
 
@@ -907,7 +907,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         val e = intercept[ArithmeticException] {
           sql("SELECT * FROM v1").collect()
         }.getMessage
-        assert(e.contains("divide by zero"))
+        assert(e.contains("Division by zero"))
       }
     }
   }

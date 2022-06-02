@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, Decimal, IntegerType}
 
@@ -419,6 +420,21 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     }
   }
 
+  test("SPARK-38333: PlanExpression expression should skip addExprTree function in Executor") {
+    try {
+      // suppose we are in executor
+      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, null, null, cpus = 0)
+      TaskContext.setTaskContext(context1)
+
+      val equivalence = new EquivalentExpressions
+      val expression = DynamicPruningExpression(Exists(LocalRelation()))
+      equivalence.addExprTree(expression)
+      assert(equivalence.getExprState(expression).isEmpty)
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
   test("SPARK-35886: PromotePrecision should not overwrite genCode") {
     val p = PromotePrecision(Literal(Decimal("10.1")))
 
@@ -430,6 +446,20 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     // Decimal `Literal` will add the value by `addReferenceObj`.
     // So if `p` is replaced by subexpression, the literal will be reused.
     assert(code.value.toString == "((Decimal) references[0] /* literal */)")
+  }
+
+  test("SPARK-39040: Respect NaNvl in EquivalentExpressions for expression elimination") {
+    val add = Add(Literal(1), Literal(0))
+    val n1 = NaNvl(Literal(1.0d), Add(add, add))
+    val e1 = new EquivalentExpressions
+    e1.addExprTree(n1)
+    assert(e1.getCommonSubexpressions.isEmpty)
+
+    val n2 = NaNvl(add, add)
+    val e2 = new EquivalentExpressions
+    e2.addExprTree(n2)
+    assert(e2.getCommonSubexpressions.size == 1)
+    assert(e2.getCommonSubexpressions.head == add)
   }
 }
 

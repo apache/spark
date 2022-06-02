@@ -111,11 +111,6 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def keys(): Iterator[InternalRow]
 
   /**
-   * Returns the average number of hash probes per key lookup.
-   */
-  def getAvgHashProbesPerKey(): Double
-
-  /**
    * Returns a read-only copy of this, to be safely used in current thread.
    */
   def asReadOnlyCopy(): HashedRelation
@@ -225,8 +220,6 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
-
-  override def getAvgHashProbesPerKey(): Double = binaryMap.getAvgHashProbesPerKey
 
   // re-used in get()/getValue()/getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
   var resultRow = new UnsafeRow(numFields)
@@ -575,12 +568,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   // The number of unique keys.
   private var numKeys = 0L
 
-  // The number of hash probes for keys.
-  private var numProbes = 0L
-
-  // The number of keys lookups.
-  private var numKeyLookups = 0L
-
   // needed by serializer
   def this() = {
     this(
@@ -630,11 +617,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   def getTotalMemoryConsumption: Long = array.length * 8L + page.length * 8L
 
   /**
-   * Returns the average number of hash probes per key lookup.
-   */
-  def getAvgHashProbesPerKey: Double = (1.0 * numProbes) / numKeyLookups
-
-  /**
    * Returns the first slot of array that store the keys (sparse mode).
    */
   private def firstSlot(key: Long): Int = {
@@ -668,9 +650,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    * Returns the single UnsafeRow for given key, or null if not found.
    */
   def getValue(key: Long, resultRow: UnsafeRow): UnsafeRow = {
-    numKeyLookups += 1
     if (isDense) {
-      numProbes += 1
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
         if (value > 0) {
@@ -678,14 +658,12 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
         }
       }
     } else {
-      numProbes += 1
       var pos = firstSlot(key)
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return getRow(array(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
-        numProbes += 1
       }
     }
     null
@@ -712,9 +690,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    * Returns an iterator for all the values for the given key, or null if no value found.
    */
   def get(key: Long, resultRow: UnsafeRow): Iterator[UnsafeRow] = {
-    numKeyLookups += 1
     if (isDense) {
-      numProbes += 1
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
         if (value > 0) {
@@ -722,14 +698,12 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
         }
       }
     } else {
-      numProbes += 1
       var pos = firstSlot(key)
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return valueIter(array(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
-        numProbes += 1
       }
     }
     null
@@ -808,13 +782,10 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    * Update the address in array for given key.
    */
   private def updateIndex(key: Long, address: Long): Unit = {
-    numKeyLookups += 1
-    numProbes += 1
     var pos = firstSlot(key)
     assert(numKeys < array.length / 2)
     while (array(pos) != key && array(pos + 1) != 0) {
       pos = nextSlot(pos)
-      numProbes += 1
     }
     if (array(pos + 1) == 0) {
       // this is the first value for this key, put the address in array.
@@ -1017,8 +988,6 @@ class LongHashedRelation(
 
   override def estimatedSize: Long = map.getTotalMemoryConsumption
 
-  override def getAvgHashProbesPerKey(): Double = map.getAvgHashProbesPerKey
-
   override def get(key: InternalRow): Iterator[InternalRow] = {
     if (key.isNullAt(0)) {
       null
@@ -1136,8 +1105,6 @@ case object EmptyHashedRelation extends HashedRelation {
   override def close(): Unit = {}
 
   override def estimatedSize: Long = 0
-
-  override def getAvgHashProbesPerKey(): Double = 0
 }
 
 /**
@@ -1164,8 +1131,6 @@ case object HashedRelationWithAllNullKeys extends HashedRelation {
   override def close(): Unit = {}
 
   override def estimatedSize: Long = 0
-
-  override def getAvgHashProbesPerKey(): Double = 0
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */

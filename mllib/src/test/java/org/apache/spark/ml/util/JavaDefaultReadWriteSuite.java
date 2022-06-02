@@ -49,13 +49,7 @@ public class JavaDefaultReadWriteSuite extends SharedSparkSession {
     instance.set(instance.intParam(), 2);
     String outputPath = new File(tempDir, uid).getPath();
     instance.save(outputPath);
-    try {
-      instance.save(outputPath);
-      Assert.fail(
-        "Write without overwrite enabled should fail if the output directory already exists.");
-    } catch (IOException e) {
-      // expected
-    }
+    Assert.assertThrows(IOException.class, () -> instance.save(outputPath));
     instance.write().session(spark).overwrite().save(outputPath);
     MyParams newInstance = MyParams.load(outputPath);
     Assert.assertEquals("UID should match.", instance.uid(), newInstance.uid());

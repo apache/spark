@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
@@ -80,7 +80,7 @@ case class DataSourceV2Relation(
         s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {
       // when not testing, return stats because bad stats are better than failing a query
-      table.asReadable.newScanBuilder(options) match {
+      table.asReadable.newScanBuilder(options).build() match {
         case r: SupportsReportStatistics =>
           val statistics = r.estimateStatistics()
           DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
@@ -113,11 +113,14 @@ case class DataSourceV2Relation(
  * @param relation a [[DataSourceV2Relation]]
  * @param scan a DSv2 [[Scan]]
  * @param output the output attributes of this relation
+ * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
+ *                               rows in the scan across different partitions
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
     scan: Scan,
-    output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
+    output: Seq[AttributeReference],
+    keyGroupedPartitioning: Option[Seq[Expression]] = None) extends LeafNode with NamedRelation {
 
   override def name: String = relation.table.name()
 

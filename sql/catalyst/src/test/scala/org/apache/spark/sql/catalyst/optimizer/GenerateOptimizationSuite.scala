@@ -36,12 +36,12 @@ class GenerateOptimizationSuite extends PlanTest {
   }
 
   private val item = StructType.fromDDL("item_id int, item_data string, item_price int")
-  private val relation = LocalRelation('items.array(item))
+  private val relation = LocalRelation($"items".array(item))
 
   test("Prune unnecessary field on Explode from count-only aggregate") {
     val query = relation
-      .generate(Explode('items), outputNames = Seq("explode"))
-      .select('explode)
+      .generate(Explode($"items"), outputNames = Seq("explode"))
+      .select($"explode")
       .groupBy()(count(1))
       .analyze
 
@@ -51,7 +51,7 @@ class GenerateOptimizationSuite extends PlanTest {
 
     val expected = relation
       .select(
-        'items.getField("item_id").as(aliases(0)))
+        $"items".getField("item_id").as(aliases(0)))
       .generate(Explode($"${aliases(0)}"),
         unrequiredChildIndex = Seq(0),
         outputNames = Seq("explode"))
@@ -63,17 +63,17 @@ class GenerateOptimizationSuite extends PlanTest {
 
   test("Do not prune field from Explode if the struct is needed") {
     val query = relation
-      .generate(Explode('items), outputNames = Seq("explode"))
-      .select('explode)
-      .groupBy()(count(1), collectList('explode))
+      .generate(Explode($"items"), outputNames = Seq("explode"))
+      .select($"explode")
+      .groupBy()(count(1), collectList($"explode"))
       .analyze
 
     val optimized = Optimize.execute(query)
 
     val expected = relation
-      .generate(Explode('items), unrequiredChildIndex = Seq(0), outputNames = Seq("explode"))
-      .select('explode)
-      .groupBy()(count(1), collectList('explode))
+      .generate(Explode($"items"), unrequiredChildIndex = Seq(0), outputNames = Seq("explode"))
+      .select($"explode")
+      .groupBy()(count(1), collectList($"explode"))
       .analyze
 
     comparePlans(optimized, expected)

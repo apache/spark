@@ -40,7 +40,7 @@ class OptimizeInSuite extends PlanTest {
         OptimizeIn) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
   test("OptimizedIn test: Remove deterministic repetitions") {
     val originalQuery =

@@ -285,7 +285,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     knownExecs ++= Set("1", "2", "3")
 
     val execInfoRp1 = new ExecutorInfo("host1", 1, Map.empty,
-      Map.empty, Map.empty, 1)
+      Map.empty, Map.empty, 1, None, None)
 
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", execInfo))
@@ -493,7 +493,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
       speculative: Boolean = false,
       duration: Long = -1L): TaskInfo = {
     val start = if (duration > 0) clock.getTimeMillis() - duration else clock.getTimeMillis()
-    val task = new TaskInfo(id, id, 1, start, execId, "foo.example.com",
+    val task = new TaskInfo(
+      id, id, 1, id, start, execId, "foo.example.com",
       TaskLocality.PROCESS_LOCAL, speculative)
     if (duration > 0) {
       task.markFinished(TaskState.FINISHED, math.max(1, clock.getTimeMillis()))

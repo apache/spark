@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedDBObjectName, UnresolvedFunc}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -94,7 +94,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           SetCommand(Some("-v" -> None))
         case s if s.isEmpty =>
           SetCommand(None)
-        case _ => throw QueryParsingErrors.unexpectedFomatForSetConfigurationError(ctx)
+        case _ => throw QueryParsingErrors.unexpectedFormatForSetConfigurationError(ctx)
       }
     }
   }
@@ -563,14 +563,13 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       if (functionIdentifier.length > 2) {
-        throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier.quoted, ctx)
+        throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
       } else if (functionIdentifier.length == 2) {
         // Temporary function names should not contain database prefix like "database.function"
         throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
       }
       CreateFunctionCommand(
-        None,
-        functionIdentifier.last,
+        FunctionIdentifier(functionIdentifier.last),
         string(ctx.className),
         resources.toSeq,
         true,
@@ -595,8 +594,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.invalidNameForDropTempFunc(functionName, ctx)
       }
       DropFunctionCommand(
-        databaseName = None,
-        functionName = functionName.head,
+        identifier = FunctionIdentifier(functionName.head),
         ifExists = ctx.EXISTS != null,
         isTemp = true)
     } else {

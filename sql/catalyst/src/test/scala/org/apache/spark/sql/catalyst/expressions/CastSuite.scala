@@ -592,15 +592,15 @@ class CastSuite extends CastSuiteBase {
       val e1 = intercept[ArithmeticException] {
         Cast(Literal(Byte.MaxValue + 1), ByteType).eval()
       }.getMessage
-      assert(e1.contains("Casting 128 to tinyint causes overflow"))
+      assert(e1.contains("The value 128 of the type \"INT\" cannot be cast to \"TINYINT\""))
       val e2 = intercept[ArithmeticException] {
         Cast(Literal(Short.MaxValue + 1), ShortType).eval()
       }.getMessage
-      assert(e2.contains("Casting 32768 to smallint causes overflow"))
+      assert(e2.contains("The value 32768 of the type \"INT\" cannot be cast to \"SMALLINT\""))
       val e3 = intercept[ArithmeticException] {
         Cast(Literal(Int.MaxValue + 1L), IntegerType).eval()
       }.getMessage
-      assert(e3.contains("Casting 2147483648 to int causes overflow"))
+      assert(e3.contains("The value 2147483648L of the type \"BIGINT\" cannot be cast to \"INT\""))
     }
   }
 
@@ -617,6 +617,10 @@ class CastSuite extends CastSuiteBase {
 
   test("SPARK-36286: invalid string cast to timestamp") {
     checkEvaluation(cast(Literal("2015-03-18T"), TimestampType), null)
+  }
+
+  private def castOverflowErrMsg(targetType: DataType): String = {
+    s"""cannot be cast to "${targetType.sql}" due to an overflow."""
   }
 
   test("SPARK-36924: Cast DayTimeIntervalType to IntegralType") {
@@ -642,15 +646,15 @@ class CastSuite extends CastSuiteBase {
           checkEvaluation(cast(v2, LongType), 25L)
         case MINUTE =>
           checkExceptionInExpression[ArithmeticException](cast(v2, ByteType),
-            s"Casting $v2 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkEvaluation(cast(v2, ShortType), (MINUTES_PER_HOUR * 25 + 1).toShort)
           checkEvaluation(cast(v2, IntegerType), (MINUTES_PER_HOUR * 25 + 1).toInt)
           checkEvaluation(cast(v2, LongType), MINUTES_PER_HOUR * 25 + 1)
         case SECOND =>
           checkExceptionInExpression[ArithmeticException](cast(v2, ByteType),
-            s"Casting $v2 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkExceptionInExpression[ArithmeticException](cast(v2, ShortType),
-            s"Casting $v2 to smallint causes overflow")
+            castOverflowErrMsg(ShortType))
           checkEvaluation(cast(v2, IntegerType), num.toInt)
           checkEvaluation(cast(v2, LongType), num)
       }
@@ -659,34 +663,34 @@ class CastSuite extends CastSuiteBase {
       dt.endField match {
         case DAY =>
           checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
-            s"Casting $v3 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
-            s"Casting $v3 to smallint causes overflow")
+            castOverflowErrMsg(ShortType))
           checkEvaluation(cast(v3, IntegerType), (Long.MaxValue / MICROS_PER_DAY).toInt)
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_DAY)
         case HOUR =>
           checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
-            s"Casting $v3 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
-            s"Casting $v3 to smallint causes overflow")
+            castOverflowErrMsg(ShortType))
           checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
-            s"Casting $v3 to int causes overflow")
+            castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_HOUR)
         case MINUTE =>
           checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
-            s"Casting $v3 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
-            s"Casting $v3 to smallint causes overflow")
+            castOverflowErrMsg(ShortType))
           checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
-            s"Casting $v3 to int causes overflow")
+            castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_MINUTE)
         case SECOND =>
           checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
-            s"Casting $v3 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
-            s"Casting $v3 to smallint causes overflow")
+            castOverflowErrMsg(ShortType))
           checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
-            s"Casting $v3 to int causes overflow")
+            castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_SECOND)
       }
 
@@ -694,34 +698,34 @@ class CastSuite extends CastSuiteBase {
       dt.endField match {
         case DAY =>
           checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
-            s"Casting $v4 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
-            s"Casting $v4 to smallint causes overflow")
+            castOverflowErrMsg(ShortType))
           checkEvaluation(cast(v4, IntegerType), (Long.MinValue / MICROS_PER_DAY).toInt)
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_DAY)
         case HOUR =>
           checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
-            s"Casting $v4 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
-            s"Casting $v4 to smallint causes overflow")
+            castOverflowErrMsg(ShortType))
           checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
-            s"Casting $v4 to int causes overflow")
+            castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_HOUR)
         case MINUTE =>
           checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
-            s"Casting $v4 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
-            s"Casting $v4 to smallint causes overflow")
+            castOverflowErrMsg(ShortType))
           checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
-            s"Casting $v4 to int causes overflow")
+            castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_MINUTE)
         case SECOND =>
           checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
-            s"Casting $v4 to tinyint causes overflow")
+            castOverflowErrMsg(ByteType))
           checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
-            s"Casting $v4 to smallint causes overflow")
+            castOverflowErrMsg(ShortType))
           checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
-            s"Casting $v4 to int causes overflow")
+            castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_SECOND)
       }
     }
@@ -773,7 +777,14 @@ class CastSuite extends CastSuiteBase {
 
     Seq(
       (Int.MaxValue, DayTimeIntervalType(DAY)),
-      (Int.MinValue, DayTimeIntervalType(DAY)),
+      (Int.MinValue, DayTimeIntervalType(DAY))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
+          castOverflowErrMsg(toType))
+    }
+
+    Seq(
       (Long.MaxValue, DayTimeIntervalType(DAY)),
       (Long.MinValue, DayTimeIntervalType(DAY)),
       (Long.MaxValue, DayTimeIntervalType(HOUR)),
@@ -785,7 +796,7 @@ class CastSuite extends CastSuiteBase {
     ).foreach {
       case (v, toType) =>
         checkExceptionInExpression[ArithmeticException](cast(v, toType),
-          s"Casting $v to ${toType.catalogString} causes overflow")
+          castOverflowErrMsg(toType))
     }
   }
 
@@ -822,7 +833,7 @@ class CastSuite extends CastSuiteBase {
       case (v, dt, toType) =>
         val value = Literal.create(v, dt)
         checkExceptionInExpression[ArithmeticException](cast(value, toType),
-          s"Casting $value to ${toType.catalogString} causes overflow")
+          castOverflowErrMsg(toType))
     }
 
     Seq(
@@ -876,7 +887,14 @@ class CastSuite extends CastSuiteBase {
 
     Seq(
       (Int.MaxValue, YearMonthIntervalType(YEAR)),
-      (Int.MinValue, YearMonthIntervalType(YEAR)),
+      (Int.MinValue, YearMonthIntervalType(YEAR))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
+          castOverflowErrMsg(toType))
+    }
+
+    Seq(
       (Long.MaxValue, YearMonthIntervalType(YEAR)),
       (Long.MinValue, YearMonthIntervalType(YEAR)),
       (Long.MaxValue, YearMonthIntervalType(MONTH)),
@@ -884,7 +902,7 @@ class CastSuite extends CastSuiteBase {
     ).foreach {
       case (v, toType) =>
         checkExceptionInExpression[ArithmeticException](cast(v, toType),
-          s"Casting $v to ${toType.catalogString} causes overflow")
+          castOverflowErrMsg(toType))
     }
   }
 }

@@ -109,7 +109,7 @@ case class AnalyzeColumnCommand(
         throw QueryCompilationErrors.analyzeTableNotSupportedOnViewsError()
       }
     } else {
-      val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val (sizeInBytes, _) = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
       val relation = sparkSession.table(tableIdent).logicalPlan
       val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
 

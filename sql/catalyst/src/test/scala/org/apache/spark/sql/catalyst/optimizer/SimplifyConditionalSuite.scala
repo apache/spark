@@ -35,7 +35,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
   }
 
-  private val relation = LocalRelation('a.int, 'b.int, 'c.boolean)
+  private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean)
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, relation).analyze
@@ -126,9 +126,9 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   test("simplify CaseWhen if all the outputs are semantic equivalence") {
     // When the conditions in `CaseWhen` are all deterministic, `CaseWhen` can be removed.
     assertEquivalent(
-      CaseWhen(('a.isNotNull, Subtract(Literal(3), Literal(2))) ::
-        ('b.isNull, Literal(1)) ::
-        (!'c, Add(Literal(6), Literal(-5))) ::
+      CaseWhen(($"a".isNotNull, Subtract(Literal(3), Literal(2))) ::
+        ($"b".isNull, Literal(1)) ::
+        (!$"c", Add(Literal(6), Literal(-5))) ::
         Nil,
         Add(Literal(2), Literal(-1))),
       Literal(1)
@@ -167,19 +167,19 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   }
 
   test("simplify if when one clause is null and another is boolean") {
-    val p = IsNull('a)
+    val p = IsNull($"a")
     val nullLiteral = Literal(null, BooleanType)
     assertEquivalent(If(p, nullLiteral, FalseLiteral), And(p, nullLiteral))
-    assertEquivalent(If(p, nullLiteral, TrueLiteral), Or(IsNotNull('a), nullLiteral))
-    assertEquivalent(If(p, FalseLiteral, nullLiteral), And(IsNotNull('a), nullLiteral))
+    assertEquivalent(If(p, nullLiteral, TrueLiteral), Or(IsNotNull($"a"), nullLiteral))
+    assertEquivalent(If(p, FalseLiteral, nullLiteral), And(IsNotNull($"a"), nullLiteral))
     assertEquivalent(If(p, TrueLiteral, nullLiteral), Or(p, nullLiteral))
 
     // the rule should not apply to nullable predicate
     Seq(TrueLiteral, FalseLiteral).foreach { b =>
-      assertEquivalent(If(GreaterThan('a, 42), nullLiteral, b),
-        If(GreaterThan('a, 42), nullLiteral, b))
-      assertEquivalent(If(GreaterThan('a, 42), b, nullLiteral),
-        If(GreaterThan('a, 42), b, nullLiteral))
+      assertEquivalent(If(GreaterThan($"a", 42), nullLiteral, b),
+        If(GreaterThan($"a", 42), nullLiteral, b))
+      assertEquivalent(If(GreaterThan($"a", 42), b, nullLiteral),
+        If(GreaterThan($"a", 42), b, nullLiteral))
     }
 
     // check evaluation also
@@ -203,10 +203,10 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   test("SPARK-33845: remove unnecessary if when the outputs are boolean type") {
     // verify the boolean equivalence of all transformations involved
     val fields = Seq(
-      'cond.boolean.notNull,
-      'cond_nullable.boolean,
-      'a.boolean,
-      'b.boolean
+      $"cond".boolean.notNull,
+      $"cond_nullable".boolean,
+      $"a".boolean,
+      $"b".boolean
     )
     val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 
@@ -238,7 +238,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
 
   test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
     assertEquivalent(
-      CaseWhen((GreaterThan('a, 1), Literal.create(null, IntegerType)) :: Nil, None),
+      CaseWhen((GreaterThan($"a", 1), Literal.create(null, IntegerType)) :: Nil, None),
       Literal.create(null, IntegerType))
 
     assertEquivalent(
@@ -249,10 +249,10 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
     // verify the boolean equivalence of all transformations involved
     val fields = Seq(
-      'cond.boolean.notNull,
-      'cond_nullable.boolean,
-      'a.boolean,
-      'b.boolean
+      $"cond".boolean.notNull,
+      $"cond_nullable".boolean,
+      $"a".boolean,
+      $"b".boolean
     )
     val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 
@@ -284,13 +284,13 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
 
   test("SPARK-37270: Remove elseValue if it is null Literal") {
     assertEquivalent(
-      CaseWhen((GreaterThan('a, Rand(1)), Literal.create(null, BooleanType)) :: Nil,
+      CaseWhen((GreaterThan($"a", Rand(1)), Literal.create(null, BooleanType)) :: Nil,
         Some(Literal.create(null, BooleanType))),
-      CaseWhen((GreaterThan('a, Rand(1)), Literal.create(null, BooleanType)) :: Nil))
+      CaseWhen((GreaterThan($"a", Rand(1)), Literal.create(null, BooleanType)) :: Nil))
 
     assertEquivalent(
-      CaseWhen((GreaterThan('a, 1), Literal.create(1, IntegerType)) :: Nil,
+      CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil,
         Some(Literal.create(null, IntegerType))),
-      CaseWhen((GreaterThan('a, 1), Literal.create(1, IntegerType)) :: Nil))
+      CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil))
   }
 }

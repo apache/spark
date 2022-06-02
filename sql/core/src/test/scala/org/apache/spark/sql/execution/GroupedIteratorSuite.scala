@@ -32,7 +32,7 @@ class GroupedIteratorSuite extends SparkFunSuite {
     val fromRow = encoder.createDeserializer()
     val input = Seq(Row(1, "a"), Row(1, "b"), Row(2, "c"))
     val grouped = GroupedIterator(input.iterator.map(toRow),
-      Seq(Symbol("i").int.at(0)), schema.toAttributes)
+      Seq($"i".int.at(0)), schema.toAttributes)
 
     val result = grouped.map {
       case (key, data) =>
@@ -59,7 +59,7 @@ class GroupedIteratorSuite extends SparkFunSuite {
       Row(3, 2L, "e"))
 
     val grouped = GroupedIterator(input.iterator.map(toRow),
-      Seq(Symbol("i").int.at(0), Symbol("l").long.at(1)), schema.toAttributes)
+      Seq($"i".int.at(0), $"l".long.at(1)), schema.toAttributes)
 
     val result = grouped.map {
       case (key, data) =>
@@ -80,7 +80,7 @@ class GroupedIteratorSuite extends SparkFunSuite {
     val toRow = encoder.createSerializer()
     val input = Seq(Row(1, "a"), Row(1, "b"), Row(2, "c"))
     val grouped = GroupedIterator(input.iterator.map(toRow),
-      Seq(Symbol("i").int.at(0)), schema.toAttributes)
+      Seq($"i".int.at(0)), schema.toAttributes)
 
     assert(grouped.length == 2)
   }

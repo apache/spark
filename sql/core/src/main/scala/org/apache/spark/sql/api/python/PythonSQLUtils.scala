@@ -19,21 +19,32 @@ package org.apache.spark.sql.api.python
 
 import java.io.InputStream
 import java.nio.channels.Channels
+import java.util.Locale
+
+import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDDServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{CastTimestampNTZToLong, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 private[sql] object PythonSQLUtils extends Logging {
+  private lazy val internalRowPickler = {
+    EvaluatePython.registerPicklers()
+    new Pickler(true, false)
+  }
+
   def parseDataType(typeText: String): DataType = CatalystSqlParser.parseDataType(typeText)
 
   // This is needed when generating SQL documentation for built-in functions.
@@ -54,6 +65,9 @@ private[sql] object PythonSQLUtils extends Logging {
   def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
     listAllSQLConfigs().filter(p => SQLConf.isStaticConfigKey(p._1)).toArray
   }
+
+  def isTimestampNTZPreferred: Boolean =
+    SQLConf.get.timestampType == org.apache.spark.sql.types.TimestampNTZType
 
   /**
    * Python callable function to read a file in Arrow stream format and create a [[RDD]]
@@ -78,7 +92,48 @@ private[sql] object PythonSQLUtils extends Logging {
     queryExecution.explainString(ExplainMode.fromString(mode))
   }
 
+  def toPyRow(row: Row): Array[Byte] = {
+    assert(row.isInstanceOf[GenericRowWithSchema])
+    internalRowPickler.dumps(EvaluatePython.toJava(
+      CatalystTypeConverters.convertToCatalyst(row), row.schema))
+  }
+
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
+
+  def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
+    Column(EWM(e.expr, alpha, ignoreNA))
+
+  def lastNonNull(e: Column): Column = Column(LastNonNull(e.expr))
+
+  def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
+
+  def makeInterval(unit: String, e: Column): Column = {
+    val zero = MakeInterval(years = Literal(0), months = Literal(0), weeks = Literal(0),
+      days = Literal(0), hours = Literal(0), mins = Literal(0), secs = Literal(0))
+
+    unit.toUpperCase(Locale.ROOT) match {
+      case "YEAR" => Column(zero.copy(years = e.expr))
+      case "MONTH" => Column(zero.copy(months = e.expr))
+      case "WEEK" => Column(zero.copy(weeks = e.expr))
+      case "DAY" => Column(zero.copy(days = e.expr))
+      case "HOUR" => Column(zero.copy(hours = e.expr))
+      case "MINUTE" => Column(zero.copy(mins = e.expr))
+      case "SECOND" => Column(zero.copy(secs = e.expr))
+      case _ => throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
+    }
+  }
+
+  def timestampDiff(unit: String, start: Column, end: Column): Column = {
+    Column(TimestampDiff(unit, start.expr, end.expr))
+  }
+
+  def pandasSkewness(e: Column): Column = {
+    Column(PandasSkewness(e.expr).toAggregateExpression(false))
+  }
+
+  def pandasKurtosis(e: Column): Column = {
+    Column(PandasKurtosis(e.expr).toAggregateExpression(false))
+  }
 }
 
 /**

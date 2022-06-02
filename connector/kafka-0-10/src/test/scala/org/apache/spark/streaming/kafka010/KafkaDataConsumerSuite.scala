@@ -93,7 +93,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
     val kafkaParams = getKafkaParams()
     val key = new CacheKey(groupId, topicPartition)
 
-    val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+    val context1 = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, null, null)
     val consumer1 = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
       topicPartition, kafkaParams, context1, true)
     consumer1.release()
@@ -101,7 +101,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
     assert(KafkaDataConsumer.cache.size() == 1)
     assert(KafkaDataConsumer.cache.get(key).eq(consumer1.internalConsumer))
 
-    val context2 = new TaskContextImpl(0, 0, 0, 0, 1, null, null, null)
+    val context2 = new TaskContextImpl(0, 0, 0, 0, 1, 1, null, null, null)
     val consumer2 = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
       topicPartition, kafkaParams, context2, true)
     consumer2.release()
@@ -126,7 +126,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
     def consume(i: Int): Unit = {
       val useCache = Random.nextBoolean
       val taskContext = if (Random.nextBoolean) {
-        new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), null, null, null)
+        new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), 1, null, null, null)
       } else {
         null
       }

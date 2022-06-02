@@ -23,7 +23,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
@@ -32,10 +34,14 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging {
+class JDBCTableCatalog extends TableCatalog
+  with SupportsNamespaces with FunctionCatalog with Logging {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
   private var catalogName: String = null
   private var options: JDBCOptions = _
   private var dialect: JdbcDialect = _
+  private var functions: Map[String, UnboundFunction] = _
 
   override def name(): String = {
     require(catalogName != null, "The JDBC table catalog is not initialed")
@@ -52,6 +58,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
     // fake value, so that it can pass the check of `JDBCOptions`.
     this.options = new JDBCOptions(map + (JDBCOptions.JDBC_TABLE_NAME -> "__invalid_dbtable"))
     dialect = JdbcDialects.get(this.options.url)
+    functions = dialect.functions.toMap
   }
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
@@ -296,5 +303,25 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
   private def getTableName(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(dialect.quoteIdentifier).mkString(".")
+  }
+
+  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
+    if (namespace.isEmpty) {
+      functions.keys.map(Identifier.of(namespace, _)).toArray
+    } else {
+      Array.empty[Identifier]
+    }
+  }
+
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    if (ident.namespace().nonEmpty) {
+      throw QueryCompilationErrors.noSuchFunctionError(ident.asFunctionIdentifier)
+    }
+    functions.get(ident.name()) match {
+      case Some(func) =>
+        func
+      case _ =>
+        throw new NoSuchFunctionException(ident)
+    }
   }
 }

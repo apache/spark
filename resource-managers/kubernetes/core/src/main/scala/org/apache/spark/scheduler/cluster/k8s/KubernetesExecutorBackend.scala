@@ -66,7 +66,8 @@ private[spark] object KubernetesExecutorBackend extends Logging {
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
       // Debug code
-      Utils.checkHost(arguments.hostname)
+      assert(arguments.hostname != null &&
+          (arguments.hostname.indexOf(':') == -1 || arguments.hostname.split(":").length > 2))
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf

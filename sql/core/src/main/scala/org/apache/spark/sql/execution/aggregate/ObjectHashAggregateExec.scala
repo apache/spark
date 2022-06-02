@@ -143,12 +143,3 @@ case class ObjectHashAggregateExec(
   override protected def withNewChildInternal(newChild: SparkPlan): ObjectHashAggregateExec =
     copy(child = newChild)
 }
-
-object ObjectHashAggregateExec {
-  def supportsAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
-    aggregateExpressions.map(_.aggregateFunction).exists {
-      case _: TypedImperativeAggregate[_] => true
-      case _ => false
-    }
-  }
-}

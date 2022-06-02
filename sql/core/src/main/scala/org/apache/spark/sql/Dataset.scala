@@ -218,7 +218,7 @@ class Dataset[T] private[sql](
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
     val plan = queryExecution.commandExecuted
-    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+    if (sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
       val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
       dsIds.add(id)
       plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
@@ -946,7 +946,21 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Inner equi-join with another `DataFrame` using the given columns.
+   * (Java-specific) Inner equi-join with another `DataFrame` using the given columns. See the
+   * Scala-specific overload for more details.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def join(right: Dataset[_], usingColumns: Array[String]): DataFrame = {
+    join(right, usingColumns.toSeq)
+  }
+
+  /**
+   * (Scala-specific) Inner equi-join with another `DataFrame` using the given columns.
    *
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
@@ -971,9 +985,53 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Equi-join with another `DataFrame` using the given columns. A cross join with a predicate
+   * Equi-join with another `DataFrame` using the given column. A cross join with a predicate
    * is specified as an inner join. If you would explicitly like to perform a cross join use the
    * `crossJoin` method.
+   *
+   * Different from other join functions, the join column will only appear once in the output,
+   * i.e. similar to SQL's `JOIN USING` syntax.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumn Name of the column to join on. This column must exist on both sides.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
+   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
+   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
+   *
+   * @note If you perform a self-join using this function without aliasing the input
+   * `DataFrame`s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def join(right: Dataset[_], usingColumn: String, joinType: String): DataFrame = {
+    join(right, Seq(usingColumn), joinType)
+  }
+
+  /**
+   * (Java-specific) Equi-join with another `DataFrame` using the given columns. See the
+   * Scala-specific overload for more details.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
+   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
+   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def join(right: Dataset[_], usingColumns: Array[String], joinType: String): DataFrame = {
+    join(right, usingColumns.toSeq, joinType)
+  }
+
+  /**
+   * (Scala-specific) Equi-join with another `DataFrame` using the given columns. A cross join
+   * with a predicate is specified as an inner join. If you would explicitly like to perform a
+   * cross join use the `crossJoin` method.
    *
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
@@ -1426,7 +1484,7 @@ class Dataset[T] private[sql](
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
       case a: AttributeReference
-        if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
+        if sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
         val metadata = new MetadataBuilder()
           .withMetadata(a.metadata)
           .putLong(Dataset.DATASET_ID_KEY, id)
@@ -1979,6 +2037,7 @@ class Dataset[T] private[sql](
   * {{{
   *   // Monitor the metrics using a listener.
   *   spark.streams.addListener(new StreamingQueryListener() {
+  *     override def onQueryStarted(event: QueryStartedEvent): Unit = {}
   *     override def onQueryProgress(event: QueryProgressEvent): Unit = {
   *       event.progress.observedMetrics.asScala.get("my_event").foreach { row =>
   *         // Trigger if the number of errors exceeds 5 percent
@@ -1990,8 +2049,7 @@ class Dataset[T] private[sql](
   *         }
   *       }
   *     }
-  *     def onQueryStarted(event: QueryStartedEvent): Unit = {}
-  *     def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+  *     override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
   *   })
   *   // Observe row count (rc) and error row count (erc) in the streaming Dataset
   *   val observed_ds = ds.observe("my_event", count(lit(1)).as("rc"), count($"error").as("erc"))
@@ -2001,6 +2059,7 @@ class Dataset[T] private[sql](
   * @group typedrel
   * @since 3.0.0
   */
+  @varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan)
   }
@@ -2041,6 +2100,16 @@ class Dataset[T] private[sql](
    */
   def limit(n: Int): Dataset[T] = withTypedPlan {
     Limit(Literal(n), logicalPlan)
+  }
+
+  /**
+   * Returns a new Dataset by skipping the first `m` rows.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def offset(n: Int): Dataset[T] = withTypedPlan {
+    Offset(Literal(n), logicalPlan)
   }
 
   /**
@@ -3619,7 +3688,8 @@ class Dataset[T] private[sql](
         fr.inputFiles
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
-      case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _), _, _) =>
+      case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _),
+          _, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray
@@ -3846,12 +3916,15 @@ class Dataset[T] private[sql](
 
   /**
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
-   * user-registered callback functions.
+   * user-registered callback functions, and also to convert asserts/illegal states to
+   * the internal error exception.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(qe, Some(name)) {
-      qe.executedPlan.resetMetrics()
-      action(qe.executedPlan)
+      QueryExecution.withInternalError(s"""The "$name" action failed.""") {
+        qe.executedPlan.resetMetrics()
+        action(qe.executedPlan)
+      }
     }
   }
 

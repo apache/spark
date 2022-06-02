@@ -31,7 +31,8 @@ case class ContinuousScanExec(
     output: Seq[Attribute],
     @transient scan: Scan,
     @transient stream: ContinuousStream,
-    @transient start: Offset) extends DataSourceV2ScanExecBase {
+    @transient start: Offset,
+    keyGroupedPartitioning: Option[Seq[Expression]] = None) extends DataSourceV2ScanExecBase {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
@@ -41,13 +42,14 @@ case class ContinuousScanExec(
 
   override def hashCode(): Int = stream.hashCode()
 
-  override lazy val partitions: Seq[InputPartition] = stream.planInputPartitions(start)
+  override lazy val inputPartitions: Seq[InputPartition] = stream.planInputPartitions(start)
 
   override lazy val readerFactory: ContinuousPartitionReaderFactory = {
     stream.createContinuousReaderFactory()
   }
 
   override lazy val inputRDD: RDD[InternalRow] = {
+    assert(partitions.forall(_.length == 1), "should only contain a single partition")
     EpochCoordinatorRef.get(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       sparkContext.env)
@@ -56,7 +58,7 @@ case class ContinuousScanExec(
       sparkContext,
       conf.continuousStreamingExecutorQueueSize,
       conf.continuousStreamingExecutorPollIntervalMs,
-      partitions,
+      partitions.map(_.head),
       schema,
       readerFactory,
       customMetrics)
