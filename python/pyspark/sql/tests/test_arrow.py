@@ -810,6 +810,8 @@ class RDDBasedArrowTests(ArrowTests):
             super(RDDBasedArrowTests, cls)
             .conf()
             .set("spark.sql.execution.arrow.localRelationThreshold", "0")
+            # to test multiple partitions
+            .set("spark.sql.execution.arrow.maxRecordsPerBatch", "2")
         )
 
 
