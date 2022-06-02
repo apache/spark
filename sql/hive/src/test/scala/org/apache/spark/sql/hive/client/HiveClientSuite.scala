@@ -171,11 +171,12 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
     val uriInCatalog = client.getDatabase("temporary").locationUri
     assert("file" === uriInCatalog.getScheme)
 
-    // Hive support altering database location since HIVE-8472.
     if (version == "3.0" || version == "3.1") {
+      // Hive support altering database location since HIVE-8472
       assert(new Path(tempDatabasePath2.getPath).toUri.getPath === uriInCatalog.getPath,
         "Failed to alter database location")
     } else {
+      // .. otherwise, the command should be non-effective against older versions of Hive
       assert(oldDatabasePath === uriInCatalog.getPath, "Expected database location to be unchanged")
     }
   }
