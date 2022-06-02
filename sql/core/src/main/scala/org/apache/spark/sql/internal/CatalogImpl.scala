@@ -148,7 +148,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         new Table(
           name = t.identifier.name(),
           catalog = t.catalog.name(),
-          qualifier = t.identifier.namespace(),
+          namespace = t.identifier.namespace(),
           description = t.table.properties().get("comment"),
           tableType =
             if (isExternal) CatalogTableType.EXTERNAL.name
@@ -158,7 +158,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         new Table(
           name = v.identifier.name(),
           catalog = null,
-          qualifier = v.identifier.namespace(),
+          namespace = v.identifier.namespace(),
           description = null,
           tableType = if (v.isTemp) "TEMPORARY" else "VIEW",
           isTemporary = v.isTemp)

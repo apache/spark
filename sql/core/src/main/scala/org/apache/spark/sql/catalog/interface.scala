@@ -56,7 +56,7 @@ class Database(
  *
  * @param name name of the table.
  * @param catalog name of the catalog that the table belongs to.
- * @param qualifier qualifier of the namespace that the table belongs to.
+ * @param namespace qualifier of the namespace that the table belongs to.
  * @param description description of the table.
  * @param tableType type of the table (e.g. view, table).
  * @param isTemporary whether the table is a temporary table.
@@ -66,7 +66,7 @@ class Database(
 class Table(
     val name: String,
     @Nullable val catalog: String,
-    @Nullable val qualifier: Array[String],
+    @Nullable val namespace: Array[String],
     @Nullable val description: String,
     val tableType: String,
     val isTemporary: Boolean)
@@ -78,12 +78,12 @@ class Table(
   }
 
   def database: String = {
-    if (qualifier == null) {
+    if (namespace == null) {
       null
-    } else if (qualifier.length == 2) {
-      qualifier(1)
-    } else if (qualifier.length == 1) {
-      qualifier(0)
+    } else if (namespace.length == 2) {
+      namespace(1)
+    } else if (namespace.length == 1) {
+      namespace(0)
     } else {
       null
     }
