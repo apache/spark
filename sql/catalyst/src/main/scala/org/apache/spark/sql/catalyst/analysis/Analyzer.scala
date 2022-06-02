@@ -1070,7 +1070,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupRelation(u).map(resolveViews).getOrElse(u)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
-          if timestamp.forall(_.resolved) =>
+          if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
         lookupRelation(u, TimeTravelSpec.create(timestamp, version, conf)).getOrElse(r)
 
       case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
@@ -2494,6 +2494,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q)
+      case r: RelationTimeTravel =>
+        resolveSubQueries(r, r)
       case j: Join if j.childrenResolved && j.duplicateResolved =>
         resolveSubQueries(j, j)
       case s: SupportsSubquery if s.childrenResolved =>
