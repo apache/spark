@@ -2,6 +2,7 @@
 CREATE OR REPLACE TEMPORARY VIEW aggr AS SELECT * FROM VALUES
 (0, 0), (0, 10), (0, 20), (0, 30), (0, 40), (1, 10), (1, 20), (2, 10), (2, 20), (2, 25), (2, 30), (3, 60), (4, null)
 AS aggr(k, v);
+
 CREATE OR REPLACE TEMPORARY VIEW basic_pays AS SELECT * FROM VALUES
 ('Diane Murphy','Accounting',8435),
 ('Mary Patterson','Accounting',9998),
@@ -26,6 +27,7 @@ SELECT
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
 FROM aggr;
+
 SELECT
   k,
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
@@ -38,6 +40,7 @@ SELECT
   percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
   percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
 FROM aggr;
+
 SELECT
   k,
   percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
@@ -51,6 +54,7 @@ SELECT
   percentile(v, 0.5),
   percentile_cont(0.5) WITHIN GROUP (ORDER BY v)
 FROM aggr;
+
 SELECT
   k,
   median(v),
