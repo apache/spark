@@ -701,7 +701,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
-  private def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+  def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
         query: LogicalPlan, agg: Aggregate): Unit = {
