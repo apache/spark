@@ -82,8 +82,10 @@ object ShuffleTestAccessor {
     new RemoteBlockPushResolver(transportConf, file) {
       override private[shuffle] def closeAndDeletePartitionFilesIfNeeded(
           appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo,
-          cleanupLocalDirs: Boolean): Unit = {
-        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs)
+          cleanupLocalDirs: Boolean,
+          cleanupDB: Boolean): Unit = {
+        super.closeAndDeletePartitionFilesOrDBIfNeeded(
+          appShuffleInfo, cleanupLocalDirs, cleanupDB)
         semaphore.release()
       }
     }
@@ -149,7 +151,7 @@ object ShuffleTestAccessor {
   def reloadAppShuffleInfo(
       mergeMgr: RemoteBlockPushResolver, db: DB): ConcurrentMap[String, AppShuffleInfo] = {
     mergeMgr.appsShuffleInfo.clear()
-    mergeMgr.reloadAppShuffleInfo(db)
+    mergeMgr.reloadAndCleanUpAppShuffleInfo(db)
     mergeMgr.appsShuffleInfo
   }
 

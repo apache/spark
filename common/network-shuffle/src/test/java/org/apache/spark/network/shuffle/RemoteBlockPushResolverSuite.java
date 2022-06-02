@@ -898,10 +898,12 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitionFilesIfNeeded(
+      void closeAndDeletePartitionFilesOrDBIfNeeded(
         AppShuffleInfo appShuffleInfo,
-        boolean cleanupLocalDirs) {
-        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
+        boolean cleanupLocalDirs,
+        boolean cleanupDB) {
+        super.closeAndDeletePartitionFilesOrDBIfNeeded(
+            appShuffleInfo, cleanupLocalDirs, cleanupDB);
         closed.release();
       }
     };
@@ -995,10 +997,12 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitionFilesIfNeeded(
+      void closeAndDeletePartitionFilesOrDBIfNeeded(
           AppShuffleInfo appShuffleInfo,
-          boolean cleanupLocalDirs) {
-        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
+          boolean cleanupLocalDirs,
+          boolean cleanupDB) {
+        super.closeAndDeletePartitionFilesOrDBIfNeeded(
+            appShuffleInfo, cleanupLocalDirs, cleanupDB);
         closed.release();
       }
     };
@@ -1332,8 +1336,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       AppShufflePartitionInfo newAppShufflePartitionInfo(
-          String appId,
-          int attemptId,
+          AppShuffleInfo appShuffleInfo,
           int shuffleId,
           int shuffleMergeId,
           int reduceId,
@@ -1347,7 +1350,7 @@ public class RemoteBlockPushResolverSuite {
           new TestMergeShuffleFile(metaFile, append) :
             new MergeShuffleFile(metaFile);
         return new AppShufflePartitionInfo(
-            new AppAttemptShuffleMergeId(appId, attemptId, shuffleId, shuffleMergeId), reduceId,
+            new AppAttemptShuffleMergeId(appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId), reduceId,
             dataFile, mergedIndexFile, mergedMetaFile);
       }
     };
