@@ -50,6 +50,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Boolean]("dataTypeMismatchError")
 
+  val DATA_TYPE_MISMATCH_ERROR_MESSAGE = TreeNodeTag[String]("dataTypeMismatchError")
+
   protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
   }
@@ -174,7 +176,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
         }
 
-        getAllExpressions(operator).foreach(_.foreachUp {
+        val expressions = getAllExpressions(operator)
+
+        expressions.foreach(_.foreachUp {
+          case e: Expression =>
+            e.getTagValue(DATA_TYPE_MISMATCH_ERROR_MESSAGE) match {
+              case Some(message) =>
+                e.failAnalysis(s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
+                  extraHintForAnsiTypeCoercionExpression(operator))
+              case _ =>
+            }
+          case _ =>
+        })
+
+        expressions.foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             val missingCol = a.sql
             val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
