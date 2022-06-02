@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command.v1
 
 /**
@@ -27,15 +28,14 @@ class AlterNamespaceSetLocationSuite extends v1.AlterNamespaceSetLocationSuiteBa
     with CommandSuiteBase {
   override def commandVersion: String = super[AlterNamespaceSetLocationSuiteBase].commandVersion
 
-  test("Hive catalog not supported by the built-in Hive client") {
+  test("Hive catalog not supported") {
     val ns = s"$catalog.$namespace"
     withNamespace(ns) {
-      sql(s"CREATE NAMESPACE $ns LOCATION '/tmp/loc_1'")
-      sql(s"ALTER DATABASE $ns SET LOCATION '/tmp/loc_2'")
-
-      // Location should remain the same since the built-in Hive version doesn't support changing
-      // database location
-      assert(getLocation(ns).contains("/tmp/loc_1"))
+      sql(s"CREATE NAMESPACE $ns")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER DATABASE $ns SET LOCATION 'loc'")
+      }
+      assert(e.getMessage.contains("does not support altering database location"))
     }
   }
 }

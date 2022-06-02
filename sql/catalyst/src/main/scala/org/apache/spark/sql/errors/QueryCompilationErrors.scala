@@ -1628,6 +1628,10 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"$tableIdentifier should be converted to HadoopFsRelation.")
   }
 
+  def alterDatabaseLocationUnsupportedError(): Throwable = {
+    new AnalysisException(s"Hive metastore does not support altering database location")
+  }
+
   def hiveTableTypeUnsupportedError(tableType: String): Throwable = {
     new AnalysisException(s"Hive $tableType is not supported.")
   }
