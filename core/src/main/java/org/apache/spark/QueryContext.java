@@ -35,7 +35,7 @@ public interface QueryContext {
     // For example, it can be the name of a "VIEW".
     String objectName();
 
-    // The starting index in the SQL query which throws the exception.
+    // The starting index in the SQL query text which throws the exception.
     // Note the index starts from 0.
     int startIndex();
 
