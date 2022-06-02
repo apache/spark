@@ -2466,7 +2466,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
   test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
     val unsupported = "does not support assigning DEFAULT column values"
     assert(intercept[AnalysisException] {
-      sql(s"create table t(a string) using avro")
+      sql(s"create table t(a string default 'abc') using avro")
     }.getMessage.contains(unsupported))
     assert(intercept[AnalysisException] {
       sql(s"create table t(a string) using parquet")
