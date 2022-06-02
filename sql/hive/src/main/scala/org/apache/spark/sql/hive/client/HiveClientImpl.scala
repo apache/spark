@@ -355,12 +355,6 @@ private[hive] class HiveClientImpl(
   }
 
   override def alterDatabase(database: CatalogDatabase): Unit = withHiveState {
-    if (!getDatabase(database.name).locationUri.equals(database.locationUri)) {
-      // SPARK-29260: Enable supported versions once it support altering database location.
-      if (!(version.equals(hive.v3_0) || version.equals(hive.v3_1))) {
-        throw QueryCompilationErrors.alterDatabaseLocationUnsupportedError(version.fullVersion)
-      }
-    }
     val hiveDb = toHiveDatabase(database)
     shim.alterDatabase(client, database.name, hiveDb)
   }

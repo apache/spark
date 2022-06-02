@@ -165,19 +165,18 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
     assert(client.getDatabase("temporary").properties.contains("flag"))
 
     // test alter database location
+    val oldDatabasePath = database.locationUri.getPath
     val tempDatabasePath2 = Utils.createTempDir().toURI
+    client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
+    val uriInCatalog = client.getDatabase("temporary").locationUri
+    assert("file" === uriInCatalog.getScheme)
+
     // Hive support altering database location since HIVE-8472.
     if (version == "3.0" || version == "3.1") {
-      client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
-      val uriInCatalog = client.getDatabase("temporary").locationUri
-      assert("file" === uriInCatalog.getScheme)
       assert(new Path(tempDatabasePath2.getPath).toUri.getPath === uriInCatalog.getPath,
         "Failed to alter database location")
     } else {
-      val e = intercept[AnalysisException] {
-        client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
-      }
-      assert(e.getMessage.contains("does not support altering database location"))
+      assert(oldDatabasePath === uriInCatalog.getPath, "Expected database location to be unchanged")
     }
   }
 
