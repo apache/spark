@@ -195,7 +195,7 @@ abstract class BaseSessionStateBuilder(
       DetectAmbiguousSelfJoin +:
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
-        DataSourceAnalysis(session) +:
+        DataSourceAnalysis(this) +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules
 

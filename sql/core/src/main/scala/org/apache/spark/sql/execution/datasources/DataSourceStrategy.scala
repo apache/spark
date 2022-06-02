@@ -61,7 +61,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-case class DataSourceAnalysis(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
 
   def resolver: Resolver = conf.resolver
 
@@ -147,11 +147,11 @@ case class DataSourceAnalysis(sparkSession: SparkSession) extends Rule[LogicalPl
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
-      if (sparkSession != null) {
-        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          sparkSession.sessionState.analyzer, tableDesc.schema, "CREATE TABLE")
-      }
-      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+      val newTableDesc: CatalogTable =
+        tableDesc.copy(schema =
+          ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
+            analyzer, tableDesc.schema, "CREATE TABLE"))
+      CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
