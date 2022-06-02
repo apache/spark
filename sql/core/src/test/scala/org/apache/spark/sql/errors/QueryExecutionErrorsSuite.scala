@@ -498,12 +498,11 @@ class QueryExecutionErrorsSuite
       val e = intercept[SparkClassNotFoundException] {
         sql("CREATE TABLE student (id INT, name STRING, age INT) USING org.apache.spark.sql.fake")
       }
-      checkErrorClass(
+      checkError(
         exception = e,
         errorClass = "INCOMPATIBLE_DATASOURCE_REGISTER",
-        msg = "Detected an incompatible DataSourceRegister. Please remove the incompatible library " +
-          "from classpath or upgrade it. Error: Illegal configuration-file syntax: " +
-          "META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")
+        parameters = Map("message" -> ("Illegal configuration-file syntax: " +
+          "META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")))
     }
   }
 
@@ -576,12 +575,13 @@ class QueryExecutionErrorsSuite
 
     JdbcDialects.registerDialect(testH2DialectUnrecognizedSQLType)
 
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkSQLException] {
         spark.read.jdbc(urlWithUserAndPass, tableName, new Properties()).collect()
       },
       errorClass = "UNRECOGNIZED_SQL_TYPE",
-      msg = s"Unrecognized SQL type $unrecognizedColumnType")
+      parameters = Map("typeName" -> unrecognizedColumnType.toString),
+      sqlState = "42000")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
   }
@@ -600,25 +600,27 @@ class QueryExecutionErrorsSuite
 
       val aggregated = spark.table("bucketed_table").groupBy("i").count()
 
-      checkErrorClass(
+      checkError(
         exception = intercept[SparkException] {
           aggregated.count()
         },
         errorClass = "INVALID_BUCKET_FILE",
-        msg = "Invalid bucket file: .+",
-        matchMsg = true)
+        errorSubClass = None,
+        parameters = Map("path" -> ".+"),
+        sqlState = None,
+        matchPVals = true)
     }
   }
 
   test("MULTI_VALUE_SUBQUERY_ERROR: " +
     "more than one row returned by a subquery used as an expression") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
       },
       errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
-      msg =
-        """more than one row returned by a subquery used as an expression: """ +
+      errorSubClass = None,
+      parameters = Map("plan" ->
           """Subquery subquery#\w+, \[id=#\w+\]
             |\+\- AdaptiveSparkPlan isFinalPlan=true
             |   \+\- == Final Plan ==
@@ -633,8 +635,9 @@ class QueryExecutionErrorsSuite
             |      :  \+\- Scan OneRowRelation\[\]
             |      \+\- Project \[\w+ AS a#\w+\]
             |         \+\- Scan OneRowRelation\[\]
-            |""".stripMargin,
-      matchMsg = true)
+            |""".stripMargin),
+      sqlState = None,
+      matchPVals = true)
   }
 }
 
