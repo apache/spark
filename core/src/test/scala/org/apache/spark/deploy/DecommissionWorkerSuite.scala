@@ -209,8 +209,7 @@ class DecommissionWorkerSuite
     sc = createSparkContext(
       config.Tests.TEST_NO_STAGE_RETRY.key -> "false",
       "spark.test.executor.decommission.initial.sleep.millis" -> initialSleepMillis.toString,
-      config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE.key -> "true",
-    )
+      config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE.key -> "true")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val executorIdToWorkerInfo = getExecutorToWorkerAssignments
