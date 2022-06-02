@@ -146,12 +146,11 @@ object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataTypeMismatchForDeserializerError(
       dataType: DataType, desiredType: String): Throwable = {
-    val quantifier = if (desiredType.equals("array")) "an" else "a"
     new AnalysisException(
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = "DATA_TYPE_MISMATCH",
       messageParameters =
-        Array(quantifier, toSQLType(desiredType), toSQLType(dataType)))
+        Array(toSQLType(desiredType), toSQLType(dataType)))
   }
 
   def fieldNumberMismatchForDeserializerError(
@@ -1958,14 +1957,14 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "FORBIDDEN_OPERATION",
       messageParameters =
-        Array(toSQLStmt("DESC PARTITION"), "the temporary view", toSQLId(table)))
+        Array(toSQLStmt("DESC PARTITION"), "TEMPORARY VIEW", toSQLId(table)))
   }
 
   def descPartitionNotAllowedOnView(table: String): Throwable = {
     new AnalysisException(
       errorClass = "FORBIDDEN_OPERATION",
       messageParameters = Array(
-        toSQLStmt("DESC PARTITION"), "the view", toSQLId(table)))
+        toSQLStmt("DESC PARTITION"), "VIEW", toSQLId(table)))
   }
 
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
