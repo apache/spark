@@ -927,10 +927,10 @@ case class ShowTablePropertiesCommand(
       Seq.empty[Row]
     } else {
       val catalogTable = catalog.getTableMetadata(table)
+      val properties = conf.redactOptions(catalogTable.properties)
       propertyKey match {
         case Some(p) =>
-          val propValue = catalogTable
-            .properties
+          val propValue = properties
             .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
           if (output.length == 1) {
             Seq(Row(propValue))
@@ -938,7 +938,7 @@ case class ShowTablePropertiesCommand(
             Seq(Row(p, propValue))
           }
         case None =>
-          catalogTable.properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
+          properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
             .toSeq.sortBy(_._1).map(p => Row(p._1, p._2)).toSeq
       }
     }

@@ -123,7 +123,7 @@ class DataSourceV2SQLSuite
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
       " USING foo" +
       " PARTITIONED BY (id)" +
-      " TBLPROPERTIES ('bar'='baz')" +
+      " TBLPROPERTIES ('bar'='baz', 'password' = 'password')" +
       " COMMENT 'this is a test table'" +
       " LOCATION 'file:/tmp/testcat/table_name'")
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
@@ -151,7 +151,7 @@ class DataSourceV2SQLSuite
       Array("Location", "file:/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
       Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
-      Array("Table Properties", "[bar=baz]", "")))
+      Array("Table Properties", "[bar=baz,password=*********(redacted)]", "")))
   }
 
   test("Describe column for v2 catalog") {
@@ -2717,6 +2717,12 @@ class DataSourceV2SQLSuite
         === Array(Row(7), Row(8)))
       assert(sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect
         === Array(Row(7), Row(8)))
+      // Scalar subquery is also supported.
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF (SELECT make_date(2021, 1, 29))").collect
+        === Array(Row(7), Row(8)))
+      // Nested subquery also works
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))").collect
+        === Array(Row(7), Row(8)))
 
       val e1 = intercept[AnalysisException](
         sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
@@ -2752,6 +2758,22 @@ class DataSourceV2SQLSuite
         sql("WITH x AS (SELECT 1) SELECT * FROM x VERSION AS OF 1")
       )
       assert(e7.message.contains("Cannot time travel subqueries from WITH clause"))
+
+      def checkSubqueryError(subquery: String, errMsg: String): Unit = {
+        val e1 = intercept[Exception](
+          sql(s"SELECT * FROM t TIMESTAMP AS OF ($subquery)").collect()
+        )
+        assert(e1.getMessage.contains(errMsg))
+        // Nested subquery should also report error correctly.
+        val e2 = intercept[Exception](
+          sql(s"SELECT * FROM t TIMESTAMP AS OF (SELECT ($subquery))").collect()
+        )
+        assert(e2.getMessage.contains(errMsg))
+      }
+      checkSubqueryError("SELECT 1 FROM non_exist", "Table or view not found: non_exist")
+      checkSubqueryError("SELECT col", "MISSING_COLUMN")
+      checkSubqueryError("SELECT 1, 2", "Scalar subquery must return only one column")
+      checkSubqueryError("SELECT * FROM VALUES (1), (2)", "MULTI_VALUE_SUBQUERY_ERROR")
     }
   }
 

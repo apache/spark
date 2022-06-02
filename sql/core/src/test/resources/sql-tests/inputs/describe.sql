@@ -1,8 +1,8 @@
 CREATE TABLE t (a STRING, b INT, c STRING, d STRING) USING parquet
-  OPTIONS (a '1', b '2')
+  OPTIONS (a '1', b '2', password 'password')
   PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
   COMMENT 'table_comment'
-  TBLPROPERTIES (t 'test');
+  TBLPROPERTIES (t 'test', password 'password');
 
 CREATE TEMPORARY VIEW temp_v AS SELECT * FROM t;
 

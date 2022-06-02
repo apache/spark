@@ -121,20 +121,18 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
 
     def skew(self) -> FrameLike:
         def skew(scol: Column) -> Column:
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
-                Column(sql_utils.pandasSkewness(scol._jc)).over(self._window),
+                SF.skew(scol).over(self._window),
             ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(skew)
 
     def kurt(self) -> FrameLike:
         def kurt(scol: Column) -> Column:
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
-                Column(sql_utils.pandasKurtosis(scol._jc)).over(self._window),
+                SF.kurt(scol).over(self._window),
             ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(kurt)

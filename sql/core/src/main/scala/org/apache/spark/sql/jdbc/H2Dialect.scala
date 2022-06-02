@@ -19,14 +19,18 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{SQLException, Types}
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
 
-private object H2Dialect extends JdbcDialect {
+private[sql] object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
@@ -80,6 +84,21 @@ private object H2Dialect extends JdbcDialect {
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", Types.NUMERIC))
     case _ => JdbcUtils.getCommonJDBCType(dt)
+  }
+
+  private val functionMap: java.util.Map[String, UnboundFunction] =
+    new ConcurrentHashMap[String, UnboundFunction]()
+
+  // test only
+  def registerFunction(name: String, fn: UnboundFunction): UnboundFunction = {
+    functionMap.put(name, fn)
+  }
+
+  override def functions: Seq[(String, UnboundFunction)] = functionMap.asScala.toSeq
+
+  // test only
+  def clearFunctions(): Unit = {
+    functionMap.clear()
   }
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {
