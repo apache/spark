@@ -18,6 +18,7 @@
 
 package org.apache.hive.service.server;
 
+import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog;
 import org.apache.spark.sql.catalyst.catalog.InMemoryCatalog;
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils;
@@ -71,7 +72,11 @@ public class ThreadWithGarbageCleanup extends Thread {
    * Cache the ThreadLocal RawStore object. Called from the corresponding thread.
    */
   public void cacheThreadLocalRawStore() {
-    SharedState sharedState = SparkSQLEnv.sqlContext().sharedState();
+    SQLContext sqlContext = SparkSQLEnv.sqlContext();
+    if (sqlContext == null) {
+      return;
+    }
+    SharedState sharedState = sqlContext.sharedState();
     ExternalCatalog externalCatalog = sharedState.externalCatalog().unwrapped();
     if (externalCatalog instanceof InMemoryCatalog) {
       return;
