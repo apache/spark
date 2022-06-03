@@ -1888,10 +1888,10 @@ private[spark] class DAGScheduler(
           } else {
             // Unregister the merge result of <shuffleId, reduceId> if there is a FetchFailed event
             // and is not a  MetaDataFetchException which is signified by bmAddress being null
-            if (bmAddress != null
-              && bmAddress.executorId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)) {
-              assert(pushBasedShuffleEnabled, "Pushed based shuffle needs to " +
-                "be enabled so that merge results are present.")
+            if (bmAddress != null &&
+              bmAddress.executorId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)) {
+              assert(pushBasedShuffleEnabled, "Push based shuffle expected to" +
+                " be enabled when handling merge block fetch failure.")
               mapOutputTracker.
                 unregisterMergeResult(shuffleId, reduceId, bmAddress, None)
             }
