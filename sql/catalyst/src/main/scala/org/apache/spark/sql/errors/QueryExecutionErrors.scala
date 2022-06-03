@@ -64,7 +64,7 @@ import org.apache.spark.util.CircularBuffer
  * This does not include exceptions thrown during the eager execution of commands, which are
  * grouped into [[QueryCompilationErrors]].
  */
-object QueryExecutionErrors {
+private[sql] object QueryExecutionErrors {
 
   def columnChangeUnsupportedError(): Throwable = {
     new UnsupportedOperationException("Please add an implementation for a column change here")
