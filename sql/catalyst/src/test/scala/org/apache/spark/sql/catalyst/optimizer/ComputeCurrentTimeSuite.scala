@@ -135,7 +135,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(offsetsFromQuarterHour.size == 1)
   }
 
-  private def literals[T](plan: LogicalPlan): Seq[T] = {
+  private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {
     val literals = new scala.collection.mutable.ArrayBuffer[T]
     plan.transformWithSubqueries { case subQuery =>
       subQuery.transformAllExpressions { case expression: Literal =>
@@ -143,6 +143,6 @@ class ComputeCurrentTimeSuite extends PlanTest {
         expression
       }
     }
-    literals.asInstanceOf[Seq[T]]
+    literals
   }
 }
