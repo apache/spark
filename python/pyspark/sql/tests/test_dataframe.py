@@ -21,7 +21,6 @@ import shutil
 import tempfile
 import time
 import unittest
-from typing import cast
 
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
