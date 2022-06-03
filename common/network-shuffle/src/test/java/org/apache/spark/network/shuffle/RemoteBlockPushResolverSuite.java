@@ -1349,8 +1349,8 @@ public class RemoteBlockPushResolverSuite {
         MergeShuffleFile mergedMetaFile = useTestMetaFile ?
           new TestMergeShuffleFile(metaFile, append) :
             new MergeShuffleFile(metaFile);
-        return new AppShufflePartitionInfo(
-            new AppAttemptShuffleMergeId(appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId), reduceId,
+        return new AppShufflePartitionInfo(new AppAttemptShuffleMergeId(
+            appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId), reduceId,
             dataFile, mergedIndexFile, mergedMetaFile);
       }
     };
