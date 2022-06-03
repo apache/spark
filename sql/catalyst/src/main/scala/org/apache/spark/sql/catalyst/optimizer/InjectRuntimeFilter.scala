@@ -290,7 +290,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       !conf.runtimeFilterBloomFilterEnabled => plan
     case _ =>
       val newPlan = tryInjectRuntimeFilter(plan)
-      if (conf.runtimeFilterSemiJoinReductionEnabled) {
+      if (conf.runtimeFilterSemiJoinReductionEnabled && !plan.fastEquals(newPlan)) {
         RewritePredicateSubquery(newPlan)
       } else {
         newPlan
