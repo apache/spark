@@ -798,7 +798,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             new_stat_scols = []
             for agg_column in agg_columns:
                 agg_column_name = agg_column._internal.data_spark_column_names[0]
-                new_agg_column_name = "__tmp_agg_col_{}__".format(agg_column_name)
+                new_agg_column_name = verify_temp_column_name(
+                    psdf._internal.spark_frame, "__tmp_agg_col_{}__".format(agg_column_name)
+                )
                 casted_agg_scol = F.col(agg_column_name).cast("double")
                 new_agg_scols[new_agg_column_name] = F.abs(
                     casted_agg_scol - F.avg(casted_agg_scol).over(window)
