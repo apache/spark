@@ -1629,7 +1629,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def alterDatabaseLocationUnsupportedError(): Throwable = {
-    new AnalysisException(s"Hive metastore does not support altering database location")
+    new AnalysisException("Hive metastore does not support altering database location")
   }
 
   def hiveTableTypeUnsupportedError(tableType: String): Throwable = {
