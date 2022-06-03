@@ -72,8 +72,8 @@ class Table(
     val isTemporary: Boolean)
   extends DefinedByConstructorParams {
 
-  def this(
-    name: String, database: String, description: String, tableType: String, isTemporary: Boolean) {
+  def this(name: String, database: String, description: String, tableType: String,
+    isTemporary: Boolean) = {
     this(name, null, Array(database), description, tableType, isTemporary)
   }
 
