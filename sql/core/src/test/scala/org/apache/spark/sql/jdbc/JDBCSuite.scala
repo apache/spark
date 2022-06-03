@@ -1882,25 +1882,51 @@ class JDBCSuite extends QueryTest
     assert(fields(0).dataType === StringType)
   }
 
-  test("SPARK-39339: TimestampNTZType support") {
-    val tableName = "timestamp_ntz_table"
+  test("SPARK-39339: Handle TimestampNTZType null values") {
+    val tableName = "timestamp_ntz_null_table"
 
-    val df = Seq(
-      (LocalDateTime.parse("2021-12-03T10:50:12"), false),
-      (null, true)).toDF("col1", "col2")
+    val df = Seq(null.asInstanceOf[LocalDateTime]).toDF("col1")
 
     df.write.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", tableName).save()
 
-    val resWithoutTZ = spark.read.format("jdbc")
+    val res = spark.read.format("jdbc")
       .option("inferTimestampNTZType", "true")
       .option("url", urlWithUserAndPass)
       .option("dbtable", tableName)
       .load()
 
-    checkAnswer(resWithoutTZ, Seq(
-      Row(LocalDateTime.parse("2021-12-03T10:50:12"), false),
-      Row(null, true)))
+    checkAnswer(res, Seq(Row(null)))
+  }
+
+  test("SPARK-39339: TimestampNTZType with different local time zones") {
+    val tableName = "timestamp_ntz_diff_tz_support_table"
+
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        Seq(
+          "1972-07-04 03:30:00",
+          "2019-01-20 12:00:00.502",
+          "2019-01-20T00:00:00.123456",
+          "1500-01-20T00:00:00.123456"
+        ).foreach { case datetime =>
+          val df = spark.sql(s"select timestamp_ntz '$datetime'")
+          df.write.format("jdbc")
+            .mode("overwrite")
+            .option("url", urlWithUserAndPass)
+            .option("dbtable", tableName)
+            .save()
+
+          val res = spark.read.format("jdbc")
+            .option("inferTimestampNTZType", "true")
+            .option("url", urlWithUserAndPass)
+            .option("dbtable", tableName)
+            .load()
+
+          checkAnswer(res, df)
+        }
+      }
+    }
   }
 }
