@@ -1890,8 +1890,8 @@ private[spark] class DAGScheduler(
             // and is not a  MetaDataFetchException which is signified by bmAddress being null
             if (bmAddress != null &&
               bmAddress.executorId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)) {
-              assert(pushBasedShuffleEnabled, "Push based shuffle expected to" +
-                " be enabled when handling merge block fetch failure.")
+              assert(pushBasedShuffleEnabled, "Push based shuffle expected to " +
+                "be enabled when handling merge block fetch failure.")
               mapOutputTracker.
                 unregisterMergeResult(shuffleId, reduceId, bmAddress, None)
             }
