@@ -359,7 +359,6 @@ case class Percentile(
   )
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(col) - Returns the median of numeric or ansi interval column `col`.",
   examples = """
@@ -371,12 +370,11 @@ case class Percentile(
   """,
   group = "agg_funcs",
   since = "3.4.0")
-// scalastyle:on line.size.limit
 case class Median(child: Expression)
   extends AggregateFunction
-    with RuntimeReplaceableAggregate
-    with ImplicitCastInputTypes
-    with UnaryLike[Expression] {
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with UnaryLike[Expression] {
   private lazy val percentile = new Percentile(child, Literal(0.5, DoubleType))
   override def replacement: Expression = percentile
   override def nodeName: String = "median"
