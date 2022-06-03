@@ -68,19 +68,29 @@ class MergerTests(unittest.TestCase):
         # shuffle locations get randomized
 
         with tempfile.TemporaryDirectory() as tempdir1, tempfile.TemporaryDirectory() as tempdir2:
+            original = None
+            if "SPARK_LOCAL_DIRS" in os.environ:
+                original = os.environ["SPARK_LOCAL_DIRS"]
             os.environ["SPARK_LOCAL_DIRS"] = tempdir1 + "," + tempdir2
-            index_of_tempdir1 = [False, False]
-            for idx in range(10):
-                m = ExternalMerger(self.agg, 20)
-                if m.localdirs[0].startswith(tempdir1):
-                    index_of_tempdir1[0] = True
-                elif m.localdirs[1].startswith(tempdir1):
-                    index_of_tempdir1[1] = True
-                m.mergeValues(self.data)
-                self.assertTrue(m.spills >= 1)
-                self.assertEqual(sum(sum(v) for k, v in m.items()), sum(range(self.N)))
-            self.assertTrue(index_of_tempdir1[0] and (index_of_tempdir1[0] == index_of_tempdir1[1]))
-            del os.environ["SPARK_LOCAL_DIRS"]
+            try:
+                index_of_tempdir1 = [False, False]
+                for idx in range(10):
+                    m = ExternalMerger(self.agg, 20)
+                    if m.localdirs[0].startswith(tempdir1):
+                        index_of_tempdir1[0] = True
+                    elif m.localdirs[1].startswith(tempdir1):
+                        index_of_tempdir1[1] = True
+                    m.mergeValues(self.data)
+                    self.assertTrue(m.spills >= 1)
+                    self.assertEqual(sum(sum(v) for k, v in m.items()), sum(range(self.N)))
+                self.assertTrue(
+                    index_of_tempdir1[0] and (index_of_tempdir1[0] == index_of_tempdir1[1])
+                )
+            finally:
+                if original is not None:
+                    os.environ["SPARK_LOCAL_DIRS"] = original
+                else:
+                    del os.environ["SPARK_LOCAL_DIRS"]
 
     def test_simple_aggregator_with_medium_dataset(self):
         # SPARK-39179: Test Simple aggregator
@@ -191,13 +201,14 @@ class ExternalGroupByTests(unittest.TestCase):
     def test_dataset_with_keys_are_unsorted(self):
         # SPARK-39179: Test external group when numbers of keys are greater than SORT KEY Limit.
         m = ExternalGroupBy(self.agg, 5, partitions=3)
+        original = m.SORT_KEY_LIMIT
         try:
             m.SORT_KEY_LIMIT = 1
             m.mergeValues(self.data)
             self.assertTrue(m.spills >= 1)
             self.assertEqual(sum(sum(v) for k, v in m.items()), 2 * sum(range(self.N)))
         finally:
-            m.SORT_KEY_LIMIT = 1000
+            m.SORT_KEY_LIMIT = original
 
 
 class SorterTests(unittest.TestCase):
