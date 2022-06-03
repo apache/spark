@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, FsAction, FsPermission}
 
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
@@ -1027,7 +1027,7 @@ case class ShowPartitionsCommand(
 /**
  * Provides common utilities between `ShowCreateTableCommand` and `ShowCreateTableAsSparkCommand`.
  */
-trait ShowCreateTableCommandBase {
+trait ShowCreateTableCommandBase extends SQLConfHelper {
 
   protected val table: TableIdentifier
 
@@ -1048,9 +1048,11 @@ trait ShowCreateTableCommandBase {
 
   protected def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
-      val props = metadata.properties.toSeq.sortBy(_._1).map { case (key, value) =>
-        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
-      }
+      val props =
+        conf.redactOptions(metadata.properties)
+          .toSeq.sortBy(_._1).map { case (key, value) =>
+          s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+        }
 
       builder ++= "TBLPROPERTIES "
       builder ++= concatByMultiLines(props)
