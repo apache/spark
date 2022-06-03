@@ -797,6 +797,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             new_agg_scols = {}
             new_stat_scols = []
             for agg_column in agg_columns:
+                # it is not able to directly use 'self._reduce_for_stat_function', due to
+                # 'it is not allowed to use a window function inside an aggregate function'.
+                # so we need to create temporary columns to compute the 'abs(x - avg(x))' here.
                 agg_column_name = agg_column._internal.data_spark_column_names[0]
                 new_agg_column_name = verify_temp_column_name(
                     psdf._internal.spark_frame, "__tmp_agg_col_{}__".format(agg_column_name)
