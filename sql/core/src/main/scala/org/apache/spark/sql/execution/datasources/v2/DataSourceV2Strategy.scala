@@ -463,6 +463,20 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case a: AlterTableCommand if a.table.resolved =>
       val table = a.table.asInstanceOf[ResolvedTable]
+      // Check that ALTER TABLE ADD COLUMN commands do not have DEFAULT values for v2 data sources.
+      a match {
+        case addColumns: AddColumns =>
+          addColumns.columnsToAdd.foreach {
+            _.default.foreach { _ =>
+              throw QueryCompilationErrors.defaultReferencesNotAllowedInAlterTableV2DataSource()
+            }
+          }
+        case alterColumn: AlterColumn =>
+          alterColumn.setDefaultExpression.foreach {
+            throw QueryCompilationErrors.defaultReferencesNotAllowedInAlterTableV2DataSource()
+          }
+        case _ =>
+      }
       AlterTableExec(table.catalog, table.identifier, a.changes) :: Nil
 
     case CreateIndex(ResolvedTable(_, _, table, _),

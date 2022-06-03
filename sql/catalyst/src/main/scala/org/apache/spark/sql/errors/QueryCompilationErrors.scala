@@ -2455,4 +2455,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       s"Failed to execute command because DEFAULT values are not supported for target data " +
         "source with table provider: \"" + dataSource + "\"")
   }
+
+  def defaultReferencesNotAllowedInAlterTableV2DataSource(): Throwable = {
+    new AnalysisException(
+      s"Failed to execute ALTER TABLE command because DEFAULT values are not supported for " +
+        "V2 tables")
+  }
 }
