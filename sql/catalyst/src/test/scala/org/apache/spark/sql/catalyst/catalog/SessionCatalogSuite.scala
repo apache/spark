@@ -122,7 +122,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   }
 
   test("create table with default columns") {
-    if (!isHiveExternalCatalog) withBasicCatalog { catalog =>
+    def test: Unit = withBasicCatalog { catalog =>
       assert(catalog.externalCatalog.listTables("db1").isEmpty)
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
       catalog.createTable(newTable(
@@ -179,6 +179,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         // No constant-folding has taken place to the EXISTS_DEFAULT metadata.
         assert(!columnEWithFeatureDisabled.metadata.contains("EXISTS_DEFAULT"))
       }
+    }
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,hive,json,orc,parquet") {
+      test
     }
   }
 

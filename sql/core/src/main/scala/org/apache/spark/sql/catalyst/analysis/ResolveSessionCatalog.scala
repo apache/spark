@@ -43,10 +43,11 @@ import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
  */
 class ResolveSessionCatalog(val analyzer: Analyzer)
   extends Rule[LogicalPlan] with LookupCatalog {
-  val catalogManager = analyzer.catalogManager
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+
+  val catalogManager = analyzer.catalogManager
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case AddColumns(

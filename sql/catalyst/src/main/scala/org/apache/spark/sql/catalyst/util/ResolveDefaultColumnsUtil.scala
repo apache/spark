@@ -93,15 +93,15 @@ object ResolveDefaultColumns {
       tableProvider: Option[String],
       statementType: String): StructType = {
     if (SQLConf.get.enableDefaultColumns) {
+      val allowedTableProviders: Array[String] =
+        SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
+          .toLowerCase().split(",").map(_.trim)
+      val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
           // Make sure that the target table has a provider that supports default column values.
-          val allowedProviders: Array[String] =
-            SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
-              .toLowerCase().split(",").map(_.trim)
-          val givenProvider: String = tableProvider.getOrElse("").toLowerCase()
-          if (!allowedProviders.contains(givenProvider)) {
-            throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(givenProvider)
+          if (!allowedTableProviders.contains(givenTableProvider)) {
+            throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(givenTableProvider)
           }
           val analyzed: Expression = analyze(analyzer, field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
