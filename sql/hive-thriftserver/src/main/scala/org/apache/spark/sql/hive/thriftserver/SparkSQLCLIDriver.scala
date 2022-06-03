@@ -527,6 +527,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
   // Note: [SPARK-33100] Ignore a semicolon inside a bracketed comment in spark-sql.
+  // Note: [SPARK-39380] Ignore comment syntax in dfs command.
   private[hive] def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
@@ -536,12 +537,20 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     var beginIndex = 0
     var leavingBracketedComment = false
     var isStatement = false
+    var isDfsCommand: Option[Boolean] = None
     val ret = new JArrayList[String]
 
     def insideBracketedComment: Boolean = bracketedCommentLevel > 0
     def insideComment: Boolean = insideSimpleComment || insideBracketedComment
     def statementInProgress(index: Int): Boolean = isStatement || (!insideComment &&
       index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
+    def dfsCommand(index: Int): Boolean = {
+      if (isDfsCommand.isEmpty) {
+        isDfsCommand =
+          Some(line.substring(beginIndex, index).trim.toLowerCase(Locale.ROOT).startsWith("dfs"))
+      }
+      isDfsCommand.get
+    }
 
     for (index <- 0 until line.length) {
       // Checks if we need to decrement a bracketed comment level; the last character '/' of
@@ -568,7 +577,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         }
       } else if (line.charAt(index) == '-') {
         val hasNext = index + 1 < line.length
-        if (insideDoubleQuote || insideSingleQuote || insideComment) {
+        if (insideDoubleQuote || insideSingleQuote || insideComment || dfsCommand(index)) {
           // Ignores '-' in any case of quotes or comment.
           // Avoids to start a comment(--) within a quoted segment or already in a comment.
           // Sample query: select "quoted value --"
@@ -587,6 +596,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           }
           beginIndex = index + 1
           isStatement = false
+          isDfsCommand = None
         }
       } else if (line.charAt(index) == '\n') {
         // with a new line the inline simple comment should end.
@@ -595,7 +605,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         }
       } else if (line.charAt(index) == '/' && !insideSimpleComment) {
         val hasNext = index + 1 < line.length
-        if (insideSingleQuote || insideDoubleQuote) {
+        if (insideSingleQuote || insideDoubleQuote || dfsCommand(index)) {
           // Ignores '/' in any case of quotes
         } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
           // Decrements `bracketedCommentLevel` at the beginning of the next loop

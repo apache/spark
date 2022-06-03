@@ -700,4 +700,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     t.start()
     cd.await()
   }
+
+  test("SPARK-39380: Ignore comment syntax in dfs command") {
+    val dataDirPath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/testDfsCommand")
+    runCliWithin(1.minute)(s"dfs -cat $dataDirPath/a---.txt;" -> "abc")
+    runCliWithin(1.minute)(s"dfs -cat $dataDirPath/*;" -> "abc")
+  }
 }
