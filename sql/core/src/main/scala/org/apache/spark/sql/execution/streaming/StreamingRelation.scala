@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
@@ -30,8 +31,13 @@ import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
+    apply(dataSource, None)
+  }
+
+  def apply(dataSource: DataSource, catalogTable: Option[CatalogTable]): StreamingRelation = {
     StreamingRelation(
-      dataSource, dataSource.sourceInfo.name, dataSource.sourceInfo.schema.toAttributes)
+      dataSource, dataSource.sourceInfo.name, dataSource.sourceInfo.schema.toAttributes,
+      catalogTable)
   }
 }
 
@@ -42,7 +48,11 @@ object StreamingRelation {
  * It should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
  * passing to [[StreamExecution]] to run a query.
  */
-case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
+case class StreamingRelation(
+    dataSource: DataSource,
+    sourceName: String,
+    output: Seq[Attribute],
+    catalogTable: Option[CatalogTable])
   extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
@@ -89,7 +99,8 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
  */
 case class StreamingExecutionRelation(
     source: SparkDataStream,
-    output: Seq[Attribute])(session: SparkSession)
+    output: Seq[Attribute],
+    catalogTable: Option[CatalogTable])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   override def otherCopyArgs: Seq[AnyRef] = session :: Nil
@@ -111,7 +122,11 @@ case class StreamingExecutionRelation(
  * A dummy physical plan for [[StreamingRelation]] to support
  * [[org.apache.spark.sql.Dataset.explain]]
  */
-case class StreamingRelationExec(sourceName: String, output: Seq[Attribute]) extends LeafExecNode {
+case class StreamingRelationExec(
+    sourceName: String,
+    output: Seq[Attribute],
+    tableIdentifier: Option[String]) extends LeafExecNode {
+  // FIXME: check the representation of this node and come up with good format to show table name
   override def toString: String = sourceName
   override protected def doExecute(): RDD[InternalRow] = {
     throw QueryExecutionErrors.cannotExecuteStreamingRelationExecError()
@@ -120,6 +135,13 @@ case class StreamingRelationExec(sourceName: String, output: Seq[Attribute]) ext
 
 object StreamingExecutionRelation {
   def apply(source: Source, session: SparkSession): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, source.schema.toAttributes)(session)
+    StreamingExecutionRelation(source, source.schema.toAttributes, None)(session)
+  }
+
+  def apply(
+      source: Source,
+      session: SparkSession,
+      catalogTable: CatalogTable): StreamingExecutionRelation = {
+    StreamingExecutionRelation(source, source.schema.toAttributes, Some(catalogTable))(session)
   }
 }

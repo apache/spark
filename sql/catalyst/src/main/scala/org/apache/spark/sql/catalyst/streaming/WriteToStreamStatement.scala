@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.streaming
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
@@ -52,7 +53,8 @@ case class WriteToStreamStatement(
     hadoopConf: Configuration,
     isContinuousTrigger: Boolean,
     inputQuery: LogicalPlan,
-    catalogAndIdent: Option[(TableCatalog, Identifier)] = None) extends UnaryNode {
+    catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
+    catalogTable: Option[CatalogTable] = None) extends UnaryNode {
 
   override def isStreaming: Boolean = true
 

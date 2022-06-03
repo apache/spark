@@ -15,34 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.streaming
+package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
+import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.OutputMode
 
-/**
- * Used to create a [[StreamExecution]].
- */
-case class WriteToStream(
-    name: String,
-    resolvedCheckpointLocation: String,
-    sink: Table,
+case class WriteToMicroBatchDataSourceV1(
+    catalogTable: Option[CatalogTable],
+    sink: Sink,
+    query: LogicalPlan,
+    queryId: String,
+    writeOptions: Map[String, String],
     outputMode: OutputMode,
-    deleteCheckpointOnStop: Boolean,
-    inputQuery: LogicalPlan,
-    catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
-    catalogTable: Option[CatalogTable]) extends UnaryNode {
+    batchId: Option[Long] = None)
+  extends UnaryNode {
 
-  override def isStreaming: Boolean = true
+  override def child: LogicalPlan = query
 
-  override def output: Seq[Attribute] = Nil
+  // Despite this is logically the top node, this node should behave like "pass-through"
+  // since the DSv1 codepath on microbatch execution handles sink operation separately.
+  // We will eliminate this node in physical planning, which shouldn't make difference as
+  // this node is pass-through.
+  override def output: Seq[Attribute] = query.output
 
-  override def child: LogicalPlan = inputQuery
+  def withNewBatchId(batchId: Long): WriteToMicroBatchDataSourceV1 = {
+    copy(batchId = Some(batchId))
+  }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): WriteToStream =
-    copy(inputQuery = newChild)
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): WriteToMicroBatchDataSourceV1 = copy(query = newChild)
 }
-
