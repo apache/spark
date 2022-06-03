@@ -2452,7 +2452,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
 
   def defaultReferencesNotAllowedInDataSource(dataSource: String): Throwable = {
     new AnalysisException(
-      s"Failed to execute command because target data source type $dataSource does not support " +
-        "assigning DEFAULT column values")
+      s"Failed to execute command because DEFAULT values are not supported for target data " +
+        "source with table provider: \"" + dataSource + "\"")
   }
 }

@@ -47,7 +47,7 @@ class ResolveSessionCatalog(val analyzer: Analyzer)
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
-  val catalogManager = analyzer.catalogManager
+  override val catalogManager = analyzer.catalogManager
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case AddColumns(
