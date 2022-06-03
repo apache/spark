@@ -25,6 +25,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * This class wraps an array of {@link ColumnVector} and provides a row view.
+ *
+ * @since 3.3.0
  */
 @DeveloperApi
 public final class ColumnarBatchRow extends InternalRow {
