@@ -68,9 +68,7 @@ class MergerTests(unittest.TestCase):
         # shuffle locations get randomized
 
         with tempfile.TemporaryDirectory() as tempdir1, tempfile.TemporaryDirectory() as tempdir2:
-            original = None
-            if "SPARK_LOCAL_DIRS" in os.environ:
-                original = os.environ["SPARK_LOCAL_DIRS"]
+            original = os.environ.get("SPARK_LOCAL_DIRS", None)
             os.environ["SPARK_LOCAL_DIRS"] = tempdir1 + "," + tempdir2
             try:
                 index_of_tempdir1 = [False, False]
