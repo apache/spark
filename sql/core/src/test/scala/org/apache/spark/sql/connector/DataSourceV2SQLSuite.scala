@@ -1331,6 +1331,28 @@ class DataSourceV2SQLSuite
     checkPartitioning(testCatalog, "b")
   }
 
+  test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
+    // Positive tests: Update the SQLConf to include the 'v2Source' from consideration as a valid
+    // table provider type for assigning DEFAULT columns.
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Source") {
+      withTable("t") {
+        sql(s"create table t (a string) using $v2Source")
+        sql(s"create or replace table t (a string default 'abc') using $v2Source")
+        sql("insert into t values (default)")
+        checkAnswer(spark.table("t"), Row("abc"))
+      }
+    }
+    // Negative tests: Update the SQLConf to exclude the 'v2Source' from consideration as a valid
+    // table provider type for assigning DEFAULT columns.
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "invalid") {
+      val unsupported = "does not support assigning DEFAULT column values"
+      assert(intercept[AnalysisException] {
+        sql(s"create or replace table t (a string default 'abc') using $v2Source")
+      }.getMessage.contains(unsupported))
+    }
+  }
+
+
   test("tableCreation: partition column case sensitive resolution") {
     def checkFailure(statement: String): Unit = {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
