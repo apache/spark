@@ -473,16 +473,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
 
-    case TimestampType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val t = rs.getTimestamp(pos + 1)
-        if (t != null) {
-          row.setLong(pos, DateTimeUtils.fromJavaTimestamp(t))
-        } else {
-          row.update(pos, null)
-        }
-
-    case TimestampNTZType =>
+    case TimestampType | TimestampNTZType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
