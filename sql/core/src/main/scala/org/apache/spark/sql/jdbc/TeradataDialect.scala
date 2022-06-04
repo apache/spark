@@ -98,18 +98,6 @@ private case object TeradataDialect extends JdbcDialect {
     ""
   }
 
-  /**
-   * Get the custom datatype mapping for the given jdbc meta information.
-   * Handle Numeric type explicitly or the column will be converted to BigDecimal(38, 0)
-   * disregard the fractional part.
-   *
-   * @param sqlType The sql type (see java.sql.Types)
-   * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
-   * @param size The size of the type.
-   * @param md Result metadata associated with this type.
-   * @return The actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
-   *         or null if the default type mapping should be used.
-   */
   override def getCatalystType(
     sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     // Use 18 as default scale respect to DecimalType definition
@@ -119,10 +107,19 @@ private case object TeradataDialect extends JdbcDialect {
         Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
       } else {
         val scale = md.build().getLong("scale")
+        // Scale returned from JDBC is 0 when NUMBER's scale is not explicitly specified
+        // Note, even if the NUMBER is defined like NUMBER(20, 0), Spark will treat it as
+        // (20, $defaultScale)
         if (scale == 0) {
           Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
         } else {
-          Option(DecimalType(DecimalType.MAX_PRECISION, scale.toInt))
+          // Precision returned from JDBC is 40 when NUMBER's precision is not explicitly specified
+          if (size == 40) {
+            val precision = DecimalType.MAX_PRECISION
+            Option(DecimalType(precision, scale.toInt))
+          } else {
+            Option(DecimalType(size, scale.toInt))
+          }
         }
       }
     } else {
