@@ -371,4 +371,19 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-32184: Remove inferred predicate if it has InOrCorrelatedExistsSubquery") {
+    val x = testRelation.as("x")
+    val y = testRelation.as("y")
+    val z = testRelation.as("z")
+
+    val originalQuery =
+      x.join(y, Inner, Some($"x.a" === $"y.a")).where($"x.a".in(ListQuery(z.select($"b"))))
+        .analyze
+    val correctAnswer =
+      x.where($"x.a".isNotNull && $"x.a".in(ListQuery(z.select($"b"))))
+        .join(y.where($"y.a".isNotNull), Inner, Some($"x.a" === $"y.a"))
+        .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
 }

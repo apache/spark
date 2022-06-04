@@ -1,10 +1,10 @@
 TakeOrderedAndProject [c_last_name,c_first_name,sales]
   Union
-    WholeStageCodegen (18)
+    WholeStageCodegen (13)
       HashAggregate [c_last_name,c_first_name,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cs_quantity as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2))),sales,sum,isEmpty]
         InputAdapter
           Exchange [c_last_name,c_first_name] #1
-            WholeStageCodegen (17)
+            WholeStageCodegen (12)
               HashAggregate [c_last_name,c_first_name,cs_quantity,cs_list_price] [sum,isEmpty,sum,isEmpty]
                 Project [cs_quantity,cs_list_price,c_first_name,c_last_name]
                   BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
@@ -124,34 +124,18 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                                                               Scan parquet default.customer [c_customer_sk]
                         InputAdapter
                           BroadcastExchange #13
-                            WholeStageCodegen (15)
-                              SortMergeJoin [c_customer_sk,c_customer_sk]
-                                InputAdapter
-                                  WholeStageCodegen (11)
-                                    Sort [c_customer_sk]
-                                      InputAdapter
-                                        Exchange [c_customer_sk] #14
-                                          WholeStageCodegen (10)
-                                            Filter [c_customer_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.customer [c_customer_sk,c_first_name,c_last_name]
-                                InputAdapter
-                                  WholeStageCodegen (14)
-                                    Sort [c_customer_sk]
-                                      Project [c_customer_sk]
-                                        Filter [ssales]
-                                          ReusedSubquery [tpcds_cmax] #3
-                                          HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(ss_quantity as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2))),ssales,sum,isEmpty]
-                                            InputAdapter
-                                              ReusedExchange [c_customer_sk,sum,isEmpty] #8
+                            WholeStageCodegen (10)
+                              Filter [c_customer_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.customer [c_customer_sk,c_first_name,c_last_name]
                     InputAdapter
                       ReusedExchange [d_date_sk] #3
-    WholeStageCodegen (36)
+    WholeStageCodegen (26)
       HashAggregate [c_last_name,c_first_name,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(ws_quantity as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2))),sales,sum,isEmpty]
         InputAdapter
-          Exchange [c_last_name,c_first_name] #15
-            WholeStageCodegen (35)
+          Exchange [c_last_name,c_first_name] #14
+            WholeStageCodegen (25)
               HashAggregate [c_last_name,c_first_name,ws_quantity,ws_list_price] [sum,isEmpty,sum,isEmpty]
                 Project [ws_quantity,ws_list_price,c_first_name,c_last_name]
                   BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
@@ -159,11 +143,11 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                       BroadcastHashJoin [ws_bill_customer_sk,c_customer_sk]
                         SortMergeJoin [ws_bill_customer_sk,c_customer_sk]
                           InputAdapter
-                            WholeStageCodegen (24)
+                            WholeStageCodegen (19)
                               Sort [ws_bill_customer_sk]
                                 InputAdapter
-                                  Exchange [ws_bill_customer_sk] #16
-                                    WholeStageCodegen (23)
+                                  Exchange [ws_bill_customer_sk] #15
+                                    WholeStageCodegen (18)
                                       Project [ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
                                         BroadcastHashJoin [ws_item_sk,item_sk]
                                           Filter [ws_bill_customer_sk]
@@ -174,7 +158,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                                           InputAdapter
                                             ReusedExchange [item_sk] #4
                           InputAdapter
-                            WholeStageCodegen (27)
+                            WholeStageCodegen (22)
                               Sort [c_customer_sk]
                                 Project [c_customer_sk]
                                   Filter [ssales]
