@@ -80,11 +80,11 @@ object ShuffleTestAccessor {
       file: File,
       semaphore: Semaphore): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
-      override private[shuffle] def closeAndDeletePartitionFilesIfNeeded(
+      override private[shuffle] def closeAndDeletePartitions(
           appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo,
           cleanupLocalDirs: Boolean,
           cleanupDB: Boolean): Unit = {
-        super.closeAndDeletePartitionFilesOrDBIfNeeded(
+        super.closeAndDeletePartitions(
           appShuffleInfo, cleanupLocalDirs, cleanupDB)
         semaphore.release()
       }

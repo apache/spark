@@ -898,12 +898,12 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitionFilesOrDBIfNeeded(
+      void closeAndDeletePartitions(
         AppShuffleInfo appShuffleInfo,
         boolean cleanupLocalDirs,
-        boolean cleanupDB) {
-        super.closeAndDeletePartitionFilesOrDBIfNeeded(
-            appShuffleInfo, cleanupLocalDirs, cleanupDB);
+        boolean removeFromDb) {
+        super.closeAndDeletePartitions(
+            appShuffleInfo, cleanupLocalDirs, removeFromDb);
         closed.release();
       }
     };
@@ -997,12 +997,12 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitionFilesOrDBIfNeeded(
+      void closeAndDeletePartitions(
           AppShuffleInfo appShuffleInfo,
           boolean cleanupLocalDirs,
-          boolean cleanupDB) {
-        super.closeAndDeletePartitionFilesOrDBIfNeeded(
-            appShuffleInfo, cleanupLocalDirs, cleanupDB);
+          boolean removeFromDb) {
+        super.closeAndDeletePartitions(
+            appShuffleInfo, cleanupLocalDirs, removeFromDb);
         closed.release();
       }
     };
@@ -1161,8 +1161,8 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitionFiles(Map<Integer, AppShufflePartitionInfo> partitions) {
-        super.closeAndDeletePartitionFiles(partitions);
+      void closeAndDeleteOutdatedPartitions(Map<Integer, AppShufflePartitionInfo> partitions) {
+        super.closeAndDeleteOutdatedPartitions(partitions);
         closed.release();
       }
     };
