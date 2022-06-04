@@ -84,7 +84,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       treePatternbits.containsPattern(CURRENT_LIKE)
     }
 
-    plan.transformDownWithSubqueries(transformCondition) {
+    plan.transformDownWithSubqueriesAndPruning(transformCondition) {
       case subQuery =>
         subQuery.transformAllExpressionsWithPruning(transformCondition) {
           case cd: CurrentDate =>
