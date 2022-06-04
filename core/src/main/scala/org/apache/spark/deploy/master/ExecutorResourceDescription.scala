@@ -26,7 +26,7 @@ import org.apache.spark.resource.ResourceRequirement
  * @param memoryMbPerExecutor memory for each executor.
  * @param customResourcesPerExecutor custom resource requests for each executor.
  */
-private[spark] case class ResourceDescription(
+private[spark] case class ExecutorResourceDescription(
     coresPerExecutor: Option[Int],
     memoryMbPerExecutor: Int,
     customResourcesPerExecutor: Seq[ResourceRequirement] = Seq.empty)

@@ -47,7 +47,7 @@ private[spark] class ApplicationInfo(
   @transient private var executorsPerResourceProfileId: mutable.HashMap[Int, mutable.Set[Int]] = _
   @transient private var targetNumExecutorsPerResourceProfileId: mutable.HashMap[Int, Int] = _
   @transient private var rpIdToResourceProfile: mutable.HashMap[Int, ResourceProfile] = _
-  @transient private var rpIdToResourceDesc: mutable.HashMap[Int, ResourceDescription] = _
+  @transient private var rpIdToResourceDesc: mutable.HashMap[Int, ExecutorResourceDescription] = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -70,7 +70,7 @@ private[spark] class ApplicationInfo(
 
     rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]()
     rpIdToResourceProfile(DEFAULT_RESOURCE_PROFILE_ID) = desc.defaultProfile
-    rpIdToResourceDesc = new mutable.HashMap[Int, ResourceDescription]()
+    rpIdToResourceDesc = new mutable.HashMap[Int, ExecutorResourceDescription]()
     createResourceDescForResourceProfile(desc.defaultProfile)
 
     targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]()
@@ -104,12 +104,12 @@ private[spark] class ApplicationInfo(
         getCustomExecutorResources(resourceProfile).values.toSeq)
 
       rpIdToResourceDesc(resourceProfile.id) =
-        ResourceDescription(coresPerExecutor, memoryMbPerExecutor, customResources)
+        ExecutorResourceDescription(coresPerExecutor, memoryMbPerExecutor, customResources)
     }
   }
 
   // Get resources required for schedule.
-  private[deploy] def getResourceDescriptionForRpId(rpId: Int): ResourceDescription = {
+  private[deploy] def getResourceDescriptionForRpId(rpId: Int): ExecutorResourceDescription = {
     rpIdToResourceDesc(rpId)
   }
 

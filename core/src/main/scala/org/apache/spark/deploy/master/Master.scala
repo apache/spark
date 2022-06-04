@@ -648,7 +648,7 @@ private[deploy] class Master(
   private def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
       rpId: Int,
-      resourceDesc: ResourceDescription,
+      resourceDesc: ExecutorResourceDescription,
       usableWorkers: Array[WorkerInfo],
       spreadOutApps: Boolean): Array[Int] = {
     val coresPerExecutor = resourceDesc.coresPerExecutor
@@ -777,7 +777,7 @@ private[deploy] class Master(
   private def allocateWorkerResourceToExecutors(
       app: ApplicationInfo,
       assignedCores: Int,
-      resourceDesc: ResourceDescription,
+      resourceDesc: ExecutorResourceDescription,
       worker: WorkerInfo,
       rpId: Int): Unit = {
     val coresPerExecutor = resourceDesc.coresPerExecutor
@@ -818,7 +818,9 @@ private[deploy] class Master(
   /**
    * @return whether the worker could launch the executor according to application's requirement
    */
-  private def canLaunchExecutor(worker: WorkerInfo, resourceDesc: ResourceDescription): Boolean = {
+  private def canLaunchExecutor(
+      worker: WorkerInfo,
+      resourceDesc: ExecutorResourceDescription): Boolean = {
     canLaunch(
       worker,
       resourceDesc.memoryMbPerExecutor,

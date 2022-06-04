@@ -43,7 +43,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       return UIUtils.basicSparkPage(request, msg, "Not Found")
     }
 
-    val executorHeaders = Seq("ExecutorID", "Worker", "Resource Profile Id", "Cores", "Memory",
+    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "Resource Profile Id",
       "Resources", "State", "Logs")
     val allExecutors = (app.executors.values ++ app.removedExecutors).toSet.toSeq
     // This includes executors that are either still running or have exited cleanly
@@ -143,9 +143,9 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       <td>
         <a href={workerUrlRef}>{executor.worker.id}</a>
       </td>
-      <td>{executor.rpId}</td>
       <td>{executor.cores}</td>
       <td>{executor.memory}</td>
+      <td>{executor.rpId}</td>
       <td>{formatResourcesAddresses(executor.resources)}</td>
       <td>{executor.state}</td>
       <td>
