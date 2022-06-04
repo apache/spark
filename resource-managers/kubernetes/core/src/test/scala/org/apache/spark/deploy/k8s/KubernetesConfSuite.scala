@@ -97,7 +97,8 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.secretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
     assert(conf.secretEnvNamesToKeyRefs === SECRET_ENV_VARS)
     assert(conf.environment === CUSTOM_ENVS)
-    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
+    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR).isDefined)
+    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR).get === 0.3)
   }
 
   test("Basic executor translated fields.") {

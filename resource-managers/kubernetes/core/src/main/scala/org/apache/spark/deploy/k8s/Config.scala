@@ -499,7 +499,7 @@ private[spark] object Config extends Logging {
       .doubleConf
       .checkValue(mem_overhead => mem_overhead >= 0,
         "Ensure that memory overhead is non-negative")
-      .createWithDefault(0.1)
+      .createOptional
 
   val PYSPARK_MAJOR_PYTHON_VERSION =
     ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")

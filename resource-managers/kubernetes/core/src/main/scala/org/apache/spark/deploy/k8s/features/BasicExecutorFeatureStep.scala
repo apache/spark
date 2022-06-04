@@ -62,7 +62,8 @@ private[spark] class BasicExecutorFeatureStep(
   private val memoryOverheadFactor = if (kubernetesConf.contains(EXECUTOR_MEMORY_OVERHEAD_FACTOR)) {
     kubernetesConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
   } else {
-    kubernetesConf.get(MEMORY_OVERHEAD_FACTOR)
+    kubernetesConf.get(MEMORY_OVERHEAD_FACTOR).getOrElse(
+      kubernetesConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR))
   }
 
   val execResources = ResourceProfile.getResourcesForClusterManager(

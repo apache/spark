@@ -133,8 +133,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val expectedSparkConf = Map(
       KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
       "spark.app.id" -> KubernetesTestConf.APP_ID,
-      "spark.kubernetes.submitInDriver" -> "true",
-      MEMORY_OVERHEAD_FACTOR.key -> MEMORY_OVERHEAD_FACTOR.defaultValue.get.toString)
+      "spark.kubernetes.submitInDriver" -> "true")
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
   }
 
@@ -193,13 +192,12 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   // Memory overhead tests. Tuples are:
   //   test name, main resource, overhead factor, expected factor
   val driverDefault = DRIVER_MEMORY_OVERHEAD_FACTOR.defaultValue.get
-  val oldConfigDefault = MEMORY_OVERHEAD_FACTOR.defaultValue.get
   val nonJvm = NON_JVM_MEMORY_OVERHEAD_FACTOR
   Seq(
-    ("java", JavaMainAppResource(None), None, driverDefault, oldConfigDefault),
-    ("python default", PythonMainAppResource(null), None, nonJvm, nonJvm),
-    ("python w/ override", PythonMainAppResource(null), Some(0.9d), 0.9d, nonJvm),
-    ("r default", RMainAppResource(null), None, nonJvm, nonJvm)
+    ("java", JavaMainAppResource(None), None, driverDefault, None),
+    ("python default", PythonMainAppResource(null), None, nonJvm, Some(nonJvm)),
+    ("python w/ override", PythonMainAppResource(null), Some(0.9d), 0.9d, Some(nonJvm)),
+    ("r default", RMainAppResource(null), None, nonJvm, Some(nonJvm))
   ).foreach { case (name, resource, factor, expectedFactor, expectedPropFactor) =>
     test(s"memory overhead factor new config: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
@@ -221,20 +219,24 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       assert(mem === s"${expected}Mi")
 
       val systemProperties = step.getAdditionalPodSystemProperties()
-      assert(systemProperties(MEMORY_OVERHEAD_FACTOR.key) === expectedPropFactor.toString)
+      if (expectedPropFactor.isDefined) {
+        assert(systemProperties(MEMORY_OVERHEAD_FACTOR.key) === expectedPropFactor.get.toString)
+      } else {
+        assert(!systemProperties.contains(MEMORY_OVERHEAD_FACTOR.key))
+      }
     }
   }
 
   Seq(
-    ("java", JavaMainAppResource(None), None, driverDefault),
-    ("python default", PythonMainAppResource(null), None, nonJvm),
-    ("python w/ override", PythonMainAppResource(null), Some(0.9d), 0.9d),
-    ("r default", RMainAppResource(null), None, nonJvm)
+    ("java", JavaMainAppResource(None), None, None),
+    ("python default", PythonMainAppResource(null), None, Some(nonJvm)),
+    ("python w/ override", PythonMainAppResource(null), Some(0.9d), Some(0.9d)),
+    ("r default", RMainAppResource(null), None, Some(nonJvm))
   ).foreach { case (name, resource, factor, expectedFactor) =>
     test(s"memory overhead factor old config: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
-      val driverMem =
-        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
+      val driverMem = ResourceProfile.MEMORY_OVERHEAD_MIN_MIB /
+        DRIVER_MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
 
       // main app resource, overhead factor
       val sparkConf = new SparkConf(false)
@@ -247,11 +249,15 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       val step = new BasicDriverFeatureStep(conf)
       val pod = step.configurePod(SparkPod.initialPod())
       val mem = amountAndFormat(pod.container.getResources.getRequests.get("memory"))
-      val expected = (driverMem + driverMem * expectedFactor).toInt
+      val expected = (driverMem + driverMem * expectedFactor.getOrElse(driverDefault)).toInt
       assert(mem === s"${expected}Mi")
 
       val systemProperties = step.getAdditionalPodSystemProperties()
-      assert(systemProperties(MEMORY_OVERHEAD_FACTOR.key) === expectedFactor.toString)
+      if (expectedFactor.isDefined) {
+        assert(systemProperties(MEMORY_OVERHEAD_FACTOR.key) === expectedFactor.get.toString)
+      } else {
+        assert(!systemProperties.contains(MEMORY_OVERHEAD_FACTOR.key))
+      }
     }
   }
 

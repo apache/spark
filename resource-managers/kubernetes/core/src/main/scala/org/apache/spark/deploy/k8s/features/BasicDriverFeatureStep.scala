@@ -60,11 +60,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   // propagated to executors and used if the executor overhead factor is not set explicitly.
   private val defaultOverheadFactor =
     if (conf.mainAppResource.isInstanceOf[NonJVMResource]) {
-      if (conf.contains(MEMORY_OVERHEAD_FACTOR)) {
-        conf.get(MEMORY_OVERHEAD_FACTOR)
-      } else {
-        NON_JVM_MEMORY_OVERHEAD_FACTOR
-      }
+      Some(conf.get(MEMORY_OVERHEAD_FACTOR).getOrElse(NON_JVM_MEMORY_OVERHEAD_FACTOR))
     } else {
       conf.get(MEMORY_OVERHEAD_FACTOR)
     }
@@ -73,7 +69,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   private val memoryOverheadFactor = if (conf.contains(DRIVER_MEMORY_OVERHEAD_FACTOR)) {
     conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
   } else {
-    defaultOverheadFactor
+    defaultOverheadFactor.getOrElse(conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR))
   }
 
   private val memoryOverheadMiB = conf
@@ -172,8 +168,13 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     val additionalProps = mutable.Map(
       KUBERNETES_DRIVER_POD_NAME.key -> driverPodName,
       "spark.app.id" -> conf.appId,
-      KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
-      MEMORY_OVERHEAD_FACTOR.key -> defaultOverheadFactor.toString)
+      KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true")
+
+    // Set the default memory overhead if one exists
+    defaultOverheadFactor.foreach { factor =>
+      additionalProps.put(MEMORY_OVERHEAD_FACTOR.key, factor.toString)
+    }
+
     // try upload local, resolvable files to a hadoop compatible file system
     Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES).foreach { key =>
       val uris = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))
