@@ -1578,9 +1578,21 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "z timestamp_ntz default cast(timestamp'0000' as timestamp_ntz), " +
           "a1 timestamp_ltz default cast(timestamp'0000' as timestamp_ltz), " +
           "a2 decimal(5, 2) default 123.45)")
-        checkAnswer(sql("select s, t, u, v, w, x is not null, " +
-          "y is not null, z is not null, a1 is not null, a2 is not null from t"),
-          Row(true, null, 42, 0.0f, 0.0d, true, true, true, true, true))
+        // Manually inspect the result row values rather than using the 'checkAnswer' helper method
+        // in order to ensure the values' correctness while avoiding minor type incompatibilities.
+        val result: Array[Row] = sql("select s, t, u, v, w, x, y, z, a1, a2 from t").collect()
+        assert(result.length == 1)
+        assert(result(0).length == 10)
+        assert(result(0)(0) == true)
+        assert(result(0)(1) == null)
+        assert(result(0)(2) == 42)
+        assert(result(0)(3) == 0.0f)
+        assert(result(0)(4) == 0.0d)
+        assert(result(0)(5).toString == "0001-01-01")
+        assert(result(0)(6).toString == "0001-01-01 00:00:00.0")
+        assert(result(0)(7).toString == "0000-01-01T00:00")
+        assert(result(0)(8).toString == "0001-01-01 00:00:00.0")
+        assert(result(0)(9).toString == "123.45")
       }
     }
 
