@@ -314,7 +314,7 @@ trait AlterTableTests extends SharedSparkSession {
     val t = s"${catalogAndNamespace}table_name"
     withTable("t") {
       sql(s"create table $t (a string) using $v2Format")
-      sql(s"alter table $t add column (b string default 'abc')")
+      sql(s"alter table $t add column (b int default 2 + 3)")
 
       val tableName = fullTableName(t)
       val table = getTableMetadata(tableName)
@@ -322,9 +322,9 @@ trait AlterTableTests extends SharedSparkSession {
       assert(table.name === tableName)
       assert(table.schema === new StructType()
         .add("a", StringType)
-        .add(StructField("b", StringType)
-          .withCurrentDefaultValue("'abc'")
-          .withExistenceDefaultValue("'abc'")))
+        .add(StructField("b", IntegerType)
+          .withCurrentDefaultValue("2 + 3")
+          .withExistenceDefaultValue("5")))
     }
   }
 

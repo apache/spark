@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object BasicInMemoryTableCatalog {
-  var defaultColumnAnalyzer: Option[Analyzer] = Option.empty[Analyzer]
+  var defaultColumnAnalyzer: Option[Analyzer] = Some(SimpleAnalyzer)
 }
 
 class BasicInMemoryTableCatalog extends TableCatalog {
