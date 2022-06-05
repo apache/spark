@@ -310,6 +310,24 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("SPARK-39383 Support DEFAULT columns with V2 data sources") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable("t") {
+      sql(s"create table $t (a string) using $v2Format")
+      sql(s"alter table $t add column (b string default 'abc')")
+
+      val tableName = fullTableName(t)
+      val table = getTableMetadata(tableName)
+
+      assert(table.name === tableName)
+      assert(table.schema === new StructType()
+        .add("a", StringType)
+        .add(StructField("b", StringType)
+          .withCurrentDefaultValue("'abc'")
+          .withExistenceDefaultValue("'abc'")))
+    }
+  }
+
   test("AlterTable: add complex column") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
