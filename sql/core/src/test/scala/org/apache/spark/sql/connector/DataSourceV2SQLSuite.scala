@@ -1344,16 +1344,10 @@ class DataSourceV2SQLSuite
         sql("insert into t values (default)")
         sql(s"alter table t add column (b string default 'def')")
         sql("insert into t values (default)")
-        sql(s"alter table t alter column a set default 'ghi'")
-        sql("insert into t values (default, default)")
-        sql(s"alter table t alter column a drop default")
-        sql("insert into t values (default, default)")
         checkAnswer(spark.table("t"),
           Seq(
             Row("abc", "def"),
-            Row("abc", "def"),
-            Row("ghi", "def"),
-            Row(null, "def")))
+            Row("abc", "def")))
       }
     }
     // Negative tests
@@ -1368,12 +1362,6 @@ class DataSourceV2SQLSuite
         }.getMessage.contains(unsupported))
         assert(intercept[AnalysisException] {
           sql(s"alter table t add column (b string default 'abc')")
-        }.getMessage.contains(unsupported))
-        assert(intercept[AnalysisException] {
-          sql(s"alter table t alter column a set default 'def'")
-        }.getMessage.contains(unsupported))
-        assert(intercept[AnalysisException] {
-          sql(s"alter table t alter column a drop default")
         }.getMessage.contains(unsupported))
       }
     }
