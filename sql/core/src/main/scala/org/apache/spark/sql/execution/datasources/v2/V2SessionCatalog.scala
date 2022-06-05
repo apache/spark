@@ -39,9 +39,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
-class V2SessionCatalog(catalog: SessionCatalog, analyzer: Analyzer)
+class V2SessionCatalog(catalog: SessionCatalog)
   extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
+
+  var defaultColumnAnalyzer: Option[Analyzer] = Option.empty[Analyzer]
 
   override val defaultNamespace: Array[String] = Array("default")
 
@@ -150,7 +152,7 @@ class V2SessionCatalog(catalog: SessionCatalog, analyzer: Analyzer)
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
-      catalogTable.schema, changes, Some(analyzer), catalogTable.provider,
+      catalogTable.schema, changes, defaultColumnAnalyzer, catalogTable.provider,
       "ALTER TABLE", "V2SessionCatalog")
     val comment = properties.get(TableCatalog.PROP_COMMENT)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
