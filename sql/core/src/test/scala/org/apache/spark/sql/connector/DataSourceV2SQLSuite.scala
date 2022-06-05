@@ -1333,41 +1333,6 @@ class DataSourceV2SQLSuite
     checkPartitioning(testCatalog, "b")
   }
 
-  test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
-    // Positive tests
-    // Update the SQLConf to include the 'v2Source' from consideration as a valid table provider
-    // type for assigning DEFAULT columns.
-    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"inmemory,$v2Source") {
-      withTable("t") {
-        sql(s"create table t (a string) using $v2Source")
-        sql(s"create or replace table t (a string default 'abc') using $v2Source")
-        sql("insert into t values (default)")
-        // sql(s"alter table t add column (b string default 'def')")
-        sql(s"alter table t add column (b string)")
-        sql("insert into t values (default)")
-        checkAnswer(spark.table("t"),
-          Seq(
-            Row("abc", "def"),
-            Row("abc", "def")))
-      }
-    }
-    // Negative tests
-    // Update the SQLConf to exclude the 'v2Source' from consideration as a valid
-    // table provider type for assigning DEFAULT columns.
-    withTable("t") {
-      sql(s"create or replace table t (a string) using $v2Source")
-      withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "inmemory,invalid") {
-        val unsupported = "DEFAULT values are not supported for"
-        assert(intercept[AnalysisException] {
-          sql(s"create or replace table t2 (a string default 'abc') using $v2Source")
-        }.getMessage.contains(unsupported))
-        assert(intercept[AnalysisException] {
-          sql(s"alter table t add column (b string default 'abc')")
-        }.getMessage.contains(unsupported))
-      }
-    }
-  }
-
   test("tableCreation: partition column case sensitive resolution") {
     def checkFailure(statement: String): Unit = {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {

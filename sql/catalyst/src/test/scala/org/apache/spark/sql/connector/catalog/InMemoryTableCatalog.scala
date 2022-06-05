@@ -28,6 +28,10 @@ import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+object BasicInMemoryTableCatalog {
+  var defaultColumnAnalyzer: Option[Analyzer] = Option.empty[Analyzer]
+}
+
 class BasicInMemoryTableCatalog extends TableCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -119,9 +123,9 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-    lazy val defaultColumnAnalyzer: Analyzer = SimpleAnalyzer
     val schema = CatalogV2Util.applySchemaChanges(table.schema, changes,
-      Some(defaultColumnAnalyzer), Some("inmemory"), "ALTER TABLE", "InMemorySessionCatalog")
+      BasicInMemoryTableCatalog.defaultColumnAnalyzer, Some("inmemory"), "ALTER TABLE",
+      "InMemorySessionCatalog")
 
     // fail if the last column in the schema was dropped
     if (schema.fields.isEmpty) {
