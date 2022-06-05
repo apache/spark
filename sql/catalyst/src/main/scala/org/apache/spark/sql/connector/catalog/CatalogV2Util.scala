@@ -243,7 +243,8 @@ private[sql] object CatalogV2Util {
     }.getOrElse {
       newSchema.fields.foreach { field: StructField =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-          throw QueryCompilationErrors.defaultReferencesNotAllowedForCatalog(catalogType)
+          throw QueryCompilationErrors.defaultReferencesNotAllowedForCatalog(
+            s"catalog type: $catalogType")
         }
       }
       newSchema

@@ -2458,7 +2458,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def defaultReferencesNotAllowedForCatalog(catalogType: String): Throwable = {
     new AnalysisException(
-      "Failed to execute command because DEFAULT values are not supported for catalog type: " +
-        s"$catalogType")
+      s"Failed to execute command because DEFAULT values are not supported for $catalogType")
   }
 }

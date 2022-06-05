@@ -402,7 +402,7 @@ abstract class JdbcDialect extends Serializable with Logging{
     val updateClause = ArrayBuilder.make[String]
     for (change <- changes) {
       change match {
-        case add: AddColumn if add.fieldNames.length == 1 =>
+        case add: AddColumn if add.fieldNames.length == 1 && add.defaultValue.isEmpty =>
           val dataType = JdbcUtils.getJdbcType(add.dataType(), this).databaseTypeDefinition
           val name = add.fieldNames
           updateClause += getAddColumnQuery(tableName, name(0), dataType)
