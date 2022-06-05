@@ -874,6 +874,8 @@ $(document).ready(function () {
               data : function (row, type) {
                 if (row.taskMetrics && row.taskMetrics.executorRunTime) {
                   return type === 'display' ? formatDuration(row.taskMetrics.executorRunTime) : row.taskMetrics.executorRunTime;
+                } else if (row.duration && row.status === 'FAILED') {
+                  return type === 'display' ? formatDuration(row.duration) : row.duration;
                 } else {
                   return "";
                 }
