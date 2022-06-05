@@ -1331,43 +1331,6 @@ class DataSourceV2SQLSuite
     checkPartitioning(testCatalog, "b")
   }
 
-  test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
-    // Positive tests
-    // Update the SQLConf to include the 'v2Source' from consideration as a valid table provider
-    // type for assigning DEFAULT columns.
-    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Source") {
-      withTable("t") {
-        sql(s"create table t (a string) using $v2Source")
-        sql(s"create or replace table t (a string default 'abc') using $v2Source")
-        sql("insert into t values (default)")
-        checkAnswer(spark.table("t"), Row("abc"))
-      }
-    }
-    // Negative tests
-    val unsupported = "DEFAULT values are not supported for"
-    def addColumns(): Unit = withTable("t") {
-      sql(s"create or replace table t (a string) using $v2Source")
-      assert(intercept[AnalysisException] {
-        sql(s"alter table t add column (b string default 'abc')")
-      }.getMessage.contains(unsupported))
-      assert(intercept[AnalysisException] {
-        sql(s"alter table t alter column a set default 'def'")
-      }.getMessage.contains(unsupported))
-      assert(intercept[AnalysisException] {
-        sql(s"alter table t alter column a drop default")
-      }.getMessage.contains(unsupported))
-    }
-    addColumns()  // ALTER ADD COLUMNS with DEFAULTs are not supported for V2 tables in general
-    // Update the SQLConf to exclude the 'v2Source' from consideration as a valid
-    // table provider type for assigning DEFAULT columns.
-    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "invalid") {
-      assert(intercept[AnalysisException] {
-        sql(s"create or replace table t (a string default 'abc') using $v2Source")
-      }.getMessage.contains(unsupported))
-      addColumns()  // ALTER ADD COLUMNS with DEFAULTs fail when the provider is not allowlisted
-    }
-  }
-
   test("tableCreation: partition column case sensitive resolution") {
     def checkFailure(statement: String): Unit = {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
