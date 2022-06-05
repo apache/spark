@@ -163,7 +163,7 @@ abstract class BaseSessionStateBuilder(
     catalog
   }
 
-  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
+  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, analyzer)
 
   protected lazy val catalogManager = new CatalogManager(v2SessionCatalog, catalog)
 

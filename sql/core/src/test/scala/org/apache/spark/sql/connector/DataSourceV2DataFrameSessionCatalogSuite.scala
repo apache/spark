@@ -21,7 +21,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.Transform
@@ -110,7 +110,9 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
     Option(tables.get(ident)) match {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
+        val schema = CatalogV2Util.applySchemaChanges(
+          table.schema, changes, Option.empty[Analyzer], Option.empty[String], "ALTER TABLE",
+        "InMemoryTableSessionCatalog")
 
         // fail if the last column in the schema was dropped
         if (schema.fields.isEmpty) {

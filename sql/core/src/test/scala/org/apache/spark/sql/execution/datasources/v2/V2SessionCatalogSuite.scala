@@ -46,7 +46,7 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   val testIdent: Identifier = Identifier.of(testNs, "test_table")
 
   def newCatalog(): V2SessionCatalog = {
-    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)
+    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog, spark.sessionState.analyzer)
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
