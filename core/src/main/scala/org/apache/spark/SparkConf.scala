@@ -639,7 +639,7 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.excludeOnFailure.killExcludedExecutors"),
       DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
         "Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
-        DeprecatedConfig("spark.kubernetes.memoryOverheadFactor", "3.4.0",
+      DeprecatedConfig("spark.kubernetes.memoryOverheadFactor", "3.4.0",
         "Please use spark.driver.memoryOverheadFactor and spark.executor.memoryOverheadFactor")
     )
 
