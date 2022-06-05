@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflow, CheckOverflowInSum, Divide, Expression, If, PromotePrecision}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflow, CheckOverflowInSum, Divide, Expression, If, Literal, PromotePrecision}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Sum}
 import org.apache.spark.sql.catalyst.optimizer.customAnalyze._
 import org.apache.spark.sql.catalyst.plans._
@@ -90,24 +90,28 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
-      Batch("Push Partial Aggregation", FixedPoint(10),
+      Batch("Finish Analysis", Once,
+        PullOutGroupingExpressions) ::
+      Batch("Filter Pushdown", FixedPoint(10),
         PullOutGroupingExpressions,
         CombineFilters,
         PushPredicateThroughNonJoin,
         BooleanSimplification,
         PushPredicateThroughJoin,
         ColumnPruning,
-        PushPartialAggregationThroughJoin,
-        ResolveTimeZone,
         SimplifyCasts,
-        CollapseProject) :: Nil
+        CollapseProject) ::
+      Batch("PushPartialAggregationThroughJoin", Once,
+        PushPartialAggregationThroughJoin) :: Nil
   }
 
-  val testRelation1 = LocalRelation($"a".int, $"b".int, $"c".int)
-  val testRelation2 = LocalRelation($"x".int, $"y".int, $"z".int)
+  private val testRelation1 = LocalRelation($"a".int, $"b".int, $"c".int)
+  private val testRelation2 = LocalRelation($"x".int, $"y".int, $"z".int)
 
-  val testRelation3 = LocalRelation($"a".decimal(17, 2), $"b".decimal(17, 2), $"c".decimal(17, 2))
-  val testRelation4 = LocalRelation($"x".decimal(17, 2), $"y".decimal(17, 2), $"z".decimal(17, 2))
+  private val testRelation3 =
+    LocalRelation($"a".decimal(17, 2), $"b".decimal(17, 2), $"c".decimal(17, 2))
+  private val testRelation4 =
+    LocalRelation($"x".decimal(17, 2), $"y".decimal(17, 2), $"z".decimal(17, 2))
 
   private def sumWithDataType(
       sum: Expression,
@@ -223,6 +227,37 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       .select($"l._pushed_max_c", $"l._pushed_min_c", 'b)
       .groupBy('b)(max('_pushed_max_c).as("max_c"), min('_pushed_min_c).as("min_c"))
       .analyze
+
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("Push down sum(2), sum(2.5BD), avg(2), min(2), max(2), first(2) and last(2)") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy('b)(sum(Literal(2)).as("sum_2"), sum(Literal(BigDecimal("2.5"))).as("sum_25"),
+        avg(Literal(2)).as("avg_2"),
+        min(Literal(2)).as("min_2"), max(Literal(2)).as("max_2"),
+        first(Literal(2)).as("first_2"), last(Literal(2)).as("last_2"))
+      .analyze
+
+    val correctLeft = PartialAggregate(Seq('a, 'b), Seq('a, 'b, count(1).as("cnt")),
+      testRelation1.select('a, 'b)).as("l")
+    val correctRight = PartialAggregate(Seq('x), Seq(count(1).as("cnt"), 'x),
+      testRelation2.select('x)).as("r")
+
+    val correctAnswer =
+      correctLeft.join(correctRight,
+        joinType = Inner, condition = Some('a === 'x))
+        .select('b, $"l.cnt", $"r.cnt")
+        .groupBy('b)(sumWithDataType(Literal(2).cast(LongType) * ($"l.cnt" * $"r.cnt"),
+          datatype = Some(LongType)).as("sum_2"),
+          sumWithDataType(CheckOverflow(Literal(BigDecimal("2.5")).cast(DecimalType(12, 1)) *
+            ($"l.cnt" * $"r.cnt").cast(DecimalType(12, 1)), DecimalType(12, 1), !conf.ansiEnabled),
+            conf.ansiEnabled, datatype = Some(DecimalType(12, 1))).as("sum_25"),
+          avg(Literal(2)).as("avg_2"),
+          min(Literal(2)).as("min_2"), max(Literal(2)).as("max_2"),
+          first(Literal(2)).as("first_2"), last(Literal(2)).as("last_2"))
+        .analyzePlan
 
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
@@ -461,15 +496,6 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       .analyze
 
     comparePlans(Optimize.execute(originalQuery2), ColumnPruning(originalQuery2))
-  }
-
-  test("Do not push down aggregate expressions if the aggregate references is empty") {
-    val originalQuery = testRelation1
-      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
-      .groupBy('b)(sum(1).as("sum_lit_1"))
-      .analyze
-
-    comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
   }
 
   test("Do not push down if grouping references from left and right side") {

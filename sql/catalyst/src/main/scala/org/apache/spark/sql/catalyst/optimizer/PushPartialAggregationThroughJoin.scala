@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
+import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, ResolveTimeZone}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -144,7 +144,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     expr.mapChildren(_.transformUp {
       case e @ Sum(_, useAnsiAdd, dt) if aliasMap.contains(e.canonicalized) =>
         val value = aliasMap(e.canonicalized).toAttribute
-        val multiply = Multiply(value, cnt.toAttribute.cast(value.dataType))
+        val multiply = value.cast(e.dataType) * cnt.toAttribute.cast(e.dataType)
         e.dataType match {
           case decType: DecimalType =>
             // Do not use DecimalPrecision because it may be change the precision and scale
@@ -166,15 +166,14 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     }).asInstanceOf[NamedExpression]
   }
 
-  // The expression's references should not empty. For example: sum(1)
   private def pushableAggExp(ae: AggregateExpression): Boolean = ae match {
-    case AggregateExpression(e: Sum, Complete, false, None, _) => e.references.nonEmpty
-    case AggregateExpression(e: Min, Complete, false, None, _) => e.references.nonEmpty
-    case AggregateExpression(e: Max, Complete, false, None, _) => e.references.nonEmpty
-    case AggregateExpression(e: First, Complete, false, None, _) => e.references.nonEmpty
-    case AggregateExpression(e: Last, Complete, false, None, _) => e.references.nonEmpty
+    case AggregateExpression(_: Sum, Complete, false, None, _) => true
+    case AggregateExpression(_: Min, Complete, false, None, _) => true
+    case AggregateExpression(_: Max, Complete, false, None, _) => true
+    case AggregateExpression(_: First, Complete, false, None, _) => true
+    case AggregateExpression(_: Last, Complete, false, None, _) => true
     case AggregateExpression(Average(e, _), Complete, false, None, _) =>
-      e.dataType.isInstanceOf[NumericType] && e.references.nonEmpty
+      e.dataType.isInstanceOf[NumericType]
     case _ => false
   }
 
@@ -210,7 +209,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
       val newAggAggregateExpressions = agg.aggregateExpressions.map { expr =>
         expr.mapChildren(_.transformUp {
           case ae @ AggregateExpression(af, _, _, _, _) => af match {
-            case avg @ Average(e, useAnsiAdd) =>
+            case avg @ Average(e, useAnsiAdd) if e.references.nonEmpty =>
               val sum = Sum(e, useAnsiAdd, Some(avg.sumDataType)).toAggregateExpression()
               val count = Count(Seq(Literal(1))).toAggregateExpression()
               e.dataType match {
@@ -353,20 +352,24 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
           .map { expr =>
             expr.mapChildren(_.transformUp {
               case e @ Count(Seq(IntegerLiteral(1))) =>
-                Sum(Multiply(leftCnt.toAttribute, rightCnt.toAttribute),
-                  conf.ansiEnabled, Some(e.dataType))
+                Sum(leftCnt.toAttribute * rightCnt.toAttribute, conf.ansiEnabled, Some(e.dataType))
+              case e @ Sum(v, useAnsiAdd, dt) if e.references.isEmpty =>
+                val multiply =
+                  v.cast(e.dataType) * (leftCnt.toAttribute * rightCnt.toAttribute).cast(e.dataType)
+                e.dataType match {
+                  case decType: DecimalType =>
+                    // Do not use DecimalPrecision because it may be change the precision and scale
+                    Sum(CheckOverflow(multiply, decType, !useAnsiAdd), useAnsiAdd, Some(decType))
+                  case _ =>
+                    Sum(multiply, useAnsiAdd, Some(dt.getOrElse(e.dataType)))
+                }
+              // These expression do not need to rewrite:
+              // Min/Max(Literal(_)), First/Last(Literal(_), _) and Average(Literal(_), _)
             }).asInstanceOf[NamedExpression]
           }
 
         val newAgg = rewrittenAgg.copy(aggregateExpressions = newAggregateExps, child = newJoin)
-
-        val required = newJoin.references ++ newAgg.references
-        if (!newJoin.inputSet.subsetOf(required)) {
-          val newChildren = newJoin.children.map(ColumnPruning.prunedChild(_, required))
-          CollapseProject(newAgg.withNewChildren(Seq(newJoin.withNewChildren(newChildren))))
-        } else {
-          newAgg
-        }
+        ResolveTimeZone(SimplifyCasts(CollapseProject(ColumnPruning(newAgg))))
       } else {
         agg
       }
@@ -382,17 +385,17 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     } else {
       plan.transformWithPruning(_.containsAllPatterns(AGGREGATE, JOIN), ruleId) {
         case agg @ Aggregate(_, _, j: Join)
-          if j.children.exists(_.isInstanceOf[AggregateBase]) =>
+            if j.children.exists(_.isInstanceOf[AggregateBase]) =>
           agg
         case agg @ Aggregate(_, _, Project(_, j: Join))
-          if j.children.exists(_.isInstanceOf[AggregateBase]) =>
+            if j.children.exists(_.isInstanceOf[AggregateBase]) =>
           agg
 
         case agg @ PartialAggregate(_, _, j: Join)
-          if j.children.exists(_.isInstanceOf[AggregateBase]) =>
+            if j.children.exists(_.isInstanceOf[AggregateBase]) =>
           agg
         case agg @ PartialAggregate(_, _, Project(_, j: Join))
-          if j.children.exists(_.isInstanceOf[AggregateBase]) =>
+            if j.children.exists(_.isInstanceOf[AggregateBase]) =>
           agg
 
         case agg @ Aggregate(_, aggregateExps,

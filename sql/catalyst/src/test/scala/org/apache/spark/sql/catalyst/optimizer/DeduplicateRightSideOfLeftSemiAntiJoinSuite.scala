@@ -31,11 +31,13 @@ class DeduplicateRightSideOfLeftSemiAntiJoinSuite extends PlanTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
     SQLConf.get.setConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED, true)
+    SQLConf.get.setConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO, 1.0)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
     SQLConf.get.unsetConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED)
+    SQLConf.get.unsetConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO)
   }
 
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -59,41 +61,29 @@ class DeduplicateRightSideOfLeftSemiAntiJoinSuite extends PlanTest {
   val testRelation2 = LocalRelation($"x".int, $"y".int, $"z".int)
 
   test("Deduplicate the right side of left semi anti join") {
-    Seq(-1, 10000).foreach { threshold =>
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
-        Seq(LeftSemi, LeftAnti).foreach { joinType =>
-          val originalQuery = testRelation1
-            .join(testRelation2, joinType = joinType, condition = Some('a === 'x))
-            .analyze
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = joinType, condition = Some('a === 'x))
+        .analyze
 
-          val correctRight = PartialAggregate(Seq('x), Seq('x), testRelation2.select('x)).as("r")
-          val correctAnswer = testRelation1.join(correctRight, joinType = joinType,
-            condition = Some('a === 'x))
-            .analyzePlan
+      val correctRight = PartialAggregate(Seq('x), Seq('x), testRelation2.select('x)).as("r")
+      val correctAnswer = testRelation1.join(correctRight, joinType = joinType,
+        condition = Some('a === 'x))
+        .analyzePlan
 
-          if (threshold < 0) {
-            comparePlans(Optimize.execute(originalQuery), correctAnswer)
-          } else {
-            comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
-          }
-        }
-      }
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
     }
   }
 
   test("Do not deduplicate if right side is aggregate") {
-    Seq(-1, 10000).foreach { threshold =>
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
-        Seq(LeftSemi, LeftAnti).foreach { joinType =>
-          val originalQuery = testRelation1
-            .join(testRelation2.groupBy('x, 'y)('x, 'y), joinType = joinType,
-              condition = Some('a === 'x))
-            .analyze
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = testRelation1
+        .join(testRelation2.groupBy('x, 'y)('x, 'y), joinType = joinType,
+          condition = Some('a === 'x))
+        .analyze
 
-          comparePlans(Optimize.execute(originalQuery),
-            CollapseProject(ColumnPruning(originalQuery)))
-        }
-      }
+      comparePlans(Optimize.execute(originalQuery),
+        CollapseProject(ColumnPruning(originalQuery)))
     }
   }
 }
