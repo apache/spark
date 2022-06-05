@@ -1655,7 +1655,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
-    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,json,orc") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,inmemory,json,orc") {
       val unsupported = "DEFAULT values are not supported for target data source"
       assert(intercept[AnalysisException] {
         sql(s"create table t(a string default 'abc') using parquet")
