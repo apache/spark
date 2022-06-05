@@ -402,10 +402,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       "ORDER BY window_ordering) from table")
   }
 
-  def cannotResolveUserSpecifiedColumnsError(col: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Cannot resolve column name $col", t.origin.line, t.origin.startPosition)
-  }
-
   def writeTableWithMismatchedColumnsError(
       columnSize: Int, outputSize: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException("Cannot write to table due to mismatched user specified column " +
