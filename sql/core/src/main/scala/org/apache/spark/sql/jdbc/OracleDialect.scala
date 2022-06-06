@@ -85,12 +85,12 @@ private case object OracleDialect extends JdbcDialect {
           // https://github.com/apache/spark/pull/8780#issuecomment-145598968
           // and
           // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-          case 0 => Option(DecimalType.SYSTEM_DEFAULT)
+          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
           // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
           // this to NUMERIC with -127 scale
           // Not sure if there is a more robust way to identify the field as a float (or other
           // numeric types that do not specify a scale.
-          case _ if scale == -127L => Option(DecimalType.SYSTEM_DEFAULT)
+          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
           case _ => None
         }
       case TIMESTAMPTZ if supportTimeZoneTypes
