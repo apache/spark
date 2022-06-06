@@ -30,6 +30,8 @@ import org.apache.spark.sql.types.DataType;
 
 /**
  * The builder to generate SQL from V2 expressions.
+ *
+ * @since 3.3.0
  */
 public class V2ExpressionSQLBuilder {
 

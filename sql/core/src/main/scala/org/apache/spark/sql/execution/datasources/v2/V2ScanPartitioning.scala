@@ -32,7 +32,7 @@ import org.apache.spark.util.collection.Utils.sequenceToOption
  */
 object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, _) =>
+    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None) =>
       val funCatalogOpt = relation.catalog.flatMap {
         case c: FunctionCatalog => Some(c)
         case _ => None
@@ -40,7 +40,7 @@ object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
 
       val catalystPartitioning = scan.outputPartitioning() match {
         case kgp: KeyGroupedPartitioning => sequenceToOption(kgp.keys().map(
-          V2ExpressionUtils.toCatalyst(_, relation, funCatalogOpt)))
+          V2ExpressionUtils.toCatalystOpt(_, relation, funCatalogOpt)))
         case _: UnknownPartitioning => None
         case p => throw new IllegalArgumentException("Unsupported data source V2 partitioning " +
             "type: " + p.getClass.getSimpleName)
