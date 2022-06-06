@@ -44,3 +44,9 @@ SELECT regr_slope(y, x) FROM testRegression;
 SELECT regr_slope(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
 SELECT k, regr_slope(y, x) FROM testRegression GROUP BY k;
 SELECT k, regr_slope(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
+
+-- SPARK-37623: Support ANSI Aggregate Function: regr_intercept
+SELECT regr_intercept(y, x) FROM testRegression;
+SELECT regr_intercept(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
+SELECT k, regr_intercept(y, x) FROM testRegression GROUP BY k;
+SELECT k, regr_intercept(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;

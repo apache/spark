@@ -1170,11 +1170,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |WITH t as (SELECT true c, false d)
            |SELECT (t.c AND t.d) c
            |FROM t
-           |GROUP BY t.c
+           |GROUP BY t.c, t.d
            |HAVING ${func}(c) > 0d""".stripMargin),
-        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
+        Seq(s"cannot resolve '$func(c)' due to data type mismatch"),
         false)
     }
+  }
+
+  test("SPARK-39354: should be `Table or view not found`") {
+    assertAnalysisError(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id, CAST("2022-06-02" AS DATE) dt)
+         |SELECT *
+         |FROM t1
+         |JOIN t2 ON t1.user_id = t2.user_id
+         |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
+      Seq(s"Table or view not found: t2"),
+      false)
   }
 
   test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {

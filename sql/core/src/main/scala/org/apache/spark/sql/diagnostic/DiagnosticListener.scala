@@ -30,7 +30,7 @@ import org.apache.spark.status.{ElementTrackingStore, KVUtils}
  *
  * @param kvStore used to store the diagnostic information
  */
-class DiagnosticListener(
+private[spark] class DiagnosticListener(
     conf: SparkConf,
     kvStore: ElementTrackingStore) extends SparkListener {
 
@@ -107,6 +107,6 @@ class DiagnosticListener(
   }
 }
 
-object DiagnosticListener {
+private[spark] object DiagnosticListener {
   val QUEUE_NAME = "diagnostics"
 }
