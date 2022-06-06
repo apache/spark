@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
