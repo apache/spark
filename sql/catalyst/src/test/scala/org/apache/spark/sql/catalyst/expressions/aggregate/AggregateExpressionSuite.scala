@@ -64,4 +64,21 @@ class AggregateExpressionSuite extends SparkFunSuite {
     assert(RegrSlope(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
       TypeCheckResult.TypeCheckSuccess)
   }
+
+  test("test regr_intercept input types") {
+    val checkResult1 = RegrIntercept(Literal("a"), Literal(1)).checkInputDataTypes()
+    assert(checkResult1.isInstanceOf[TypeCheckResult.TypeCheckFailure])
+    assert(checkResult1.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
+      .contains("argument 1 requires double type, however, ''a'' is of string type"))
+    val checkResult2 = RegrIntercept(Literal(3.0D), Literal('b')).checkInputDataTypes()
+    assert(checkResult2.isInstanceOf[TypeCheckResult.TypeCheckFailure])
+    assert(checkResult2.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
+      .contains("argument 2 requires double type, however, ''b'' is of string type"))
+    val checkResult3 = RegrIntercept(Literal(3.0D), Literal(Array(0))).checkInputDataTypes()
+    assert(checkResult3.isInstanceOf[TypeCheckResult.TypeCheckFailure])
+    assert(checkResult3.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
+      .contains("argument 2 requires double type, however, '[0]' is of array<int> type"))
+    assert(RegrIntercept(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
+      TypeCheckResult.TypeCheckSuccess)
+  }
 }

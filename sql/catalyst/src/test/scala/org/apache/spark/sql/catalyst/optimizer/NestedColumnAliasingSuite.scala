@@ -498,7 +498,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
     val query = contact
-      .select($"name.first", winExpr.as(Symbol("window")))
+      .select($"name.first", winExpr.as("window"))
       .orderBy($"name.last".asc)
       .analyze
     val optimized = Optimize.execute(query)
@@ -516,7 +516,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("Nested field pruning for Filter with other supported operators") {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
-    val query1 = contact.select($"name.first", winExpr.as(Symbol("window")))
+    val query1 = contact.select($"name.first", winExpr.as("window"))
       .where($"window" === 1 && $"name.first" === "a")
       .analyze
     val optimized1 = Optimize.execute(query1)

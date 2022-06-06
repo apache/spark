@@ -360,4 +360,35 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     blockInfoManager.releaseAllLocksForTask(0)
     assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries - 1)
   }
+
+  test("SPARK-38675 - concurrent unlock and releaseAllLocksForTask calls should not fail") {
+    // Create block
+    val blockId = TestBlockId("block")
+    assert(blockInfoManager.lockNewBlockForWriting(blockId, newBlockInfo()))
+    blockInfoManager.unlock(blockId)
+
+    // Without the fix the block below fails in 50% of the time. By executing it
+    // 10 times we increase the chance of failing to ~99.9%.
+    (0 to 10).foreach { task =>
+      withTaskId(task) {
+        blockInfoManager.registerTask(task)
+
+        // Acquire read locks
+        (0 to 50).foreach { _ =>
+          assert(blockInfoManager.lockForReading(blockId).isDefined)
+        }
+
+        // Asynchronously release read locks.
+        val futures = (0 to 50).map { _ =>
+          Future(blockInfoManager.unlock(blockId, Option(0L)))
+        }
+
+        // Remove all lock and hopefully don't hit an assertion error
+        blockInfoManager.releaseAllLocksForTask(task)
+
+        // Wait until all futures complete for the next iteration
+        futures.foreach(ThreadUtils.awaitReady(_, 100.millis))
+      }
+    }
+  }
 }

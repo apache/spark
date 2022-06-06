@@ -179,9 +179,9 @@ class DistinctKeyVisitorSuite extends PlanTest {
 
     checkDistinctAttributes(
       Distinct(t1)
-        .select($"a", $"b", $"c", winExpr.as(Symbol("window"))), Set(ExpressionSet(Seq(a, b, c))))
+        .select($"a", $"b", $"c", winExpr.as("window")), Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(
-      Distinct(t1).select($"a", $"b", winExpr.as(Symbol("window"))), Set())
+      Distinct(t1).select($"a", $"b", winExpr.as("window")), Set())
   }
 
   test("Tail's distinct attributes") {
