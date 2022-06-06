@@ -28,7 +28,6 @@ import org.apache.spark.annotation.Private;
 @Private
 public final class SparkOutOfMemoryError extends OutOfMemoryError implements SparkThrowable {
     String errorClass;
-    String errorSubClass;
     String[] messageParameters;
 
     public SparkOutOfMemoryError(String s) {
@@ -55,7 +54,4 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError implements Spa
     public String getErrorClass() {
         return errorClass;
     }
-
-    @Override
-    public String getErrorSubClass() { return errorSubClass; }
 }
