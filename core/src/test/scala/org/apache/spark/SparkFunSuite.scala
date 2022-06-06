@@ -273,12 +273,13 @@ abstract class SparkFunSuite
    * @param parameters    A map of parameter names and values. The names are as defined
    *                      in the error-classes file.
    */
-  protected def checkError(exception: Exception with SparkThrowable,
-                           errorClass: String,
-                           errorSubClass: Option[String],
-                           sqlState: Option[String],
-                           parameters: Map[String, String],
-                           matchPVals: Boolean = false): Unit = {
+  protected def checkError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      errorSubClass: Option[String],
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      matchPVals: Boolean = false): Unit = {
     assert(exception.getErrorClass === errorClass)
     if (exception.getErrorSubClass != null) { assert(errorSubClass.isDefined) }
     errorSubClass.foreach(subClass => assert(exception.getErrorSubClass === subClass))
