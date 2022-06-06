@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector
 
 import scala.collection.JavaConverters._
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
@@ -312,20 +311,22 @@ trait AlterTableTests extends SharedSparkSession {
   }
 
   test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ADD COLUMN") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable("t") {
-      sql(s"create table $t (a string) using $v2Format")
-      sql(s"alter table $t add column (b int default 2 + 3)")
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"inmemory,$v2Format") {
+      val t = s"${catalogAndNamespace}table_name"
+      withTable("t") {
+        sql(s"create table $t (a string) using $v2Format")
+        sql(s"alter table $t add column (b int default 2 + 3)")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+        val tableName = fullTableName(t)
+        val table = getTableMetadata(tableName)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("a", StringType)
-        .add(StructField("b", IntegerType)
-          .withCurrentDefaultValue("2 + 3")
-          .withExistenceDefaultValue("5")))
+        assert(table.name === tableName)
+        assert(table.schema === new StructType()
+          .add("a", StringType)
+          .add(StructField("b", IntegerType)
+            .withCurrentDefaultValue("2 + 3")
+            .withExistenceDefaultValue("5")))
+      }
     }
   }
 
