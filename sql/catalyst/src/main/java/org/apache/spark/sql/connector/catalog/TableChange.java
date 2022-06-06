@@ -710,8 +710,8 @@ public interface TableChange {
     }
   }
 
-/**
- * A TableChange to delete a field.
+  /**
+   * A TableChange to delete a field.
    * <p>
    * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
    */
