@@ -19,11 +19,17 @@
 rootLogger.level = info
 rootLogger.appenderRef.stdout.ref = console
 
+# In the pattern layout configuration below, we specify an explicit `%ex` conversion
+# pattern for logging Throwables. If this was omitted, then (by default) Log4J would
+# implicitly add an `%xEx` conversion pattern which logs stacktraces with additional
+# class packaging information. That extra information can sometimes add a substantial
+# performance overhead, so we disable it in our default logging config.
+# For more information, see SPARK-39361.
 appender.console.type = Console
 appender.console.name = console
 appender.console.target = SYSTEM_ERR
 appender.console.layout.type = PatternLayout
-appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
 
 # Set the default spark-shell/spark-sql log level to WARN. When running the
 # spark-shell/spark-sql, the log level for these classes is used to overwrite
