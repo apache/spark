@@ -71,6 +71,26 @@ private[sql] object H2Dialect extends JdbcDialect {
         case f: GeneralAggregateFunc if f.name() == "CORR" && !f.isDistinct =>
           assert(f.children().length == 2)
           Some(s"CORR(${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "REGR_INTERCEPT" =>
+          assert(f.children().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"REGR_INTERCEPT($distinct${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "REGR_R2" =>
+          assert(f.children().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"REGR_R2($distinct${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "REGR_SLOPE" =>
+          assert(f.children().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"REGR_SLOPE($distinct${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "REGR_SXX" =>
+          assert(f.children().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"REGR_SXX($distinct${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "REGR_SXY" =>
+          assert(f.children().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"REGR_SXY($distinct${f.children().head}, ${f.children().last})")
         case _ => None
       }
     )

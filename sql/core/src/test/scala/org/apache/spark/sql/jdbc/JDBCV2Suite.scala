@@ -1685,6 +1685,28 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df2, Seq(Row(1d), Row(1d), Row(null)))
   }
 
+  test("scan with aggregate push-down: linear regression functions with filter and group by") {
+    val df = sql(
+      """
+        |SELECT
+        |  REGR_INTERCEPT(bonus, bonus),
+        |  REGR_R2(bonus, bonus),
+        |  REGR_SLOPE(bonus, bonus),
+        |  REGR_SXY(bonus, bonus)
+        |FROM h2.test.employee where dept > 0 group by DePt""".stripMargin)
+    checkFiltersRemoved(df)
+    checkAggregateRemoved(df)
+    checkPushedInfo(df,
+      """
+        |PushedAggregates: [REGR_INTERCEPT(BONUS, BONUS), REGR_R2(BONUS, BONUS),
+        |REGR_SLOPE(BONUS, BONUS), REGR_SXY(BONUS, B...,
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df,
+      Seq(Row(0.0, 1.0, 1.0, 20000.0), Row(0.0, 1.0, 1.0, 5000.0), Row(null, null, null, 0.0)))
+  }
+
   test("scan with aggregate push-down: aggregate over alias push down") {
     val cols = Seq("a", "b", "c", "d", "e")
     val df1 = sql("SELECT * FROM h2.test.employee").toDF(cols: _*)

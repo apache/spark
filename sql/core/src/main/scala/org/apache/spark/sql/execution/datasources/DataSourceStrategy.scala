@@ -751,6 +751,22 @@ object DataSourceStrategy
         PushableColumnWithoutNestedColumn(right), _) =>
           Some(new GeneralAggregateFunc("CORR", agg.isDistinct,
             Array(FieldReference.column(left), FieldReference.column(right))))
+        case aggregate.RegrIntercept(PushableColumnWithoutNestedColumn(left),
+        PushableColumnWithoutNestedColumn(right)) =>
+          Some(new GeneralAggregateFunc("REGR_INTERCEPT", agg.isDistinct,
+            Array(FieldReference.column(left), FieldReference.column(right))))
+        case aggregate.RegrR2(PushableColumnWithoutNestedColumn(left),
+        PushableColumnWithoutNestedColumn(right)) =>
+          Some(new GeneralAggregateFunc("REGR_R2", agg.isDistinct,
+            Array(FieldReference.column(left), FieldReference.column(right))))
+        case aggregate.RegrSlope(PushableColumnWithoutNestedColumn(left),
+        PushableColumnWithoutNestedColumn(right)) =>
+          Some(new GeneralAggregateFunc("REGR_SLOPE", agg.isDistinct,
+            Array(FieldReference.column(left), FieldReference.column(right))))
+        case aggregate.RegrSXY(PushableColumnWithoutNestedColumn(left),
+        PushableColumnWithoutNestedColumn(right)) =>
+          Some(new GeneralAggregateFunc("REGR_SXY", agg.isDistinct,
+            Array(FieldReference.column(left), FieldReference.column(right))))
         case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
           val translatedExprs = children.flatMap(PushableExpression.unapply(_))
           if (translatedExprs.length == children.length) {
