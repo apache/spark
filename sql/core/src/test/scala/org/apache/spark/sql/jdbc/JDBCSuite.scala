@@ -928,9 +928,9 @@ class JDBCSuite extends QueryTest
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
     val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+      Some(DecimalType.SYSTEM_DEFAULT))
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+      Some(DecimalType.SYSTEM_DEFAULT))
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null) ==
       Some(FloatType))
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
@@ -1356,17 +1356,23 @@ class JDBCSuite extends QueryTest
   }
 
   test("SPARK-38846: TeradataDialect catalyst type mapping") {
-    val defaultScale = 18
     val teradataDialect = JdbcDialects.get("jdbc:teradata")
     val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", 0)
-    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER", 10, metadata) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, defaultScale)))
+    // When scale is 0, default DecimalType should be returned
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      DecimalType.MAX_PRECISION, metadata) == Some(DecimalType.SYSTEM_DEFAULT))
     val specifiedScale = 10
+    val specifiedPrecision = 10
     metadata.putLong("scale", specifiedScale)
-    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER", 10, metadata) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, specifiedScale)))
-    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER", 10, null) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, defaultScale)))
+    // Both precision and scale is in valid range
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      specifiedPrecision, metadata) == Some(DecimalType(specifiedPrecision, specifiedScale)))
+    // When precision is not specified, MAX_PRECISION should be used
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      40, metadata) == Some(DecimalType(DecimalType.MAX_PRECISION, specifiedScale)))
+    // When MetadataBuilder is null, default DecimalType should be returned
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      specifiedPrecision, null) == Some(DecimalType.SYSTEM_DEFAULT))
   }
 
     test("Checking metrics correctness with JDBC") {

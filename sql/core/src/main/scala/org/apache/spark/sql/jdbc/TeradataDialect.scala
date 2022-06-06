@@ -105,19 +105,17 @@ private case object TeradataDialect extends JdbcDialect {
         Option(DecimalType.SYSTEM_DEFAULT)
       } else {
         val scale = md.build().getLong("scale")
-        // Scale returned from JDBC is 0 when NUMBER's scale is not explicitly specified
-        // Note, even if the NUMBER is defined like NUMBER(20, 0), Spark will treat it as
-        // (20, $defaultScale)
+        // In Teradata, Number or Number(*) means precision and scale is flexible.
+        // However, the scale returned from JDBC is 0, which leads to fractional part loss.
+        // Handle this special case by adding explicit conversion to system default decimal type.
+        // Note, even if the NUMBER is defined with explicit precision and scale like NUMBER(20, 0),
+        // Spark will treat it as DecimalType.SYSTEM_DEFAULT, which is NUMBER(38,18)
         if (scale == 0) {
           Option(DecimalType.SYSTEM_DEFAULT)
         } else {
-          // Precision returned from JDBC is 40 when NUMBER's precision is not explicitly specified
-          if (size == 40) {
-            val precision = DecimalType.MAX_PRECISION
-            Option(DecimalType(precision, scale.toInt))
-          } else {
-            Option(DecimalType(size, scale.toInt))
-          }
+          // In Teradata, Number(*, scale) will return size, namely precision, as 40,
+          // which conflicts to DecimalType.MAX_PRECISION
+          Option(DecimalType(Math.min(size, DecimalType.MAX_PRECISION), scale.toInt))
         }
       }
     } else {
