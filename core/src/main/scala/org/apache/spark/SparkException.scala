@@ -32,10 +32,11 @@ class SparkException(
     messageParameters: Array[String])
   extends Exception(message, cause) with SparkThrowable {
 
-   def this(message: String,
-            cause: Throwable,
-            errorClass: Option[String],
-            messageParameters: Array[String]) =
+   def this(
+       message: String,
+       cause: Throwable,
+       errorClass: Option[String],
+       messageParameters: Array[String]) =
      this(message = message,
           cause = cause,
           errorClass = errorClass,
