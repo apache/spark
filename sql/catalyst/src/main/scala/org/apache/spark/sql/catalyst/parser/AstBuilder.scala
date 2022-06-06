@@ -1289,10 +1289,6 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       throw QueryParsingErrors.invalidTimeTravelSpec(
         "timestamp expression cannot refer to any columns", ctx.timestamp)
     }
-    if (timestamp.exists(e => SubqueryExpression.hasSubquery(e))) {
-      throw QueryParsingErrors.invalidTimeTravelSpec(
-        "timestamp expression cannot contain subqueries", ctx.timestamp)
-    }
     RelationTimeTravel(plan, timestamp, version)
   }
 

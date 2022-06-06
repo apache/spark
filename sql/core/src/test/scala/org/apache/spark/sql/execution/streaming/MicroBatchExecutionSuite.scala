@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.read.streaming
@@ -93,8 +94,9 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     testStream(streamEvent) (
       AddData(inputData, 1, 2, 3, 4, 5, 6),
       StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
-      ExpectFailure[IllegalStateException] { e =>
-        assert(e.getMessage.contains("batch 3 doesn't exist"))
+      ExpectFailure[SparkException] { e =>
+        assert(e.asInstanceOf[SparkThrowable].getErrorClass === "INTERNAL_ERROR")
+        assert(e.getCause.getMessage.contains("batch 3 doesn't exist"))
       }
     )
   }
