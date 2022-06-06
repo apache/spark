@@ -58,8 +58,11 @@ class SparkException(
       errorSubClass = None,
       messageParameters = messageParameters)
 
-  def this(errorClass: String, errorSubClass: String,
-           messageParameters: Array[String], cause: Throwable) =
+  def this(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Array[String],
+      cause: Throwable) =
     this(
       message = SparkThrowableHelper.getMessage(errorClass, Some(errorSubClass), messageParameters),
       cause = cause,
