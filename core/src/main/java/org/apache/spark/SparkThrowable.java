@@ -55,7 +55,7 @@ public interface SparkThrowable {
     return new String[]{};
   }
 
-  // True if this error is an internal error.
+  // Returns a string array of all parameters that need to be passed to this error message.
   default String[] getParameterNames() {
     return SparkThrowableHelper.getParameterNames(this.getErrorClass(), this.getErrorSubClass());
   }
