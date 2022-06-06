@@ -1228,7 +1228,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
           |appender.console.name = console
           |appender.console.target = SYSTEM_ERR
           |appender.console.layout.type = PatternLayout
-          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
         """.stripMargin,
         new File(s"$tempLog4jConf/log4j2.properties"),
         StandardCharsets.UTF_8)
