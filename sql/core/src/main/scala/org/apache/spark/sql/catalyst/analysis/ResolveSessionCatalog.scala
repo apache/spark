@@ -48,17 +48,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AddColumns(
-      ResolvedTable(catalog, ident, v1Table: V1Table, _), cols)
-        if isSessionCatalog(catalog) =>
+    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
         assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
         if (!c.nullable) {
           throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
         }
       }
-      AlterTableAddColumnsCommand(
-        ident.asTableIdentifier, StructType(cols.map(convertToStructField)))
+      AlterTableAddColumnsCommand(ident.asTableIdentifier, cols.map(convertToStructField))
 
     case ReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE COLUMNS")
