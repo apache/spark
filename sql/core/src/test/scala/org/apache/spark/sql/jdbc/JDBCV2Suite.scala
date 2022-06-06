@@ -958,6 +958,48 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |[DEPT, CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
         |""".stripMargin.replaceAll("\n", " "))
     checkAnswer(df5, Seq(Row(1, 0, 10000), Row(1, 9000, 9000), Row(2, 0, 22000), Row(6, 0, 12000)))
+
+    val df6 = sql(
+      """
+        |SELECT CASE WHEN SALARY > 8000 AND is_manager <> false THEN SALARY ELSE 0 END as key,
+        |  SUM(SALARY) FROM h2.test.employee GROUP BY key""".stripMargin)
+    checkAggregateRemoved(df6)
+    checkPushedInfo(df6,
+      """
+        |PushedAggregates: [SUM(SALARY)],
+        |PushedFilters: [],
+        |PushedGroupByExpressions:
+        |[CASE WHEN (SALARY > 8000.00) AND (IS_MANAGER = true) THEN SALARY ELSE 0.00 END],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df6, Seq(Row(0, 21000), Row(10000, 20000), Row(12000, 12000)))
+
+    val df7 = sql(
+      """
+        |SELECT CASE WHEN SALARY > 8000 OR is_manager <> false THEN SALARY ELSE 0 END as key,
+        |  SUM(SALARY) FROM h2.test.employee GROUP BY key""".stripMargin)
+    checkAggregateRemoved(df7)
+    checkPushedInfo(df7,
+      """
+        |PushedAggregates: [SUM(SALARY)],
+        |PushedFilters: [],
+        |PushedGroupByExpressions:
+        |[CASE WHEN (SALARY > 8000.00) OR (IS_MANAGER = true) THEN SALARY ELSE 0.00 END],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df7, Seq(Row(10000, 20000), Row(12000, 24000), Row(9000, 9000)))
+
+    val df8 = sql(
+      """
+        |SELECT CASE WHEN NOT(is_manager <> false) THEN SALARY ELSE 0 END as key,
+        |  SUM(SALARY) FROM h2.test.employee GROUP BY key""".stripMargin)
+    checkAggregateRemoved(df8)
+    checkPushedInfo(df8,
+      """
+        |PushedAggregates: [SUM(SALARY)],
+        |PushedFilters: [],
+        |PushedGroupByExpressions:
+        |[CASE WHEN NOT (IS_MANAGER = true) THEN SALARY ELSE 0.00 END],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df8, Seq(Row(0, 32000), Row(12000, 12000), Row(9000, 9000)))
   }
 
   test("scan with aggregate push-down: DISTINCT SUM with group by") {
