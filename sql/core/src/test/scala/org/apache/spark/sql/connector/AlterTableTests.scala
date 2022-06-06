@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -310,7 +311,7 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("SPARK-39383 Support DEFAULT columns with V2 data sources") {
+  test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ADD COLUMN") {
     val t = s"${catalogAndNamespace}table_name"
     withTable("t") {
       sql(s"create table $t (a string) using $v2Format")
@@ -325,6 +326,24 @@ trait AlterTableTests extends SharedSparkSession {
         .add(StructField("b", IntegerType)
           .withCurrentDefaultValue("2 + 3")
           .withExistenceDefaultValue("5")))
+    }
+  }
+
+  test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ALTER COLUMN") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"inmemory,$v2Format") {
+      val t = s"${catalogAndNamespace}table_name"
+      withTable("t") {
+        sql(s"create table $t (a int) using $v2Format")
+        sql(s"alter table $t alter column a set default 2 + 3")
+
+        val tableName = fullTableName(t)
+        val table = getTableMetadata(tableName)
+
+        assert(table.name === tableName)
+        assert(table.schema === new StructType()
+          .add(StructField("a", IntegerType)
+            .withCurrentDefaultValue("2 + 3")))
+      }
     }
   }
 

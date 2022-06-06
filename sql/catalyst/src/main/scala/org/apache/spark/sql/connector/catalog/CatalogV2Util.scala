@@ -207,6 +207,14 @@ private[sql] object CatalogV2Util {
               })
           }
 
+        case update: UpdateColumnDefaultValue =>
+          replace(schema, update.fieldNames, field =>
+            if (update.newDefaultValue().nonEmpty) {
+              Some(field.withCurrentDefaultValue(update.newDefaultValue()))
+            } else {
+              Some(field.clearCurrentDefaultValue)
+            })
+
         case delete: DeleteColumn =>
           replace(schema, delete.fieldNames, _ => None, delete.ifExists)
 
