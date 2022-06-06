@@ -1011,7 +1011,7 @@ case class Pmod(
         }
         val decimalAdd = "$plus"
         s"""
-           |$javaType $remainder = ${eval1.value}.remainder(${eval2.value});
+           |$javaType $remainder = ${eval1.value}.$decimalMethod(${eval2.value});
            |if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
            |  ${ev.value}=($remainder.$decimalAdd(${eval2.value})).$decimalMethod(${eval2.value});
            |} else {
