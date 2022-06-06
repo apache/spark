@@ -20,12 +20,11 @@ import java.util.Collections
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder => catalystSortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.TransformExpression
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.functions._
-import org.apache.spark.sql.connector.distributions.Distribution
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
@@ -83,8 +82,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val partitions: Array[Transform] = Array(Expressions.years("ts"))
 
     // create a table with 3 partitions, partitioned by `years` transform
-    createTable(table, schema, partitions,
-      Distributions.clustered(partitions.map(_.asInstanceOf[Expression])))
+    createTable(table, schema, partitions)
     sql(s"INSERT INTO testcat.ns.$table VALUES " +
         s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
         s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
@@ -104,28 +102,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       physical.KeyGroupedPartitioning(catalystDistribution.clustering, partitionValues))
   }
 
-  test("non-clustered distribution: fallback to super.partitioning") {
-    val partitions: Array[Transform] = Array(years("ts"))
-    val ordering: Array[SortOrder] = Array(sort(FieldReference("ts"),
-      SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
-
-    createTable(table, schema, partitions, Distributions.ordered(ordering), ordering)
-    sql(s"INSERT INTO testcat.ns.$table VALUES " +
-        s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
-        s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
-        s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
-
-    val df = sql(s"SELECT * FROM testcat.ns.$table")
-    val catalystOrdering = Seq(catalystSortOrder(attr("ts"), Ascending))
-    val catalystDistribution = physical.OrderedDistribution(catalystOrdering)
-
-    checkQueryPlan(df, catalystDistribution, physical.UnknownPartitioning(0))
-  }
-
   test("non-clustered distribution: no partition") {
     val partitions: Array[Transform] = Array(bucket(32, "ts"))
-    createTable(table, schema, partitions,
-      Distributions.clustered(partitions.map(_.asInstanceOf[Expression])))
+    createTable(table, schema, partitions)
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = physical.ClusteredDistribution(
@@ -136,8 +115,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
   test("non-clustered distribution: single partition") {
     val partitions: Array[Transform] = Array(bucket(32, "ts"))
-    createTable(table, schema, partitions,
-      Distributions.clustered(partitions.map(_.asInstanceOf[Expression])))
+    createTable(table, schema, partitions)
     sql(s"INSERT INTO testcat.ns.$table VALUES (0, 'aaa', CAST('2020-01-01' AS timestamp))")
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
@@ -152,9 +130,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val nonFunctionCatalog = spark.sessionState.catalogManager.catalog("testcat2")
         .asInstanceOf[InMemoryTableCatalog]
     val partitions: Array[Transform] = Array(bucket(32, "ts"))
-    createTable(table, schema, partitions,
-      Distributions.clustered(partitions.map(_.asInstanceOf[Expression])),
-      catalog = nonFunctionCatalog)
+    createTable(table, schema, partitions, catalog = nonFunctionCatalog)
     sql(s"INSERT INTO testcat2.ns.$table VALUES " +
         s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
         s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
@@ -174,8 +150,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     catalog.clearFunctions()
 
     val partitions: Array[Transform] = Array(bucket(32, "ts"))
-    createTable(table, schema, partitions,
-      Distributions.clustered(partitions.map(_.asInstanceOf[Expression])))
+    createTable(table, schema, partitions)
     sql(s"INSERT INTO testcat.ns.$table VALUES " +
         s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
         s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
@@ -190,8 +165,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   test("non-clustered distribution: V2 bucketing disabled") {
     withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
       val partitions: Array[Transform] = Array(bucket(32, "ts"))
-      createTable(table, schema, partitions,
-        Distributions.clustered(partitions.map(_.asInstanceOf[Expression])))
+      createTable(table, schema, partitions)
       sql(s"INSERT INTO testcat.ns.$table VALUES " +
           s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
           s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
@@ -239,11 +213,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       table: String,
       schema: StructType,
       partitions: Array[Transform],
-      distribution: Distribution = Distributions.unspecified(),
-      ordering: Array[expressions.SortOrder] = Array.empty,
       catalog: InMemoryTableCatalog = catalog): Unit = {
     catalog.createTable(Identifier.of(Array("ns"), table),
-      schema, partitions, emptyProps, distribution, ordering, None)
+      schema, partitions, emptyProps, Distributions.unspecified(), Array.empty, None)
   }
 
   private val customers: String = "customers"
@@ -259,15 +231,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
   private def testWithCustomersAndOrders(
       customers_partitions: Array[Transform],
-      customers_distribution: Distribution,
       orders_partitions: Array[Transform],
-      orders_distribution: Distribution,
       expectedNumOfShuffleExecs: Int): Unit = {
-    createTable(customers, customers_schema, customers_partitions, customers_distribution)
+    createTable(customers, customers_schema, customers_partitions)
     sql(s"INSERT INTO testcat.ns.$customers VALUES " +
         s"('aaa', 10, 1), ('bbb', 20, 2), ('ccc', 30, 3)")
 
-    createTable(orders, orders_schema, orders_partitions, orders_distribution)
+    createTable(orders, orders_schema, orders_partitions)
     sql(s"INSERT INTO testcat.ns.$orders VALUES " +
         s"(100.0, 1), (200.0, 1), (150.0, 2), (250.0, 2), (350.0, 2), (400.50, 3)")
 
@@ -297,11 +267,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val customers_partitions = Array(bucket(4, "customer_id"))
     val orders_partitions = Array(bucket(4, "customer_id"))
 
-    testWithCustomersAndOrders(customers_partitions,
-      Distributions.clustered(customers_partitions.toArray),
-      orders_partitions,
-      Distributions.clustered(orders_partitions.toArray),
-      0)
+    testWithCustomersAndOrders(customers_partitions, orders_partitions, 0)
   }
 
   test("partitioned join: number of buckets mismatch should trigger shuffle") {
@@ -309,22 +275,14 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val orders_partitions = Array(bucket(2, "customer_id"))
 
     // should shuffle both sides when number of buckets are not the same
-    testWithCustomersAndOrders(customers_partitions,
-      Distributions.clustered(customers_partitions.toArray),
-      orders_partitions,
-      Distributions.clustered(orders_partitions.toArray),
-      2)
+    testWithCustomersAndOrders(customers_partitions, orders_partitions, 2)
   }
 
   test("partitioned join: only one side reports partitioning") {
     val customers_partitions = Array(bucket(4, "customer_id"))
     val orders_partitions = Array(bucket(2, "customer_id"))
 
-    testWithCustomersAndOrders(customers_partitions,
-      Distributions.clustered(customers_partitions.toArray),
-      orders_partitions,
-      Distributions.unspecified(),
-      2)
+    testWithCustomersAndOrders(customers_partitions, orders_partitions, 2)
   }
 
   private val items: String = "items"
@@ -342,8 +300,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
   test("partitioned join: join with two partition keys and matching & sorted partitions") {
     val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
-    createTable(items, items_schema, items_partitions,
-      Distributions.clustered(items_partitions.toArray))
+    createTable(items, items_schema, items_partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
         s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
         s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
@@ -352,8 +309,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
 
     val purchases_partitions = Array(bucket(8, "item_id"), days("time"))
-    createTable(purchases, purchases_schema, purchases_partitions,
-      Distributions.clustered(purchases_partitions.toArray))
+    createTable(purchases, purchases_schema, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
         s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
         s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
@@ -375,8 +331,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
   test("partitioned join: join with two partition keys and unsorted partitions") {
     val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
-    createTable(items, items_schema, items_partitions,
-      Distributions.clustered(items_partitions.toArray))
+    createTable(items, items_schema, items_partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
         s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp)), " +
         s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
@@ -385,8 +340,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp))")
 
     val purchases_partitions = Array(bucket(8, "item_id"), days("time"))
-    createTable(purchases, purchases_schema, purchases_partitions,
-      Distributions.clustered(purchases_partitions.toArray))
+    createTable(purchases, purchases_schema, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
         s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
         s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
@@ -408,8 +362,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
   test("partitioned join: join with two partition keys and different # of partition keys") {
     val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
-    createTable(items, items_schema, items_partitions,
-      Distributions.clustered(items_partitions.toArray))
+    createTable(items, items_schema, items_partitions)
 
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
         s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
@@ -417,8 +370,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
 
     val purchases_partitions = Array(bucket(8, "item_id"), days("time"))
-    createTable(purchases, purchases_schema, purchases_partitions,
-      Distributions.clustered(purchases_partitions.toArray))
+    createTable(purchases, purchases_schema, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
         s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
         s"(2, 11.0, cast('2020-01-01' as timestamp))")
@@ -439,8 +391,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
         SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
       val items_partitions = Array(identity("id"))
-      createTable(items, items_schema, items_partitions,
-        Distributions.clustered(items_partitions.toArray))
+      createTable(items, items_schema, items_partitions)
       sql(s"INSERT INTO testcat.ns.$items VALUES " +
           s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
           s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
@@ -449,8 +400,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
           s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
 
       val purchases_partitions = Array(identity("item_id"))
-      createTable(purchases, purchases_schema, purchases_partitions,
-        Distributions.clustered(purchases_partitions.toArray))
+      createTable(purchases, purchases_schema, purchases_partitions)
       sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
           s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
           s"(1, 44.0, cast('2020-01-15' as timestamp)), " +

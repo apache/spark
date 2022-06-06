@@ -1296,10 +1296,15 @@ class PlanParserSuite extends AnalysisTest {
         Some(UnresolvedFunction(Seq("current_date"), Nil, isDistinct = false)),
         None)))
 
+    testTimestamp("(SELECT current_date())", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        Some(ScalarSubquery(Project(UnresolvedAlias(UnresolvedFunction(
+          Seq("current_date"), Nil, isDistinct = false)) :: Nil, OneRowRelation()))),
+        None)))
+
     intercept("SELECT * FROM a.b.c TIMESTAMP AS OF col",
       "timestamp expression cannot refer to any columns")
-    intercept("SELECT * FROM a.b.c TIMESTAMP AS OF (select 1)",
-      "timestamp expression cannot contain subqueries")
   }
 
   test("PERCENTILE_CONT & PERCENTILE_DISC") {

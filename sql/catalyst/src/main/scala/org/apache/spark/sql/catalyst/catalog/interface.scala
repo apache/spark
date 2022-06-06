@@ -119,7 +119,8 @@ case class CatalogTablePartition(
     map.put("Partition Values", s"[$specString]")
     map ++= storage.toLinkedHashMap
     if (parameters.nonEmpty) {
-      map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+      map.put("Partition Parameters", s"{" +
+        s"${SQLConf.get.redactOptions(parameters).map(p => p._1 + "=" + p._2).mkString(", ")}}")
     }
     map.put("Created Time", new Date(createTime).toString)
     val lastAccess = {
@@ -383,10 +384,10 @@ case class CatalogTable(
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
-    val tableProperties = properties
-      .filterKeys(!_.startsWith(VIEW_PREFIX))
-      .toSeq.sortBy(_._1)
-      .map(p => p._1 + "=" + p._2)
+    val tableProperties =
+      SQLConf.get.redactOptions(properties.filterKeys(!_.startsWith(VIEW_PREFIX)).toMap)
+        .toSeq.sortBy(_._1)
+        .map(p => p._1 + "=" + p._2)
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
     val lastAccess = {
       if (lastAccessTime <= 0) "UNKNOWN" else new Date(lastAccessTime).toString

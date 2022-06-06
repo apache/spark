@@ -46,8 +46,8 @@ class FilterPushdownOnePassSuite extends PlanTest {
   val testRelation2 = LocalRelation($"a".int, $"d".int, $"e".int)
 
   test("really simple predicate push down") {
-    val x = testRelation1.subquery(Symbol("x"))
-    val y = testRelation2.subquery(Symbol("y"))
+    val x = testRelation1.subquery("x")
+    val y = testRelation2.subquery("y")
 
     val originalQuery = x.join(y).where("x.a".attr === 1)
 
@@ -58,8 +58,8 @@ class FilterPushdownOnePassSuite extends PlanTest {
   }
 
   test("push down conjunctive predicates") {
-    val x = testRelation1.subquery(Symbol("x"))
-    val y = testRelation2.subquery(Symbol("y"))
+    val x = testRelation1.subquery("x")
+    val y = testRelation2.subquery("y")
 
     val originalQuery = x.join(y).where("x.a".attr === 1 && "y.d".attr < 1)
 
@@ -70,8 +70,8 @@ class FilterPushdownOnePassSuite extends PlanTest {
   }
 
   test("push down predicates for simple joins") {
-    val x = testRelation1.subquery(Symbol("x"))
-    val y = testRelation2.subquery(Symbol("y"))
+    val x = testRelation1.subquery("x")
+    val y = testRelation2.subquery("y")
 
     val originalQuery =
       x.where("x.c".attr < 0)
@@ -87,8 +87,8 @@ class FilterPushdownOnePassSuite extends PlanTest {
   }
 
   test("push down top-level filters for cascading joins") {
-    val x = testRelation1.subquery(Symbol("x"))
-    val y = testRelation2.subquery(Symbol("y"))
+    val x = testRelation1.subquery("x")
+    val y = testRelation2.subquery("y")
 
     val originalQuery =
       y.join(x).join(x).join(x).join(x).join(x).where("y.d".attr === 0)
@@ -100,9 +100,9 @@ class FilterPushdownOnePassSuite extends PlanTest {
   }
 
   test("push down predicates for tree-like joins") {
-    val x = testRelation1.subquery(Symbol("x"))
-    val y1 = testRelation2.subquery(Symbol("y1"))
-    val y2 = testRelation2.subquery(Symbol("y2"))
+    val x = testRelation1.subquery("x")
+    val y1 = testRelation2.subquery("y1")
+    val y2 = testRelation2.subquery("y2")
 
     val originalQuery =
       y1.join(x).join(x)
@@ -118,8 +118,8 @@ class FilterPushdownOnePassSuite extends PlanTest {
   }
 
   test("push down through join and project") {
-    val x = testRelation1.subquery(Symbol("x"))
-    val y = testRelation2.subquery(Symbol("y"))
+    val x = testRelation1.subquery("x")
+    val y = testRelation2.subquery("y")
 
     val originalQuery =
       x.where($"a" > 0).select($"a", $"b")
@@ -135,40 +135,40 @@ class FilterPushdownOnePassSuite extends PlanTest {
   }
 
   test("push down through deep projects") {
-    val x = testRelation1.subquery(Symbol("x"))
+    val x = testRelation1.subquery("x")
 
     val originalQuery =
-      x.select(($"a" + 1) as Symbol("a1"), $"b")
-        .select(($"a1" + 1) as Symbol("a2"), $"b")
-        .select(($"a2" + 1) as Symbol("a3"), $"b")
-        .select(($"a3" + 1) as Symbol("a4"), $"b")
+      x.select(($"a" + 1) as "a1", $"b")
+        .select(($"a1" + 1) as "a2", $"b")
+        .select(($"a2" + 1) as "a3", $"b")
+        .select(($"a3" + 1) as "a4", $"b")
         .select($"b")
         .where($"b" > 0)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       x.where($"b" > 0)
-        .select(($"a" + 1) as Symbol("a1"), $"b")
-        .select(($"a1" + 1) as Symbol("a2"), $"b")
-        .select(($"a2" + 1) as Symbol("a3"), $"b")
-        .select(($"a3" + 1) as Symbol("a4"), $"b")
+        .select(($"a" + 1) as "a1", $"b")
+        .select(($"a1" + 1) as "a2", $"b")
+        .select(($"a2" + 1) as "a3", $"b")
+        .select(($"a3" + 1) as "a4", $"b")
         .select($"b").analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("push down through aggregate and join") {
-    val x = testRelation1.subquery(Symbol("x"))
-    val y = testRelation2.subquery(Symbol("y"))
+    val x = testRelation1.subquery("x")
+    val y = testRelation2.subquery("y")
 
     val left = x
       .where($"c" > 0)
       .groupBy($"a")($"a", count($"b"))
-      .subquery(Symbol("left"))
+      .subquery("left")
     val right = y
       .where($"d" < 0)
       .groupBy($"a")($"a", count($"d"))
-      .subquery(Symbol("right"))
+      .subquery("right")
     val originalQuery = left
       .join(right).where("left.a".attr < 100 && "right.a".attr < 100)
 

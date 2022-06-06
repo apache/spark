@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-object QueryCompilationErrors extends QueryErrorsBase {
+private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -400,10 +400,6 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"Window function $wf requires window to be ordered, please add " +
       s"ORDER BY clause. For example SELECT $wf(value_expr) OVER (PARTITION BY window_partition " +
       "ORDER BY window_ordering) from table")
-  }
-
-  def cannotResolveUserSpecifiedColumnsError(col: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Cannot resolve column name $col", t.origin.line, t.origin.startPosition)
   }
 
   def writeTableWithMismatchedColumnsError(
@@ -1628,8 +1624,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"$tableIdentifier should be converted to HadoopFsRelation.")
   }
 
-  def alterDatabaseLocationUnsupportedError(version: String): Throwable = {
-    new AnalysisException(s"Hive $version does not support altering database location")
+  def alterDatabaseLocationUnsupportedError(): Throwable = {
+    new AnalysisException("Hive metastore does not support altering database location")
   }
 
   def hiveTableTypeUnsupportedError(tableType: String): Throwable = {
