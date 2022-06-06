@@ -35,7 +35,8 @@ public interface SparkThrowable {
   // Succinct, human-readable, unique, and consistent representation of the error category
   // If null, error class is not set
   String getErrorClass();
-  default String getErrorSubClass() {
+
+    default String getErrorSubClass() {
     return null;
   }
 
