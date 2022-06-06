@@ -166,7 +166,6 @@ case class OrcPartitionReaderFactory(
   private def createORCReader(filePath: Path, conf: Configuration): Reader = {
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
-
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val reader = OrcFile.createReader(filePath, readerOptions)
