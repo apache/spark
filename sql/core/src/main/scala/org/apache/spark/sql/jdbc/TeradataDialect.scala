@@ -100,18 +100,16 @@ private case object TeradataDialect extends JdbcDialect {
 
   override def getCatalystType(
     sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    // Use 18 as default scale respect to DecimalType definition
-    val defaultScale = 18
     if (sqlType == Types.NUMERIC) {
       if (md == null) {
-        Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
+        Option(DecimalType.SYSTEM_DEFAULT)
       } else {
         val scale = md.build().getLong("scale")
         // Scale returned from JDBC is 0 when NUMBER's scale is not explicitly specified
         // Note, even if the NUMBER is defined like NUMBER(20, 0), Spark will treat it as
         // (20, $defaultScale)
         if (scale == 0) {
-          Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
+          Option(DecimalType.SYSTEM_DEFAULT)
         } else {
           // Precision returned from JDBC is 40 when NUMBER's precision is not explicitly specified
           if (size == 40) {
