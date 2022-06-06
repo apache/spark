@@ -554,4 +554,26 @@ class DataFrameJoinSuite extends QueryTest
       )
     }
   }
+
+  test("SPARK-39376: Hide duplicated columns in star expansion of subquery alias from USING JOIN") {
+    val joinDf = testData2.as("testData2").join(
+      testData3.as("testData3"), usingColumns = Seq("a"), joinType = "fullouter")
+    val equivalentQueries = Seq(
+      joinDf.select($"*"),
+      joinDf.as("r").select($"*"),
+      joinDf.as("r").select($"r.*")
+    )
+    equivalentQueries.foreach { query =>
+      checkAnswer(query,
+        Seq(
+          Row(1, 1, null),
+          Row(1, 2, null),
+          Row(2, 1, 2),
+          Row(2, 2, 2),
+          Row(3, 1, null),
+          Row(3, 2, null)
+        )
+      )
+    }
+  }
 }
