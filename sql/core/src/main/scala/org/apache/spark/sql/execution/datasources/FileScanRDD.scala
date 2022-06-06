@@ -252,8 +252,10 @@ class FileScanRDD(
                     null
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
-                  case e @ (_: RuntimeException | _: IOException)
-                    if ignoreCorruptFiles && !e.getMessage.contains("Filesystem closed") =>
+                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+                    if (e.getMessage.contains("Filesystem closed")) {
+                      throw e
+                    }
                     logWarning(
                       s"Skipped the rest of the content in the corrupted file: $currentFile", e)
                     finished = true
