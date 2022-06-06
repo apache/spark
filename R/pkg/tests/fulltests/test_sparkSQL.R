@@ -4026,7 +4026,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   tb <- listTables()
   count <- count(tables())
   expect_equal(nrow(tb), count)
-  expect_equal(colnames(tb), c("name", "catalog", "database", "description", "tableType", "isTemporary"))
+  expect_equal(colnames(tb),
+               c("name", "catalog", "namespace", "description", "tableType", "isTemporary"))
 
   createOrReplaceTempView(as.DataFrame(cars), "cars")
 
