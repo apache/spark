@@ -29,7 +29,7 @@ import org.scalatest.Assertions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
-import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, Distribution, Distributions}
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
@@ -52,7 +52,8 @@ class InMemoryTable(
     override val properties: util.Map[String, String],
     val distribution: Distribution = Distributions.unspecified(),
     val ordering: Array[SortOrder] = Array.empty,
-    val numPartitions: Option[Int] = None)
+    val numPartitions: Option[Int] = None,
+    val isDistributionStrictlyRequired: Boolean = true)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
@@ -291,9 +292,12 @@ class InMemoryTable(
     }
 
     override def outputPartitioning(): Partitioning = {
-      InMemoryTable.this.distribution match {
-        case cd: ClusteredDistribution => new KeyGroupedPartitioning(cd.clustering(), data.size)
-        case _ => new UnknownPartitioning(data.size)
+      if (InMemoryTable.this.partitioning.nonEmpty) {
+        new KeyGroupedPartitioning(
+          InMemoryTable.this.partitioning.map(_.asInstanceOf[Expression]),
+          data.size)
+      } else {
+        new UnknownPartitioning(data.size)
       }
     }
 
@@ -362,6 +366,8 @@ class InMemoryTable(
 
       override def build(): Write = new Write with RequiresDistributionAndOrdering {
         override def requiredDistribution: Distribution = distribution
+
+        override def distributionStrictlyRequired = isDistributionStrictlyRequired
 
         override def requiredOrdering: Array[SortOrder] = ordering
 

@@ -44,7 +44,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
     case a @ AppendData(r: DataSourceV2Relation, query, options, _, None) =>
       val writeBuilder = newWriteBuilder(r.table, options, query.schema)
       val write = writeBuilder.build()
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
       a.copy(write = Some(write), query = newQuery)
 
     case o @ OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, options, _, None) =>
@@ -68,7 +68,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
           throw QueryExecutionErrors.overwriteTableByUnsupportedExpressionError(table)
       }
 
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
       o.copy(write = Some(write), query = newQuery)
 
     case o @ OverwritePartitionsDynamic(r: DataSourceV2Relation, query, options, _, None) =>
@@ -80,7 +80,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         case _ =>
           throw QueryExecutionErrors.dynamicPartitionOverwriteUnsupportedByTableError(table)
       }
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
       o.copy(write = Some(write), query = newQuery)
 
     case WriteToMicroBatchDataSource(
@@ -90,14 +90,14 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
       val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
       val customMetrics = write.supportedCustomMetrics.toSeq
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
       WriteToDataSourceV2(relation, microBatchWrite, newQuery, customMetrics)
 
     case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, None) =>
       val rowSchema = StructType.fromAttributes(rd.dataInput)
       val writeBuilder = newWriteBuilder(r.table, Map.empty, rowSchema)
       val write = writeBuilder.build()
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query)
       // project away any metadata columns that could be used for distribution and ordering
       rd.copy(write = Some(write), query = Project(rd.dataInput, newQuery))
 

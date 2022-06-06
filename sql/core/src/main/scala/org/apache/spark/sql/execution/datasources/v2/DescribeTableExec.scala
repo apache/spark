@@ -49,14 +49,13 @@ case class DescribeTableExec(
       table.properties.asScala.partition { case (key, _) =>
         CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
       }
-
-    reservedProperties.foreach { case (key, value) =>
-      rows += toCatalystRow(key.capitalize, value, "")
-    }
-
-    val properties = nonReservedProperties.toList.sortBy(_._1).map {
-      case (key, value) => key + "=" + value
-    }.mkString("[", ",", "]")
+    })
+    val properties =
+      conf.redactOptions(table.properties.asScala.toMap).toList
+        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
+        .sortBy(_._1).map {
+        case (key, value) => key + "=" + value
+      }.mkString("[", ",", "]")
     rows += toCatalystRow("Table Properties", properties, "")
   }
 

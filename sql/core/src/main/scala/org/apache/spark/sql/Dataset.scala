@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkException, SparkThrowable, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -3920,19 +3920,11 @@ class Dataset[T] private[sql](
    * the internal error exception.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
-    try {
-      SQLExecution.withNewExecutionId(qe, Some(name)) {
+    SQLExecution.withNewExecutionId(qe, Some(name)) {
+      QueryExecution.withInternalError(s"""The "$name" action failed.""") {
         qe.executedPlan.resetMetrics()
         action(qe.executedPlan)
       }
-    } catch {
-      case e: SparkThrowable => throw e
-      case e @ (_: java.lang.IllegalStateException | _: java.lang.AssertionError) =>
-        throw new SparkException(
-          errorClass = "INTERNAL_ERROR",
-          messageParameters = Array(s"""The "$name" action failed."""),
-          cause = e)
-      case e: Throwable => throw e
     }
   }
 

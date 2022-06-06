@@ -4,10 +4,10 @@
 
 -- !query
 CREATE TABLE t (a STRING, b INT, c STRING, d STRING) USING parquet
-  OPTIONS (a '1', b '2')
+  OPTIONS (a '1', b '2', password 'password')
   PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
   COMMENT 'table_comment'
-  TBLPROPERTIES (t 'test')
+  TBLPROPERTIES (t 'test', password 'password')
 -- !query schema
 struct<>
 -- !query output
@@ -130,9 +130,9 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
-Table Properties    	[e=3, t=test]       	                    
+Table Properties    	[e=3, password=*********(redacted), t=test]	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
-Storage Properties  	[a=1, b=2]          	                    
+Storage Properties  	[a=1, b=2, password=*********(redacted)]	                    
 Partition Provider  	Catalog
 
 
@@ -162,9 +162,9 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
-Table Properties    	[e=3, t=test]       	                    
+Table Properties    	[e=3, password=*********(redacted), t=test]	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
-Storage Properties  	[a=1, b=2]          	                    
+Storage Properties  	[a=1, b=2, password=*********(redacted)]	                    
 Partition Provider  	Catalog
 
 
@@ -202,9 +202,9 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
-Table Properties    	[t=test]            	                    
+Table Properties    	[password=*********(redacted), t=test]	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
-Storage Properties  	[a=1, b=2]          	                    
+Storage Properties  	[a=1, b=2, password=*********(redacted)]	                    
 Partition Provider  	Catalog
 
 
@@ -241,9 +241,9 @@ Provider            	parquet
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
-Table Properties    	[t=test]            	                    
+Table Properties    	[password=*********(redacted), t=test]	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
-Storage Properties  	[a=1, b=2]          	                    
+Storage Properties  	[a=1, b=2, password=*********(redacted)]	                    
 Partition Provider  	Catalog
 
 
@@ -281,7 +281,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
 Location [not included in comparison]/{warehouse_dir}/t/c=Us/d=1	                    
-Storage Properties  	[a=1, b=2]          	                    
+Storage Properties  	[a=1, b=2, password=*********(redacted)]	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
                     	                    	                    
@@ -290,7 +290,7 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
-Storage Properties  	[a=1, b=2]
+Storage Properties  	[a=1, b=2, password=*********(redacted)]
 
 
 -- !query
@@ -312,7 +312,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
 Location [not included in comparison]/{warehouse_dir}/t/c=Us/d=1	                    
-Storage Properties  	[a=1, b=2]          	                    
+Storage Properties  	[a=1, b=2, password=*********(redacted)]	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
                     	                    	                    
@@ -321,7 +321,7 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
-Storage Properties  	[a=1, b=2]
+Storage Properties  	[a=1, b=2, password=*********(redacted)]
 
 
 -- !query
@@ -343,7 +343,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
 Location [not included in comparison]/{warehouse_dir}/t/c=Us/d=1	                    
-Storage Properties  	[a=1, b=2]          	                    
+Storage Properties  	[a=1, b=2, password=*********(redacted)]	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
                     	                    	                    
@@ -352,7 +352,7 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
-Storage Properties  	[a=1, b=2]
+Storage Properties  	[a=1, b=2, password=*********(redacted)]
 
 
 -- !query

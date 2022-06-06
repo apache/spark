@@ -191,7 +191,7 @@ case class DescribeDatabaseCommand(
         if (properties.isEmpty) {
           ""
         } else {
-          properties.toSeq.sortBy(_._1).mkString("(", ", ", ")")
+          conf.redactOptions(properties).toSeq.sortBy(_._1).mkString("(", ", ", ")")
         }
       result :+ Row("Properties", propertiesStr)
     } else {
