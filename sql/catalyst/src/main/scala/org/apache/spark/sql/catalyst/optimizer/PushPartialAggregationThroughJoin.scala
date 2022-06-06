@@ -99,10 +99,19 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     }
   }
 
-  // Returns true if `expr`'s references is non empty and can be evaluated using only
+  // Returns true if `expr`'s references is non empty and can be evaluated using
   // the output of `plan`.
   private def canEvaluateOnly(expr: Expression, plan: LogicalPlan): Boolean =
     expr.references.nonEmpty && canEvaluate(expr, plan)
+
+  // Returns true if `expr`'s references is empty or it can be evaluated using one side.
+  private def canEvaluateOnOneSide(
+      expr: Expression,
+      leftNamedExpressions: Seq[NamedExpression],
+      rightNamedExpressions: Seq[NamedExpression]): Boolean = {
+    expr.references.subsetOf(AttributeSet(leftNamedExpressions.map(_.toAttribute))) ||
+      expr.references.subsetOf(AttributeSet(rightNamedExpressions.map(_.toAttribute)))
+  }
 
   // Splits expressions into three categories based on the attributes required to evaluate them.
   private def split(expressions: Seq[NamedExpression], left: LogicalPlan, right: LogicalPlan) = {
@@ -181,16 +190,6 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
   private def pushableCountExp(ae: AggregateExpression): Boolean = ae match {
     case AggregateExpression(_: Count, Complete, false, None, _) => true
     case _ => false
-  }
-
-  private def supportPushDownAgg(
-      aggExps: Seq[AggregateExpression],
-      left: LogicalPlan,
-      right: LogicalPlan): Boolean = {
-    // All aggregate expressions should be pushable aggregate expression or count expression,
-    // and it should can be evaluated only on left or right
-    aggExps.forall(e => (pushableAggExp(e) || pushableCountExp(e)) &&
-      (canEvaluate(e, left) || canEvaluate(e, right)))
   }
 
   // Deduplicate and reorder aggregate expressions to avoid some query can't reuse the exchange.
@@ -294,9 +293,11 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     // 2. groupingExpressions is empty and aggregateExpressions are pushableAggExp
     if (remainingProjectList.isEmpty &&
       ((rewrittenAgg.groupingExpressions.nonEmpty &&
-        aggregateExpressions.forall(ae => pushableAggExp(ae) || pushableCountExp(ae))) ||
+        aggregateExpressions.forall(e => (pushableAggExp(e) || pushableCountExp(e)) &&
+          canEvaluateOnOneSide(e, leftProjectList, rightProjectList))) ||
         (rewrittenAgg.groupingExpressions.isEmpty &&
-          aggregateExpressions.forall(pushableAggExp)))) {
+          aggregateExpressions.forall(e => pushableAggExp(e) &&
+            canEvaluateOnOneSide(e, leftProjectList, rightProjectList))))) {
 
       val pushedLeftProject = Project(leftProjectList, join.left)
       val pushedRightProject = Project(rightProjectList, join.right)
@@ -412,7 +413,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
           j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _))
             if groupExps.forall(_.isInstanceOf[Attribute]) && leftKeys.nonEmpty &&
               aggregateExps.forall(e => e.deterministic && isSimpleExpression(e)) &&
-              supportPushDownAgg(agg.aggregateExprs, left, right) =>
+              agg.aggregateExprs.forall(e => pushableAggExp(e) || pushableCountExp(e)) =>
           pushAggThroughJoin(agg, j.output, leftKeys, rightKeys, j)
 
         case agg @ Aggregate(groupExps, aggregateExps, Project(projectList,
@@ -420,7 +421,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
             if groupExps.forall(_.isInstanceOf[Attribute]) && leftKeys.nonEmpty &&
               aggregateExps.forall(e => e.deterministic && isSimpleExpression(e)) &&
               projectList.forall(_.deterministic) &&
-              supportPushDownAgg(agg.aggregateExprs, left, right) =>
+              agg.aggregateExprs.forall(e => pushableAggExp(e) || pushableCountExp(e)) =>
           pushAggThroughJoin(agg, projectList, leftKeys, rightKeys, j)
       }
     }

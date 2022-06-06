@@ -461,6 +461,30 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
+  test("Aggregate expression's references from Alias") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .select('b, 'c.as("new_c"))
+      .groupBy('b)(sum('new_c).as("sum_new_c"))
+      .analyze
+
+    val correctLeft = PartialAggregate(Seq('a, 'b),
+      Seq(sum('new_c).as("_pushed_sum_new_c"), 'a, 'b),
+      testRelation1.select('a, 'b, 'c.as("new_c"))).as("l")
+    val correctRight = PartialAggregate(Seq('x), Seq(count(1).as("cnt"), 'x),
+      testRelation2.select('x)).as("r")
+
+    val correctAnswer =
+      correctLeft.join(correctRight,
+        joinType = Inner, condition = Some('a === 'x))
+        .select('_pushed_sum_new_c, 'b, 'cnt)
+        .groupBy('b)(sumWithDataType('_pushed_sum_new_c * 'cnt, datatype = Some(LongType))
+          .as("sum_new_c"))
+        .analyzePlan
+
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
   // The following tests are unsupported cases
 
   test("Do not push down count if grouping is empty") {
