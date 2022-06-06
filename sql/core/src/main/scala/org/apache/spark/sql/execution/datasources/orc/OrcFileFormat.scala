@@ -134,7 +134,6 @@ class OrcFileFormat
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
-    val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
@@ -153,10 +152,9 @@ class OrcFileFormat
       } else {
         // ORC predicate pushdown
         if (orcFilterPushDown && filters.nonEmpty) {
-          OrcUtils.readCatalystSchema(filePath, conf, ignoreCorruptFiles).foreach { fileSchema =>
-            OrcFilters.createFilter(fileSchema, filters).foreach { f =>
-              OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
-            }
+          val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
+          OrcFilters.createFilter(fileSchema, filters).foreach { f =>
+            OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
           }
         }
 
