@@ -302,22 +302,25 @@ abstract class SparkFunSuite
     }
   }
 
-  protected def checkError(exception: Exception with SparkThrowable,
-                           errorClass: String,
-                           errorSubClass: String,
-                           sqlState: String,
-                           parameters: Map[String, String]): Unit =
+  protected def checkError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit =
     checkError(exception, errorClass, Some(errorSubClass), Some(sqlState), parameters)
 
-  protected def checkError(exception: Exception with SparkThrowable,
-                           errorClass: String,
-                           sqlState: String,
-                           parameters: Map[String, String]): Unit =
+  protected def checkError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit =
     checkError(exception, errorClass, None, Some(sqlState), parameters)
 
-  protected def checkError(exception: Exception with SparkThrowable,
-                           errorClass: String,
-                           parameters: Map[String, String]): Unit =
+  protected def checkError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      parameters: Map[String, String]): Unit =
     checkError(exception, errorClass, None, None, parameters)
 
   /**
@@ -327,16 +330,18 @@ abstract class SparkFunSuite
    * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
    * @param parameters    An array of values. This does not verify the right name association.
    */
-  protected def checkError(exception: Exception with SparkThrowable,
-                           errorClass: String,
-                           sqlState: String,
-                           parameters: Array[String]): Unit =
+  protected def checkError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      sqlState: String,
+      parameters: Array[String]): Unit =
     checkError(exception, errorClass, None, Some(sqlState),
       (exception.getParameterNames zip parameters).toMap)
 
-  protected def checkError(exception: Exception with SparkThrowable,
-                           errorClass: String,
-                           parameters: Array[String]): Unit =
+  protected def checkError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      parameters: Array[String]): Unit =
     checkError(exception, errorClass, None, None,
       (exception.getParameterNames zip parameters).toMap)
 
