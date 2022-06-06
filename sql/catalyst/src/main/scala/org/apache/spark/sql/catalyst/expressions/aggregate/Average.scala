@@ -68,8 +68,7 @@ abstract class AverageBase
   lazy val count = AttributeReference("count", LongType)()
 
   protected def add(left: Expression, right: Expression): Expression = left.dataType match {
-    case _: DecimalType =>
-      DecimalAddNoOverflowCheck(left, right, left.dataType, failOnError = useAnsiAdd)
+    case _: DecimalType => DecimalAddNoOverflowCheck(left, right, left.dataType)
     case _ => Add(left, right, useAnsiAdd)
   }
 
