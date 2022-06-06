@@ -1029,24 +1029,22 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The default value fails to analyze.
     withTable("t") {
-      sql("create table t(i boolean, s bigint default badvalue) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (default, default)")
+        sql("create table t(i boolean, s bigint default badvalue) using parquet")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value analyzes to a table not in the catalog.
     withTable("t") {
-      sql("create table t(i boolean, s bigint default (select min(x) from badtable)) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (default, default)")
+        sql("create table t(i boolean, s bigint default (select min(x) from badtable)) " +
+          "using parquet")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value parses but refers to a table from the catalog.
     withTable("t", "other") {
       sql("create table other(x string) using parquet")
-      sql("create table t(i boolean, s bigint default (select min(x) from other)) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (default, default)")
+        sql("create table t(i boolean, s bigint default (select min(x) from other)) using parquet")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
@@ -1083,10 +1081,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The default value parses but the type is not coercible.
     withTable("t") {
-      sql("create table t(i boolean, s bigint default false) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (default, default)")
-      }.getMessage.contains("provided a value of incompatible type"))
+        sql("create table t(i boolean, s bigint default false) using parquet")
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The number of columns in the INSERT INTO statement is greater than the number of columns in
     // the table.
@@ -1280,7 +1277,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("create table t(i boolean default true, s bigint default 42) using parquet")
         assert(intercept[AnalysisException] {
           sql("insert into t (I) select true from (select 1)")
-        }.getMessage.contains("Cannot resolve column name I"))
+        }.getMessage.contains(
+          "[MISSING_COLUMN] Column 'I' does not exist. Did you mean one of the following? [i, s]"))
       }
     }
   }
@@ -1612,11 +1610,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         dataSource = "orc",
         Seq(
           Config(
+            None),
+          Config(
             Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false"),
             insertNullsToStorage = false))),
       TestCase(
         dataSource = "parquet",
         Seq(
+          Config(
+            None),
           Config(
             Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"),
             insertNullsToStorage = false)))

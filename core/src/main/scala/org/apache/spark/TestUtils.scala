@@ -431,7 +431,7 @@ private[spark] object TestUtils {
     val appenderBuilder = builder.newAppender("console", "CONSOLE")
       .addAttribute("target", ConsoleAppender.Target.SYSTEM_ERR)
     appenderBuilder.add(builder.newLayout("PatternLayout")
-      .addAttribute("pattern", "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n"))
+      .addAttribute("pattern", "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex"))
     builder.add(appenderBuilder)
     builder.add(builder.newRootLogger(level).add(builder.newAppenderRef("console")))
     val configuration = builder.build()

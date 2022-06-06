@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartit
 import org.apache.spark.sql.connector.distributions._
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.util.collection.Utils.sequenceToOption
 
 object DistributionAndOrderingUtils {
 
@@ -33,9 +32,7 @@ object DistributionAndOrderingUtils {
 
       val distribution = write.requiredDistribution match {
         case d: OrderedDistribution => toCatalystOrdering(d.ordering(), query)
-        case d: ClusteredDistribution =>
-          sequenceToOption(d.clustering.map(e => toCatalyst(e, query)))
-            .getOrElse(Seq.empty[Expression])
+        case d: ClusteredDistribution => d.clustering.map(e => toCatalyst(e, query)).toSeq
         case _: UnspecifiedDistribution => Seq.empty[Expression]
       }
 

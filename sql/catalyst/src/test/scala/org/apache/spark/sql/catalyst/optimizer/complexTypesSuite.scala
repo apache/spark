@@ -415,12 +415,12 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       testRelation
         .select(
           namedStruct("col1", $"b", "col2", $"c").as("s1"), $"a", $"b")
-        .select($"s1" getField "col2" as Symbol("s1Col2"),
+        .select($"s1" getField "col2" as "s1Col2",
           namedStruct("col1", $"a", "col2", $"b").as("s2"))
-        .select($"s1Col2", $"s2" getField "col2" as Symbol("s2Col2"))
+        .select($"s1Col2", $"s2" getField "col2" as "s2Col2")
     val correctAnswer =
       testRelation
-        .select($"c" as Symbol("s1Col2"), $"b" as Symbol("s2Col2"))
+        .select($"c" as "s1Col2", $"b" as "s2Col2")
     checkRule(originalQuery, correctAnswer)
   }
 
@@ -428,11 +428,11 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val originalQuery =
       testRelation
         .select(
-          namedStruct("col1", $"b", "col2", $"c") getField "col2" as Symbol("sCol2"),
-          namedStruct("col1", $"a", "col2", $"c") getField "col1" as Symbol("sCol1"))
+          namedStruct("col1", $"b", "col2", $"c") getField "col2" as "sCol2",
+          namedStruct("col1", $"a", "col2", $"c") getField "col1" as "sCol1")
     val correctAnswer =
       testRelation
-        .select($"c" as Symbol("sCol2"), $"a" as Symbol("sCol1"))
+        .select($"c" as "sCol2", $"a" as "sCol1")
     checkRule(originalQuery, correctAnswer)
   }
 

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -357,6 +357,30 @@ case class Percentile(
     percentageExpression = newSecond,
     frequencyExpression = newThird
   )
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(col) - Returns the median of numeric or ansi interval column `col`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
+       5.0
+      > SELECT _FUNC_(col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       5.0
+  """,
+  group = "agg_funcs",
+  since = "3.4.0")
+case class Median(child: Expression)
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with UnaryLike[Expression] {
+  private lazy val percentile = new Percentile(child, Literal(0.5, DoubleType))
+  override def replacement: Expression = percentile
+  override def nodeName: String = "median"
+  override def inputTypes: Seq[AbstractDataType] = percentile.inputTypes.take(1)
+  override protected def withNewChildInternal(
+      newChild: Expression): Median = this.copy(child = newChild)
 }
 
 /**

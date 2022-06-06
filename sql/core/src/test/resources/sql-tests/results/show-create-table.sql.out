@@ -32,7 +32,7 @@ struct<>
 
 -- !query
 CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet
-OPTIONS ('a' 1)
+OPTIONS ('a' 1, 'password' = 'password')
 -- !query schema
 struct<>
 -- !query output
@@ -50,7 +50,8 @@ CREATE TABLE default.tbl (
   c INT)
 USING parquet
 OPTIONS (
-  'a' = '1')
+  'a' = '1',
+  'password' = '*********(redacted)')
 
 
 -- !query
@@ -215,7 +216,7 @@ struct<>
 
 -- !query
 CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet
-TBLPROPERTIES ('a' = '1')
+TBLPROPERTIES ('a' = '1', 'password' = 'password')
 -- !query schema
 struct<>
 -- !query output
@@ -233,7 +234,8 @@ CREATE TABLE default.tbl (
   c INT)
 USING parquet
 TBLPROPERTIES (
-  'a' = '1')
+  'a' = '1',
+  'password' = '*********(redacted)')
 
 
 -- !query

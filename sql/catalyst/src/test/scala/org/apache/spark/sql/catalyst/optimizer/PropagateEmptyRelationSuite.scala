@@ -79,7 +79,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
     val query2 = testRelation1.where(false).union(testRelation2)
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation2.select($"b".as(Symbol("a"))).analyze
+    val correctAnswer2 = testRelation2.select($"b".as("a")).analyze
     comparePlans(optimized2, correctAnswer2)
 
     val query3 = testRelation1.union(testRelation2.where(false)).union(testRelation3)
@@ -89,7 +89,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
     val query4 = testRelation1.where(false).union(testRelation2).union(testRelation3)
     val optimized4 = Optimize.execute(query4.analyze)
-    val correctAnswer4 = testRelation2.union(testRelation3).select($"b".as(Symbol("a"))).analyze
+    val correctAnswer4 = testRelation2.union(testRelation3).select($"b".as("a")).analyze
     comparePlans(optimized4, correctAnswer4)
 
     // Nullability can change from nullable to non-nullable
@@ -119,11 +119,11 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (true, false, Inner, Some(LocalRelation($"a".int, $"b".int))),
       (true, false, Cross, Some(LocalRelation($"a".int, $"b".int))),
       (true, false, LeftOuter,
-        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1)
+        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
           .analyze)),
       (true, false, RightOuter, Some(LocalRelation($"a".int, $"b".int))),
       (true, false, FullOuter,
-        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1)
+        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
           .analyze)),
       (true, false, LeftAnti, Some(testRelation1)),
       (true, false, LeftSemi, Some(LocalRelation($"a".int))),
@@ -132,10 +132,10 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (false, true, Cross, Some(LocalRelation($"a".int, $"b".int))),
       (false, true, LeftOuter, Some(LocalRelation($"a".int, $"b".int))),
       (false, true, RightOuter,
-        Some(Project(Seq(Literal(null).cast(IntegerType).as(Symbol("a")), $"b"), testRelation2)
+        Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2)
           .analyze)),
       (false, true, FullOuter,
-        Some(Project(Seq(Literal(null).cast(IntegerType).as(Symbol("a")), $"b"), testRelation2)
+        Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2)
           .analyze)),
       (false, true, LeftAnti, Some(LocalRelation($"a".int))),
       (false, true, LeftSemi, Some(LocalRelation($"a".int))),
@@ -165,10 +165,10 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (Inner, Some(LocalRelation($"a".int, $"b".int))),
       (Cross, Some(LocalRelation($"a".int, $"b".int))),
       (LeftOuter,
-        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1)
+        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
           .analyze)),
       (RightOuter,
-        Some(Project(Seq(Literal(null).cast(IntegerType).as(Symbol("a")), $"b"), testRelation2)
+        Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2)
           .analyze)),
       (FullOuter, None),
       (LeftAnti, Some(testRelation1)),
@@ -261,7 +261,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
   test("propagate empty relation through Aggregate with grouping expressions") {
     val query = testRelation1
       .where(false)
-      .groupBy($"a")($"a", ($"a" + 1).as(Symbol("x")))
+      .groupBy($"a")($"a", ($"a" + 1).as("x"))
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation($"a".int, $"x".int).analyze

@@ -207,7 +207,7 @@ private[sql] object AvroUtils extends Logging {
   }
 
   /** Wrapper for a pair of matched fields, one Catalyst and one corresponding Avro field. */
-  case class AvroMatchedField(
+  private[sql] case class AvroMatchedField(
       catalystField: StructField,
       catalystPosition: Int,
       avroField: Schema.Field)
