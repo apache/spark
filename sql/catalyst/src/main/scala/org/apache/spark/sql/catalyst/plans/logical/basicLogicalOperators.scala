@@ -1369,7 +1369,8 @@ case class SubqueryAlias(
 
   override def metadataOutput: Seq[Attribute] = {
     val qualifierList = identifier.qualifier :+ alias
-    child.metadataOutput.map(_.withQualifier(qualifierList))
+    val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.supportsQualifiedStar)
+    nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
   }
 
   override def maxRows: Option[Long] = child.maxRows
