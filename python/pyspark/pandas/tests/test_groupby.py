@@ -1353,6 +1353,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True))
 
+    def test_mad(self):
+        self._test_stat_func(lambda groupby_obj: groupby_obj.mad())
+
     def test_first(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.first())
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=None))

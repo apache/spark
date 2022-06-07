@@ -44,10 +44,14 @@ import java.util.Random;
  *   4. In Hive's code, the method [[merge()] pass a serialized histogram,
  *      in Spark, this method pass a deserialized histogram.
  *      Here we change the code about merge bins.
+ *
+ * @since 3.3.0
  */
 public class NumericHistogram {
   /**
    * The Coord class defines a histogram bin, which is just an (x,y) pair.
+   *
+   * @since 3.3.0
    */
   public static class Coord implements Comparable {
     public double x;
