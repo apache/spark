@@ -41,7 +41,7 @@ trait AvroDecoderFactory {
     def create(schema: Schema): AvroDecoder
 }
 
-class DirectBinaryAvroDecoder(avroSchema: Schema) extends AvroDecoder {
+class DirectBinaryAvroDecoder(avroSchema: Schema) extends AvroDecoder with Serializable {
     @transient lazy val reader = new GenericDatumReader[Any](avroSchema)
     
     @transient private var decoder: BinaryDecoder = _
@@ -56,7 +56,7 @@ class DirectBinaryAvroDecoder(avroSchema: Schema) extends AvroDecoder {
 }
 
 
-class DirectBinaryAvroDecoderFactory extends AvroDecoderFactory {
+class DirectBinaryAvroDecoderFactory extends AvroDecoderFactory with Serializable {
     override def create(schema: Schema) : AvroDecoder = {
         return new DirectBinaryAvroDecoder(schema)
     }
