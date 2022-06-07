@@ -19,12 +19,10 @@ import os
 import unittest
 
 import numpy as np
-import pandas as pd
 
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.sql.functions import col
-from pyspark.sql.types import LongType, FloatType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkTestCase
 
@@ -413,8 +411,8 @@ class CreateDataFrame(unittest.TestCase):
                 self.assertEqual(df.dtypes, dtypes)
 
             two_d_collected_dtypes = [
-                ([Row(_1=1, _2=2), Row(_1=3, _2=4)], [('_1', 'bigint'), ('_2', 'bigint')]),
-                ([Row(_1=0.1, _2=0.2), Row(_1=0.3, _2=0.4)], [('_1', 'double'), ('_2', 'double')]),
+                ([Row(_1=1, _2=2), Row(_1=3, _2=4)], [("_1", "bigint"), ("_2", "bigint")]),
+                ([Row(_1=0.1, _2=0.2), Row(_1=0.3, _2=0.4)], [("_1", "double"), ("_2", "double")]),
             ]
 
             for data, [collected, dtypes] in zip(self.two_d_arrs, two_d_collected_dtypes):
