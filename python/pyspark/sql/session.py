@@ -967,14 +967,13 @@ class SparkSession(SparkConversionMixin):
             has_numpy = False
 
         if has_numpy and isinstance(data, np.ndarray):
-            if has_pandas:
-                if data.ndim not in [1, 2]:
-                    raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
-                column_names = ["value"] if data.ndim == 1 else ["_1", "_2"]
-                data = pd.DataFrame(data, columns=column_names)
+            from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
-            else:
-                raise RuntimeError("pandas library is required for NumPy array input.")
+            require_minimum_pandas_version()
+            if data.ndim not in [1, 2]:
+                raise ImportError("NumPy array input should be of 1 or 2 dimensions.")
+            column_names = ["value"] if data.ndim == 1 else ["_1", "_2"]
+            data = pd.DataFrame(data, columns=column_names)
 
         if has_pandas and isinstance(data, pd.DataFrame):
             # Create a DataFrame from pandas DataFrame.
