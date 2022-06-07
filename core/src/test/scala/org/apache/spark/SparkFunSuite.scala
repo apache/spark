@@ -272,6 +272,8 @@ abstract class SparkFunSuite
    * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
    * @param parameters    A map of parameter names and values. The names are as defined
    *                      in the error-classes file.
+   * @param matchPVals    Optionally treat the parameters value as regular expression pattern.
+   *                      false if not supplied.
    */
   protected def checkError(
       exception: SparkThrowable,
@@ -324,28 +326,6 @@ abstract class SparkFunSuite
       errorClass: String,
       parameters: Map[String, String]): Unit =
     checkError(exception, errorClass, None, None, parameters)
-
-  /**
-   * Checks an exception with an error class against expected results.
-   * @param exception     The exception to check
-   * @param errorClass    The expected error class identifying the error
-   * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
-   * @param parameters    An array of values. This does not verify the right name association.
-   */
-  protected def checkError(
-      exception: Exception with SparkThrowable,
-      errorClass: String,
-      sqlState: String,
-      parameters: Array[String]): Unit =
-    checkError(exception, errorClass, None, Some(sqlState),
-      (exception.getParameterNames zip parameters).toMap)
-
-  protected def checkError(
-      exception: Exception with SparkThrowable,
-      errorClass: String,
-      parameters: Array[String]): Unit =
-    checkError(exception, errorClass, None, None,
-      (exception.getParameterNames zip parameters).toMap)
 
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
       extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {

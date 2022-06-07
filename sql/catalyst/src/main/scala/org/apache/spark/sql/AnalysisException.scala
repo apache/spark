@@ -40,6 +40,7 @@ class AnalysisException protected[sql] (
     val messageParameters: Array[String] = Array.empty)
   extends Exception(message, cause.orNull) with SparkThrowable with Serializable {
 
+    // Needed for binary compatibility
     protected[sql] def this(message: String,
            line: Option[Int],
            startPosition: Option[Int],
