@@ -87,14 +87,14 @@ private[spark] class SecurityManager(
   private var secretKey: String = _
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
-    "; users  with view permissions: " +
-    (if (viewAcls.nonEmpty) viewAcls.mkString(",") else "EMPTY") +
+    "; users with view permissions: " +
+    (if (viewAcls.nonEmpty) viewAcls.mkString(", ") else "EMPTY") +
     "; groups with view permissions: " +
-    (if (viewAclsGroups.nonEmpty) viewAclsGroups.mkString(",") else "EMPTY") +
-    "; users  with modify permissions: " +
-    (if (modifyAcls.nonEmpty) modifyAcls.mkString(",") else "EMPTY") +
+    (if (viewAclsGroups.nonEmpty) viewAclsGroups.mkString(", ") else "EMPTY") +
+    "; users with modify permissions: " +
+    (if (modifyAcls.nonEmpty) modifyAcls.mkString(", ") else "EMPTY") +
     "; groups with modify permissions: " +
-    (if (modifyAclsGroups.nonEmpty) modifyAclsGroups.mkString(",") else "EMPTY"))
+    (if (modifyAclsGroups.nonEmpty) modifyAclsGroups.mkString(", ") else "EMPTY"))
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
