@@ -99,27 +99,29 @@ private case object TeradataDialect extends JdbcDialect {
   }
 
   override def getCatalystType(
-    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.NUMERIC) {
-      if (md == null) {
-        Option(DecimalType.SYSTEM_DEFAULT)
-      } else {
-        val scale = md.build().getLong("scale")
-        // In Teradata, Number or Number(*) means precision and scale is flexible.
-        // However, the scale returned from JDBC is 0, which leads to fractional part loss.
-        // Handle this special case by adding explicit conversion to system default decimal type.
-        // Note, even if the NUMBER is defined with explicit precision and scale like NUMBER(20, 0),
-        // Spark will treat it as DecimalType.SYSTEM_DEFAULT, which is NUMBER(38,18)
-        if (scale == 0) {
-          Option(DecimalType.SYSTEM_DEFAULT)
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    sqlType match {
+      case Types.NUMERIC =>
+        if (md == null) {
+          Some(DecimalType.SYSTEM_DEFAULT)
         } else {
-          // In Teradata, Number(*, scale) will return size, namely precision, as 40,
-          // which conflicts to DecimalType.MAX_PRECISION
-          Option(DecimalType(Math.min(size, DecimalType.MAX_PRECISION), scale.toInt))
+          val scale = md.build().getLong("scale")
+          // In Teradata, Number or Number(*) means precision and scale is flexible.
+          // However, in this case, the scale returned from JDBC is 0,
+          // which will lead to fractional part loss.
+          // The precision returned from JDBC is 40, which conflicts to DecimalType.MAX_PRECISION.
+          // Handle this special case by adding explicit conversion to system default decimal type.
+          if (size == 40) {
+            if (scale == 0) Some(DecimalType.SYSTEM_DEFAULT)
+            // In Teradata, Number(*, scale) is valid but in this case, the precision
+            // returned from JDBC is also 40, which conflicts to DecimalType.MAX_PRECISION.
+            else Some(DecimalType(DecimalType.MAX_PRECISION, scale.toInt))
+          } else {
+            // Normal case, Number(precision, scale) is explicitly set in Teradata
+            Some(DecimalType(size, scale.toInt))
+          }
         }
-      }
-    } else {
-      None
+        case _ => None
     }
   }
 }
