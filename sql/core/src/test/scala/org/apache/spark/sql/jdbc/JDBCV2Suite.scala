@@ -1632,23 +1632,47 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with aggregate push-down: VAR_POP VAR_SAMP with filter and group by") {
-    val df = sql("SELECT VAR_POP(bonus), VAR_SAMP(bonus) FROM h2.test.employee WHERE dept > 0" +
-      " GROUP BY DePt")
+    val df = sql(
+      """
+        |SELECT
+        |  VAR_POP(bonus),
+        |  VAR_POP(DISTINCT bonus),
+        |  VAR_SAMP(bonus),
+        |  VAR_SAMP(DISTINCT bonus)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
-    checkPushedInfo(df, "PushedAggregates: [VAR_POP(BONUS), VAR_SAMP(BONUS)], " +
-      "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], PushedGroupByExpressions: [DEPT]")
-    checkAnswer(df, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
+    checkPushedInfo(df,
+     """
+       |PushedAggregates: [VAR_POP(BONUS), VAR_POP(DISTINCT BONUS),
+       |VAR_SAMP(BONUS), VAR_SAMP(DISTINCT BONUS)],
+       |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+       |PushedGroupByExpressions: [DEPT],
+       |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df, Seq(Row(10000d, 10000d, 20000d, 20000d),
+      Row(2500d, 2500d, 5000d, 5000d), Row(0d, 0d, null, null)))
   }
 
   test("scan with aggregate push-down: STDDEV_POP STDDEV_SAMP with filter and group by") {
-    val df = sql("SELECT STDDEV_POP(bonus), STDDEV_SAMP(bonus) FROM h2.test.employee" +
-      " WHERE dept > 0 GROUP BY DePt")
+    val df = sql(
+      """
+        |SELECT
+        |  STDDEV_POP(bonus),
+        |  STDDEV_POP(DISTINCT bonus),
+        |  STDDEV_SAMP(bonus),
+        |  STDDEV_SAMP(DISTINCT bonus)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
-    checkPushedInfo(df, "PushedAggregates: [STDDEV_POP(BONUS), STDDEV_SAMP(BONUS)], " +
-      "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], PushedGroupByExpressions: [DEPT]")
-    checkAnswer(df, Seq(Row(100d, 141.4213562373095d), Row(50d, 70.71067811865476d), Row(0d, null)))
+    checkPushedInfo(df,
+      """
+        |PushedAggregates: [STDDEV_POP(BONUS), STDDEV_POP(DISTINCT BONUS),
+        |STDDEV_SAMP(BONUS), STDDEV_SAMP(DISTINCT BONUS)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df, Seq(Row(100d, 100d, 141.4213562373095d, 141.4213562373095d),
+      Row(50d, 50d, 70.71067811865476d, 70.71067811865476d), Row(0d, 0d, null, null)))
   }
 
   test("scan with aggregate push-down: COVAR_POP COVAR_SAMP with filter and group by") {
@@ -1686,24 +1710,38 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with aggregate push-down: linear regression functions with filter and group by") {
-    val df = sql(
+    val df1 = sql(
       """
         |SELECT
         |  REGR_INTERCEPT(bonus, bonus),
         |  REGR_R2(bonus, bonus),
         |  REGR_SLOPE(bonus, bonus),
         |  REGR_SXY(bonus, bonus)
-        |FROM h2.test.employee where dept > 0 group by DePt""".stripMargin)
-    checkFiltersRemoved(df)
-    checkAggregateRemoved(df)
-    checkPushedInfo(df,
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df1)
+    checkAggregateRemoved(df1)
+    checkPushedInfo(df1,
       """
         |PushedAggregates: [REGR_INTERCEPT(BONUS, BONUS), REGR_R2(BONUS, BONUS),
         |REGR_SLOPE(BONUS, BONUS), REGR_SXY(BONUS, B...,
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
-    checkAnswer(df,
+    checkAnswer(df1,
+      Seq(Row(0.0, 1.0, 1.0, 20000.0), Row(0.0, 1.0, 1.0, 5000.0), Row(null, null, null, 0.0)))
+
+    val df2 = sql(
+      """
+        |SELECT
+        |  REGR_INTERCEPT(DISTINCT bonus, bonus),
+        |  REGR_R2(DISTINCT bonus, bonus),
+        |  REGR_SLOPE(DISTINCT bonus, bonus),
+        |  REGR_SXY(DISTINCT bonus, bonus)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df2)
+    checkAggregateRemoved(df2, false)
+    checkPushedInfo(df2, "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], ReadSchema:")
+    checkAnswer(df2,
       Seq(Row(0.0, 1.0, 1.0, 20000.0), Row(0.0, 1.0, 1.0, 5000.0), Row(null, null, null, 0.0)))
   }
 
