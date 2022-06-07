@@ -47,7 +47,7 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
 
   def newCatalog(): V2SessionCatalog = {
     val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)
-    newCatalog.defaultColumnAnalyzer = Some(spark.sessionState.analyzer)
+    newCatalog.defaultColumnAnalyzer = spark.sessionState.analyzer
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
