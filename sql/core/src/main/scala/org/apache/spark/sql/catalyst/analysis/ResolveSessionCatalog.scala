@@ -48,9 +48,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AddColumns(
-      ResolvedTable(catalog, ident, v1Table: V1Table, _), cols)
-        if isSessionCatalog(catalog) =>
+    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
         assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
         if (!c.nullable) {
