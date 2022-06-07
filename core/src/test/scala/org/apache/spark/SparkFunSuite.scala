@@ -274,7 +274,7 @@ abstract class SparkFunSuite
    *                      in the error-classes file.
    */
   protected def checkError(
-      exception: Exception with SparkThrowable,
+      exception: SparkThrowable,
       errorClass: String,
       errorSubClass: Option[String],
       sqlState: Option[String],
