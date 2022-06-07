@@ -2504,9 +2504,10 @@ object Decode {
   usage = """
     _FUNC_(bin, charset) - Decodes the first argument using the second argument character set.
 
-    _FUNC_(expr, search, result [, search, result ] ... [, default]) - Decode compares expr
-      to each search value one by one. If expr is equal to a search, returns the corresponding result.
-      If no match is found, then Oracle returns default. If default is omitted, returns null.
+    _FUNC_(expr, search, result [, search, result ] ... [, default]) - Compares expr
+      to each search value in order. If expr is equal to a search value, _FUNC_ returns
+      the corresponding result. If no match is found, then it returns default. If default
+      is omitted, it returns null.
   """,
   examples = """
     Examples:
