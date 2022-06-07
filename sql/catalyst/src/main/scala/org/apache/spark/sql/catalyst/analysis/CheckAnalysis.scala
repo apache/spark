@@ -21,7 +21,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -49,6 +49,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
   val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Boolean]("dataTypeMismatchError")
+
+  val DATA_TYPE_MISMATCH_ERROR_MESSAGE = TreeNodeTag[String]("dataTypeMismatchError")
 
   protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
@@ -174,7 +176,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
         }
 
-        getAllExpressions(operator).foreach(_.foreachUp {
+        val expressions = getAllExpressions(operator)
+
+        expressions.foreach(_.foreachUp {
+          case e: Expression =>
+            e.getTagValue(DATA_TYPE_MISMATCH_ERROR_MESSAGE) match {
+              case Some(message) =>
+                e.failAnalysis(s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
+                  extraHintForAnsiTypeCoercionExpression(operator))
+              case _ =>
+            }
+          case _ =>
+        })
+
+        expressions.foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             val missingCol = a.sql
             val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
@@ -228,7 +243,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             w.windowFunction match {
-              case agg @ AggregateExpression(_: PercentileCont | _: PercentileDisc, _, _, _, _)
+              case agg @ AggregateExpression(
+                _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
                 if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
                     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
                 failAnalysis(

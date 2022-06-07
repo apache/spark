@@ -16,22 +16,32 @@
     under the License.
 
 
-=============
-API Reference
-=============
+============
+Input/Output
+============
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. currentmodule:: pyspark.sql.streaming
 
-Pandas API on Spark follows the API specifications of latest pandas release.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-   :maxdepth: 2
-
-   pyspark.sql/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
+    DataStreamReader.csv
+    DataStreamReader.format
+    DataStreamReader.json
+    DataStreamReader.load
+    DataStreamReader.option
+    DataStreamReader.options
+    DataStreamReader.orc
+    DataStreamReader.parquet
+    DataStreamReader.schema
+    DataStreamReader.text
+    DataStreamWriter.foreach
+    DataStreamWriter.foreachBatch
+    DataStreamWriter.format
+    DataStreamWriter.option
+    DataStreamWriter.options
+    DataStreamWriter.outputMode
+    DataStreamWriter.partitionBy
+    DataStreamWriter.queryName
+    DataStreamWriter.start
+    DataStreamWriter.trigger
