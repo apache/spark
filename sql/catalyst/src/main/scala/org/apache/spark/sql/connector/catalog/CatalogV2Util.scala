@@ -224,20 +224,19 @@ private[sql] object CatalogV2Util {
       analyzer: Analyzer,
       tableProvider: Option[String],
       statementType: String): StructType = {
-    val newSchema: StructType =
-      if (position == null) {
-        schema.add(field)
-      } else if (position.isInstanceOf[First]) {
-        StructType(field +: schema.fields)
-      } else {
-        val afterCol = position.asInstanceOf[After].column()
-        val fieldIndex = schema.fields.indexWhere(_.name == afterCol)
-        if (fieldIndex == -1) {
-          throw new IllegalArgumentException("AFTER column not found: " + afterCol)
-        }
-        val (before, after) = schema.fields.splitAt(fieldIndex + 1)
-        StructType(before ++ (field +: after))
+    val newSchema: StructType = if (position == null) {
+      schema.add(field)
+    } else if (position.isInstanceOf[First]) {
+      StructType(field +: schema.fields)
+    } else {
+      val afterCol = position.asInstanceOf[After].column()
+      val fieldIndex = schema.fields.indexWhere(_.name == afterCol)
+      if (fieldIndex == -1) {
+        throw new IllegalArgumentException("AFTER column not found: " + afterCol)
       }
+      val (before, after) = schema.fields.splitAt(fieldIndex + 1)
+      StructType(before ++ (field +: after))
+    }
     constantFoldCurrentDefaultsToExistDefaults(analyzer, newSchema, tableProvider, statementType)
   }
 
