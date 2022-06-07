@@ -260,7 +260,7 @@ public class HiveServer2 extends CompositeService {
     @Override
     public void execute() {
       new HelpFormatter().printHelp(serverName, options);
-      System.exit(SparkExitCode.EXIT_SUCCESS);
+      System.exit(SparkExitCode.EXIT_SUCCESS());
     }
   }
 
