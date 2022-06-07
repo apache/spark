@@ -18,9 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, LessThan, Literal, Or}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project, RepartitionOperation, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project, RepartitionByExpression, RepartitionOperation, WithCTE}
 import org.apache.spark.sql.execution.adaptive._
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_NONE, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -479,6 +479,31 @@ abstract class CTEInlineSuiteBase
         """.stripMargin)
         checkAnswer(df, Row(1, 100) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-39402: Optimize ReplaceCTERefWithRepartition to support coalesce partitions") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val df = sql(
+        """with
+           |v as (
+           |  select c1, c2, rand() from t
+           |)
+           |select c1, c2 from v union select c1, c2 from v
+         """.stripMargin)
+      checkAnswer(df, Row(0, 1) :: Row(1, 2) :: Nil)
+
+      val repartition =
+        df.queryExecution.optimizedPlan.collectFirst { case r: RepartitionByExpression => r }
+      assert(repartition.isDefined)
+      assert(repartition.get.partitionExpressions.isEmpty)
+      assert(repartition.get.optNumPartitions.isEmpty)
+
+      val shuffle = collectFirst(df.queryExecution.executedPlan) {
+        case s: ShuffleExchangeExec if s.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => s
+      }
+      assert(shuffle.isDefined)
     }
   }
 }

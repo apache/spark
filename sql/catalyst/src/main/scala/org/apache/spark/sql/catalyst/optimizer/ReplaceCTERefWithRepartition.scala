@@ -53,7 +53,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
             // scalar subquery, we do not need to add an extra repartition shuffle.
             inlined
           } else {
-            Repartition(conf.numShufflePartitions, shuffle = true, inlined)
+            RepartitionByExpression(Seq.empty, inlined, None)
           }
         cteMap.put(cteDef.id, withRepartition)
       }
