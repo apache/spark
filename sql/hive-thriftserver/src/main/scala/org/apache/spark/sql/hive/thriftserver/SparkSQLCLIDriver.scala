@@ -102,10 +102,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.info = new PrintStream(System.err, true, UTF_8.name())
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
-      case e: UnsupportedEncodingException => System.exit(3)
+      case e: UnsupportedEncodingException =>
+        sessionState.close()
+        System.exit(3)
     }
 
     if (!oproc.process_stage2(sessionState)) {
+      sessionState.close()
       System.exit(2)
     }
 
@@ -139,7 +142,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     SessionState.setCurrentSessionState(sessionState)
 
     // Clean up after we exit
-    ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
+    ShutdownHookManager.addShutdownHook { () =>
+      sessionState.close()
+      SparkSQLEnv.stop()
+    }
 
     if (isRemoteMode(sessionState)) {
       // Hive 1.2 + not supported in CLI
