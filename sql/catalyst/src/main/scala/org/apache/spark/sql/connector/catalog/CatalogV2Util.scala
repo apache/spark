@@ -144,23 +144,18 @@ private[sql] object CatalogV2Util {
           add.fieldNames match {
             case Array(name) =>
               val field = StructField(name, add.dataType, nullable = add.isNullable)
-              val fieldWithDefault: StructField =
-                Option(add.defaultValue).map(field.withCurrentDefaultValue).getOrElse(field)
-              val fieldWithComment: StructField =
-                Option(add.comment).map(fieldWithDefault.withComment).getOrElse(fieldWithDefault)
-              addField(schema, fieldWithComment, add.position(), analyzer, tableProvider,
+              val newField = Option(add.comment).map(field.withComment).getOrElse(
+                Option(add.defaultValue).map(field.withCurrentDefaultValue).getOrElse(field))
+              addField(schema, newField, add.position(), analyzer, tableProvider,
                 statementType, catalogType)
             case names =>
               replace(schema, names.init, parent => parent.dataType match {
                 case parentType: StructType =>
                   val field = StructField(names.last, add.dataType, nullable = add.isNullable)
-                  val fieldWithDefault: StructField =
-                    Option(add.defaultValue).map(field.withCurrentDefaultValue).getOrElse(field)
-                  val fieldWithComment: StructField =
-                    Option(add.comment).map(fieldWithDefault.withComment)
-                      .getOrElse(fieldWithDefault)
+                  val newField = Option(add.comment).map(field.withComment).getOrElse(
+                    Option(add.defaultValue).map(field.withCurrentDefaultValue).getOrElse(field))
                   Some(parent.copy(dataType =
-                    addField(parentType, fieldWithComment, add.position(), analyzer, tableProvider,
+                    addField(parentType, newField, add.position(), analyzer, tableProvider,
                       statementType, catalogType)))
                 case _ =>
                   throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
