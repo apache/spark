@@ -34,7 +34,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "CAST_OVERFLOW",
       msg =
         "The value TIMESTAMP '9999-12-31 04:13:14.56789' of the type \"TIMESTAMP\" cannot be cast" +
-        " to \"INT\" due to an overflow. To return NULL instead, use `try_cast`. " +
+        " to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return " +
+          "NULL instead. " +
         s"""If necessary set $ansiConf to "false" to bypass this error.""",
       sqlState = Some("22005"))
   }
@@ -46,7 +47,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "DIVIDE_BY_ZERO",
       msg =
-        "Division by zero. To return NULL instead, use `try_divide`. If necessary set " +
+        "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
+          "If necessary set " +
         s"""$ansiConf to "false" (except for ANSI interval type) to bypass this error.""" +
         """
           |== SQL(line 1, position 8) ==
@@ -102,7 +104,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       msg = "The index 8 is out of bounds. The array has 5 elements. " +
-        "To return NULL instead, use `try_element_at`. " +
+        "Use `try_element_at` to tolerate accessing element at invalid index and return " +
+        "NULL instead. " +
         s"""If necessary set $ansiConf to "false" to bypass this error."""
     )
   }
@@ -114,7 +117,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
     checkErrorClass(
       exception = e,
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      msg = "Key 3 does not exist. To return NULL instead, use `try_element_at`. " +
+      msg = "Key 3 does not exist. Use `try_element_at` to tolerate non-existent key and return " +
+        "NULL instead. " +
         s"""If necessary set $ansiConf to "false" to bypass this error.""" +
         """
           |== SQL(line 1, position 8) ==
@@ -132,7 +136,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "CAST_INVALID_INPUT",
       msg = """The value '111111111111xe23' of the type "STRING" cannot be cast to "DOUBLE" """ +
         "because it is malformed. Correct the value as per the syntax, " +
-        "or change its target type. To return NULL instead, use `try_cast`. If necessary set " +
+        "or change its target type. Use `try_cast` to tolerate malformed input and return " +
+        "NULL instead. If necessary set " +
         s"""$ansiConf to \"false\" to bypass this error.
           |== SQL(line 1, position 8) ==
           |select CAST('111111111111xe23' AS DOUBLE)
