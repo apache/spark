@@ -36,7 +36,7 @@ public interface SparkThrowable {
   // If null, error class is not set
   String getErrorClass();
 
-    default String getErrorSubClass() {
+  default String getErrorSubClass() {
     return null;
   }
 
