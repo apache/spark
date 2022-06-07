@@ -16,55 +16,9 @@
     under the License.
 
 
-====================
-Structured Streaming
-====================
-
-Core Classes
-------------
-
-.. currentmodule:: pyspark.sql.streaming
-
-.. autosummary::
-    :toctree: api/
-
-    DataStreamReader
-    DataStreamWriter
-    StreamingQuery
-    StreamingQueryManager
-    StreamingQueryListener
-
-Input and Output
-----------------
-
-.. currentmodule:: pyspark.sql.streaming
-
-.. autosummary::
-    :toctree: api/
-
-    DataStreamReader.csv
-    DataStreamReader.format
-    DataStreamReader.json
-    DataStreamReader.load
-    DataStreamReader.option
-    DataStreamReader.options
-    DataStreamReader.orc
-    DataStreamReader.parquet
-    DataStreamReader.schema
-    DataStreamReader.text
-    DataStreamWriter.foreach
-    DataStreamWriter.foreachBatch
-    DataStreamWriter.format
-    DataStreamWriter.option
-    DataStreamWriter.options
-    DataStreamWriter.outputMode
-    DataStreamWriter.partitionBy
-    DataStreamWriter.queryName
-    DataStreamWriter.start
-    DataStreamWriter.trigger
-
+================
 Query Management
-----------------
+================
 
 .. currentmodule:: pyspark.sql.streaming
 
