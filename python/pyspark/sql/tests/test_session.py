@@ -420,6 +420,11 @@ class CreateDataFrame(unittest.TestCase):
                 self.assertEqual(df.collect(), collected)
                 self.assertEqual(df.dtypes, dtypes)
 
+            with self.assertRaisesRegex(
+                ImportError, "NumPy array input should be of 1 or 2 dimensions"
+            ):
+                spark.createDataFrame(np.array(0))
+
         finally:
             spark.stop()
 
