@@ -180,8 +180,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         assert(!columnEWithFeatureDisabled.metadata.contains("EXISTS_DEFAULT"))
       }
     }
-    withSQLConf(
-      SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,hive,inmemory,json,orc,parquet") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,hive,json,orc,parquet") {
       test
     }
   }

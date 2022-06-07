@@ -111,8 +111,8 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
         val schema = CatalogV2Util.applySchemaChanges(
-          table.schema, changes, BasicInMemoryTableCatalog.defaultColumnAnalyzer, Some("inmemory"),
-          "ALTER TABLE", "InMemoryTableSessionCatalog")
+          table.schema, changes, BasicInMemoryTableCatalog.defaultColumnAnalyzer, None,
+          "ALTER TABLE")
 
         // fail if the last column in the schema was dropped
         if (schema.fields.isEmpty) {

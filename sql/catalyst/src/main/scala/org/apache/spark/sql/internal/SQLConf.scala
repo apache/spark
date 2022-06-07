@@ -2888,7 +2888,7 @@ object SQLConf {
         "values. Comma-separated list, whitespace ignored, case-insensitive.")
       .version("3.4.0")
       .stringConf
-      .createWithDefault("csv,inmemory,json,orc,parquet")
+      .createWithDefault("csv,json,orc,parquet")
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
