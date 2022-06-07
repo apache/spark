@@ -49,18 +49,16 @@ class V2ExpressionBuilder(
     case Literal(true, BooleanType) => Some(new AlwaysTrue())
     case Literal(false, BooleanType) => Some(new AlwaysFalse())
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))
-    case col @ pushableColumn(name) if nestedPredicatePushdownEnabled =>
-      if (isPredicate && col.dataType.isInstanceOf[BooleanType]) {
-        Some(new V2Predicate("=", Array(FieldReference(name), LiteralValue(true, BooleanType))))
+    case col @ pushableColumn(name) =>
+      val ref = if (nestedPredicatePushdownEnabled) {
+        FieldReference(name)
       } else {
-        Some(FieldReference(name))
+        FieldReference.column(name)
       }
-    case col @ pushableColumn(name) if !nestedPredicatePushdownEnabled =>
       if (isPredicate && col.dataType.isInstanceOf[BooleanType]) {
-        Some(new V2Predicate("=",
-          Array(FieldReference.column(name), LiteralValue(true, BooleanType))))
+        Some(new V2Predicate("=", Array(ref, LiteralValue(true, BooleanType))))
       } else {
-        Some(FieldReference.column(name))
+        Some(ref)
       }
     case in @ InSet(child, hset) =>
       generateExpression(child).map { v =>
