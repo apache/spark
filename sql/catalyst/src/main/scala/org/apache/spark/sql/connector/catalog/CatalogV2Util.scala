@@ -135,10 +135,10 @@ private[sql] object CatalogV2Util {
   def applySchemaChanges(
       schema: StructType,
       changes: Seq[TableChange],
-      analyzer: Option[Analyzer],
+      analyzer: Analyzer,
       tableProvider: Option[String],
-      statementType: String,
-      catalogType: String): StructType = { changes.foldLeft(schema) { (schema, change) =>
+      statementType: String): StructType = {
+    changes.foldLeft(schema) { (schema, change) =>
       change match {
         case add: AddColumn =>
           add.fieldNames match {
@@ -149,7 +149,7 @@ private[sql] object CatalogV2Util {
               val fieldWithComment: StructField =
                 Option(add.comment).map(fieldWithDefault.withComment).getOrElse(fieldWithDefault)
               addField(schema, fieldWithComment, add.position(), analyzer, tableProvider,
-                statementType, catalogType)
+                statementType)
             case names =>
               replace(schema, names.init, parent => parent.dataType match {
                 case parentType: StructType =>
@@ -161,7 +161,7 @@ private[sql] object CatalogV2Util {
                       .getOrElse(fieldWithDefault)
                   Some(parent.copy(dataType =
                     addField(parentType, fieldWithComment, add.position(), analyzer, tableProvider,
-                      statementType, catalogType)))
+                      statementType)))
                 case _ =>
                   throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
               })
@@ -192,7 +192,7 @@ private[sql] object CatalogV2Util {
             }
             val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
             addField(withFieldRemoved, oldField, update.position(), analyzer, tableProvider,
-              statementType, catalogType)
+              statementType)
           }
 
           update.fieldNames() match {
@@ -229,10 +229,9 @@ private[sql] object CatalogV2Util {
       schema: StructType,
       field: StructField,
       position: ColumnPosition,
-      analyzer: Option[Analyzer],
+      analyzer: Analyzer,
       tableProvider: Option[String],
-      statementType: String,
-      catalogType: String): StructType = {
+      statementType: String): StructType = {
     val newSchema: StructType = if (position == null) {
       schema.add(field)
     } else if (position.isInstanceOf[First]) {
@@ -246,17 +245,7 @@ private[sql] object CatalogV2Util {
       val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
     }
-    analyzer.map { a =>
-      constantFoldCurrentDefaultsToExistDefaults(a, newSchema, tableProvider, statementType)
-    }.getOrElse {
-      newSchema.fields.foreach { field: StructField =>
-        if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-          throw QueryCompilationErrors.defaultReferencesNotAllowedForCatalog(
-            s"catalog type: $catalogType")
-        }
-      }
-      newSchema
-    }
+    constantFoldCurrentDefaultsToExistDefaults(analyzer, newSchema, tableProvider, statementType)
   }
 
   private def replace(

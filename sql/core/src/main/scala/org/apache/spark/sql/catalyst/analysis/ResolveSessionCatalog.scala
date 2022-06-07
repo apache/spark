@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
@@ -41,29 +41,21 @@ import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
  *
  * We can remove this rule once we implement all the catalog functionality in `V2SessionCatalog`.
  */
-class ResolveSessionCatalog(val analyzer: Analyzer)
+class ResolveSessionCatalog(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
-  override val catalogManager = analyzer.catalogManager
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AddColumns(
-      ResolvedTable(catalog, ident, v1Table: V1Table, _), cols)
-        if isSessionCatalog(catalog) =>
+    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
         assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
         if (!c.nullable) {
           throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
         }
       }
-      val prevSchema = StructType(cols.map(convertToStructField))
-      val newSchema: StructType =
-        DefaultCols.constantFoldCurrentDefaultsToExistDefaults(
-          analyzer, prevSchema, v1Table.catalogTable.provider, "ALTER TABLE ADD COLUMNS")
-      AlterTableAddColumnsCommand(ident.asTableIdentifier, newSchema.fields)
+      AlterTableAddColumnsCommand(ident.asTableIdentifier, cols.map(convertToStructField))
 
     case ReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE COLUMNS")

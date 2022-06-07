@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object BasicInMemoryTableCatalog {
-  var defaultColumnAnalyzer: Option[Analyzer] = Some(SimpleAnalyzer)
+  lazy val defaultColumnAnalyzer: Analyzer = SimpleAnalyzer
 }
 
 class BasicInMemoryTableCatalog extends TableCatalog {
@@ -124,8 +124,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(table.schema, changes,
-      BasicInMemoryTableCatalog.defaultColumnAnalyzer, Some("inmemory"), "ALTER TABLE",
-      "InMemorySessionCatalog")
+      BasicInMemoryTableCatalog.defaultColumnAnalyzer, None, "ALTER TABLE")
 
     // fail if the last column in the schema was dropped
     if (schema.fields.isEmpty) {

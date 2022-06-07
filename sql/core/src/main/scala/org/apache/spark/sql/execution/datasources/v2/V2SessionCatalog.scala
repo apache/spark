@@ -43,7 +43,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
 
-  var defaultColumnAnalyzer: Option[Analyzer] = Option.empty[Analyzer]
+  var defaultColumnAnalyzer: Analyzer
 
   override val defaultNamespace: Array[String] = Array("default")
 
@@ -152,8 +152,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
-      catalogTable.schema, changes, defaultColumnAnalyzer, catalogTable.provider,
-      "ALTER TABLE", "V2SessionCatalog")
+      catalogTable.schema, changes, defaultColumnAnalyzer, catalogTable.provider, "ALTER TABLE")
     val comment = properties.get(TableCatalog.PROP_COMMENT)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
     val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
