@@ -96,7 +96,7 @@ SELECT float('N A N')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'N A N' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_INVALID_INPUT] The value 'N A N' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 SELECT float('N A N')
        ^^^^^^^^^^^^^^
@@ -108,7 +108,7 @@ SELECT float('NaN x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'NaN x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_INVALID_INPUT] The value 'NaN x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 SELECT float('NaN x')
        ^^^^^^^^^^^^^^
@@ -120,7 +120,7 @@ SELECT float(' INFINITY    x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value ' INFINITY    x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_INVALID_INPUT] The value ' INFINITY    x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 SELECT float(' INFINITY    x')
        ^^^^^^^^^^^^^^^^^^^^^^^
@@ -156,7 +156,7 @@ SELECT float(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'nan' of the type "STRING" cannot be cast to "DECIMAL(10,0)" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_INVALID_INPUT] The value 'nan' of the type "STRING" cannot be cast to "DECIMAL(10,0)" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 14) ==
 SELECT float(decimal('nan'))
              ^^^^^^^^^^^^^^
@@ -340,7 +340,7 @@ SELECT int(float('2147483647'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value 2.14748365E9 of the type "FLOAT" cannot be cast to "INT" due to an overflow. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_OVERFLOW] The value 2.14748365E9 of the type "FLOAT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -357,7 +357,7 @@ SELECT int(float('-2147483900'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value -2.1474839E9 of the type "FLOAT" cannot be cast to "INT" due to an overflow. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_OVERFLOW] The value -2.1474839E9 of the type "FLOAT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -390,7 +390,7 @@ SELECT bigint(float('-9223380000000000000'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value -9.22338E18 of the type "FLOAT" cannot be cast to "BIGINT" due to an overflow. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_OVERFLOW] The value -9.22338E18 of the type "FLOAT" cannot be cast to "BIGINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query

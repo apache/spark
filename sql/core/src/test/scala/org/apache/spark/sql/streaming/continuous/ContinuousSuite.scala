@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming.continuous
 
 import java.sql.Timestamp
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
@@ -440,8 +440,9 @@ class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
 
       testStream(df)(
         StartStream(Trigger.Continuous(1)),
-        ExpectFailure[IllegalStateException] { e =>
-          e.getMessage.contains("queue has exceeded its maximum")
+        ExpectFailure[SparkException] { e =>
+          assert(e.asInstanceOf[SparkThrowable].getErrorClass === "INTERNAL_ERROR")
+          e.getCause.getMessage.contains("queue has exceeded its maximum")
         }
       )
     }

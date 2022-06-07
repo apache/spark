@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
  * 7. SQL expressions shall be wrapped by double quotes.
  *   For example: "earnings + 1".
  */
-trait QueryErrorsBase {
+private[sql] trait QueryErrorsBase {
   // Converts an error class parameter to its SQL representation
   def toSQLValue(v: Any, t: DataType): String = Literal.create(v, t) match {
     case Literal(null, _) => "NULL"

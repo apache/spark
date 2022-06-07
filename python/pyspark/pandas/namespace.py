@@ -2608,9 +2608,8 @@ def concat(
                 label for label in column_labels_of_psdfs[0] if label in interested_columns
             ]
 
-            # When multi-index column, although pandas is flaky if `join="inner" and sort=False`,
-            # always sort to follow the `join="outer"` case behavior.
-            if (len(merged_columns) > 0 and len(merged_columns[0]) > 1) or sort:
+            # If sort is True, sort to follow pandas 1.4+ behavior.
+            if sort:
                 # FIXME: better ordering
                 merged_columns = sorted(merged_columns, key=name_like_string)
 
@@ -2622,11 +2621,9 @@ def concat(
 
             assert len(merged_columns) > 0
 
-            # Always sort when multi-index columns or there are more than two Series,
-            # and if there is only one Series, never sort.
-            sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
-
-            if sort:
+            # If sort is True, always sort when there are more than two Series,
+            # and if there is only one Series, never sort to follow pandas 1.4+ behavior.
+            if sort and num_series != 1:
                 # FIXME: better ordering
                 merged_columns = sorted(merged_columns, key=name_like_string)
 

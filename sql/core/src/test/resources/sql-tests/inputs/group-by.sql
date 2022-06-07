@@ -7,9 +7,6 @@
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
 AS testData(a, b);
-CREATE OR REPLACE TEMPORARY VIEW aggr AS SELECT * FROM VALUES
-(0, 0), (0, 10), (0, 20), (0, 30), (0, 40), (1, 10), (1, 20), (2, 10), (2, 20), (2, 25), (2, 30), (3, 60), (4, null)
-AS aggr(k, v);
 
 -- Aggregate with empty GroupBy expressions.
 SELECT a, COUNT(b) FROM testData;
@@ -247,29 +244,3 @@ SELECT
 FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a;
-
--- SPARK-37676: Support ANSI Aggregation Function: percentile_cont
-SELECT
-  percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
-FROM aggr;
-SELECT
-  k,
-  percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
-FROM aggr
-GROUP BY k
-ORDER BY k;
-
--- SPARK-37691: Support ANSI Aggregation Function: percentile_disc
-SELECT
-  percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
-FROM aggr;
-SELECT
-  k,
-  percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
-FROM aggr
-GROUP BY k
-ORDER BY k;

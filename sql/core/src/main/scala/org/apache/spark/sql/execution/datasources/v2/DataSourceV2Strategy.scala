@@ -173,7 +173,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         tableSpec, ifNotExists) =>
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          session.sessionState.analyzer, schema, "CREATE TABLE")
+          session.sessionState.analyzer, schema, tableSpec.provider, "CREATE TABLE")
       CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, newSchema,
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
@@ -195,7 +195,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          session.sessionState.analyzer, schema, "CREATE TABLE")
+          session.sessionState.analyzer, schema, tableSpec.provider, "CREATE TABLE")
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident.asIdentifier, newSchema, parts,

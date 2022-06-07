@@ -49,6 +49,7 @@ import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.internal.SharedState
 import org.apache.spark.util.ShutdownHookManager
+import org.apache.spark.util.SparkExitCode._
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -85,7 +86,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   def main(args: Array[String]): Unit = {
     val oproc = new OptionsProcessor()
     if (!oproc.process_stage1(args)) {
-      System.exit(1)
+      System.exit(EXIT_FAILURE)
     }
 
     val sparkConf = new SparkConf(loadDefaults = true)
@@ -102,11 +103,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.info = new PrintStream(System.err, true, UTF_8.name())
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
-      case e: UnsupportedEncodingException => System.exit(3)
+      case e: UnsupportedEncodingException => System.exit(ERROR_PATH_NOT_FOUND)
     }
 
     if (!oproc.process_stage2(sessionState)) {
-      System.exit(2)
+      System.exit(ERROR_MISUSE_SHELL_BUILTIN)
     }
 
     // Set all properties specified via command line.
@@ -183,7 +184,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.info = new PrintStream(System.err, true, UTF_8.name())
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
-      case e: UnsupportedEncodingException => System.exit(3)
+      case e: UnsupportedEncodingException => System.exit(ERROR_PATH_NOT_FOUND)
     }
 
     if (sessionState.database != null) {
@@ -214,7 +215,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     } catch {
       case e: FileNotFoundException =>
         logError(s"Could not open input file for reading. (${e.getMessage})")
-        System.exit(3)
+        System.exit(ERROR_PATH_NOT_FOUND)
     }
 
     val reader = new ConsoleReader()
@@ -351,7 +352,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     if (cmd_lower.equals("quit") ||
       cmd_lower.equals("exit")) {
       sessionState.close()
-      System.exit(0)
+      System.exit(EXIT_SUCCESS)
     }
     if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
       cmd_trimmed.startsWith("!") || isRemoteMode) {
@@ -476,7 +477,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // Kill the VM on second ctrl+c
           if (!initialRequest) {
             console.printInfo("Exiting the JVM")
-            System.exit(127)
+            System.exit(ERROR_COMMAND_NOT_FOUND)
           }
 
           // Interrupt the CLI thread to stop the current statement and return

@@ -2881,6 +2881,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DEFAULT_COLUMN_ALLOWED_PROVIDERS =
+    buildConf("spark.sql.defaultColumn.allowedProviders")
+      .internal()
+      .doc("List of table providers wherein SQL commands are permitted to assign DEFAULT column " +
+        "values. Comma-separated list, whitespace ignored, case-insensitive.")
+      .version("3.4.0")
+      .stringConf
+      .createWithDefault("csv,json,orc,parquet")
+
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
@@ -4453,6 +4462,8 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
+
+  def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
 
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
