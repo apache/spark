@@ -299,7 +299,7 @@ private[kafka010] class KafkaDataConsumer(
     // `false`, we will try to fetch the record at `offset`, if the record does not exist, we will
     // try to fetch next available record within [offset, untilOffset).
     // If `failOnDataLoss` is `true`, the loop body will be executed only once, either return the
-    // record at `offset` or throw an exception when the record does not exist
+    // record at `offset` or throw an exception when the record does not exist.
     var toFetchOffset = offset
     var fetchedRecord: FetchedRecord = null
     // We want to break out of the while loop on a successful fetch to avoid using "return"
