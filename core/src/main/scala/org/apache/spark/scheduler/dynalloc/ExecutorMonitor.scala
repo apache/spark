@@ -379,6 +379,10 @@ private[spark] class ExecutorMonitor(
   }
 
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
+    if (!client.isExecutorActive(event.blockUpdatedInfo.blockManagerId.executorId)) {
+      return
+    }
+
     val exec = ensureExecutorIsTracked(event.blockUpdatedInfo.blockManagerId.executorId,
       UNKNOWN_RESOURCE_PROFILE_ID)
 

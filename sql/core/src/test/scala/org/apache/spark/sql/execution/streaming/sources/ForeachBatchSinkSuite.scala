@@ -160,9 +160,9 @@ class ForeachBatchSinkSuite extends StreamTest {
       var planAsserted = false
 
       val writer: (Dataset[T], Long) => Unit = { case (df, _) =>
-        assert(df.queryExecution.executedPlan.find { p =>
+        assert(!df.queryExecution.executedPlan.exists { p =>
           p.isInstanceOf[SerializeFromObjectExec]
-        }.isEmpty, "Untyped Dataset should not introduce serialization on object!")
+        }, "Untyped Dataset should not introduce serialization on object!")
         planAsserted = true
       }
 

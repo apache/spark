@@ -20,7 +20,10 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Divide}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -593,7 +596,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       spark.range(10).write.saveAsTable("add_col")
       withView("v") {
         sql("CREATE VIEW v AS SELECT * FROM add_col")
-        spark.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("add_col")
+        spark.range(10).select($"id", $"id" as Symbol("a"))
+          .write.mode("overwrite").saveAsTable("add_col")
         checkAnswer(sql("SELECT * FROM v"), spark.range(10).toDF())
       }
     }
@@ -765,7 +769,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
       withTempView("v1") {
-        sql("CREATE TEMPORARY VIEW v1 AS SELECT 1/0")
+        withSQLConf(ANSI_ENABLED.key -> "false") {
+          sql("CREATE TEMPORARY VIEW v1 AS SELECT 1/0")
+        }
         withSQLConf(
           USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true",
           ANSI_ENABLED.key -> "true") {
@@ -838,7 +844,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE VIEW v2 (c1) AS SELECT c1 FROM t ORDER BY 1 ASC, c1 DESC")
         sql("CREATE VIEW v3 (c1, count) AS SELECT c1, count(c1) AS cnt FROM t GROUP BY 1")
         sql("CREATE VIEW v4 (a, count) AS SELECT c1 as a, count(c1) AS cnt FROM t GROUP BY a")
-        sql("CREATE VIEW v5 (c1) AS SELECT 1/0 AS invalid")
+        withSQLConf(ANSI_ENABLED.key -> "false") {
+          sql("CREATE VIEW v5 (c1) AS SELECT 1/0 AS invalid")
+        }
 
         withSQLConf(CASE_SENSITIVE.key -> "true") {
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2), Row(3), Row(1)))
@@ -889,7 +897,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[ArithmeticException] {
               sql("SELECT * FROM v5").collect()
             }.getMessage
-            assert(e.contains("divide by zero"))
+            assert(e.contains("Division by zero"))
           }
         }
 
@@ -899,7 +907,78 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         val e = intercept[ArithmeticException] {
           sql("SELECT * FROM v1").collect()
         }.getMessage
-        assert(e.contains("divide by zero"))
+        assert(e.contains("Division by zero"))
+      }
+    }
+  }
+
+  test("CurrentOrigin is correctly set in and out of the View") {
+    withTable("t") {
+      Seq((1, 1), (2, 2)).toDF("a", "b").write.format("parquet").saveAsTable("t")
+      Seq("VIEW", "TEMPORARY VIEW").foreach { viewType =>
+        val viewId = "v"
+        withView(viewId) {
+          val viewText = "SELECT a + b c FROM t"
+          sql(
+            s"""
+              |CREATE $viewType $viewId AS
+              |-- the body of the view
+              |$viewText
+              |""".stripMargin)
+          val plan = sql("select c / 2.0D d from v").logicalPlan
+          val add = plan.collectFirst {
+            case Project(Seq(Alias(a: Add, _)), _) => a
+          }
+          assert(add.isDefined)
+          val qualifiedName = if (viewType == "VIEW") {
+            s"default.$viewId"
+          } else {
+            viewId
+          }
+          val expectedAddOrigin = Origin(
+            line = Some(1),
+            startPosition = Some(7),
+            startIndex = Some(7),
+            stopIndex = Some(11),
+            sqlText = Some("SELECT a + b c FROM t"),
+            objectType = Some("VIEW"),
+            objectName = Some(qualifiedName)
+          )
+          assert(add.get.origin == expectedAddOrigin)
+
+          val divide = plan.collectFirst {
+            case Project(Seq(Alias(d: Divide, _)), _) => d
+          }
+          assert(divide.isDefined)
+          val expectedDivideOrigin = Origin(
+            line = Some(1),
+            startPosition = Some(7),
+            startIndex = Some(7),
+            stopIndex = Some(14),
+            sqlText = Some("select c / 2.0D d from v"),
+            objectType = None,
+            objectName = None)
+          assert(divide.get.origin == expectedDivideOrigin)
+        }
+      }
+    }
+  }
+
+  test("SPARK-37932: view join with same view") {
+    withTable("t") {
+      withView("v1") {
+        Seq((1, "test1"), (2, "test2"), (1, "test2")).toDF("id", "name")
+          .write.format("parquet").saveAsTable("t")
+        sql("CREATE VIEW v1 (id, name) AS SELECT id, name FROM t")
+
+        checkAnswer(
+          sql("""SELECT l1.id FROM v1 l1
+                |INNER JOIN (
+                |   SELECT id FROM v1
+                |   GROUP BY id HAVING COUNT(DISTINCT name) > 1
+                | ) l2 ON l1.id = l2.id GROUP BY l1.name, l1.id;
+                |""".stripMargin),
+          Seq(Row(1), Row(1)))
       }
     }
   }

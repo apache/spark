@@ -84,7 +84,8 @@ class CreateNamespaceParserSuite extends AnalysisTest {
          |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
          |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
       """.stripMargin
-    intercept(sql, "Either PROPERTIES or DBPROPERTIES is allowed")
+    intercept(sql, "The feature is not supported: " +
+      "set PROPERTIES and DBPROPERTIES at the same time.")
   }
 
   test("create namespace - support for other types in PROPERTIES") {
@@ -107,5 +108,5 @@ class CreateNamespaceParserSuite extends AnalysisTest {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)()
 }

@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode._
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.types._
 
 /**
@@ -248,7 +249,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
           // Spark SQL's data source table now support static and dynamic partition insert. Source
           // table converted from Hive table should always use dynamic.
-          val enableDynamicPartition = hiveOptions.updated("partitionOverwriteMode", "dynamic")
+          val enableDynamicPartition = hiveOptions.updated(DataSourceUtils.PARTITION_OVERWRITE_MODE,
+            PartitionOverwriteMode.DYNAMIC.toString)
           val fsRelation = HadoopFsRelation(
             location = fileIndex,
             partitionSchema = partitionSchema,

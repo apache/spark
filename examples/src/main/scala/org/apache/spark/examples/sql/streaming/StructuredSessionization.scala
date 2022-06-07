@@ -70,7 +70,7 @@ object StructuredSessionization {
     // Sessionize the events. Track number of events, start and end timestamps of session,
     // and report session updates.
     val sessionUpdates = events
-      .groupBy(session_window($"eventTime", "10 seconds") as 'session, 'sessionId)
+      .groupBy(session_window($"eventTime", "10 seconds") as Symbol("session"), $"sessionId")
       .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",

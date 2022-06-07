@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.File
+
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.util.Utils
 
 class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
 
@@ -40,8 +45,8 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     val df = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     testStream(df)(
@@ -74,13 +79,35 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     )
   }
 
+  test("SPARK-38033: SS cannot be started because the commitId and offsetId are inconsistent") {
+    val inputData = MemoryStream[Int]
+    val streamEvent = inputData.toDF().select("value")
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-test-offsetId-commitId-inconsistent/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    testStream(streamEvent) (
+      AddData(inputData, 1, 2, 3, 4, 5, 6),
+      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      ExpectFailure[SparkException] { e =>
+        assert(e.asInstanceOf[SparkThrowable].getErrorClass === "INTERNAL_ERROR")
+        assert(e.getCause.getMessage.contains("batch 3 doesn't exist"))
+      }
+    )
+  }
+
   test("no-data-batch re-executed after restart should call V1 source.getBatch()") {
     val testSource = ReExecutedBatchTestSource(spark)
     val df = testSource.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long])
 
     /** Reset this test source so that it appears to be a new source requiring initialization */
@@ -153,7 +180,6 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     )
   }
 
-
   case class ReExecutedBatchTestSource(spark: SparkSession) extends Source {
     @volatile var currentOffset = 0L
     @volatile var getBatchCallCount = 0
@@ -191,4 +217,3 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     }
   }
 }
-

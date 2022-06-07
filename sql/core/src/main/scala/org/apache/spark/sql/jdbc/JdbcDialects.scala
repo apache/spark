@@ -17,25 +17,30 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -98,6 +103,29 @@ abstract class JdbcDialect extends Serializable with Logging{
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Returns a factory for creating connections to the given JDBC URL.
+   * In general, creating a connection has nothing to do with JDBC partition id.
+   * But sometimes it is needed, such as a database with multiple shard nodes.
+   * @param options - JDBC options that contains url, table and other information.
+   * @return The factory method for creating JDBC connections with the RDD partition ID. -1 means
+             the connection is being created at the driver side.
+   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
+   */
+  @Since("3.3.0")
+  def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+    val driverClass: String = options.driverClass
+    (partitionId: Int) => {
+      DriverRegistry.register(driverClass)
+      val driver: Driver = DriverRegistry.get(driverClass)
+      val connection =
+        ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
+      require(connection != null,
+        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+      connection
+    }
+  }
 
   /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column
@@ -194,6 +222,81 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
+  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    override def visitLiteral(literal: Literal[_]): String = {
+      compileValue(
+        CatalystTypeConverters.convertToScala(literal.value(), literal.dataType())).toString
+    }
+
+    override def visitNamedReference(namedRef: NamedReference): String = {
+      if (namedRef.fieldNames().length > 1) {
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+          "Filter push down", namedRef.toString)
+      }
+      quoteIdentifier(namedRef.fieldNames.head)
+    }
+
+    override def visitCast(l: String, dataType: DataType): String = {
+      val databaseTypeDefinition =
+        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+      s"CAST($l AS $databaseTypeDefinition)"
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        s"""$funcName(${inputs.mkString(", ")})"""
+      } else {
+        // The framework will catch the error and give up the push-down.
+        // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: $funcName")
+      }
+    }
+
+    override def visitOverlay(inputs: Array[String]): String = {
+      if (isSupportedFunction("OVERLAY")) {
+        super.visitOverlay(inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+      }
+    }
+
+    override def visitTrim(direction: String, inputs: Array[String]): String = {
+      if (isSupportedFunction("TRIM")) {
+        super.visitTrim(direction, inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: TRIM")
+      }
+    }
+  }
+
+  /**
+   * Returns whether the database supports function.
+   * @param funcName Upper-cased function name
+   * @return True if the database supports function.
+   */
+  @Since("3.3.0")
+  def isSupportedFunction(funcName: String): Boolean = false
+
+  /**
+   * Converts V2 expression to String representing a SQL expression.
+   * @param expr The V2 expression to be converted.
+   * @return Converted value.
+   */
+  @Since("3.3.0")
+  def compileExpression(expr: Expression): Option[String] = {
+    val jdbcSQLBuilder = new JDBCSQLBuilder()
+    try {
+      Some(jdbcSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
   /**
    * Converts aggregate function to String representing a SQL expression.
    * @param aggFunction The aggregate function to be converted.
@@ -203,58 +306,29 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
-        val sql = min.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
-        Some(s"MIN($sql)")
+        compileExpression(min.column).map(v => s"MIN($v)")
       case max: Max =>
-        val sql = max.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
-        Some(s"MAX($sql)")
+        compileExpression(max.column).map(v => s"MAX($v)")
       case count: Count =>
-        val sql = count.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
         val distinct = if (count.isDistinct) "DISTINCT " else ""
-        Some(s"COUNT($distinct$sql)")
+        compileExpression(count.column).map(v => s"COUNT($distinct$v)")
       case sum: Sum =>
-        val sql = sum.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
         val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        Some(s"SUM($distinct$sql)")
+        compileExpression(sum.column).map(v => s"SUM($distinct$v)")
       case _: CountStar =>
         Some("COUNT(*)")
       case avg: Avg =>
-        val sql = avg.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
         val distinct = if (avg.isDistinct) "DISTINCT " else ""
-        Some(s"AVG($distinct$sql)")
+        compileExpression(avg.column).map(v => s"AVG($distinct$v)")
       case _ => None
     }
   }
+
+  /**
+   * List the user-defined functions in jdbc dialect.
+   * @return a sequence of tuple from function name to user-defined function.
+   */
+  def functions: Seq[(String, UnboundFunction)] = Nil
 
   /**
    * Create schema with an optional comment. Empty string means no comment.

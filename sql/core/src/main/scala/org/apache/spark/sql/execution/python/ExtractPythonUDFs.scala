@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.errors.QueryCompilationErrors
 
 
 /**
@@ -45,10 +44,10 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
   }
 
   private def hasPythonUdfOverAggregate(expr: Expression, agg: Aggregate): Boolean = {
-    expr.find {
+    expr.exists {
       e => PythonUDF.isScalarPythonUDF(e) &&
-        (e.references.isEmpty || e.find(belongAggregate(_, agg)).isDefined)
-    }.isDefined
+        (e.references.isEmpty || e.exists(belongAggregate(_, agg)))
+    }
   }
 
   private def extract(agg: Aggregate): LogicalPlan = {
@@ -90,7 +89,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  */
 object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
   private def hasScalarPythonUDF(e: Expression): Boolean = {
-    e.find(PythonUDF.isScalarPythonUDF).isDefined
+    e.exists(PythonUDF.isScalarPythonUDF)
   }
 
   private def extract(agg: Aggregate): LogicalPlan = {
@@ -164,7 +163,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
   private type EvalTypeChecker = EvalType => Boolean
 
   private def hasScalarPythonUDF(e: Expression): Boolean = {
-    e.find(PythonUDF.isScalarPythonUDF).isDefined
+    e.exists(PythonUDF.isScalarPythonUDF)
   }
 
   @scala.annotation.tailrec
@@ -264,7 +263,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
 
           val evalTypes = validUdfs.map(_.evalType).toSet
           if (evalTypes.size != 1) {
-            throw QueryCompilationErrors.unexpectedEvalTypesForUDFsError(evalTypes)
+            throw new IllegalStateException(
+              "Expected udfs have the same evalType but got different evalTypes: " +
+              evalTypes.mkString(","))
           }
           val evalType = evalTypes.head
           val evaluation = evalType match {
@@ -284,8 +285,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
       }
       // Other cases are disallowed as they are ambiguous or would require a cartesian
       // product.
-      udfs.map(canonicalizeDeterministic).filterNot(attributeMap.contains).foreach {
-        udf => sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
+      udfs.map(canonicalizeDeterministic).filterNot(attributeMap.contains).foreach { udf =>
+        throw new IllegalStateException(
+          s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
       val rewritten = plan.withNewChildren(newChildren).transformExpressions {

@@ -78,17 +78,17 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
     // Invalid datasets
     val df1 = getTestData(Seq(0.0, 2.0, 1.0, 5.1))
     withClue("getNumClasses should fail if label is max label not an integer") {
-      val e: IllegalArgumentException = intercept[IllegalArgumentException] {
+      val e = intercept[Exception] {
         c.getNumClasses(df1)
       }
-      assert(e.getMessage.contains("requires integers in range"))
+      assert(e.getMessage.contains("Labels MUST be Integers"))
     }
     val df2 = getTestData(Seq(0.0, 2.0, 1.0, Int.MaxValue.toDouble))
     withClue("getNumClasses should fail if label is max label is >= Int.MaxValue") {
-      val e: IllegalArgumentException = intercept[IllegalArgumentException] {
+      val e = intercept[Exception] {
         c.getNumClasses(df2)
       }
-      assert(e.getMessage.contains("requires integers in range"))
+      assert(e.getMessage.contains("Labels MUST be in [0"))
     }
     val df3 = getTestData(Seq.empty[Double])
     withClue("getNumClasses should fail if dataset is empty") {

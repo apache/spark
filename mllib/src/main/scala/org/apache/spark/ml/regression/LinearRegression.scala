@@ -37,6 +37,7 @@ import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -340,13 +341,17 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
 
+    val instances = dataset.select(
+      checkRegressionLabels($(labelCol)),
+      checkNonNegativeWeights(get(weightCol)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v)
+    }.setName("training instances")
+
     if ($(loss) == SquaredError && (($(solver) == Auto &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == Normal)) {
-      return trainWithNormal(dataset, instr)
+      return trainWithNormal(dataset, instances, instr)
     }
-
-    val instances = extractInstances(dataset)
-      .setName("training instances")
 
     val (summarizer, labelSummarizer) = Summarizer
       .getRegressionSummarizers(instances, $(aggregationDepth), Seq("mean", "std", "count"))
@@ -439,6 +444,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   private def trainWithNormal(
       dataset: Dataset[_],
+      instances: RDD[Instance],
       instr: Instrumentation): LinearRegressionModel = {
     // For low dimensional data, WeightedLeastSquares is more efficient since the
     // training algorithm only requires one pass through the data. (SPARK-10668)
@@ -446,8 +452,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
       elasticNetParam = $(elasticNetParam), $(standardization), true,
       solverType = WeightedLeastSquares.Auto, maxIter = $(maxIter), tol = $(tol))
-    val instances = extractInstances(dataset)
-      .setName("training instances")
     val model = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
     // When it is trained by WeightedLeastSquares, training summary does not
     // attach returned model.

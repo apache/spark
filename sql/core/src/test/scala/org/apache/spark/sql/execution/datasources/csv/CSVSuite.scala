@@ -807,12 +807,20 @@ abstract class CSVSuite
 
   test("SPARK-37575: null values should be saved as nothing rather than " +
     "quoted empty Strings \"\" with default settings") {
-    withTempPath { path =>
-      Seq(("Tesla", null: String, ""))
-        .toDF("make", "comment", "blank")
-        .write
-        .csv(path.getCanonicalPath)
-      checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+    Seq("true", "false").foreach { confVal =>
+      withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key -> confVal) {
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .csv(path.getCanonicalPath)
+          if (confVal == "false") {
+            checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+          } else {
+            checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,\"\",\"\""))
+          }
+        }
+      }
     }
   }
 
@@ -1621,38 +1629,30 @@ abstract class CSVSuite
     checkAnswer(df, Row("a", null, "a"))
   }
 
-  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
-    "from a file") {
-    val columnNameOfCorruptRecord = "_corrupt_record"
+  test("SPARK-38523: referring to the corrupt record column") {
     val schema = new StructType()
       .add("a", IntegerType)
       .add("b", DateType)
-      .add(columnNameOfCorruptRecord, StringType)
-    // negative cases
-    val msg = intercept[AnalysisException] {
-      spark
-        .read
-        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .schema(schema)
-        .csv(testFile(valueMalformedFile))
-        .select(columnNameOfCorruptRecord)
-        .collect()
-    }.getMessage
-    assert(msg.contains("only include the internal corrupt record column"))
-
-    // workaround
-    val df = spark
+      .add("corrRec", StringType)
+    val readback = spark
       .read
-      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+      .option("columnNameOfCorruptRecord", "corrRec")
       .schema(schema)
       .csv(testFile(valueMalformedFile))
-      .cache()
-    assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
-    assert(df.filter($"_corrupt_record".isNull).count() == 1)
     checkAnswer(
-      df.select(columnNameOfCorruptRecord),
-      Row("0,2013-111_11 12:13:14") :: Row(null) :: Nil
-    )
+      readback,
+      Row(0, null, "0,2013-111_11 12:13:14") ::
+      Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
+    checkAnswer(
+      readback.filter($"corrRec".isNotNull),
+      Row(0, null, "0,2013-111_11 12:13:14"))
+    checkAnswer(
+      readback.select($"corrRec", $"b"),
+      Row("0,2013-111_11 12:13:14", null) ::
+      Row(null, Date.valueOf("1983-08-04")) :: Nil)
+    checkAnswer(
+      readback.filter($"corrRec".isNull && $"a" === 1),
+      Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
   }
 
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
@@ -1836,7 +1836,7 @@ abstract class CSVSuite
       val idf = spark.read
         .schema(schema)
         .csv(path.getCanonicalPath)
-        .select('f15, 'f10, 'f5)
+        .select($"f15", $"f10", $"f5")
 
       assert(idf.count() == 2)
       checkAnswer(idf, List(Row(15, 10, 5), Row(-15, -10, -5)))
@@ -2692,6 +2692,16 @@ abstract class CSVSuite
         .csv(csv)
       assert(df.schema == expected)
       checkAnswer(df, Row(1, null) :: Nil)
+    }
+
+    withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
+      checkAnswer(
+        spark.read.schema(
+          StructType(
+            StructField("f1", StringType, nullable = false) ::
+            StructField("f2", StringType, nullable = false) :: Nil)
+        ).option("mode", "DROPMALFORMED").csv(Seq("a,", "a,b").toDS),
+        Row("a", "b"))
     }
   }
 

@@ -37,7 +37,7 @@ object AQEUtils {
       } else {
         None
       }
-      Some(ClusteredDistribution(h.expressions, numPartitions))
+      Some(ClusteredDistribution(h.expressions, requiredNumPartitions = numPartitions))
     case f: FilterExec => getRequiredDistribution(f.child)
     case s: SortExec if !s.global => getRequiredDistribution(s.child)
     case c: CollectMetricsExec => getRequiredDistribution(c.child)

@@ -40,7 +40,12 @@ case class ReferenceEqualPlanWrapper(plan: LogicalPlan) {
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    renewDuplicatedRelations(mutable.HashSet.empty, plan)._1.resolveOperatorsUpWithPruning(
+    val newPlan = renewDuplicatedRelations(mutable.HashSet.empty, plan)._1
+    if (newPlan.find(p => p.resolved && p.missingInput.nonEmpty).isDefined) {
+      // Wait for `ResolveMissingReferences` to resolve missing attributes first
+      return newPlan
+    }
+    newPlan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(JOIN, LATERAL_JOIN, AS_OF_JOIN, INTERSECT, EXCEPT, UNION, COMMAND),
       ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p
@@ -120,9 +125,18 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           }
         }
 
+        val planWithNewSubquery = plan.transformExpressions {
+          case subquery: SubqueryExpression =>
+            val (renewed, collected, changed) = renewDuplicatedRelations(
+              existingRelations ++ relations, subquery.plan)
+            relations ++= collected
+            if (changed) planChanged = true
+            subquery.withNewPlan(renewed)
+        }
+
         if (planChanged) {
-          if (plan.childrenResolved) {
-            val planWithNewChildren = plan.withNewChildren(newChildren.toSeq)
+          if (planWithNewSubquery.childrenResolved) {
+            val planWithNewChildren = planWithNewSubquery.withNewChildren(newChildren.toSeq)
             val attrMap = AttributeMap(
               plan
                 .children
@@ -135,7 +149,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
               planWithNewChildren.rewriteAttrs(attrMap)
             }
           } else {
-            plan.withNewChildren(newChildren.toSeq)
+            planWithNewSubquery.withNewChildren(newChildren.toSeq)
           }
         } else {
           plan
@@ -143,16 +157,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       } else {
         plan
       }
-
-      val planWithNewSubquery = newPlan.transformExpressions {
-        case subquery: SubqueryExpression =>
-          val (renewed, collected, changed) = renewDuplicatedRelations(
-            existingRelations ++ relations, subquery.plan)
-          relations ++= collected
-          if (changed) planChanged = true
-          subquery.withNewPlan(renewed)
-      }
-      (planWithNewSubquery, relations, planChanged)
+      (newPlan, relations, planChanged)
   }
 
   /**

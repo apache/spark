@@ -169,6 +169,24 @@ class DistributionSuite extends SparkFunSuite {
       ClusteredDistribution(Seq($"d", $"e")),
       false)
 
+    // When ClusteredDistribution.requireAllClusterKeys is set to true,
+    // HashPartitioning can only satisfy ClusteredDistribution iff its hash expressions are
+    // exactly same as the required clustering expressions.
+    checkSatisfied(
+      HashPartitioning(Seq($"a", $"b", $"c"), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      true)
+
+    checkSatisfied(
+      HashPartitioning(Seq($"b", $"c"), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq($"b", $"a", $"c"), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      false)
+
     // HashPartitioning cannot satisfy OrderedDistribution
     checkSatisfied(
       HashPartitioning(Seq($"a", $"b", $"c"), 10),
@@ -249,22 +267,40 @@ class DistributionSuite extends SparkFunSuite {
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
       ClusteredDistribution(Seq($"c", $"d")),
       false)
+
+    // When ClusteredDistribution.requireAllClusterKeys is set to true,
+    // RangePartitioning can only satisfy ClusteredDistribution iff its ordering expressions are
+    // exactly same as the required clustering expressions.
+    checkSatisfied(
+      RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      true)
+
+    checkSatisfied(
+      RangePartitioning(Seq($"a".asc, $"b".asc), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      false)
+
+    checkSatisfied(
+      RangePartitioning(Seq($"b".asc, $"a".asc, $"c".asc), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      false)
   }
 
   test("Partitioning.numPartitions must match Distribution.requiredNumPartitions to satisfy it") {
     checkSatisfied(
       SinglePartition,
-      ClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requiredNumPartitions = Some(10)),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requiredNumPartitions = Some(5)),
       false)
 
     checkSatisfied(
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requiredNumPartitions = Some(5)),
       false)
   }
 

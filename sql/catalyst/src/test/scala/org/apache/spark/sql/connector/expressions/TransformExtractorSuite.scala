@@ -45,7 +45,6 @@ class TransformExtractorSuite extends SparkFunSuite {
    */
   private def transform(func: String, ref: NamedReference): Transform = new Transform {
     override def name: String = func
-    override def references: Array[NamedReference] = Array(ref)
     override def arguments: Array[Expression] = Array(ref)
     override def toString: String = ref.describe
   }

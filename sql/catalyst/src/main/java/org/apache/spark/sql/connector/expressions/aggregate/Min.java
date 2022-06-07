@@ -34,5 +34,8 @@ public final class Min implements AggregateFunc {
   public Expression column() { return input; }
 
   @Override
+  public Expression[] children() { return new Expression[]{ input }; }
+
+  @Override
   public String toString() { return "MIN(" + input.describe() + ")"; }
 }

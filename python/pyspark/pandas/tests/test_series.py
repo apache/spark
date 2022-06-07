@@ -175,8 +175,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_rename_method(self):
         # Series name
-        pser = pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-        psser = ps.from_pandas(pser)
+        pdf = pd.DataFrame({"x": [1, 2, 3, 4, 5, 6, 7]})
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         self.assert_eq(psser.rename("y"), pser.rename("y"))
         self.assertEqual(psser.name, "x")  # no mutation
@@ -188,18 +189,31 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser.rename("z", inplace=True)
         self.assertEqual(psser.name, "z")
         self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
 
         expected_error_message = "Series.name must be a hashable type"
         with self.assertRaisesRegex(TypeError, expected_error_message):
             psser.rename(["0", "1"])
 
+        # Function index
+        self.assert_eq(psser.rename(lambda x: x ** 2), pser.rename(lambda x: x ** 2))
+        self.assert_eq((psser + 1).rename(lambda x: x ** 2), (pser + 1).rename(lambda x: x ** 2))
+
+        expected_error_message = "inplace True is not supported yet for a function 'index'"
+        with self.assertRaisesRegex(ValueError, expected_error_message):
+            psser.rename(lambda x: x ** 2, inplace=True)
+
+        unsupported_index_inputs = (pd.Series([2, 3, 4, 5, 6, 7, 8]), {0: "zero", 1: "one"})
+        for index in unsupported_index_inputs:
+            expected_error_message = (
+                "'index' of %s type is not supported yet" % type(index).__name__
+            )
+            with self.assertRaisesRegex(ValueError, expected_error_message):
+                psser.rename(index)
+
         # Series index
         # pser = pd.Series(['a', 'b', 'c', 'd', 'e', 'f', 'g'], name='x')
         # psser = ps.from_pandas(s)
-
-        # TODO: index
-        # res = psser.rename(lambda x: x ** 2)
-        # self.assert_eq(res, pser.rename(lambda x: x ** 2))
 
         # res = psser.rename(pser)
         # self.assert_eq(res, pser.rename(pser))
@@ -214,8 +228,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_rename_axis(self):
         index = pd.Index(["A", "B", "C"], name="index")
-        pser = pd.Series([1.0, 2.0, 3.0], index=index, name="name")
-        psser = ps.from_pandas(pser)
+        pdf = pd.DataFrame({"x": [1.0, 2.0, 3.0]}, index=index)
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         self.assert_eq(
             pser.rename_axis("index2").sort_index(),
@@ -226,12 +241,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             (pser + 1).rename_axis("index2").sort_index(),
             (psser + 1).rename_axis("index2").sort_index(),
         )
-
-        pser2 = pser.copy()
-        psser2 = psser.copy()
-        pser2.rename_axis("index2", inplace=True)
-        psser2.rename_axis("index2", inplace=True)
-        self.assert_eq(pser2.sort_index(), psser2.sort_index())
 
         self.assertRaises(ValueError, lambda: psser.rename_axis(["index2", "index3"]))
         self.assertRaises(TypeError, lambda: psser.rename_axis(mapper=["index2"], index=["index3"]))
@@ -245,6 +254,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pser.rename_axis(index=str.upper).sort_index(),
             psser.rename_axis(index=str.upper).sort_index(),
         )
+
+        pser.rename_axis("index2", inplace=True)
+        psser.rename_axis("index2", inplace=True)
+        self.assert_eq(pser.sort_index(), psser.sort_index())
+        # Note: in pandas, pdf.x's index is renamed, whereas pdf's index isn't due to a bug.
+        self.assert_eq(pdf, psdf)
 
         index = pd.MultiIndex.from_tuples(
             [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
@@ -387,6 +402,32 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             )
             self.assert_eq(psser.isin([1, 5, 0, None]), expected)
 
+    def test_duplicated(self):
+        for pser in [
+            pd.Series(["beetle", None, "beetle", None, "lama", "beetle"], name="objects"),
+            pd.Series([1, np.nan, 1, np.nan], name="numbers"),
+            pd.Series(
+                [
+                    pd.Timestamp("2022-01-01"),
+                    pd.Timestamp("2022-02-02"),
+                    pd.Timestamp("2022-01-01"),
+                    pd.Timestamp("2022-02-02"),
+                ],
+                name="times",
+            ),
+        ]:
+            psser = ps.from_pandas(pser)
+            self.assert_eq(psser.duplicated().sort_index(), pser.duplicated())
+            self.assert_eq(
+                psser.duplicated(keep="first").sort_index(), pser.duplicated(keep="first")
+            )
+            self.assert_eq(psser.duplicated(keep="last").sort_index(), pser.duplicated(keep="last"))
+            self.assert_eq(psser.duplicated(keep=False).sort_index(), pser.duplicated(keep=False))
+
+        pser = pd.Series([1, 2, 1, 2, 3], name="numbers")
+        psser = ps.from_pandas(pser)
+        self.assert_eq((psser + 1).duplicated().sort_index(), (pser + 1).duplicated())
+
     def test_drop_duplicates(self):
         pdf = pd.DataFrame({"animal": ["lama", "cow", "lama", "beetle", "lama", "hippo"]})
         psdf = ps.from_pandas(pdf)
@@ -510,12 +551,14 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser.fillna(0, inplace=True)
         pser.fillna(0, inplace=True)
         self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
 
         psser = psdf.x.rename("y")
         pser = pdf.x.rename("y")
         psser.fillna(0, inplace=True)
         pser.fillna(0, inplace=True)
         self.assert_eq(psser.head(), pser.head())
+        self.assert_eq(psdf, pdf)
 
         pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
         psser = ps.from_pandas(pser)
@@ -838,13 +881,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pd.Series([True, False], name="x"),
             pd.Series([0, 1], name="x"),
             pd.Series([1, 2, 3], name="x"),
+            pd.Series([np.nan, 0, 1], name="x"),
+            pd.Series([np.nan, 1, 2, 3], name="x"),
             pd.Series([True, True, None], name="x"),
             pd.Series([True, False, None], name="x"),
             pd.Series([], name="x"),
             pd.Series([np.nan], name="x"),
+            pd.Series([np.nan, np.nan], name="x"),
+            pd.Series([None], name="x"),
+            pd.Series([None, None], name="x"),
         ]:
             psser = ps.from_pandas(pser)
             self.assert_eq(psser.all(), pser.all())
+            self.assert_eq(psser.all(skipna=False), pser.all(skipna=False))
+            self.assert_eq(psser.all(skipna=True), pser.all(skipna=True))
 
         pser = pd.Series([1, 2, 3, 4], name="x")
         psser = ps.from_pandas(pser)
@@ -933,13 +983,14 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         check(psdf.index.to_series(name=("x", "a")), pdf.index.to_series(name=("x", "a")))
 
     def test_sort_values(self):
-        pdf = pd.DataFrame({"x": [1, 2, 3, 4, 5, None, 7]})
+        pdf = pd.DataFrame({"x": [1, 2, 3, 4, 5, None, 7]}, index=np.random.rand(7))
         psdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         psser = psdf.x
 
         self.assert_eq(psser.sort_values(), pser.sort_values())
+        self.assert_eq(psser.sort_values(ignore_index=True), pser.sort_values(ignore_index=True))
         self.assert_eq(psser.sort_values(ascending=False), pser.sort_values(ascending=False))
         self.assert_eq(
             psser.sort_values(na_position="first"), pser.sort_values(na_position="first")
@@ -951,6 +1002,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         # pandas raises an exception when the Series is derived from DataFrame
         psser.sort_values(inplace=True)
         self.assert_eq(psser, pser.sort_values())
+        self.assert_eq(psdf, pdf)
+
+        # pandas raises an exception when the Series is derived from DataFrame
+        psser.sort_values(inplace=True, ascending=False, ignore_index=True)
+        self.assert_eq(psser, pser.sort_values(ascending=False, ignore_index=True))
         self.assert_eq(psdf, pdf)
 
         pser = pdf.x.copy()
@@ -979,12 +1035,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.sort_index(ascending=False), pser.sort_index(ascending=False))
         # Assert sorting NA indices first
         self.assert_eq(psser.sort_index(na_position="first"), pser.sort_index(na_position="first"))
+        # Assert ignoring index
+        self.assert_eq(psser.sort_index(ignore_index=True), pser.sort_index(ignore_index=True))
 
         # Assert sorting inplace
         # pandas sorts pdf.x by the index and update the column only
         # when the Series is derived from DataFrame.
         psser.sort_index(inplace=True)
         self.assert_eq(psser, pser.sort_index())
+        self.assert_eq(psdf, pdf)
+
+        # pandas sorts pdf.x by the index and update the column only
+        # when the Series is derived from DataFrame.
+        psser.sort_index(inplace=True, ascending=False, ignore_index=True)
+        self.assert_eq(psser, pser.sort_index(ascending=False, ignore_index=True))
         self.assert_eq(psdf, pdf)
 
         pser = pdf.x.copy()
@@ -1061,8 +1125,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
                 getattr(psser, name)
 
     def test_clip(self):
-        pser = pd.Series([0, 2, 4], index=np.random.rand(3))
-        psser = ps.from_pandas(pser)
+        pdf = pd.DataFrame({"x": [0, 2, 4]}, index=np.random.rand(3))
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         # Assert list-like values are not accepted for 'lower' and 'upper'
         msg = "List-like value are not supported for 'lower' and 'upper' at the moment"
@@ -1079,6 +1144,13 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.clip(upper=3), pser.clip(upper=3))
         # Assert lower and upper
         self.assert_eq(psser.clip(1, 3), pser.clip(1, 3))
+        self.assert_eq((psser + 1).clip(1, 3), (pser + 1).clip(1, 3))
+
+        # Assert inplace is True
+        pser.clip(1, 3, inplace=True)
+        psser.clip(1, 3, inplace=True)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
 
         # Assert behavior on string values
         str_psser = ps.Series(["a", "b", "c"])
@@ -1161,12 +1233,33 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_map(self):
         pser = pd.Series(["cat", "dog", None, "rabbit"])
         psser = ps.from_pandas(pser)
-        # Currently Koalas doesn't return NaN as pandas does.
-        self.assert_eq(psser.map({}), pser.map({}).replace({pd.np.nan: None}))
+
+        # dict correspondence
+        # Currently pandas API on Spark doesn't return NaN as pandas does.
+        self.assert_eq(psser.map({}), pser.map({}).replace({np.nan: None}))
 
         d = defaultdict(lambda: "abc")
         self.assertTrue("abc" in repr(psser.map(d)))
         self.assert_eq(psser.map(d), pser.map(d))
+
+        # series correspondence
+        pser_to_apply = pd.Series(["one", "two", "four"], index=["cat", "dog", "rabbit"])
+        self.assert_eq(psser.map(pser_to_apply), pser.map(pser_to_apply))
+        self.assert_eq(
+            psser.map(pser_to_apply, na_action="ignore"),
+            pser.map(pser_to_apply, na_action="ignore"),
+        )
+
+        # function correspondence
+        self.assert_eq(
+            psser.map(lambda x: x.upper(), na_action="ignore"),
+            pser.map(lambda x: x.upper(), na_action="ignore"),
+        )
+
+        def to_upper(string) -> str:
+            return string.upper() if string else ""
+
+        self.assert_eq(psser.map(to_upper), pser.map(to_upper))
 
         def tomorrow(date) -> datetime:
             return date + timedelta(days=1)
@@ -1304,6 +1397,25 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.rank(method="max"), psser.rank(method="max").sort_index())
         self.assert_eq(pser.rank(method="first"), psser.rank(method="first").sort_index())
         self.assert_eq(pser.rank(method="dense"), psser.rank(method="dense").sort_index())
+
+        non_numeric_pser = pd.Series(["a", "c", "b", "d"], name="x", index=[10, 11, 12, 13])
+        non_numeric_psser = ps.from_pandas(non_numeric_pser)
+        self.assert_eq(
+            non_numeric_pser.rank(numeric_only=True),
+            non_numeric_psser.rank(numeric_only=True),
+        )
+        self.assert_eq(
+            non_numeric_pser.rank(numeric_only=None),
+            non_numeric_psser.rank(numeric_only=None).sort_index(),
+        )
+        self.assert_eq(
+            non_numeric_pser.rank(numeric_only=False),
+            non_numeric_psser.rank(numeric_only=False).sort_index(),
+        )
+        self.assert_eq(
+            (non_numeric_pser + "x").rank(numeric_only=True),
+            (non_numeric_psser + "x").rank(numeric_only=True),
+        )
 
         msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
         with self.assertRaisesRegex(ValueError, msg):
@@ -1598,24 +1710,40 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.aggregate(["min", max])
 
     def test_drop(self):
-        pser = pd.Series([10, 20, 15, 30, 45], name="x")
-        psser = ps.Series(pser)
+        pdf = pd.DataFrame({"x": [10, 20, 15, 30, 45]})
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         self.assert_eq(psser.drop(1), pser.drop(1))
         self.assert_eq(psser.drop([1, 4]), pser.drop([1, 4]))
+        self.assert_eq(psser.drop(columns=1), pser.drop(columns=1))
+        self.assert_eq(psser.drop(columns=[1, 4]), pser.drop(columns=[1, 4]))
 
-        msg = "Need to specify at least one of 'labels' or 'index'"
+        msg = "Need to specify at least one of 'labels', 'index' or 'columns'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.drop()
         self.assertRaises(KeyError, lambda: psser.drop((0, 1)))
+
+        psser.drop([2, 3], inplace=True)
+        pser.drop([2, 3], inplace=True)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+
+        n_pser, n_psser = pser + 1, psser + 1
+        n_psser.drop([1, 4], inplace=True)
+        n_pser.drop([1, 4], inplace=True)
+        self.assert_eq(n_psser, n_pser)
+        self.assert_eq(psser, pser)
 
         # For MultiIndex
         midx = pd.MultiIndex(
             [["lama", "cow", "falcon"], ["speed", "weight", "length"]],
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
-        pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        psser = ps.from_pandas(pser)
+
+        pdf = pd.DataFrame({"x": [45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3]}, index=midx)
+        psdf = ps.from_pandas(pdf)
+        psser, pser = psdf.x, pdf.x
 
         self.assert_eq(psser.drop("lama"), pser.drop("lama"))
         self.assert_eq(psser.drop(labels="weight", level=1), pser.drop(labels="weight", level=1))
@@ -1638,13 +1766,21 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(ValueError, msg):
             psser.drop(["lama", ["cow", "falcon"]])
 
-        msg = "Cannot specify both 'labels' and 'index'"
+        msg = "Cannot specify both 'labels' and 'index'/'columns'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.drop("lama", index="cow")
+
+        with self.assertRaisesRegex(ValueError, msg):
+            psser.drop("lama", columns="cow")
 
         msg = r"'Key length \(2\) exceeds index depth \(3\)'"
         with self.assertRaisesRegex(KeyError, msg):
             psser.drop(("lama", "speed", "x"))
+
+        psser.drop({"lama": "speed"}, inplace=True)
+        pser.drop({"lama": "speed"}, inplace=True)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
 
     def test_pop(self):
         midx = pd.MultiIndex(
@@ -1696,7 +1832,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_replace(self):
         pser = pd.Series([10, 20, 15, 30, np.nan], name="x")
-        psser = ps.Series(pser)
+        psser = ps.from_pandas(pser)
 
         self.assert_eq(psser.replace(), pser.replace())
         self.assert_eq(psser.replace({}), pser.replace({}))
@@ -1707,15 +1843,36 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.replace([10, 15], [45, 50]), pser.replace([10, 15], [45, 50]))
         self.assert_eq(psser.replace((10, 15), (45, 50)), pser.replace((10, 15), (45, 50)))
 
+        pser = pd.Series(["bat", "foo", "bait", "abc", "bar", "zoo"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.replace(to_replace=r"^ba.$", value="new", regex=True),
+            pser.replace(to_replace=r"^ba.$", value="new", regex=True),
+        )
+        self.assert_eq(
+            psser.replace(regex=r"^.oo$", value="new"), pser.replace(regex=r"^.oo$", value="new")
+        )
+        self.assert_eq(
+            (psser + "o").replace(regex=r"^.ooo$", value="new"),
+            (pser + "o").replace(regex=r"^.ooo$", value="new"),
+        )
+
         msg = "'to_replace' should be one of str, list, tuple, dict, int, float"
         with self.assertRaisesRegex(TypeError, msg):
             psser.replace(ps.range(5))
         msg = "Replacement lists must match in length. Expecting 3 got 2"
         with self.assertRaisesRegex(ValueError, msg):
-            psser.replace([10, 20, 30], [1, 2])
-        msg = "replace currently not support for regex"
+            psser.replace(["bat", "foo", "bait"], ["a", "b"])
+        msg = "'to_replace' must be 'None' if 'regex' is not a bool"
+        with self.assertRaisesRegex(ValueError, msg):
+            psser.replace(to_replace="foo", regex=r"^.oo$")
+        msg = "If 'regex' is True then 'to_replace' must be a string"
+        with self.assertRaisesRegex(AssertionError, msg):
+            psser.replace(["bat", "foo", "bait"], regex=True)
+        unsupported_regex = [r"^.oo$", r"^ba.$"]
+        msg = "'regex' of %s type is not supported" % type(unsupported_regex).__name__
         with self.assertRaisesRegex(NotImplementedError, msg):
-            psser.replace(r"^1.$", regex=True)
+            psser.replace(regex=unsupported_regex, value="new")
 
     def test_xs(self):
         midx = pd.MultiIndex(
@@ -2008,7 +2165,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         pser.name = "x"
         psser = ps.from_pandas(pser)
-        self.assert_eq(psser.mode(), pser.mode())
+        if LooseVersion(pd.__version__) < LooseVersion("1.4"):
+            # Due to pandas bug: https://github.com/pandas-dev/pandas/issues/46737
+            psser.name = None
+            self.assert_eq(psser.mode(), pser.mode())
+        else:
+            self.assert_eq(psser.mode(), pser.mode())
         self.assert_eq(
             psser.mode(dropna=False).sort_values().reset_index(drop=True),
             pser.mode(dropna=False).sort_values().reset_index(drop=True),
@@ -2070,6 +2232,48 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         with ps.option_context("compute.eager_check", False):
             self.assert_eq(psser.asof(20), 4.0)
+
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 20]), pser.asof([5, 20]))
+
+        pser = pd.Series([4, np.nan, np.nan, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 100]), pser.asof([5, 100]))
+
+        pser = pd.Series([np.nan, 4, 1, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 35]), pser.asof([5, 35]))
+
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([25, 25]), pser.asof([25, 25]))
+
+        pser = pd.Series([2, 1, np.nan, 4], index=["a", "b", "c", "d"], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof(["a", "d"]), pser.asof(["a", "d"]))
+
+        pser = pd.Series(
+            [2, 1, np.nan, 4],
+            index=[
+                pd.Timestamp(2020, 1, 1),
+                pd.Timestamp(2020, 2, 2),
+                pd.Timestamp(2020, 3, 3),
+                pd.Timestamp(2020, 4, 4),
+            ],
+            name="Koalas",
+        )
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.asof([pd.Timestamp(2020, 1, 1)]),
+            pser.asof([pd.Timestamp(2020, 1, 1)]),
+        )
+
+        pser = pd.Series([2, np.nan, 1, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof(np.nan), pser.asof(np.nan))
+        self.assert_eq(psser.asof([np.nan, np.nan]), pser.asof([np.nan, np.nan]))
+        self.assert_eq(psser.asof([10, np.nan]), pser.asof([10, np.nan]))
 
     def test_squeeze(self):
         # Single value
@@ -2642,8 +2846,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(puniques, kuniques)
 
     def test_pad(self):
-        pser = pd.Series([np.nan, 2, 3, 4, np.nan, 6], name="x")
-        psser = ps.from_pandas(pser)
+        pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             self.assert_eq(pser.pad(), psser.pad())
@@ -2652,6 +2857,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pser.pad(inplace=True)
             psser.pad(inplace=True)
             self.assert_eq(pser, psser)
+            self.assert_eq(pdf, psdf)
         else:
             expected = ps.Series([np.nan, 2, 3, 4, 4, 6], name="x")
             self.assert_eq(expected, psser.pad())
@@ -2781,9 +2987,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             name="Koalas",
         )
         psser = ps.from_pandas(pser)
-
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
+        self.assert_eq((pser + 1).argmax(skipna=False), (psser + 1).argmax(skipna=False))
 
         # MultiIndex
         pser.index = pd.MultiIndex.from_tuples(
@@ -2792,19 +2999,26 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
 
         # Null Series
         self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
         self.assert_eq(pd.Series([np.nan]).argmax(), ps.Series([np.nan]).argmax())
+        self.assert_eq(
+            pd.Series([np.nan]).argmax(skipna=False), ps.Series([np.nan]).argmax(skipna=False)
+        )
 
         with self.assertRaisesRegex(ValueError, "attempt to get argmin of an empty sequence"):
             ps.Series([]).argmin()
         with self.assertRaisesRegex(ValueError, "attempt to get argmax of an empty sequence"):
             ps.Series([]).argmax()
+        with self.assertRaisesRegex(ValueError, "axis can only be 0 or 'index'"):
+            psser.argmax(axis=1)
 
     def test_backfill(self):
-        pser = pd.Series([np.nan, 2, 3, 4, np.nan, 6], name="x")
-        psser = ps.from_pandas(pser)
+        pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             self.assert_eq(pser.backfill(), psser.backfill())
@@ -2813,6 +3027,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pser.backfill(inplace=True)
             psser.backfill(inplace=True)
             self.assert_eq(pser, psser)
+            self.assert_eq(pdf, psdf)
         else:
             expected = ps.Series([2.0, 2.0, 3.0, 4.0, 6.0, 6.0], name="x")
             self.assert_eq(expected, psser.backfill())
@@ -2847,6 +3062,30 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser ** np.nan, psser ** np.nan)
         self.assert_eq(pser.rpow(np.nan), psser.rpow(np.nan))
         self.assert_eq(1 ** pser, 1 ** psser)
+
+    def test_between(self):
+        pser = pd.Series([np.nan, 1, 2, 3, 4])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.between(1, 4), pser.between(1, 4))
+        self.assert_eq(psser.between(1, 4, inclusive="both"), pser.between(1, 4, inclusive="both"))
+        self.assert_eq(
+            psser.between(1, 4, inclusive="neither"), pser.between(1, 4, inclusive="neither")
+        )
+        self.assert_eq(psser.between(1, 4, inclusive="left"), pser.between(1, 4, inclusive="left"))
+        self.assert_eq(
+            psser.between(1, 4, inclusive="right"), pser.between(1, 4, inclusive="right")
+        )
+        expected_err_msg = (
+            "Inclusive has to be either string of 'both'," "'left', 'right', or 'neither'"
+        )
+        with self.assertRaisesRegex(ValueError, expected_err_msg):
+            psser.between(1, 4, inclusive="middle")
+
+        # Test for backward compatibility
+        self.assert_eq(psser.between(1, 4, inclusive=True), pser.between(1, 4, inclusive=True))
+        self.assert_eq(psser.between(1, 4, inclusive=False), pser.between(1, 4, inclusive=False))
+        with self.assertWarns(FutureWarning):
+            psser.between(1, 4, inclusive=True)
 
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
@@ -2903,7 +3142,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(
             ValueError,
             r"Expected the return type of this function to be of scalar type, "
-            r"but found type SeriesType\[LongType\]",
+            r"but found type SeriesType\[LongType\(\)\]",
         ):
             psser.apply(udf)
 
@@ -2924,6 +3163,23 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser2.name = pser2.name = ("Y", "B")
 
         self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
+    def test_autocorr(self):
+        pdf = pd.DataFrame({"s1": [0.90010907, 0.13484424, 0.62036035]})
+        self._test_autocorr(pdf)
+
+        pdf = pd.DataFrame({"s1": [0.90010907, np.nan, 0.13484424, 0.62036035]})
+        self._test_autocorr(pdf)
+
+        pdf = pd.DataFrame({"s1": [0.2, 0.0, 0.6, 0.2, np.nan, 0.5, 0.6]})
+        self._test_autocorr(pdf)
+
+    def _test_autocorr(self, pdf):
+        psdf = ps.from_pandas(pdf)
+        for lag in range(-10, 10):
+            p_autocorr = pdf["s1"].autocorr(lag)
+            ps_autocorr = psdf["s1"].autocorr(lag)
+            self.assert_eq(p_autocorr, ps_autocorr, almost=True)
 
     def test_cov(self):
         pdf = pd.DataFrame(

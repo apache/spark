@@ -28,7 +28,7 @@ To run tests with Hadoop 2.x instead of Hadoop 3.x, use `--hadoop-profile`.
 
     ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2
 
-The minimum tested version of Minikube is 1.7.3. The kube-dns addon must be enabled. Minikube should
+The minimum tested version of Minikube is 1.18.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
 
     minikube start --cpus 4 --memory 6144
@@ -47,7 +47,7 @@ default this is set to `minikube`, the available backends are their prerequisite
 
 ### `minikube`
 
-Uses the local `minikube` cluster, this requires that `minikube` 1.7.3 or greater be installed and that it be allocated
+Uses the local `minikube` cluster, this requires that `minikube` 1.18.0 or greater be installed and that it be allocated
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
@@ -268,4 +268,102 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     </td>
     <td></td>
   </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.driverRequestCores</code></td>
+    <td>
+      Set cpu resource for each driver pod in test, this is currently only for test on cpu resource limited cluster,
+      it's not recommended for other scenarios.
+    </td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.executorRequestCores</code></td>
+    <td>
+      Set cpu resource for each executor pod in test, this is currently only for test on cpu resource limited cluster,
+      it's not recommended for other scenarios.
+    </td>
+    <td></td>
+  </tr>
 </table>
+
+# Running the Kubernetes Integration Tests with SBT
+
+You can use SBT in the same way to build image and run all K8s integration tests except Minikube-only ones.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/test'
+
+The following is an example to rerun tests with the pre-built image.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/runIts'
+
+In addition, you can run a single test selectively.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/testOnly -- -z "Run SparkPi with a very long application name"'
+
+You can also specify your specific dockerfile to build JVM/Python/R based image to test.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        -Dspark.kubernetes.test.dockerFile=/path/to/Dockerfile \
+        -Dspark.kubernetes.test.pyDockerFile=/path/to/py/Dockerfile \
+        -Dspark.kubernetes.test.rDockerFile=/path/to/r/Dockerfile \
+        'kubernetes-integration-tests/test'
+
+# Running the Volcano Integration Tests
+
+Volcano integration is experimental in Aapche Spark 3.3.0 and the test coverage is limited.
+
+## Requirements
+- A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
+- Volcano v1.5.1.
+
+## Installation
+
+    # x86_64
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
+
+    # arm64:
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+
+## Run tests
+
+You can specify `-Pvolcano` to enable volcano module to run all Kubernetes and Volcano tests
+
+    build/sbt -Pvolcano -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        'kubernetes-integration-tests/test'
+
+You can also specify `volcano` tag to only run Volcano test:
+
+    build/sbt -Pvolcano -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.include.tags=volcano \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        'kubernetes-integration-tests/test'
+
+## Cleanup Volcano
+
+    # x86_64
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
+
+    # arm64:
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+    
+    # Cleanup Volcano webhook 
+    kubectl delete validatingwebhookconfigurations volcano-admission-service-jobs-validate volcano-admission-service-pods-validate volcano-admission-service-queues-validate
+    kubectl delete mutatingwebhookconfigurations volcano-admission-service-jobs-mutate volcano-admission-service-podgroups-mutate volcano-admission-service-pods-mutate volcano-admission-service-queues-mutate
+

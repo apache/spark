@@ -88,14 +88,14 @@ case class InsertAdaptiveSparkPlan(
   //   - The query contains sub-query.
   private def shouldApplyAQE(plan: SparkPlan, isSubquery: Boolean): Boolean = {
     conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
-      plan.find {
+      plan.exists {
         case _: Exchange => true
         case p if !p.requiredChildDistribution.forall(_ == UnspecifiedDistribution) => true
-        case p => p.expressions.exists(_.find {
+        case p => p.expressions.exists(_.exists {
           case _: SubqueryExpression => true
           case _ => false
-        }.isDefined)
-      }.isDefined
+        })
+      }
     }
   }
 

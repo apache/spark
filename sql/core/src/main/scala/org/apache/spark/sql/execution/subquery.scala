@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
@@ -46,10 +47,10 @@ object ExecSubqueryExpression {
    * Returns true when an expression contains a subquery
    */
   def hasSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case _: ExecSubqueryExpression => true
       case _ => false
-    }.isDefined
+    }
   }
 }
 
@@ -79,7 +80,7 @@ case class ScalarSubquery(
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     if (rows.length > 1) {
-      sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
+      throw QueryExecutionErrors.multipleRowSubqueryError(plan.toString)
     }
     if (rows.length == 1) {
       assert(rows(0).numFields == 1,

@@ -38,10 +38,10 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util.ExpressionSQLBuilder
+import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{Expression => ExpressionV2, FieldReference, GeneralSQLExpression, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
@@ -61,7 +61,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-object DataSourceAnalysis extends Rule[LogicalPlan] {
+case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
 
   def resolver: Resolver = conf.resolver
 
@@ -112,8 +112,10 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
           // the reason that the parser has erased the type info of static partition values
           // and converted them to string.
           case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
-            Some(Alias(AnsiCast(Literal(partValue), field.dataType,
-              Option(conf.sessionLocalTimeZone)), field.name)())
+            val cast = Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone),
+              ansiEnabled = true)
+            cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+            Some(Alias(cast, field.name)())
           case _ =>
             val castExpression =
               Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone),
@@ -145,7 +147,11 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
-      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+      val newTableDesc: CatalogTable =
+        tableDesc.copy(schema =
+          ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
+            analyzer, tableDesc.schema, "CREATE TABLE"))
+      CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
@@ -340,7 +346,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        PushedDownOperators(None, None, None, Seq.empty),
+        PushedDownOperators(None, None, None, Seq.empty, Seq.empty),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -414,7 +420,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, Seq.empty),
+        PushedDownOperators(None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -437,7 +443,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, Seq.empty),
+        PushedDownOperators(None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -759,14 +765,13 @@ object DataSourceStrategy
   protected[sql] def translateAggregation(
       aggregates: Seq[AggregateExpression], groupBy: Seq[Expression]): Option[Aggregation] = {
 
-    def columnAsString(e: Expression): Option[FieldReference] = e match {
-      case PushableColumnWithoutNestedColumn(name) =>
-        Some(FieldReference.column(name).asInstanceOf[FieldReference])
+    def translateGroupBy(e: Expression): Option[V2Expression] = e match {
+      case PushableExpression(expr) => Some(expr)
       case _ => None
     }
 
     val translatedAggregates = aggregates.flatMap(translateAggregate)
-    val translatedGroupBys = groupBy.flatMap(columnAsString)
+    val translatedGroupBys = groupBy.flatMap(translateGroupBy)
 
     if (translatedAggregates.length != aggregates.length ||
       translatedGroupBys.length != groupBy.length) {
@@ -776,9 +781,9 @@ object DataSourceStrategy
     Some(new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray))
   }
 
-  protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[SortOrderV2] = {
-    def translateOortOrder(sortOrder: SortOrder): Option[SortOrderV2] = sortOrder match {
-      case SortOrder(PushableColumnWithoutNestedColumn(name), directionV1, nullOrderingV1, _) =>
+  protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[V2SortOrder] = {
+    def translateSortOrder(sortOrder: SortOrder): Option[V2SortOrder] = sortOrder match {
+      case SortOrder(PushableExpression(expr), directionV1, nullOrderingV1, _) =>
         val directionV2 = directionV1 match {
           case Ascending => SortDirection.ASCENDING
           case Descending => SortDirection.DESCENDING
@@ -787,11 +792,11 @@ object DataSourceStrategy
           case NullsFirst => NullOrdering.NULLS_FIRST
           case NullsLast => NullOrdering.NULLS_LAST
         }
-        Some(SortValue(FieldReference(name), directionV2, nullOrderingV2))
+        Some(SortValue(expr, directionV2, nullOrderingV2))
       case _ => None
     }
 
-    sortOrders.flatMap(translateOortOrder)
+    sortOrders.flatMap(translateSortOrder)
   }
 
   /**
@@ -802,7 +807,7 @@ object DataSourceStrategy
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.needConversion) {
-      val toRow = RowEncoder(StructType.fromAttributes(output)).createSerializer()
+      val toRow = RowEncoder(StructType.fromAttributes(output), lenient = true).createSerializer()
       rdd.mapPartitions { iterator =>
         iterator.map(toRow)
       }
@@ -864,8 +869,5 @@ object PushableColumnWithoutNestedColumn extends PushableColumnBase {
  * Get the expression of DS V2 to represent catalyst expression that can be pushed down.
  */
 object PushableExpression {
-  def unapply(e: Expression): Option[ExpressionV2] = e match {
-    case PushableColumnWithoutNestedColumn(name) => Some(FieldReference.column(name))
-    case _ => new ExpressionSQLBuilder(e).build().map(new GeneralSQLExpression(_))
-  }
+  def unapply(e: Expression): Option[V2Expression] = new V2ExpressionBuilder(e).build()
 }

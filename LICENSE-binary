@@ -382,6 +382,10 @@ org.eclipse.jetty:jetty-servlets
 org.eclipse.jetty:jetty-util
 org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
+org.scala-lang:scala-compiler
+org.scala-lang:scala-library
+org.scala-lang:scala-reflect
+org.scala-lang.modules:scala-parser-combinators_2.12
 org.scala-lang.modules:scala-xml_2.12
 com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.zaxxer.HikariCP
@@ -445,10 +449,6 @@ org.antlr:stringtemplate
 org.antlr:antlr4-runtime
 antlr:antlr
 com.thoughtworks.paranamer:paranamer
-org.scala-lang:scala-compiler
-org.scala-lang:scala-library
-org.scala-lang:scala-reflect
-org.scala-lang.modules:scala-parser-combinators_2.12
 org.fusesource.leveldbjni:leveldbjni-all
 net.sourceforge.f2j:arpack_combined_all
 xmlenc:xmlenc
@@ -456,6 +456,7 @@ net.sf.py4j:py4j
 org.jpmml:pmml-model
 org.jpmml:pmml-schema
 org.threeten:threeten-extra
+org.jdom:jdom2
 
 python/lib/py4j-*-src.zip
 python/pyspark/cloudpickle.py
@@ -504,6 +505,7 @@ Common Development and Distribution License (CDDL) 1.0
 javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
 javax.xml.stream:stax-api    https://jcp.org/en/jsr/detail?id=173
 javax.transaction:javax.transaction-api
+javax.xml.bind:jaxb-api
 
 
 Common Development and Distribution License (CDDL) 1.1
@@ -544,6 +546,7 @@ jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/
 jakarta.servlet:jakarta.servlet-api https://projects.eclipse.org/projects/ee4j.servlet
 jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
 org.glassfish.hk2.external:jakarta.inject
+com.github.jnr:jnr-posix
 
 
 Public Domain

@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, Metadata, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructType}
 
 class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkSession  {
 
@@ -103,6 +103,35 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
           //   - b: ID 2 is not found, return null
           //   - c: ID 3 is found, read it
           Row(null, null, 100) :: Row(null, null, 200) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-38094: absence of field ids: reading nested schema") {
+    withTempDir { dir =>
+      // now with nested schema/complex type
+      val readSchema =
+        new StructType()
+          .add("a", IntegerType, true, withId(1))
+          .add("b", ArrayType(StringType), true, withId(2))
+          .add("c", new StructType().add("c1", IntegerType, true, withId(6)), true, withId(3))
+          .add("d", MapType(StringType, StringType), true, withId(4))
+          .add("e", IntegerType, true, withId(5))
+
+      val writeSchema =
+        new StructType()
+          .add("a", IntegerType, true, withId(5))
+          .add("randomName", StringType, true)
+
+      val writeData = Seq(Row(100, "text"), Row(200, "more"))
+
+      spark.createDataFrame(writeData.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
+
+      withAllParquetReaders {
+        checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
+          // a, b, c, d all couldn't be found
+          Row(null, null, null, null, 100) :: Row(null, null, null, null, 200) :: Nil)
       }
     }
   }

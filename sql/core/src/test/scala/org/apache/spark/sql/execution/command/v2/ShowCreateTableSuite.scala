@@ -82,7 +82,12 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
            |  to = 1,
            |  via = 2)
            |COMMENT 'This is a comment'
-           |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
+           |TBLPROPERTIES (
+           |  'prop1' = '1',
+           |  'prop2' = '2',
+           |  'prop3' = 3,
+           |  'prop4' = 4,
+           |  'password' = 'password')
            |PARTITIONED BY (a)
            |LOCATION '/tmp'
         """.stripMargin)
@@ -103,6 +108,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         "COMMENT 'This is a comment'",
         "LOCATION 'file:/tmp'",
         "TBLPROPERTIES (",
+        "'password' = '*********(redacted)',",
         "'prop1' = '1',",
         "'prop2' = '2',",
         "'prop3' = '3',",

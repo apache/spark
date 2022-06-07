@@ -20,7 +20,7 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option, option_context
-from pyspark.pandas.plot import TopNPlotBase, SampledPlotBase, HistogramPlotBase
+from pyspark.pandas.plot import TopNPlotBase, SampledPlotBase, HistogramPlotBase, BoxPlotBase
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -41,7 +41,7 @@ class DataFramePlotTest(PandasOnSparkTestCase):
     def test_missing(self):
         psdf = ps.DataFrame(np.random.rand(2500, 4), columns=["a", "b", "c", "d"])
 
-        unsupported_functions = ["box", "hexbin"]
+        unsupported_functions = ["hexbin"]
 
         for name in unsupported_functions:
             with self.assertRaisesRegex(
@@ -109,6 +109,48 @@ class DataFramePlotTest(PandasOnSparkTestCase):
             self.assert_eq(
                 pd.Series(expected_histogram, name=expected_name), histogram, almost=True
             )
+
+    def test_compute_box_multi_columns(self):
+        # compare compute_multicol_stats with compute_stats
+        def check_box_multi_columns(psdf):
+            k = 1.5
+            multicol_stats = BoxPlotBase.compute_multicol_stats(
+                psdf, ["a", "b", "c"], whis=k, precision=0.01
+            )
+            multicol_outliers = BoxPlotBase.multicol_outliers(psdf, multicol_stats)
+            multicol_whiskers = BoxPlotBase.calc_multicol_whiskers(
+                ["a", "b", "c"], multicol_outliers
+            )
+
+            for col in ["a", "b", "c"]:
+                col_stats = multicol_stats[col]
+                col_whiskers = multicol_whiskers[col]
+
+                stats, fences = BoxPlotBase.compute_stats(psdf[col], col, whis=k, precision=0.01)
+                outliers = BoxPlotBase.outliers(psdf[col], col, *fences)
+                whiskers = BoxPlotBase.calc_whiskers(col, outliers)
+
+                self.assertEqual(stats["mean"], col_stats["mean"])
+                self.assertEqual(stats["med"], col_stats["med"])
+                self.assertEqual(stats["q1"], col_stats["q1"])
+                self.assertEqual(stats["q3"], col_stats["q3"])
+                self.assertEqual(fences[0], col_stats["lfence"])
+                self.assertEqual(fences[1], col_stats["ufence"])
+                self.assertEqual(whiskers[0], col_whiskers["min"])
+                self.assertEqual(whiskers[1], col_whiskers["max"])
+
+        pdf = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 50],
+                "b": [3, 2, 5, 4, 5, 6, 8, 8, 11, 60, 90],
+                "c": [-30, -2, 5, 4, 5, 6, -8, 8, 11, 12, 18],
+            },
+            index=[0, 1, 3, 5, 6, 8, 9, 9, 9, 10, 10],
+        )
+        psdf = ps.from_pandas(pdf)
+
+        check_box_multi_columns(psdf)
+        check_box_multi_columns(-psdf)
 
 
 if __name__ == "__main__":

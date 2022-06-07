@@ -31,7 +31,7 @@ from typing import (
     Union,
 )
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
@@ -233,23 +233,13 @@ class Column:
     __radd__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _bin_op("plus")
     )
-    __rsub__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _reverse_op("minus")
-    )
+    __rsub__ = _reverse_op("minus")
     __rmul__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _bin_op("multiply")
     )
-    __rdiv__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("divide"),
-    )
-    __rtruediv__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("divide"),
-    )
-    __rmod__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _reverse_op("mod")
-    )
+    __rdiv__ = _reverse_op("divide")
+    __rtruediv__ = _reverse_op("divide")
+    __rmod__ = _reverse_op("mod")
 
     __pow__ = _bin_func_op("pow")
     __rpow__ = cast(
@@ -709,7 +699,7 @@ class Column:
         if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)
         elif isinstance(startPos, Column):
-            jc = self._jc.substr(cast("Column", startPos)._jc, cast("Column", length)._jc)
+            jc = self._jc.substr(startPos._jc, cast("Column", length)._jc)
         else:
             raise TypeError("Unexpected type: %s" % type(startPos))
         return Column(jc)

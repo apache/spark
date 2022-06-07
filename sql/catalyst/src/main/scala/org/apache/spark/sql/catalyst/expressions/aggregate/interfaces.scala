@@ -83,7 +83,7 @@ object AggregateExpression {
   }
 
   def containsAggregate(expr: Expression): Boolean = {
-    expr.find(isAggregate).isDefined
+    expr.exists(isAggregate)
   }
 
   def isAggregate(expr: Expression): Boolean = {
@@ -422,7 +422,7 @@ abstract class DeclarativeAggregate
   /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
   final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+  lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
   /**

@@ -52,7 +52,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
-      testRelation.select('b).analyze
+      testRelation.select($"b").analyze
     }
   }
 
@@ -221,7 +221,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val pl = plan.asInstanceOf[Project].projectList
 
     assert(pl(0).dataType == DoubleType)
-    assert(pl(1).dataType == DoubleType)
+    if (!SQLConf.get.ansiEnabled) {
+      assert(pl(1).dataType == DoubleType)
+    }
     assert(pl(2).dataType == DoubleType)
     assert(pl(3).dataType == DoubleType)
     assert(pl(4).dataType == DoubleType)
@@ -285,7 +287,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         CreateNamedStruct(Seq(
           Literal(att1.name), att1,
           Literal("a_plus_1"), (att1 + 1))),
-          Symbol("col").struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
+          $"col".struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
       )).as("arr")
     )
 
@@ -425,15 +427,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-12102: Ignore nullability when comparing two sides of case") {
-    val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
-      Symbol("b").struct(Symbol("x").int.withNullability(false)))
+    val relation = LocalRelation($"a".struct($"x".int),
+      $"b".struct($"x".int.withNullability(false)))
     val plan = relation.select(
-      CaseWhen(Seq((Literal(true), Symbol("a").attr)), Symbol("b")).as("val"))
+      CaseWhen(Seq((Literal(true), $"a".attr)), $"b").as("val"))
     assertAnalysisSuccess(plan)
   }
 
   test("Keep attribute qualifiers after dedup") {
-    val input = LocalRelation(Symbol("key").int, Symbol("value").string)
+    val input = LocalRelation($"key".int, $"value".string)
 
     val query =
       Project(Seq($"x.key", $"y.key"),
@@ -560,13 +562,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-20963 Support aliases for join relations in FROM clause") {
     def joinRelationWithAliases(outputNames: Seq[String]): LogicalPlan = {
-      val src1 = LocalRelation(Symbol("id").int, Symbol("v1").string).as("s1")
-      val src2 = LocalRelation(Symbol("id").int, Symbol("v2").string).as("s2")
+      val src1 = LocalRelation($"id".int, $"v1".string).as("s1")
+      val src2 = LocalRelation($"id".int, $"v2".string).as("s2")
       UnresolvedSubqueryColumnAliases(
         outputNames,
         SubqueryAlias(
           "dst",
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+          src1.join(src2, Inner, Option($"s1.id" === $"s2.id")))
       ).select(star())
     }
     assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
@@ -590,12 +592,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))
     checkPartitioning[HashPartitioning](numPartitions = 10,
-      exprs = Symbol("a").attr, Symbol("b").attr)
+      exprs = $"a".attr, $"b".attr)
 
     checkPartitioning[RangePartitioning](numPartitions = 10,
       exprs = SortOrder(Literal(10), Ascending))
     checkPartitioning[RangePartitioning](numPartitions = 10,
-      exprs = SortOrder(Symbol("a").attr, Ascending), SortOrder(Symbol("b").attr, Descending))
+      exprs = SortOrder($"a".attr, Ascending), SortOrder($"b".attr, Descending))
 
     checkPartitioning[RoundRobinPartitioning](numPartitions = 10, exprs = Seq.empty: _*)
 
@@ -607,7 +609,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
     intercept[IllegalArgumentException] {
       checkPartitioning(numPartitions = 10, exprs =
-        SortOrder(Symbol("a").attr, Ascending), Symbol("b").attr)
+        SortOrder($"a".attr, Ascending), $"b".attr)
     }
   }
 
@@ -671,13 +673,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
-    val cond = 'a > 1
+    val cond = $"a" > 1
     assertAnalysisError(
       MergeIntoTable(
         testRelation,
         testRelation,
         cond,
-        UpdateAction(Some(cond), Assignment('a, 'a) :: Nil) :: Nil,
+        UpdateAction(Some(cond), Assignment($"a", $"a") :: Nil) :: Nil,
         Nil
       ),
       "Reference 'a' is ambiguous" :: Nil)
@@ -792,7 +794,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "Multiple definitions of observed metrics" :: "evt1" :: Nil)
 
     // Different children, same metrics - fail
-    val b = Symbol("b").string
+    val b = $"b".string
     val tblB = LocalRelation(b)
     assertAnalysisError(Union(
       CollectMetrics("evt1", count :: Nil, testRelation) ::
@@ -1168,10 +1170,60 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |WITH t as (SELECT true c, false d)
            |SELECT (t.c AND t.d) c
            |FROM t
-           |GROUP BY t.c
+           |GROUP BY t.c, t.d
            |HAVING ${func}(c) > 0d""".stripMargin),
-        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
+        Seq(s"cannot resolve '$func(c)' due to data type mismatch"),
         false)
     }
+  }
+
+  test("SPARK-39354: should be `Table or view not found`") {
+    assertAnalysisError(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id, CAST("2022-06-02" AS DATE) dt)
+         |SELECT *
+         |FROM t1
+         |JOIN t2 ON t1.user_id = t2.user_id
+         |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
+      Seq(s"Table or view not found: t2"),
+      false)
+  }
+
+  test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {
+    val innerRelation = SubqueryAlias("src1", testRelation)
+    val outerRelation = SubqueryAlias("src2", testRelation)
+    val ref1 = testRelation.output.head
+
+    val subPlan = getAnalyzer.execute(
+      Project(
+        Seq(UnresolvedStar(None)),
+        Filter.apply(
+          Exists(
+            Filter.apply(
+              EqualTo(
+                OuterReference(ref1),
+                ref1),
+              innerRelation
+            )
+          ),
+          outerRelation
+        )))
+
+    val finalPlan = {
+      Union.apply(
+        Project(
+          Seq(UnresolvedStar(None)),
+          subPlan
+        ),
+        Filter.apply(
+          Exists(
+            subPlan
+          ),
+          subPlan
+        )
+      )
+    }
+
+    assertAnalysisSuccess(finalPlan)
   }
 }

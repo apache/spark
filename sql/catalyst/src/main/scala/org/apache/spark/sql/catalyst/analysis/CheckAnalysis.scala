@@ -21,14 +21,14 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -49,6 +49,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
   val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Boolean]("dataTypeMismatchError")
+
+  val DATA_TYPE_MISMATCH_ERROR_MESSAGE = TreeNodeTag[String]("dataTypeMismatchError")
 
   protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
@@ -93,8 +95,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
-    // of the result of cascading resolution failures.
-    plan.foreachUp {
+    // of the result of cascading resolution failures. Inline all CTEs in the plan to help check
+    // query plan structures in subqueries.
+    val inlineCTE = InlineCTE(alwaysInline = true)
+    inlineCTE(plan).foreachUp {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
 
@@ -172,7 +176,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
         }
 
-        getAllExpressions(operator).foreach(_.foreachUp {
+        val expressions = getAllExpressions(operator)
+
+        expressions.foreach(_.foreachUp {
+          case e: Expression =>
+            e.getTagValue(DATA_TYPE_MISMATCH_ERROR_MESSAGE) match {
+              case Some(message) =>
+                e.failAnalysis(s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
+                  extraHintForAnsiTypeCoercionExpression(operator))
+              case _ =>
+            }
+          case _ =>
+        })
+
+        expressions.foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             val missingCol = a.sql
             val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
@@ -199,6 +216,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"invalid cast from ${c.child.dataType.catalogString} to " +
               c.dataType.catalogString)
 
+          case e: RuntimeReplaceable if !e.replacement.resolved =>
+            throw new IllegalStateException("Illegal RuntimeReplaceable: " + e +
+              "\nReplacement is unresolved: " + e.replacement)
+
           case g: Grouping =>
             failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
           case g: GroupingID =>
@@ -222,6 +243,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             w.windowFunction match {
+              case agg @ AggregateExpression(
+                _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
+                if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
+                    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
+                failAnalysis(
+                  s"Cannot specify order by or frame for '${agg.aggregateFunction.prettyName}'.")
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
@@ -330,7 +357,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
-              if (expr.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+              if (expr.exists(_.isInstanceOf[AggregateExpression])) {
                 failAnalysis(
                   "aggregate functions are not allowed in GROUP BY, but found " + expr.sql)
               }
@@ -403,7 +430,24 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
-          case LocalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
+          case LocalLimit(limitExpr, child) =>
+            checkLimitLikeClause("limit", limitExpr)
+            child match {
+              case Offset(offsetExpr, _) =>
+                val limit = limitExpr.eval().asInstanceOf[Int]
+                val offset = offsetExpr.eval().asInstanceOf[Int]
+                if (Int.MaxValue - limit < offset) {
+                  failAnalysis(
+                    s"""
+                       |The sum of the LIMIT clause and the OFFSET clause must not be greater than
+                       |the maximum 32-bit integer value (2,147,483,647),
+                       |but found limit = $limit, offset = $offset.
+                       |""".stripMargin.replace("\n", " "))
+                }
+              case _ =>
+            }
+
+          case Offset(offsetExpr, _) => checkLimitLikeClause("offset", offsetExpr)
 
           case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
@@ -431,7 +475,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (dataTypesAreCompatibleFn(dt1, dt2)) {
+                if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   val errorMessage =
                     s"""
                        |${operator.nodeName} can only be performed on tables with the compatible
@@ -554,8 +598,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}
                """.stripMargin)
 
-          case _: UnresolvedHint =>
-            throw QueryExecutionErrors.logicalHintOperatorNotRemovedDuringAnalysisError
+          case _: UnresolvedHint => throw new IllegalStateException(
+            "Logical hint operator should be removed during analysis.")
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
@@ -603,11 +647,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     val isUnion = plan.isInstanceOf[Union]
     if (isUnion) {
       (dt1: DataType, dt2: DataType) =>
-        !DataType.equalsStructurally(dt1, dt2, true)
+        DataType.equalsStructurally(dt1, dt2, true)
     } else {
       // SPARK-18058: we shall not care about the nullability of columns
       (dt1: DataType, dt2: DataType) =>
-        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).nonEmpty
     }
   }
 
@@ -658,7 +702,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
             // Check if the data types match.
             dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-              if (dataTypesAreCompatibleFn(dt1, dt2)) {
+              if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                 issueFixedIfAnsiOff = false
               }
             }
@@ -673,7 +717,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
-  private def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+  def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
         query: LogicalPlan, agg: Aggregate): Unit = {
@@ -714,11 +758,29 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Check whether the given expressions contains the subquery expression.
     def containsExpr(expressions: Seq[Expression]): Boolean = {
-      expressions.exists(_.find(_.semanticEquals(expr)).isDefined)
+      expressions.exists(_.exists(_.semanticEquals(expr)))
+    }
+
+    def checkOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = p match {
+      case f: Filter =>
+        if (hasOuterReferences(expr.plan)) {
+          expr.plan.expressions.foreach(_.foreachUp {
+            case o: OuterReference =>
+              p.children.foreach(e =>
+                if (!e.output.exists(_.exprId == o.exprId)) {
+                  failAnalysis("outer attribute not found")
+                })
+            case _ =>
+          })
+        }
+      case _ =>
     }
 
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
+
+    // Check if there is outer attribute that cannot be found from the plan.
+    checkOuterReference(plan, expr)
 
     expr match {
       case ScalarSubquery(query, outerAttrs, _, _) =>
@@ -778,10 +840,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter | _: SupportsSubquery | _: Join => // Ok
+          case _: Filter | _: SupportsSubquery | _: Join |
+            _: Project | _: Aggregate | _: Window => // Ok
           case _ =>
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
-                s" Filter/Join and a few commands: $plan")
+              s" Filter/Join/Project/Aggregate/Window and a few commands: $plan")
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
@@ -933,31 +996,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
-    def containsAttribute(e: Expression): Boolean = {
-      e.find(_.isInstanceOf[Attribute]).isDefined
-    }
-
-    // Given a correlated predicate, check if it is either a non-equality predicate or
-    // equality predicate that does not guarantee one-on-one mapping between inner and
-    // outer attributes. When the correlated predicate does not contain any attribute
-    // (i.e. only has outer references), it is supported and should return false. E.G.:
-    //   (a = outer(c)) -> false
-    //   (outer(c) = outer(d)) -> false
-    //   (a > outer(c)) -> true
-    //   (a + b = outer(c)) -> true
-    // The last one is true because there can be multiple combinations of (a, b) that
-    // satisfy the equality condition. For example, if outer(c) = 0, then both (0, 0)
-    // and (-1, 1) can make the predicate evaluate to true.
-    def isUnsupportedPredicate(condition: Expression): Boolean = condition match {
-      // Only allow equality condition with one side being an attribute and another
-      // side being an expression without attributes from the inner query. Note
-      // OuterReference is a leaf node and will not be found here.
-      case Equality(_: Attribute, b) => containsAttribute(b)
-      case Equality(a, _: Attribute) => containsAttribute(a)
-      case e @ Equality(_, _) => containsAttribute(e)
-      case _ => true
-    }
-
     val unsupportedPredicates = mutable.ArrayBuffer.empty[Expression]
 
     // Simplify the predicates before validating any unsupported correlation patterns in the plan.
@@ -1004,7 +1042,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // The other operator is Join. Filter can be anywhere in a correlated subquery.
       case f: Filter =>
         val (correlated, _) = splitConjunctivePredicates(f.condition).partition(containsOuter)
-        unsupportedPredicates ++= correlated.filter(isUnsupportedPredicate)
+        unsupportedPredicates ++= correlated.filterNot(DecorrelateInnerQuery.canPullUpOverAgg)
         failOnInvalidOuterReference(f)
 
       // Aggregate cannot host any correlated expressions
@@ -1106,7 +1144,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
+      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _, _) =>
         val fieldName = col.name.quoted
         if (a.dataType.isDefined) {
           val field = CharVarcharUtils.getRawType(col.field.metadata)

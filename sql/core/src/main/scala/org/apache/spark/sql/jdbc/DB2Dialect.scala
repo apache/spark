@@ -35,27 +35,27 @@ private object DB2Dialect extends JdbcDialect {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
         case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VARIANCE($distinct${f.inputs().head})")
+          Some(s"VARIANCE($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VARIANCE_SAMP($distinct${f.inputs().head})")
+          Some(s"VARIANCE_SAMP($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV($distinct${f.inputs().head})")
+          Some(s"STDDEV($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_SAMP($distinct${f.inputs().head})")
+          Some(s"STDDEV_SAMP($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
-          assert(f.inputs().length == 2)
-          Some(s"COVARIANCE(${f.inputs().head}, ${f.inputs().last})")
+          assert(f.children().length == 2)
+          Some(s"COVARIANCE(${f.children().head}, ${f.children().last})")
         case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
-          assert(f.inputs().length == 2)
-          Some(s"COVARIANCE_SAMP(${f.inputs().head}, ${f.inputs().last})")
+          assert(f.children().length == 2)
+          Some(s"COVARIANCE_SAMP(${f.children().head}, ${f.children().last})")
         case _ => None
       }
     )

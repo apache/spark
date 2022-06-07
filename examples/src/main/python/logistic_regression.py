@@ -23,6 +23,8 @@ In practice, one may prefer to use the LogisticRegression algorithm in
 ML, as shown in examples/src/main/python/ml/logistic_regression_with_elastic_net.py.
 """
 import sys
+from typing import Iterable, List
+
 
 import numpy as np
 from pyspark.sql import SparkSession
@@ -35,7 +37,7 @@ D = 10  # Number of dimensions
 # make further computations faster.
 # The data file contains lines of the form <label> <x1> <x2> ... <xD>. We load each block of these
 # into a NumPy array of size numLines * (D + 1) and pull out column 0 vs the others in gradient().
-def readPointBatch(iterator):
+def readPointBatch(iterator: Iterable[str]) -> List[np.ndarray]:
     strs = list(iterator)
     matrix = np.zeros((len(strs), D + 1))
     for i, s in enumerate(strs):
@@ -68,13 +70,13 @@ if __name__ == "__main__":
     print("Initial w: " + str(w))
 
     # Compute logistic regression gradient for a matrix of data points
-    def gradient(matrix, w):
+    def gradient(matrix: np.ndarray, w: np.ndarray) -> np.ndarray:
         Y = matrix[:, 0]    # point labels (first column of input file)
         X = matrix[:, 1:]   # point coordinates
         # For each point (x, y), compute gradient function, then sum these up
         return ((1.0 / (1.0 + np.exp(-Y * X.dot(w))) - 1.0) * Y * X.T).sum(1)
 
-    def add(x, y):
+    def add(x: np.ndarray, y: np.ndarray) -> np.ndarray:
         x += y
         return x
 

@@ -30,7 +30,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, TreePattern}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -240,18 +241,20 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 case class ILike(
     left: Expression,
     right: Expression,
-    escapeChar: Char,
-    child: Expression) extends RuntimeReplaceable {
-  def this(left: Expression, right: Expression, escapeChar: Char) =
-    this(left, right, escapeChar, Like(Lower(left), Lower(right), escapeChar))
+    escapeChar: Char) extends RuntimeReplaceable
+  with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  override lazy val replacement: Expression = Like(Lower(left), Lower(right), escapeChar)
+
   def this(left: Expression, right: Expression) =
     this(left, right, '\\')
 
-  override def exprsReplaced: Seq[Expression] = Seq(left, right)
-  override def flatArguments: Iterator[Any] = Iterator(left, right, escapeChar)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
-  override protected def withNewChildInternal(newChild: Expression): ILike =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
 }
 
 sealed abstract class MultiLikeBase
@@ -624,6 +627,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   @transient private var lastReplacementInUTF8: UTF8String = _
   // result buffer write by Matcher
   @transient private lazy val result: StringBuffer = new StringBuffer
+  final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_REPLACE)
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
     if (!p.equals(lastRegex)) {
@@ -638,7 +642,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     }
     val source = s.toString()
     val position = i.asInstanceOf[Int] - 1
-    if (position < source.length) {
+    if (position == 0 || position < source.length) {
       val m = pattern.matcher(source)
       m.region(position, source.length)
       result.delete(0, result.length())
@@ -692,7 +696,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       }
       String $source = $subject.toString();
       int $position = $pos - 1;
-      if ($position < $source.length()) {
+      if ($position == 0 || $position < $source.length()) {
         $classNameStringBuffer $termResult = new $classNameStringBuffer();
         java.util.regex.Matcher $matcher = $termPattern.matcher($source);
         $matcher.region($position, $source.length());
@@ -747,6 +751,8 @@ abstract class RegExpExtractBase
   @transient private var lastRegex: UTF8String = _
   // last regex pattern, we cache it for performance concern
   @transient private var pattern: Pattern = _
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_EXTRACT_FAMILY)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
   override def first: Expression = subject

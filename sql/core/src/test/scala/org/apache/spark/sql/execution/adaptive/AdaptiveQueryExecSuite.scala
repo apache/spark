@@ -23,11 +23,13 @@ import java.net.URI
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -123,6 +125,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelSort(plan: SparkPlan): Seq[SortExec] = {
     collect(plan) {
       case s: SortExec => s
+    }
+  }
+
+  private def findTopLevelAggregate(plan: SparkPlan): Seq[BaseAggregateExec] = {
+    collect(plan) {
+      case agg: BaseAggregateExec => agg
     }
   }
 
@@ -273,11 +281,12 @@ class AdaptiveQueryExecSuite
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
-      val df1 = spark.range(10).withColumn("a", 'id)
-      val df2 = spark.range(10).withColumn("b", 'id)
+      val df1 = spark.range(10).withColumn("a", $"id")
+      val df2 = spark.range(10).withColumn("b", $"id")
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
-          .groupBy('a).count()
+        val testDf = df1.where($"a" > 10)
+          .join(df2.where($"b" > 10), Seq("id"), "left_outer")
+          .groupBy($"a").count()
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[SortMergeJoinExec]).isDefined)
@@ -289,8 +298,9 @@ class AdaptiveQueryExecSuite
       }
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
-        val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
-          .groupBy('a).count()
+        val testDf = df1.where($"a" > 10)
+          .join(df2.where($"b" > 10), Seq("id"), "left_outer")
+          .groupBy($"a").count()
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
@@ -674,6 +684,41 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+  test("SPARK-37753: Allow changing outer join to broadcast join even if too many empty" +
+    " partitions on broadcast side") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
+      // `testData` is small enough to be broadcast but has empty partition ratio over the config.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM (select * from testData where value = '1') td" +
+            " right outer join testData2 ON key = a")
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.size == 1)
+      }
+    }
+  }
+
+  test("SPARK-37753: Inhibit broadcast in left outer join when there are many empty" +
+    " partitions on outer/left side") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
+      // `testData` is small enough to be broadcast but has empty partition ratio over the config.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM (select * from testData where value = '1') td" +
+            " left outer join testData2 ON key = a")
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.isEmpty)
+      }
+    }
+  }
 
   test("SPARK-29906: AQE should not introduce extra shuffle for outermost limit") {
     var numStages = 0
@@ -744,17 +789,17 @@ class AdaptiveQueryExecSuite
           spark
             .range(0, 1000, 1, 10)
             .select(
-              when('id < 250, 249)
-                .when('id >= 750, 1000)
-                .otherwise('id).as("key1"),
-              'id as "value1")
+              when($"id" < 250, 249)
+                .when($"id" >= 750, 1000)
+                .otherwise($"id").as("key1"),
+              $"id" as "value1")
             .createOrReplaceTempView("skewData1")
           spark
             .range(0, 1000, 1, 10)
             .select(
-              when('id < 250, 249)
-                .otherwise('id).as("key2"),
-              'id as "value2")
+              when($"id" < 250, 249)
+                .otherwise($"id").as("key2"),
+              $"id" as "value2")
             .createOrReplaceTempView("skewData2")
 
           def checkSkewJoin(
@@ -812,11 +857,11 @@ class AdaptiveQueryExecSuite
         df1.write.parquet(tableDir.getAbsolutePath)
 
         val aggregated = spark.table("bucketed_table").groupBy("i").count()
-        val error = intercept[Exception] {
+        val error = intercept[SparkException] {
           aggregated.count()
         }
-        assert(error.toString contains "Invalid bucket file")
-        assert(error.getSuppressed.size === 0)
+        assert(error.getErrorClass === "INVALID_BUCKET_FILE")
+        assert(error.getMessage contains "Invalid bucket file")
       }
     }
   }
@@ -989,17 +1034,17 @@ class AdaptiveQueryExecSuite
           spark
             .range(0, 1000, 1, 10)
             .select(
-              when('id < 250, 249)
-                .when('id >= 750, 1000)
-                .otherwise('id).as("key1"),
-              'id as "value1")
+              when($"id" < 250, 249)
+                .when($"id" >= 750, 1000)
+                .otherwise($"id").as("key1"),
+              $"id" as "value1")
             .createOrReplaceTempView("skewData1")
           spark
             .range(0, 1000, 1, 10)
             .select(
-              when('id < 250, 249)
-                .otherwise('id).as("key2"),
-              'id as "value2")
+              when($"id" < 250, 249)
+                .otherwise($"id").as("key2"),
+              $"id" as "value2")
             .createOrReplaceTempView("skewData2")
           val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
             "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
@@ -1077,7 +1122,7 @@ class AdaptiveQueryExecSuite
 
   test("AQE should set active session during execution") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      val df = spark.range(10).select(sum('id))
+      val df = spark.range(10).select(sum($"id"))
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
       SparkSession.setActiveSession(null)
       checkAnswer(df, Seq(Row(45)))
@@ -1104,7 +1149,7 @@ class AdaptiveQueryExecSuite
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
       try {
         spark.experimental.extraStrategies = TestStrategy :: Nil
-        val df = spark.range(10).groupBy('id).count()
+        val df = spark.range(10).groupBy($"id").count()
         df.collect()
       } finally {
         spark.experimental.extraStrategies = Nil
@@ -1560,7 +1605,7 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-33494: Do not use local shuffle read for repartition") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      val df = spark.table("testData").repartition('key)
+      val df = spark.table("testData").repartition($"key")
       df.collect()
       // local shuffle read breaks partitioning and shouldn't be used for repartition operation
       // which is specified by users.
@@ -1639,28 +1684,28 @@ class AdaptiveQueryExecSuite
           |  SELECT * FROM testData WHERE key = 1
           |)
           |RIGHT OUTER JOIN testData2
-          |ON value = b
+          |ON CAST(value AS INT) = b
         """.stripMargin)
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
         // Repartition with no partition num specified.
-        checkBHJ(df.repartition('b),
+        checkBHJ(df.repartition($"b"),
           // The top shuffle from repartition is optimized out.
           optimizeOutRepartition = true, probeSideLocalRead = false, probeSideCoalescedRead = true)
 
         // Repartition with default partition num (5 in test env) specified.
-        checkBHJ(df.repartition(5, 'b),
+        checkBHJ(df.repartition(5, $"b"),
           // The top shuffle from repartition is optimized out
           // The final plan must have 5 partitions, no optimization can be made to the probe side.
           optimizeOutRepartition = true, probeSideLocalRead = false, probeSideCoalescedRead = false)
 
         // Repartition with non-default partition num specified.
-        checkBHJ(df.repartition(4, 'b),
+        checkBHJ(df.repartition(4, $"b"),
           // The top shuffle from repartition is not optimized out
           optimizeOutRepartition = false, probeSideLocalRead = true, probeSideCoalescedRead = true)
 
         // Repartition by col and project away the partition cols
-        checkBHJ(df.repartition('b).select('key),
+        checkBHJ(df.repartition($"b").select($"key"),
           // The top shuffle from repartition is not optimized out
           optimizeOutRepartition = false, probeSideLocalRead = true, probeSideCoalescedRead = true)
       }
@@ -1672,23 +1717,23 @@ class AdaptiveQueryExecSuite
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "0",
         SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10") {
         // Repartition with no partition num specified.
-        checkSMJ(df.repartition('b),
+        checkSMJ(df.repartition($"b"),
           // The top shuffle from repartition is optimized out.
           optimizeOutRepartition = true, optimizeSkewJoin = false, coalescedRead = true)
 
         // Repartition with default partition num (5 in test env) specified.
-        checkSMJ(df.repartition(5, 'b),
+        checkSMJ(df.repartition(5, $"b"),
           // The top shuffle from repartition is optimized out.
           // The final plan must have 5 partitions, can't do coalesced read.
           optimizeOutRepartition = true, optimizeSkewJoin = false, coalescedRead = false)
 
         // Repartition with non-default partition num specified.
-        checkSMJ(df.repartition(4, 'b),
+        checkSMJ(df.repartition(4, $"b"),
           // The top shuffle from repartition is not optimized out.
           optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
 
         // Repartition by col and project away the partition cols
-        checkSMJ(df.repartition('b).select('key),
+        checkSMJ(df.repartition($"b").select($"key"),
           // The top shuffle from repartition is not optimized out.
           optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
       }
@@ -2482,6 +2527,53 @@ class AdaptiveQueryExecSuite
             "SELECT key1 from (SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2) tmp1 " +
             "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 0)
       }
+    }
+  }
+
+  test("SPARK-38162: Optimize one row plan in AQE Optimizer") {
+    withTempView("v") {
+      spark.sparkContext.parallelize(
+        (1 to 4).map(i => TestData(i, i.toString)), 2)
+        .toDF("c1", "c2").createOrReplaceTempView("v")
+
+      // remove sort
+      val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT * FROM v where c1 = 1 order by c1, c2
+          |""".stripMargin)
+      assert(findTopLevelSort(origin1).size == 1)
+      assert(findTopLevelSort(adaptive1).isEmpty)
+
+      // convert group only aggregate to project
+      val (origin2, adaptive2) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT distinct c1 FROM (SELECT /*+ repartition(c1) */ * FROM v where c1 = 1)
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin2).size == 2)
+      assert(findTopLevelAggregate(adaptive2).isEmpty)
+
+      // remove distinct in aggregate
+      val (origin3, adaptive3) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT sum(distinct c1) FROM (SELECT /*+ repartition(c1) */ * FROM v where c1 = 1)
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin3).size == 4)
+      assert(findTopLevelAggregate(adaptive3).size == 2)
+
+      // do not optimize if the aggregate is inside query stage
+      val (origin4, adaptive4) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT distinct c1 FROM v where c1 = 1
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin4).size == 2)
+      assert(findTopLevelAggregate(adaptive4).size == 2)
+
+      val (origin5, adaptive5) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT sum(distinct c1) FROM v where c1 = 1
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin5).size == 4)
+      assert(findTopLevelAggregate(adaptive5).size == 4)
     }
   }
 }

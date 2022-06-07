@@ -20,7 +20,7 @@ __all__ = ["SparkConf"]
 import sys
 from typing import Dict, List, Optional, Tuple, cast, overload
 
-from py4j.java_gateway import JVMView, JavaObject  # type: ignore[import]
+from py4j.java_gateway import JVMView, JavaObject
 
 
 class SparkConf:
@@ -124,7 +124,7 @@ class SparkConf:
         else:
             from pyspark.context import SparkContext
 
-            _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
+            _jvm = _jvm or SparkContext._jvm
 
             if _jvm is not None:
                 # JVM is created, so create self._jconf directly through JVM

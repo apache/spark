@@ -553,7 +553,10 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       val createArray = udf { (length: Long) =>
         for (i <- 1 to length.toInt) yield i.toString
       }
-      spark.range(4).select(createArray('id + 1) as 'ex, 'id, 'id % 4 as 'part).coalesce(1).write
+      spark.range(4)
+        .select(createArray($"id" + 1) as Symbol("ex"), $"id",
+          $"id" % 4 as Symbol("part"))
+        .coalesce(1).write
         .partitionBy("part", "id")
         .mode("overwrite")
         .parquet(src.toString)
@@ -605,7 +608,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
             .stop()
           assert(checkpointPath.listFiles().isEmpty,
             "SQLConf path is used even if user specified checkpointLoc: " +
-              s"${checkpointPath.listFiles()} is not empty")
+              s"${checkpointPath.listFiles().mkString("Locations(", ", ", ")")} is not empty")
           assert(userCheckpointPath.exists(),
             s"The user specified checkpointLoc (userCheckpointPath) is not created")
         }

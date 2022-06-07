@@ -67,11 +67,9 @@ def _to_java_object_rdd(rdd: RDD) -> JavaObject:
     It will convert each Python object into Java object by Pickle, whenever the
     RDD is serialized in batch or not.
     """
-    rdd = rdd._reserialize(AutoBatchedSerializer(CPickleSerializer()))  # type: ignore[attr-defined]
+    rdd = rdd._reserialize(AutoBatchedSerializer(CPickleSerializer()))
     assert rdd.ctx._jvm is not None
-    return rdd.ctx._jvm.org.apache.spark.mllib.api.python.SerDe.pythonToJava(
-        rdd._jrdd, True  # type: ignore[attr-defined]
-    )
+    return rdd.ctx._jvm.org.apache.spark.mllib.api.python.SerDe.pythonToJava(rdd._jrdd, True)
 
 
 def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
@@ -81,7 +79,7 @@ def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
     elif isinstance(obj, DataFrame):
         obj = obj._jdf
     elif isinstance(obj, SparkContext):
-        obj = obj._jsc  # type: ignore[attr-defined]
+        obj = obj._jsc
     elif isinstance(obj, list):
         obj = [_py2java(sc, x) for x in obj]
     elif isinstance(obj, JavaObject):

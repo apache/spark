@@ -21,10 +21,9 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -32,7 +31,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, CTERelationDef, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -63,17 +62,6 @@ class QueryExecution(
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
-
-  // The CTE map for the planner shared by the main query and all subqueries.
-  private val cteMap = mutable.HashMap.empty[Long, CTERelationDef]
-
-  def withCteMap[T](f: => T): T = {
-    val old = QueryExecution.currentCteMap.get()
-    QueryExecution.currentCteMap.set(cteMap)
-    try f finally {
-      QueryExecution.currentCteMap.set(old)
-    }
-  }
 
   def assertAnalyzed(): Unit = analyzed
 
@@ -147,7 +135,7 @@ class QueryExecution(
 
   private def assertOptimized(): Unit = optimizedPlan
 
-  lazy val sparkPlan: SparkPlan = withCteMap {
+  lazy val sparkPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
     // the planning phase
     assertOptimized()
@@ -160,7 +148,7 @@ class QueryExecution(
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = withCteMap {
+  lazy val executedPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
     assertOptimized()
@@ -193,7 +181,9 @@ class QueryExecution(
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
-    tracker.measurePhase(phase)(block)
+    QueryExecution.withInternalError(s"The Spark SQL phase $phase failed with an internal error.") {
+      tracker.measurePhase(phase)(block)
+    }
   }
 
   def simpleString: String = {
@@ -223,9 +213,11 @@ class QueryExecution(
     append("\n")
   }
 
-  def explainString(mode: ExplainMode): String = {
+  def explainString(
+      mode: ExplainMode,
+      maxFields: Int = SQLConf.get.maxToStringFields): String = {
     val concat = new PlanStringConcat()
-    explainString(mode, SQLConf.get.maxToStringFields, concat.append)
+    explainString(mode, maxFields, concat.append)
     withRedaction {
       concat.toString
     }
@@ -485,7 +477,42 @@ object QueryExecution {
     prepareExecutedPlan(spark, sparkPlan)
   }
 
-  private val currentCteMap = new ThreadLocal[mutable.HashMap[Long, CTERelationDef]]()
+  /**
+   * Prepare the [[SparkPlan]] for execution using exists adaptive execution context.
+   * This method is only called by [[PlanAdaptiveDynamicPruningFilters]].
+   */
+  def prepareExecutedPlan(
+      session: SparkSession,
+      plan: LogicalPlan,
+      context: AdaptiveExecutionContext): SparkPlan = {
+    val sparkPlan = createSparkPlan(session, session.sessionState.planner, plan.clone())
+    val preparationRules = preparations(session, Option(InsertAdaptiveSparkPlan(context)), true)
+    prepareForExecution(preparationRules, sparkPlan.clone())
+  }
 
-  def cteMap: mutable.HashMap[Long, CTERelationDef] = currentCteMap.get()
+  /**
+   * Converts asserts, null pointer, illegal state exceptions to internal errors.
+   */
+  private[sql] def toInternalError(msg: String, e: Throwable): Throwable = e match {
+    case e @ (_: java.lang.IllegalStateException | _: java.lang.NullPointerException |
+              _: java.lang.AssertionError) =>
+      new SparkException(
+        errorClass = "INTERNAL_ERROR",
+        messageParameters = Array(msg +
+          " Please, fill a bug report in, and provide the full stack trace."),
+        cause = e)
+    case e: Throwable =>
+      e
+  }
+
+  /**
+   * Catches asserts, null pointer, illegal state exceptions, and converts them to internal errors.
+   */
+  private[sql] def withInternalError[T](msg: String)(block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: Throwable => throw toInternalError(msg, e)
+    }
+  }
 }

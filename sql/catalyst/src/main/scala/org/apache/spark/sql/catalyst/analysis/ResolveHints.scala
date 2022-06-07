@@ -250,14 +250,26 @@ object ResolveHints {
     }
 
     private def createRebalance(hint: UnresolvedHint): LogicalPlan = {
+      def createRebalancePartitions(
+          partitionExprs: Seq[Any], initialNumPartitions: Option[Int]): RebalancePartitions = {
+        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+        if (invalidParams.nonEmpty) {
+          val hintName = hint.name.toUpperCase(Locale.ROOT)
+          throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
+        }
+        RebalancePartitions(
+          partitionExprs.map(_.asInstanceOf[Expression]),
+          hint.child,
+          initialNumPartitions)
+      }
+
       hint.parameters match {
+        case param @ Seq(IntegerLiteral(numPartitions), _*) =>
+          createRebalancePartitions(param.tail, Some(numPartitions))
+        case param @ Seq(numPartitions: Int, _*) =>
+          createRebalancePartitions(param.tail, Some(numPartitions))
         case partitionExprs @ Seq(_*) =>
-          val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
-          if (invalidParams.nonEmpty) {
-            val hintName = hint.name.toUpperCase(Locale.ROOT)
-            throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
-          }
-          RebalancePartitions(partitionExprs.map(_.asInstanceOf[Expression]), hint.child)
+          createRebalancePartitions(partitionExprs, None)
       }
     }
 

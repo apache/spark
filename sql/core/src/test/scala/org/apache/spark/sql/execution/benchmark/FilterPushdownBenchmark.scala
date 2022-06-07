@@ -242,6 +242,38 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       }
     }
 
+    runBenchmark("Pushdown benchmark for StringEndsWith") {
+      withTempPath { dir =>
+        withTempTable("orcTable", "parquetTable") {
+          prepareStringDictTable(dir, numRows, 200, width)
+          Seq(
+            "value like '%10'",
+            "value like '%1000'",
+            s"value like '%${mid.toString.substring(0, mid.toString.length - 1)}'"
+          ).foreach { whereExpr =>
+            val title = s"StringEndsWith filter: ($whereExpr)"
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+        }
+      }
+    }
+
+    runBenchmark("Pushdown benchmark for StringContains") {
+      withTempPath { dir =>
+        withTempTable("orcTable", "parquetTable") {
+          prepareStringDictTable(dir, numRows, 200, width)
+          Seq(
+            "value like '%10%'",
+            "value like '%1000%'",
+            s"value like '%${mid.toString.substring(0, mid.toString.length - 1)}%'"
+          ).foreach { whereExpr =>
+            val title = s"StringContains filter: ($whereExpr)"
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+        }
+      }
+    }
+
     runBenchmark(s"Pushdown benchmark for ${DecimalType.simpleString}") {
       withTempPath { dir =>
         Seq(

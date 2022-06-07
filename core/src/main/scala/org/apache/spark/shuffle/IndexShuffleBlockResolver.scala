@@ -84,6 +84,11 @@ private[spark] class IndexShuffleBlockResolver(
     shuffleFiles.map(_.length()).sum
   }
 
+  /** Create a temporary file that will be renamed to the final resulting file */
+  def createTempFile(file: File): File = {
+    blockManager.diskBlockManager.createTempFileWith(file)
+  }
+
   /**
    * Get the shuffle data file.
    *
@@ -93,7 +98,8 @@ private[spark] class IndexShuffleBlockResolver(
    def getDataFile(shuffleId: Int, mapId: Long, dirs: Option[Array[String]]): File = {
     val blockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     dirs
-      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
+      .map(d =>
+        new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, blockId.name)))
       .getOrElse(blockManager.diskBlockManager.getFile(blockId))
   }
 
@@ -109,7 +115,8 @@ private[spark] class IndexShuffleBlockResolver(
       dirs: Option[Array[String]] = None): File = {
     val blockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     dirs
-      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
+      .map(d =>
+        new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, blockId.name)))
       .getOrElse(blockManager.diskBlockManager.getFile(blockId))
   }
 
@@ -232,7 +239,7 @@ private[spark] class IndexShuffleBlockResolver(
         throw new IllegalStateException(s"Unexpected shuffle block transfer ${blockId} as " +
           s"${blockId.getClass().getSimpleName()}")
     }
-    val fileTmp = Utils.tempFileWith(file)
+    val fileTmp = createTempFile(file)
     val channel = Channels.newChannel(
       serializerManager.wrapStream(blockId,
         new FileOutputStream(fileTmp)))
@@ -333,7 +340,7 @@ private[spark] class IndexShuffleBlockResolver(
       checksums: Array[Long],
       dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
-    val indexTmp = Utils.tempFileWith(indexFile)
+    val indexTmp = createTempFile(indexFile)
 
     val checksumEnabled = checksums.nonEmpty
     val (checksumFileOpt, checksumTmpOpt) = if (checksumEnabled) {
@@ -341,7 +348,7 @@ private[spark] class IndexShuffleBlockResolver(
         "The size of partition lengths and checksums should be equal")
       val checksumFile =
         getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
-      (Some(checksumFile), Some(Utils.tempFileWith(checksumFile)))
+      (Some(checksumFile), Some(createTempFile(checksumFile)))
     } else {
       (None, None)
     }
@@ -546,7 +553,8 @@ private[spark] class IndexShuffleBlockResolver(
     val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId.name, algorithm)
     dirs
-      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, fileName))
+      .map(d =>
+        new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, fileName)))
       .getOrElse(blockManager.diskBlockManager.getFile(fileName))
   }
 
@@ -592,6 +600,13 @@ private[spark] class IndexShuffleBlockResolver(
     } finally {
       in.close()
     }
+  }
+
+  override def getBlocksForShuffle(shuffleId: Int, mapId: Long): Seq[BlockId] = {
+    Seq(
+      ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID),
+      ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+    )
   }
 
   override def stop(): Unit = {}

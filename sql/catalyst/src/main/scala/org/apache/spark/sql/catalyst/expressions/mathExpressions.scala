@@ -269,28 +269,32 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
 }
 
-trait CeilFloorExpressionBuilder extends ExpressionBuilder {
-  val functionName: String
-  def build(expressions: Seq[Expression]): Expression
+trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
+  protected def buildWithOneParam(param: Expression): Expression
+  protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression
 
-  def extractChildAndScaleParam(expressions: Seq[Expression]): (Expression, Expression) = {
-    val child = expressions(0)
-    val scale = expressions(1)
-    if (! (scale.foldable && scale.dataType == DataTypes.IntegerType)) {
-      throw QueryCompilationErrors.invalidScaleParameterRoundBase(functionName)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      buildWithOneParam(expressions.head)
+    } else if (numArgs == 2) {
+      val scale = expressions(1)
+      if (!(scale.foldable && scale.dataType == IntegerType)) {
+        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+      }
+      if (scale.eval() == null) {
+        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+      }
+      buildWithTwoParams(expressions(0), scale)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
     }
-    val scaleV = scale.eval(EmptyRow)
-    if (scaleV == null) {
-      throw QueryCompilationErrors.invalidScaleParameterRoundBase(functionName)
-    }
-    (child, scale)
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
-  _FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller
-  than `expr`. A optional `scale` parameter can be specified to control the rounding behavior.""",
+  usage = "_FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -304,40 +308,24 @@ trait CeilFloorExpressionBuilder extends ExpressionBuilder {
   """,
   since = "3.3.0",
   group = "math_funcs")
-object CeilExpressionBuilder extends CeilFloorExpressionBuilder {
-  val functionName: String = "ceil"
+// scalastyle:on line.size.limit
+object CeilExpressionBuilder extends CeilFloorExpressionBuilderBase {
+  override protected def buildWithOneParam(param: Expression): Expression = Ceil(param)
 
-  def build(expressions: Seq[Expression]): Expression = {
-    if (expressions.length == 1) {
-      Ceil(expressions.head)
-    } else if (expressions.length == 2) {
-      val (child, scale) = extractChildAndScaleParam(expressions)
-      RoundCeil(child, scale)
-    } else {
-      throw QueryCompilationErrors.invalidNumberOfFunctionParameters(functionName)
-    }
-  }
+  override protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression =
+    RoundCeil(param1, param2)
 }
 
 case class RoundCeil(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING")
-    with Serializable with ImplicitCastInputTypes {
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING") {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
 
-  override lazy val dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(p, s) =>
-      if (_scale < 0) {
-        DecimalType(math.max(p, 1 - _scale), 0)
-      } else {
-        DecimalType(p, math.min(s, _scale))
-      }
-    case t => t
-  }
-
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-  : RoundCeil = copy(child = newLeft, scale = newRight)
   override def nodeName: String = "ceil"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RoundCeil =
+    copy(child = newLeft, scale = newRight)
 }
 
 @ExpressionDescription(
@@ -539,10 +527,9 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
-  _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater
-  than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.""",
+  usage = " _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -556,40 +543,24 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   """,
   since = "3.3.0",
   group = "math_funcs")
-object FloorExpressionBuilder extends CeilFloorExpressionBuilder {
-  val functionName: String = "floor"
+// scalastyle:on line.size.limit
+object FloorExpressionBuilder extends CeilFloorExpressionBuilderBase {
+  override protected def buildWithOneParam(param: Expression): Expression = Floor(param)
 
-  def build(expressions: Seq[Expression]): Expression = {
-    if (expressions.length == 1) {
-      Floor(expressions.head)
-    } else if (expressions.length == 2) {
-      val(child, scale) = extractChildAndScaleParam(expressions)
-      RoundFloor(child, scale)
-    } else {
-      throw QueryCompilationErrors.invalidNumberOfFunctionParameters(functionName)
-    }
-  }
+  override protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression =
+    RoundFloor(param1, param2)
 }
 
 case class RoundFloor(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR")
-    with Serializable with ImplicitCastInputTypes {
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR") {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
 
-  override lazy val dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(p, s) =>
-      if (_scale < 0) {
-        DecimalType(math.max(p, 1 - _scale), 0)
-      } else {
-        DecimalType(p, math.min(s, _scale))
-      }
-    case t => t
-  }
-
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-  : RoundFloor = copy(child = newLeft, scale = newRight)
   override def nodeName: String = "floor"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RoundFloor =
+    copy(child = newLeft, scale = newRight)
 }
 
 object Factorial {
@@ -1454,9 +1425,21 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def foldable: Boolean = child.foldable
 
   override lazy val dataType: DataType = child.dataType match {
-    // if the new scale is bigger which means we are scaling up,
-    // keep the original scale as `Decimal` does
-    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+    case DecimalType.Fixed(p, s) =>
+      // After rounding we may need one more digit in the integral part,
+      // e.g. `ceil(9.9, 0)` -> `10`, `ceil(99, -1)` -> `100`.
+      val integralLeastNumDigits = p - s + 1
+      if (_scale < 0) {
+        // negative scale means we need to adjust `-scale` number of digits before the decimal
+        // point, which means we need at lease `-scale + 1` digits (after rounding).
+        val newPrecision = math.max(integralLeastNumDigits, -_scale + 1)
+        // We have to accept the risk of overflow as we can't exceed the max precision.
+        DecimalType(math.min(newPrecision, DecimalType.MAX_PRECISION), 0)
+      } else {
+        val newScale = math.min(s, _scale)
+        // We have to accept the risk of overflow as we can't exceed the max precision.
+        DecimalType(math.min(integralLeastNumDigits + newScale, 38), newScale)
+      }
     case t => t
   }
 
@@ -1537,7 +1520,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
         if (_scale >= 0) {
           s"""
             ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-            Decimal.$modeStr(), true);
+            Decimal.$modeStr(), true, "");
             ${ev.isNull} = ${ev.value} == null;"""
        } else {
           s"""
@@ -1623,13 +1606,14 @@ abstract class RoundBase(child: Expression, scale: Expression,
     Examples:
       > SELECT _FUNC_(2.5, 0);
        3
+      > SELECT _FUNC_(25, -1);
+       30
   """,
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Round(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
-    with Serializable with ImplicitCastInputTypes {
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP") {
   def this(child: Expression) = this(child, Literal(0))
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
     copy(child = newLeft, scale = newRight)
@@ -1647,13 +1631,14 @@ case class Round(child: Expression, scale: Expression)
     Examples:
       > SELECT _FUNC_(2.5, 0);
        2
+      > SELECT _FUNC_(25, -1);
+       20
   """,
   since = "2.0.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class BRound(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
-    with Serializable with ImplicitCastInputTypes {
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN") {
   def this(child: Expression) = this(child, Literal(0))
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)

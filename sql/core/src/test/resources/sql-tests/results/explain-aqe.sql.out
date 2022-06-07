@@ -1125,7 +1125,8 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 *Filter v#x IN ([a],null)
-+- FileScan parquet default.t[v#x] Batched: false, DataFilters: [v#x IN ([a],null)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/t], PartitionFilters: [], PushedFilters: [In(v, [[a],null])], ReadSchema: struct<v:array<string>>
++- *ColumnarToRow
+   +- FileScan parquet default.t[v#x] Batched: true, DataFilters: [v#x IN ([a],null)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/t], PartitionFilters: [], PushedFilters: [In(v, [[a],null])], ReadSchema: struct<v:array<string>>
 
 
 -- !query

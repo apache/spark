@@ -200,11 +200,13 @@ public class SparkFirehoseListener implements SparkListenerInterface {
     onEvent(speculativeTask);
   }
 
+  @Override
   public void onUnschedulableTaskSetAdded(
       SparkListenerUnschedulableTaskSetAdded unschedulableTaskSetAdded) {
     onEvent(unschedulableTaskSetAdded);
   }
 
+  @Override
   public void onUnschedulableTaskSetRemoved(
       SparkListenerUnschedulableTaskSetRemoved unschedulableTaskSetRemoved) {
     onEvent(unschedulableTaskSetRemoved);

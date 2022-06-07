@@ -261,8 +261,8 @@ private[spark] class ApplicationMaster(
           if (!unregistered) {
             // we only want to unregister if we don't want the RM to retry
             if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
-              unregister(finalStatus, finalMsg)
               cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+              unregister(finalStatus, finalMsg)
             }
           }
         } catch {
@@ -750,7 +750,7 @@ private[spark] class ApplicationMaster(
                 logError(msg)
                 finish(FinalApplicationStatus.FAILED, exitCode, msg)
               case cause: Throwable =>
-                logError("User class threw exception: " + cause, cause)
+                logError("User class threw exception: ", cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
                   "User class threw exception: " + StringUtils.stringifyException(cause))

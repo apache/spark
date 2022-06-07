@@ -29,7 +29,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -66,7 +66,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Array and Map Size - legacy") {
-    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+    withSQLConf(
+      SQLConf.LEGACY_SIZE_OF_NULL.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "false") {
       testSize(sizeOfNull = -1)
     }
   }
@@ -962,6 +964,50 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     }
   }
 
+  test("SPARK-37544: Time zone should not affect date sequence with month interval") {
+    outstandingZoneIds.foreach { zid =>
+      DateTimeTestUtils.withDefaultTimeZone(zid) {
+        checkEvaluation(new Sequence(
+          Literal(Date.valueOf("2021-01-01")),
+          Literal(Date.valueOf("2022-01-01")),
+          Literal(stringToInterval("interval 3 month"))),
+          Seq(
+            Date.valueOf("2021-01-01"),
+            Date.valueOf("2021-04-01"),
+            Date.valueOf("2021-07-01"),
+            Date.valueOf("2021-10-01"),
+            Date.valueOf("2022-01-01")))
+      }
+    }
+
+    // However, time zone should still affect sequences generated using hours interval,
+    // especially if the sequence's start-stop includes a "spring forward".
+    // Take, for example, the following Spark date arithmetic:
+    //   select cast(date'2022-03-09' + interval '4' days '23' hour as date) as x;
+    // In the America/Los_Angeles time zone, it returns 2022-03-14.
+    // In the UTC time zone, it instead returns 2022-03-13.
+    // The sequence function should be consistent with the date arithmetic.
+    DateTimeTestUtils.withDefaultTimeZone(LA) {
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2022-03-09")),
+        Literal(Date.valueOf("2022-03-15")),
+        Literal(stringToInterval("interval 4 days 23 hours"))),
+        Seq(
+          Date.valueOf("2022-03-09"),
+          Date.valueOf("2022-03-14")))
+    }
+
+    DateTimeTestUtils.withDefaultTimeZone(UTC) {
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2022-03-09")),
+        Literal(Date.valueOf("2022-03-15")),
+        Literal(stringToInterval("interval 4 days 23 hours"))),
+        Seq(
+          Date.valueOf("2022-03-09"),
+          Date.valueOf("2022-03-13"))) // this is different from LA time zone above
+    }
+  }
+
   test("SPARK-35088: Accept ANSI intervals by the Sequence expression") {
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
@@ -1437,8 +1483,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(ElementAt(a0, Literal(0)), null)
     }.getMessage.contains("SQL array indices start at 1")
     intercept[Exception] { checkEvaluation(ElementAt(a0, Literal(1.1)), null) }
-    checkEvaluation(ElementAt(a0, Literal(4)), null)
-    checkEvaluation(ElementAt(a0, Literal(-4)), null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(ElementAt(a0, Literal(4)), null)
+      checkEvaluation(ElementAt(a0, Literal(-4)), null)
+    }
 
     checkEvaluation(ElementAt(a0, Literal(1)), 1)
     checkEvaluation(ElementAt(a0, Literal(2)), 2)
@@ -1464,9 +1512,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes().isFailure)
 
-    checkEvaluation(ElementAt(m0, Literal("d")), null)
-
-    checkEvaluation(ElementAt(m1, Literal("a")), null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(ElementAt(m0, Literal("d")), null)
+      checkEvaluation(ElementAt(m1, Literal("a")), null)
+    }
 
     checkEvaluation(ElementAt(m0, Literal("a")), "1")
     checkEvaluation(ElementAt(m0, Literal("b")), "2")
@@ -1480,9 +1529,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       MapType(BinaryType, StringType))
     val mb1 = Literal.create(Map[Array[Byte], String](), MapType(BinaryType, StringType))
 
-    checkEvaluation(ElementAt(mb0, Literal(Array[Byte](1, 2, 3))), null)
-
-    checkEvaluation(ElementAt(mb1, Literal(Array[Byte](1, 2))), null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(ElementAt(mb0, Literal(Array[Byte](1, 2, 3))), null)
+      checkEvaluation(ElementAt(mb1, Literal(Array[Byte](1, 2))), null)
+    }
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
   }
@@ -2282,7 +2332,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
         var expr: Expression = ElementAt(array, Literal(5))
         if (ansiEnabled) {
-          val errMsg = "Invalid index: 5, numElements: 3"
+          val errMsg = "The index 5 is out of bounds. The array has 3 elements."
           checkExceptionInExpression[Exception](expr, errMsg)
         } else {
           checkEvaluation(expr, null)
@@ -2290,7 +2340,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
         expr = ElementAt(array, Literal(-5))
         if (ansiEnabled) {
-          val errMsg = "Invalid index: -5, numElements: 3"
+          val errMsg = "The index -5 is out of bounds. The array has 3 elements."
           checkExceptionInExpression[Exception](expr, errMsg)
         } else {
           checkEvaluation(expr, null)

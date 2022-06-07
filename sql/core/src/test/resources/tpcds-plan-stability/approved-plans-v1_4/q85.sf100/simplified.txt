@@ -58,11 +58,31 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                             WholeStageCodegen (4)
                                                               Project [wr_item_sk,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_order_number,wr_fee,wr_refunded_cash]
                                                                 Filter [wr_item_sk,wr_order_number,wr_refunded_cdemo_sk,wr_returning_cdemo_sk,wr_refunded_addr_sk,wr_reason_sk]
+                                                                  Subquery #2
+                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 159981, 1279848, 0, 0),bloomFilter,buf]
+                                                                      Exchange #7
+                                                                        ObjectHashAggregate [cd_demo_sk] [buf,buf]
+                                                                          WholeStageCodegen (1)
+                                                                            Project [cd_demo_sk]
+                                                                              Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                                                                ColumnarToRow
+                                                                                  InputAdapter
+                                                                                    Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                                                                  Subquery #3
+                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 152837, 1222696, 0, 0),bloomFilter,buf]
+                                                                      Exchange #8
+                                                                        ObjectHashAggregate [ca_address_sk] [buf,buf]
+                                                                          WholeStageCodegen (1)
+                                                                            Project [ca_address_sk]
+                                                                              Filter [ca_country,ca_address_sk,ca_state]
+                                                                                ColumnarToRow
+                                                                                  InputAdapter
+                                                                                    Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.web_returns [wr_item_sk,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_order_number,wr_fee,wr_refunded_cash,wr_returned_date_sk]
                                               InputAdapter
-                                                BroadcastExchange #7
+                                                BroadcastExchange #9
                                                   WholeStageCodegen (6)
                                                     Filter [cd_demo_sk,cd_marital_status,cd_education_status]
                                                       ColumnarToRow
@@ -72,14 +92,14 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                 WholeStageCodegen (10)
                                   Sort [cd_demo_sk,cd_marital_status,cd_education_status]
                                     InputAdapter
-                                      Exchange [cd_demo_sk,cd_marital_status,cd_education_status] #8
+                                      Exchange [cd_demo_sk,cd_marital_status,cd_education_status] #10
                                         WholeStageCodegen (9)
                                           Filter [cd_demo_sk,cd_marital_status,cd_education_status]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                           InputAdapter
-                            BroadcastExchange #9
+                            BroadcastExchange #11
                               WholeStageCodegen (11)
                                 Project [ca_address_sk,ca_state]
                                   Filter [ca_country,ca_address_sk,ca_state]
@@ -89,7 +109,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                       InputAdapter
                         ReusedExchange [d_date_sk] #4
                   InputAdapter
-                    BroadcastExchange #10
+                    BroadcastExchange #12
                       WholeStageCodegen (13)
                         Filter [r_reason_sk]
                           ColumnarToRow

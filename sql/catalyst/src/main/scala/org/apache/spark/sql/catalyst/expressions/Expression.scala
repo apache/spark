@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
@@ -352,65 +352,56 @@ trait Unevaluable extends Expression {
  * An expression that gets replaced at runtime (currently by the optimizer) into a different
  * expression for evaluation. This is mainly used to provide compatibility with other databases.
  * For example, we use this to support "nvl" by replacing it with "coalesce".
- *
- * A RuntimeReplaceable should have the original parameters along with a "child" expression in the
- * case class constructor, and define a normal constructor that accepts only the original
- * parameters. For an example, see [[Nvl]]. To make sure the explain plan and expression SQL
- * works correctly, the implementation should also override flatArguments method and sql method.
  */
-trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
-  override def nullable: Boolean = child.nullable
-  override def dataType: DataType = child.dataType
+trait RuntimeReplaceable extends Expression {
+  def replacement: Expression
+
+  override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+  override def nullable: Boolean = replacement.nullable
+  override def dataType: DataType = replacement.dataType
   // As this expression gets replaced at optimization with its `child" expression,
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
-  override lazy val preCanonicalized: Expression = child.preCanonicalized
+  override lazy val preCanonicalized: Expression = replacement.preCanonicalized
 
-  /**
-   * Only used to generate SQL representation of this expression.
-   *
-   * Implementations should override this with original parameters
-   */
-  def exprsReplaced: Seq[Expression]
-
-  override def sql: String = mkString(exprsReplaced.map(_.sql))
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
-
-  def mkString(childrenString: Seq[String]): String = {
-    prettyName + childrenString.mkString("(", ", ", ")")
-  }
+  final override def eval(input: InternalRow = null): Any =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
 /**
- * An aggregate expression that gets rewritten (currently by the optimizer) into a
+ * An add-on of [[RuntimeReplaceable]]. It makes `replacement` the child of the expression, to
+ * inherit the analysis rules for it, such as type coercion. The implementation should put
+ * `replacement` in the case class constructor, and define a normal constructor that accepts only
+ * the original parameters. For an example, see [[TryAdd]]. To make sure the explain plan and
+ * expression SQL works correctly, the implementation should also implement the `parameters` method.
+ */
+trait InheritAnalysisRules extends UnaryLike[Expression] { self: RuntimeReplaceable =>
+  override def child: Expression = replacement
+  def parameters: Seq[Expression]
+  override def flatArguments: Iterator[Any] = parameters.iterator
+  // This method is used to generate a SQL string with transformed inputs. This is necessary as
+  // the actual inputs are not the children of this expression.
+  def makeSQLString(childrenSQL: Seq[String]): String = {
+    prettyName + childrenSQL.mkString("(", ", ", ")")
+  }
+  final override def sql: String = makeSQLString(parameters.map(_.sql))
+}
+
+/**
+ * An add-on of [[AggregateFunction]]. This gets rewritten (currently by the optimizer) into a
  * different aggregate expression for evaluation. This is mainly used to provide compatibility
  * with other databases. For example, we use this to support every, any/some aggregates by rewriting
  * them with Min and Max respectively.
  */
-trait UnevaluableAggregate extends DeclarativeAggregate {
-
-  override def nullable: Boolean = true
-
-  override lazy val aggBufferAttributes =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "aggBufferAttributes", this)
-
-  override lazy val initialValues: Seq[Expression] =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "initialValues", this)
-
-  override lazy val updateExpressions: Seq[Expression] =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "updateExpressions", this)
-
-  override lazy val mergeExpressions: Seq[Expression] =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "mergeExpressions", this)
-
-  override lazy val evaluateExpression: Expression =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "evaluateExpression", this)
+trait RuntimeReplaceableAggregate extends RuntimeReplaceable { self: AggregateFunction =>
+  override def aggBufferSchema: StructType = throw new IllegalStateException(
+    "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
+  override def aggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
+    "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
+  override def inputAggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
+    "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
 }
 
 /**
@@ -461,6 +452,25 @@ trait Nondeterministic extends Expression {
   }
 
   protected def evalInternal(input: InternalRow): Any
+}
+
+/**
+ * An expression that contains conditional expression branches, so not all branches will be hit.
+ * All optimization should be careful with the evaluation order.
+ */
+trait ConditionalExpression extends Expression {
+  final override def foldable: Boolean = children.forall(_.foldable)
+
+  /**
+   * Return the children expressions which can always be hit at runtime.
+   */
+  def alwaysEvaluatedInputs: Seq[Expression]
+
+  /**
+   * Return groups of branches. For each group, at least one branch will be hit at runtime,
+   * so that we can eagerly evaluate the common expressions of a group.
+   */
+  def branchGroups: Seq[Seq[Expression]]
 }
 
 /**
@@ -578,6 +588,28 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
   }
 }
 
+/**
+ * An expression with SQL query context. The context string can be serialized from the Driver
+ * to executors. It will also be kept after rule transforms.
+ */
+trait SupportQueryContext extends Expression with Serializable {
+  protected var queryContext: String = initQueryContext()
+
+  def initQueryContext(): String
+
+  // Note: Even though query contexts are serialized to executors, it will be regenerated from an
+  //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors
+  //       for better performance. Thus, we need to copy the original query context during
+  //       transforms. The query context string is considered as a "tag" on the expression here.
+  override def copyTagsFrom(other: Expression): Unit = {
+    other match {
+      case s: SupportQueryContext =>
+        queryContext = s.queryContext
+      case _ =>
+    }
+    super.copyTagsFrom(other)
+  }
+}
 
 object UnaryExpression {
   def unapply(e: UnaryExpression): Option[Expression] = Some(e.child)

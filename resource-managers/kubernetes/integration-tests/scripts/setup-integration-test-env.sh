@@ -106,7 +106,11 @@ then
     # OpenJDK base-image tag (e.g. 8-jre-slim, 11-jre-slim)
     JAVA_IMAGE_TAG_BUILD_ARG="-b java_image_tag=$JAVA_IMAGE_TAG"
   else
-    JAVA_IMAGE_TAG_BUILD_ARG="-f $DOCKER_FILE"
+    if [[ $DOCKER_FILE = /* ]]; then
+      JAVA_IMAGE_TAG_BUILD_ARG="-f $DOCKER_FILE"
+    else
+      JAVA_IMAGE_TAG_BUILD_ARG="-f $DOCKER_FILE_BASE_PATH/$DOCKER_FILE"
+    fi
   fi
 
   # Build PySpark image

@@ -24,7 +24,8 @@ import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
-import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
+import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -143,7 +144,9 @@ abstract class Classifier[
       case Some(n: Int) => n
       case None =>
         // Get number of classes from dataset itself.
-        val maxLabelRow: Array[Row] = dataset.select(max($(labelCol))).take(1)
+        val maxLabelRow: Array[Row] = dataset
+          .select(max(checkClassificationLabels($(labelCol), Some(maxNumClasses))))
+          .take(1)
         if (maxLabelRow.isEmpty || maxLabelRow(0).get(0) == null) {
           throw new SparkException("ML algorithm was given empty dataset.")
         }

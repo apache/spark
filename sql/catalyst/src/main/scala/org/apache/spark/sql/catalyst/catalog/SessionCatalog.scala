@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -365,10 +366,12 @@ class SessionCatalog(
       if (!ignoreIfExists) {
         throw new TableAlreadyExistsException(db = db, table = table)
       }
-    } else if (validateLocation) {
-      validateTableLocation(newTableDefinition)
+    } else {
+      if (validateLocation) {
+        validateTableLocation(newTableDefinition)
+      }
+      externalCatalog.createTable(newTableDefinition, ignoreIfExists)
     }
-    externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
 
   def validateTableLocation(table: CatalogTable): Unit = {
@@ -732,10 +735,9 @@ class SessionCatalog(
     } else {
       requireDbExists(db)
       if (oldName.database.isDefined || !tempViews.contains(oldTableName)) {
-        requireTableExists(TableIdentifier(oldTableName, Some(db)))
-        requireTableNotExists(TableIdentifier(newTableName, Some(db)))
         validateName(newTableName)
-        validateNewLocationOfRename(oldName, newName)
+        validateNewLocationOfRename(
+          TableIdentifier(oldTableName, Some(db)), TableIdentifier(newTableName, Some(db)))
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
         if (newName.database.isDefined) {
@@ -871,9 +873,15 @@ class SessionCatalog(
       throw new IllegalStateException("Invalid view without text.")
     }
     val viewConfigs = metadata.viewSQLConfigs
+    val origin = Origin(
+      objectType = Some("VIEW"),
+      objectName = Some(metadata.qualifiedName)
+    )
     val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
       try {
-        parser.parseQuery(viewText)
+        CurrentOrigin.withOrigin(origin) {
+          parser.parseQuery(viewText)
+        }
       } catch {
         case _: ParseException =>
           throw QueryCompilationErrors.invalidViewText(viewText, metadata.qualifiedName)
@@ -1746,6 +1754,23 @@ class SessionCatalog(
   }
 
   /**
+   * List all registered functions in a database with the given pattern.
+   */
+  private def listRegisteredFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
+    val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
+      .filter(_.database.forall(_ == db))
+    StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
+      // In functionRegistry, function names are stored as an unquoted format.
+      Try(parser.parseFunctionIdentifier(f)) match {
+        case Success(e) => e
+        case Failure(_) =>
+          // The names of some built-in functions are not parsable by our parser, e.g., %
+          FunctionIdentifier(f)
+      }
+    }
+  }
+
+  /**
    * List all functions in the specified database, including temporary functions. This
    * returns the function identifier and the scope in which it was defined (system or user
    * defined).
@@ -1762,18 +1787,7 @@ class SessionCatalog(
     requireDbExists(dbName)
     val dbFunctions = externalCatalog.listFunctions(dbName, pattern).map { f =>
       FunctionIdentifier(f, Some(dbName)) }
-    val loadedFunctions = StringUtils
-      .filterPattern(
-        (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-          .map(_.unquotedString), pattern).map { f =>
-        // In functionRegistry, function names are stored as an unquoted format.
-        Try(parser.parseFunctionIdentifier(f)) match {
-          case Success(e) => e
-          case Failure(_) =>
-            // The names of some built-in functions are not parsable by our parser, e.g., %
-            FunctionIdentifier(f)
-        }
-      }
+    val loadedFunctions = listRegisteredFunctions(db, pattern)
     val functions = dbFunctions ++ loadedFunctions
     // The session catalog caches some persistent functions in the FunctionRegistry
     // so there can be duplicates.
@@ -1804,13 +1818,10 @@ class SessionCatalog(
     listTables(DEFAULT_DATABASE).foreach { table =>
       dropTable(table, ignoreIfNotExists = false, purge = false)
     }
-    listFunctions(DEFAULT_DATABASE).map(_._1).foreach { func =>
-      if (func.database.isDefined) {
-        dropFunction(func, ignoreIfNotExists = false)
-      } else {
-        dropTempFunction(func.funcName, ignoreIfNotExists = false)
-      }
-    }
+    // Temp functions are dropped below, we only need to drop permanent functions here.
+    externalCatalog.listFunctions(DEFAULT_DATABASE, "*").map { f =>
+      FunctionIdentifier(f, Some(DEFAULT_DATABASE))
+    }.foreach(dropFunction(_, ignoreIfNotExists = false))
     clearTempTables()
     globalTempViewManager.clear()
     functionRegistry.clear()
@@ -1854,10 +1865,13 @@ class SessionCatalog(
   private def validateNewLocationOfRename(
       oldName: TableIdentifier,
       newName: TableIdentifier): Unit = {
+    requireTableExists(oldName)
+    requireTableNotExists(newName)
     val oldTable = getTableMetadata(oldName)
     if (oldTable.tableType == CatalogTableType.MANAGED) {
+      assert(oldName.database.nonEmpty)
       val databaseLocation =
-        externalCatalog.getDatabase(oldName.database.getOrElse(currentDb)).locationUri
+        externalCatalog.getDatabase(oldName.database.get).locationUri
       val newTableLocation = new Path(new Path(databaseLocation), formatTableName(newName.table))
       val fs = newTableLocation.getFileSystem(hadoopConf)
       if (fs.exists(newTableLocation)) {

@@ -265,7 +265,7 @@ private[spark] object HighlyCompressedMapStatus {
     val threshold =
       if (accurateBlockSkewedFactor > 0) {
         val sortedSizes = uncompressedSizes.sorted
-        val medianSize: Long = Utils.median(sortedSizes)
+        val medianSize: Long = Utils.median(sortedSizes, true)
         val maxAccurateSkewedBlockNumber =
           Math.min(
             Option(SparkEnv.get)

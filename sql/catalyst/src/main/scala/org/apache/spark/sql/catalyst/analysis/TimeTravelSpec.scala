@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{AnsiCast, Cast, Expression, RuntimeReplaceable, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, RuntimeReplaceable, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.TimestampType
@@ -37,11 +37,11 @@ object TimeTravelSpec {
     } else if (timestamp.nonEmpty) {
       val ts = timestamp.get
       assert(ts.resolved && ts.references.isEmpty && !SubqueryExpression.hasSubquery(ts))
-      if (!AnsiCast.canCast(ts.dataType, TimestampType)) {
+      if (!Cast.canAnsiCast(ts.dataType, TimestampType)) {
         throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(ts)
       }
       val tsToEval = ts.transform {
-        case r: RuntimeReplaceable => r.child
+        case r: RuntimeReplaceable => r.replacement
         case _: Unevaluable =>
           throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(ts)
         case e if !e.deterministic =>

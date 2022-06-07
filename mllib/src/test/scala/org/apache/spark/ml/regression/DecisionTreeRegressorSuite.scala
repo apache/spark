@@ -53,6 +53,12 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
+  test("DecisionTreeRegressor validate input dataset") {
+    testInvalidRegressionLabels(new DecisionTreeRegressor().fit(_))
+    testInvalidWeights(new DecisionTreeRegressor().setWeightCol("weight").fit(_))
+    testInvalidVectors(new DecisionTreeRegressor().fit(_))
+  }
+
   test("Regression stump with 3-ary (ordered) categorical features") {
     val dt = new DecisionTreeRegressor()
       .setImpurity("variance")

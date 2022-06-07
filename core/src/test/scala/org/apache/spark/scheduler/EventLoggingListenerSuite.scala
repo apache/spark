@@ -23,7 +23,7 @@ import java.util.{Arrays, Properties}
 import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.Set
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
@@ -91,7 +91,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       .set(key, secretPassword)
     val hadoopconf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val envDetails = SparkEnv.environmentDetails(
-      conf, hadoopconf, "FIFO", Seq.empty, Seq.empty, Seq.empty)
+      conf, hadoopconf, "FIFO", Seq.empty, Seq.empty, Seq.empty, Map.empty)
     val event = SparkListenerEnvironmentUpdate(envDetails)
     val redactedProps = EventLoggingListener
       .redactEvent(conf, event).environmentDetails("Spark Properties").toMap
@@ -599,7 +599,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       stageId: Int,
       taskType: String,
       executorMetrics: ExecutorMetrics): SparkListenerTaskEnd = {
-    val taskInfo = new TaskInfo(taskId, taskIndex, 0, 1553291556000L, executorId, "executor",
+    val taskInfo = new TaskInfo(
+      taskId, taskIndex, 0, partitionId = taskIndex, 1553291556000L, executorId, "executor",
       TaskLocality.NODE_LOCAL, false)
     val taskMetrics = TaskMetrics.empty
     SparkListenerTaskEnd(stageId, 0, taskType, Success, taskInfo, executorMetrics, taskMetrics)
@@ -661,7 +662,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   private def readLines(in: InputStream): Seq[String] = {
-    Source.fromInputStream(in).getLines().toSeq
+    Source.fromInputStream(in)(Codec.UTF8).getLines().toSeq
   }
 
   /**

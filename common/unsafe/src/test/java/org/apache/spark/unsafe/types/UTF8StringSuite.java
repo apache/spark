@@ -613,12 +613,8 @@ public class UTF8StringSuite {
 
     for (final long offset : offsets) {
       try {
-        fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length)
-            .writeTo(outputStream);
-
-        throw new IllegalStateException(Long.toString(offset));
-      } catch (ArrayIndexOutOfBoundsException e) {
-        // ignore
+        assertThrows(ArrayIndexOutOfBoundsException.class,
+          () -> fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length).writeTo(outputStream));
       } finally {
         outputStream.reset();
       }

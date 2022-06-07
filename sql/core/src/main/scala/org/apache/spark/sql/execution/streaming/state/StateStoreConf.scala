@@ -52,6 +52,9 @@ class StateStoreConf(
   val formatValidationCheckValue: Boolean =
     extraOptions.getOrElse(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG, "true") == "true"
 
+  /** Whether to skip null values for hash based stream-stream joins. */
+  val skipNullsForStreamStreamJoins: Boolean = sqlConf.stateStoreSkipNullsForStreamStreamJoins
+
   /** The compression codec used to compress delta and snapshot files. */
   val compressionCodec: String = sqlConf.stateStoreCompressionCodec
 

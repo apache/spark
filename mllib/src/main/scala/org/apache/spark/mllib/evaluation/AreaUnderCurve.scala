@@ -78,7 +78,7 @@ private[evaluation] object AreaUnderCurve {
    * @param curve an iterator over ordered 2D points stored in pairs representing a curve
    */
   def of(curve: Iterable[(Double, Double)]): Double = {
-    curve.toIterator.sliding(2).withPartial(false).aggregate(0.0)(
+    curve.iterator.sliding(2).withPartial(false).aggregate(0.0)(
       seqop = (auc: Double, points: Seq[(Double, Double)]) => auc + trapezoid(points),
       combop = _ + _
     )

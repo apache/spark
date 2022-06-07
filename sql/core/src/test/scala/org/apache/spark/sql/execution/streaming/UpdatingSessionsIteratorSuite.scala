@@ -52,7 +52,7 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     super.beforeAll()
     val taskManager = new TaskMemoryManager(new TestMemoryManager(sqlContext.sparkContext.conf), 0)
     TaskContext.setTaskContext(
-      new TaskContextImpl(0, 0, 0, 0, 0, taskManager, new Properties, null))
+      new TaskContextImpl(0, 0, 0, 0, 0, 1, taskManager, new Properties, null))
   }
 
   override def afterAll(): Unit = try {

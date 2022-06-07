@@ -113,7 +113,7 @@ Use `;` (semicolon) to terminate commands. Notice:
    /* This is a comment contains ;
    */ SELECT 1;
    ```
-   However, if ';' is the end of the line, it terminates the SQL statement. The example above will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`, Spark will submit these two commands separated and throw parser error (`unclosed bracketed comment` and `extraneous input '*/'`).
+   However, if ';' is the end of the line, it terminates the SQL statement. The example above will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`, Spark will submit these two commands separated and throw parser error (`unclosed bracketed comment` and `Syntax error at or near '*/'`).
 
 <table class="table">
 <tr><th>Command</th><th>Description</th></tr>

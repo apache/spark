@@ -63,6 +63,6 @@ class JdbcUtilsSuite extends SparkFunSuite {
       JdbcUtils.getCustomSchema(tableSchema, "c3 DATE. C2 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, false), StructField("C2", StringType, false)))
     }
-    assert(mismatchedInput.getMessage.contains("mismatched input '.' expecting"))
+    assert(mismatchedInput.getMessage.contains("Syntax error at or near '.'"))
   }
 }

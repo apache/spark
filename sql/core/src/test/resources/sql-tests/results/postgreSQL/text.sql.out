@@ -64,8 +64,11 @@ select string('four: ') || 2+2
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: four: 2. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkNumberFormatException
+[CAST_INVALID_INPUT] The value 'four: 2' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select string('four: ') || 2+2
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -73,8 +76,11 @@ select 'four: ' || 2+2
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: four: 2. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkNumberFormatException
+[CAST_INVALID_INPUT] The value 'four: 2' of the type "STRING" cannot be cast to "BIGINT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select 'four: ' || 2+2
+       ^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -279,7 +285,7 @@ select format_string('%0$s', 'Hello')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The argument_index of string format cannot contain position 0$.; line 1 pos 7
+[INVALID_PARAMETER_VALUE] The value of parameter(s) 'strfmt' in `format_string` is invalid: expects %1$, %2$ and so on, but got %0$.; line 1 pos 7
 
 
 -- !query

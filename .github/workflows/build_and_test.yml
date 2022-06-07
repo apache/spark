@@ -23,8 +23,8 @@ on:
   push:
     branches:
     - '**'
-    - '!branch-*.*'
   schedule:
+    # Note that the scheduled jobs are only for master branch.
     # master, Hadoop 2
     - cron: '0 1 * * *'
     # master
@@ -37,11 +37,22 @@ on:
     - cron: '0 13 * * *'
     # Java 17
     - cron: '0 16 * * *'
+  workflow_call:
+    inputs:
+      ansi_enabled:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   configure-jobs:
     name: Configure jobs
     runs-on: ubuntu-20.04
+    # All other jobs in this workflow depend on this job,
+    # so the entire workflow is skipped when these conditions evaluate to false:
+    # Run all jobs for Apache Spark repository
+    # Run only non-scheduled jobs for forked repositories
+    if: github.repository == 'apache/spark' || github.event_name != 'schedule'
     outputs:
       java: ${{ steps.set-outputs.outputs.java }}
       branch: ${{ steps.set-outputs.outputs.branch }}
@@ -90,15 +101,16 @@ jobs:
           echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
-          echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
+          echo '::set-output name=branch::master'  # NOTE: UPDATE THIS WHEN CUTTING BRANCH
           echo '::set-output name=type::regular'
-          echo '::set-output name=envs::{}'
+          echo '::set-output name=envs::{"SPARK_ANSI_SQL_MODE": "${{ inputs.ansi_enabled }}"}'
           echo '::set-output name=hadoop::hadoop3'
         fi
 
   precondition:
     name: Check changes
     runs-on: ubuntu-20.04
+    needs: configure-jobs
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -109,14 +121,14 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Check all modules
       id: set-outputs
       run: |
@@ -134,9 +146,9 @@ jobs:
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
     needs: [configure-jobs, precondition]
     # Run scheduled jobs for Apache Spark only
-    # Run regular jobs for commit in both Apache Spark and forked repository
+    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
     if: >-
-      (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled')
+      needs.configure-jobs.outputs.type == 'scheduled'
       || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true')
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
@@ -216,7 +228,7 @@ jobs:
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -279,10 +291,10 @@ jobs:
     needs: [configure-jobs, precondition]
     # Run PySpark coverage scheduled jobs for Apache Spark only
     # Run scheduled jobs with JDK 17 in Apache Spark
-    # Run regular jobs for commit in both Apache Spark and forked repository
+    # Run regular jobs for commit in both Apache Spark and forked repository, but only if pyspark changes exist
     if: >-
-      (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled')
-      || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
+      needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled'
+      || (needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
       || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).pyspark == 'true')
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
@@ -311,6 +323,7 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -318,14 +331,14 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -385,9 +398,11 @@ jobs:
 
   sparkr:
     needs: [configure-jobs, precondition]
+    # Run scheduled jobs with JDK 17 in Apache Spark
+    # Run regular jobs for commit in both Apache Spark and forked repository, but only if sparkr changes exist
     if: >-
-      (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).sparkr == 'true')
-      || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
+      (needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
+      || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).sparkr == 'true')
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
@@ -398,6 +413,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_MIMA: true
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -405,14 +421,14 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -469,13 +485,13 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -509,7 +525,7 @@ jobs:
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.920' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==21.12b0'
-        python3.9 -m pip install pandas-stubs
+        python3.9 -m pip install 'pandas-stubs==1.2.0.53'
     - name: Install R linter dependencies and SparkR
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
@@ -532,6 +548,7 @@ jobs:
         # Pin the MarkupSafe to 2.0.1 to resolve the CI error.
         #   See also https://issues.apache.org/jira/browse/SPARK-38279.
         python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1'
+        python3.9 -m pip install ipython_genutils # See SPARK-38517
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 
         apt-get update -y
         apt-get install -y ruby ruby-dev
@@ -566,6 +583,7 @@ jobs:
 
   java-11-17:
     needs: [configure-jobs, precondition]
+    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
     if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
     name: Java ${{ matrix.java }} build with Maven
     strategy:
@@ -581,13 +599,13 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -621,6 +639,7 @@ jobs:
 
   scala-213:
     needs: [configure-jobs, precondition]
+    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
     if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-20.04
@@ -630,13 +649,13 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -666,24 +685,26 @@ jobs:
 
   tpcds-1g:
     needs: [configure-jobs, precondition]
+    # Run regular jobs for commit in both Apache Spark and forked repository, but only if tpcds changes exist
     if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).tpcds == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -760,6 +781,7 @@ jobs:
 
   docker-integration-tests:
     needs: [configure-jobs, precondition]
+    # Run regular jobs for commit in both Apache Spark and forked repository, but only if docker changes exist
     if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).docker == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-20.04
@@ -768,7 +790,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
-      ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:18.4.0
+      ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
       SKIP_MIMA: true
     steps:
     - name: Checkout Spark repository
@@ -776,14 +798,14 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
