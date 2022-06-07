@@ -281,8 +281,10 @@ abstract class SparkFunSuite
       parameters: Map[String, String],
       matchPVals: Boolean = false): Unit = {
     assert(exception.getErrorClass === errorClass)
-    if (exception.getErrorSubClass != null) { assert(errorSubClass.isDefined) }
-    errorSubClass.foreach(subClass => assert(exception.getErrorSubClass === subClass))
+    if (exception.getErrorSubClass != null) {
+      assert(errorSubClass.isDefined)
+      assert(exception.getErrorSubClass === errorSubClass.get)
+    }
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = (exception.getParameterNames zip exception.getMessageParameters).toMap
     if (matchPVals == true) {
