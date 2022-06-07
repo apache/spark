@@ -157,7 +157,7 @@
           "See more details in SPARK-31404. You can set the SQL config <config> or",
           "the datasource option <option> to \"LEGACY\" to rebase the datetime values",
           "w.r.t. the calendar difference during reading. To read the datetime values",
-          "as it is, set the SQL config or the datasource option t \"CORRECTED\"."
+          "as it is, set the SQL config or the datasource option to \"CORRECTED\"."
         ]
       },
       "WRITE_ANCIENT_DATETIME" : {
