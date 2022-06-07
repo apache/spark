@@ -130,6 +130,22 @@ class HashPartitioner(partitions: Int) extends Partitioner {
 }
 
 /**
+ * A dummy partitioner for use with records whose partition ids have been pre-computed (i.e. for
+ * use on RDDs of (Int, Row) pairs where the Int is a partition id in the expected range).
+ */
+private[spark] class PartitionIdPassthrough(override val numPartitions: Int) extends Partitioner {
+  override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+}
+
+/**
+ * A [[org.apache.spark.Partitioner]] that partitions all records into a single partition.
+ */
+private[spark] class ConstantPartitioner extends Partitioner {
+  override def numPartitions: Int = 1
+  override def getPartition(key: Any): Int = 0
+}
+
+/**
  * A [[org.apache.spark.Partitioner]] that partitions sortable records by range into roughly
  * equal ranges. The ranges are determined by sampling the content of the RDD passed in.
  *

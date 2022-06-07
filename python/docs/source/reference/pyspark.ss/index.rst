@@ -16,22 +16,15 @@
     under the License.
 
 
-=============
-API Reference
-=============
+====================
+Structured Streaming
+====================
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
-
-Pandas API on Spark follows the API specifications of latest pandas release.
+This page gives an overview of all public Structed Streaming API.
 
 .. toctree::
-   :maxdepth: 2
+    :maxdepth: 2
 
-   pyspark.sql/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
+    core_classes
+    io
+    query_management

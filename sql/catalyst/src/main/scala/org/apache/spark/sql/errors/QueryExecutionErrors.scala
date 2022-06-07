@@ -477,7 +477,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       message: String,
       hint: String = "",
       errorContext: String = ""): ArithmeticException = {
-    val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
+    val alternative = if (hint.nonEmpty) {
+      s" Use '$hint' to tolerate overflow and return NULL instead."
+    } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
       messageParameters = Array(message, alternative, SQLConf.ANSI_ENABLED.key),

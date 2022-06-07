@@ -37,13 +37,13 @@
   },
   "CAST_INVALID_INPUT" : {
     "message" : [
-      "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error."
+      "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "42000"
   },
   "CAST_OVERFLOW" : {
     "message" : [
-      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. To return NULL instead, use `try_cast`. If necessary set <config> to \"false\" to bypass this error."
+      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22005"
   },
@@ -60,7 +60,7 @@
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [
-      "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error."
+      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error."
     ],
     "sqlState" : "22012"
   },
@@ -195,7 +195,7 @@
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ]
   },
   "INVALID_BUCKET_FILE" : {
@@ -249,7 +249,7 @@
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [
-      "Key <keyValue> does not exist. To return NULL instead, use `try_element_at`. If necessary set <config> to \"false\" to bypass this error."
+      "Key <keyValue> does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ]
   },
   "MISSING_COLUMN" : {

@@ -1277,7 +1277,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("create table t(i boolean default true, s bigint default 42) using parquet")
         assert(intercept[AnalysisException] {
           sql("insert into t (I) select true from (select 1)")
-        }.getMessage.contains("Cannot resolve column name I"))
+        }.getMessage.contains(
+          "[MISSING_COLUMN] Column 'I' does not exist. Did you mean one of the following? [i, s]"))
       }
     }
   }
@@ -1628,6 +1629,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       TestCase(
         dataSource = "orc",
         Seq(
+          Config(
+            None),
           Config(
             Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false"),
             insertNullsToStorage = false))),
