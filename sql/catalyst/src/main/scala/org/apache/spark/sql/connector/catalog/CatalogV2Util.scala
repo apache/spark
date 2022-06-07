@@ -157,7 +157,8 @@ private[sql] object CatalogV2Util {
                   val fieldWithDefault: StructField =
                     Option(add.defaultValue).map(field.withCurrentDefaultValue).getOrElse(field)
                   val fieldWithComment: StructField =
-                    Option(add.comment).map(fieldWithDefault.withComment).getOrElse(fieldWithDefault)
+                    Option(add.comment).map(fieldWithDefault.withComment)
+                      .getOrElse(fieldWithDefault)
                   Some(parent.copy(dataType =
                     addField(parentType, fieldWithComment, add.position(), analyzer, tableProvider,
                       statementType, catalogType)))
