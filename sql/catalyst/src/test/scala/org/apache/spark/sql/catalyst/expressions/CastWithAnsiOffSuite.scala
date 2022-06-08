@@ -65,11 +65,11 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
   }
 
   test("cast string to date #2") {
-    checkEvaluation(Cast(Literal("2015-03-18X"), DateType), null)
-    checkEvaluation(Cast(Literal("2015/03/18"), DateType), null)
-    checkEvaluation(Cast(Literal("2015.03.18"), DateType), null)
-    checkEvaluation(Cast(Literal("20150318"), DateType), null)
-    checkEvaluation(Cast(Literal("2015-031-8"), DateType), null)
+    checkEvaluation(cast(Literal("2015-03-18X"), DateType), null)
+    checkEvaluation(cast(Literal("2015/03/18"), DateType), null)
+    checkEvaluation(cast(Literal("2015.03.18"), DateType), null)
+    checkEvaluation(cast(Literal("20150318"), DateType), null)
+    checkEvaluation(cast(Literal("2015-031-8"), DateType), null)
   }
 
   test("casting to fixed-precision decimals") {
