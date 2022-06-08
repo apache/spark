@@ -33,12 +33,6 @@ private case class AskPermissionToCommitOutput(
     partition: Int,
     attemptNumber: Int)
 
-private case class CommitOutputSuccess(
-    stage: Int,
-    stateAttempt: Int,
-    partition: Int,
-    attemptNumber: Int)
-
 /**
  * Authority that decides whether tasks can commit output to HDFS. Uses a "first committer wins"
  * policy.
@@ -64,13 +58,8 @@ private[spark] class OutputCommitCoordinator(
   // concurrently in two different attempts of the same stage.
   private case class TaskIdentifier(stageAttempt: Int, taskAttempt: Int)
 
-  // Class used to identify a committer 's status when this committer is allowed to commit task.
-  // Status is false means this committer is allowed to commit task, status is true means this
-  // committer have sent CommitOutputSuccess message to OutputCommitCoordinator.
-  private case class CommitStatus(taskIdent: TaskIdentifier, status: Boolean)
-
   private case class StageState(numPartitions: Int) {
-    val authorizedCommitters = Array.fill[CommitStatus](numPartitions)(null)
+    val authorizedCommitters = Array.fill[TaskIdentifier](numPartitions)(null)
     val failures = mutable.Map[Int, mutable.Set[TaskIdentifier]]()
   }
 
@@ -125,33 +114,6 @@ private[spark] class OutputCommitCoordinator(
   }
 
   /**
-   * Called by tasks to update commit output success status.
-   *
-   * If a task attempt has been authorized to commit, after commit task success,
-   * task side should update commit status to true.
-   *
-   * @param stage the stage number
-   * @param partition the partition number
-   * @param attemptNumber how many times this task has been attempted
-   *                      (see [[TaskContext.attemptNumber()]])
-   * @return true if this task can update the commit output success status.
-   */
-  def commitSuccess(
-      stage: Int,
-      stageAttempt: Int,
-      partition: Int,
-      attemptNumber: Int): Unit = {
-    val msg = CommitOutputSuccess(stage, stageAttempt, partition, attemptNumber)
-    coordinatorRef match {
-      case Some(endpointRef) =>
-        endpointRef.send(msg)
-      case None =>
-        logError(
-          "commitSuccess called after coordinator was stopped (is SparkEnv shutdown in progress)?")
-    }
-  }
-
-  /**
    * Called by the DAGScheduler when a stage starts. Initializes the stage's state if it hasn't
    * yet been initialized.
    *
@@ -196,17 +158,10 @@ private[spark] class OutputCommitCoordinator(
         // Mark the attempt as failed to exclude from future commit protocol
         val taskId = TaskIdentifier(stageAttempt, attemptNumber)
         stageState.failures.getOrElseUpdate(partition, mutable.Set()) += taskId
-        val commitStatus = stageState.authorizedCommitters(partition)
-        if (commitStatus != null && commitStatus.taskIdent == taskId) {
-          if (commitStatus.status) {
-            sc.foreach(_.dagScheduler.abortStage(stage, s"Authorized committer " +
-              s"(attemptNumber=$attemptNumber, stage=$stage, partition=$partition) failed; " +
-              s"but task commit success, should fail the job"))
-          } else {
-            logDebug(s"Authorized committer (attemptNumber=$attemptNumber, stage=$stage, " +
-              s"partition=$partition) failed; clearing lock")
-            stageState.authorizedCommitters(partition) = null
-          }
+        if (stageState.authorizedCommitters(partition) == taskId) {
+          sc.foreach(_.dagScheduler.abortStage(stage, s"Authorized committer " +
+            s"(attemptNumber=$attemptNumber, stage=$stage, partition=$partition) failed; " +
+            s"but task commit success, should fail the job"))
         }
     }
   }
@@ -235,8 +190,7 @@ private[spark] class OutputCommitCoordinator(
         if (existing == null) {
           logDebug(s"Commit allowed for stage=$stage.$stageAttempt, partition=$partition, " +
             s"task attempt $attemptNumber")
-          state.authorizedCommitters(partition) =
-            CommitStatus(TaskIdentifier(stageAttempt, attemptNumber), false)
+          state.authorizedCommitters(partition) = TaskIdentifier(stageAttempt, attemptNumber)
           true
         } else {
           logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
@@ -247,45 +201,6 @@ private[spark] class OutputCommitCoordinator(
         logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
           "stage already marked as completed.")
         false
-    }
-  }
-
-  private[scheduler] def handleCommitOutputSuccess(
-      stage: Int,
-      stageAttempt: Int,
-      partition: Int,
-      attemptNumber: Int): Unit = synchronized {
-    stageStates.get(stage) match {
-      case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
-        sc.foreach(_.dagScheduler.abortStage(stage,
-          s"Authorized committer (attemptNumber=$attemptNumber, " +
-            s"stage=$stage, partition=$partition) failed; but task commit success, " +
-            s"should fail the job"))
-      case Some(state) =>
-        val existing = state.authorizedCommitters(partition)
-        if (existing == null) {
-          sc.foreach(_.dagScheduler.abortStage(stage,
-            s"Authorized committer (attemptNumber=$attemptNumber, " +
-              s"stage=$stage, partition=$partition) commit success; partition lock removed " +
-              s"before receive CommitOutputSuccess, should fail the job"))
-        } else {
-          val taskIdent = existing.taskIdent
-          if (taskIdent.stageAttempt == stageAttempt && taskIdent.taskAttempt == attemptNumber) {
-            logDebug(s"Task Commit success for stage=$stage.$stageAttempt, " +
-              s"partition=$partition, task attempt $attemptNumber")
-            state.authorizedCommitters(partition) =
-              CommitStatus(TaskIdentifier(stageAttempt, attemptNumber), true)
-            true
-          } else {
-            sc.foreach(_.dagScheduler.abortStage(stage,
-              s"Authorized committer (attemptNumber=$attemptNumber, " +
-              s"stage=$stage, partition=$partition) commit success; but partition lock not " +
-              s"consistent, should fail the job"))
-          }
-        }
-      case None =>
-        logDebug(s"Commit update status failed for stage=$stage.$stageAttempt, " +
-          s"partition=$partition: stage already marked as completed.")
     }
   }
 
@@ -312,10 +227,6 @@ private[spark] object OutputCommitCoordinator {
       case StopCoordinator =>
         logInfo("OutputCommitCoordinator stopped!")
         stop()
-
-      case CommitOutputSuccess(stage, stageAttempt, partition, attemptNumber) =>
-        outputCommitCoordinator.handleCommitOutputSuccess(stage, stageAttempt, partition,
-          attemptNumber)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
