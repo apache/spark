@@ -194,7 +194,7 @@ private[spark] class OutputCommitCoordinator(
           true
         } else {
           logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
-            s"already committed by ${existing.taskIdent}")
+            s"already committed by $existing")
           false
         }
       case None =>
