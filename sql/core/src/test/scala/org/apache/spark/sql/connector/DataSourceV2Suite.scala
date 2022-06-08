@@ -974,8 +974,10 @@ class PartitionAwareDataSource extends TestingV2Source {
 
 class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
-  class MyScanBuilder(val partitionKeys: Option[Seq[String]],
-                      val orderKeys: Seq[String]) extends SimpleScanBuilder
+  class MyScanBuilder(
+      val partitionKeys: Option[Seq[String]],
+      val orderKeys: Seq[String])
+    extends SimpleScanBuilder
     with SupportsReportPartitioning with SupportsReportOrdering {
 
     override def planInputPartitions(): Array[InputPartition] = {

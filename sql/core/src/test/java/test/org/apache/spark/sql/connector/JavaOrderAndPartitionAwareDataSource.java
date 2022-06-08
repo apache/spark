@@ -30,7 +30,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareDataSource {
 
   static class MyScanBuilder extends JavaPartitionAwareDataSource.MyScanBuilder
-          implements SupportsReportOrdering {
+    implements SupportsReportOrdering {
 
     private final Partitioning partitioning;
     private final SortOrder[] ordering;
@@ -86,7 +86,7 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
         if (partitionKeys == null) {
           return new Transform[0];
         } else {
-          return (Transform[])Arrays.stream(partitionKeys.split(","))
+          return (Transform[]) Arrays.stream(partitionKeys.split(","))
             .map(Expressions::identity).toArray();
         }
       }
@@ -106,22 +106,32 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
     }
 
     @Override
-    public Expression expression() { return expression; }
+    public Expression expression() {
+      return expression;
+    }
 
     @Override
-    public SortDirection direction() { return SortDirection.ASCENDING; }
+    public SortDirection direction() {
+      return SortDirection.ASCENDING;
+    }
 
     @Override
-    public NullOrdering nullOrdering() { return NullOrdering.NULLS_FIRST; }
+    public NullOrdering nullOrdering() {
+      return NullOrdering.NULLS_FIRST;
+    }
   }
 
   static class MyNamedReference implements NamedReference {
     private final String[] parts;
 
-    MyNamedReference(String part) { this.parts = new String[] { part }; }
+    MyNamedReference(String part) {
+      this.parts = new String[] { part };
+    }
 
     @Override
-    public String[] fieldNames() { return this.parts; }
+    public String[] fieldNames() {
+      return this.parts;
+    }
   }
 
   static class MyIdentityTransform implements Transform {
@@ -132,13 +142,19 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
     }
 
     @Override
-    public String name() { return "identity"; }
+    public String name() {
+      return "identity";
+    }
 
     @Override
-    public NamedReference[] references() { return new NamedReference[0]; }
+    public NamedReference[] references() {
+      return new NamedReference[0];
+    }
 
     @Override
-    public Expression[] arguments() { return this.args; }
+    public Expression[] arguments() {
+      return this.args;
+    }
   }
 
 }
