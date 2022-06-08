@@ -220,12 +220,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropView(ResolvedV1Identifier(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
-    case DropView(r @ ResolvedIdentifier(catalog, ident), _) =>
-      if (catalog == FakeSystemCatalog) {
-        DropTempViewCommand(ident)
-      } else {
-        throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
-      }
+    case DropView(ResolvedIdentifier(FakeSystemCatalog, ident), _) =>
+      DropTempViewCommand(ident)
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
@@ -391,8 +387,18 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         replace = replace,
         viewType = PersistedView)
 
-    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _) =>
-      throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "views")
+    case CreateView(ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment,
+        properties, originalText, child, allowExisting, replace) if isSessionCatalog(catalog) =>
+      CreateViewCommand(
+        name = ident.asTableIdentifier,
+        userSpecifiedColumns = userSpecifiedColumns,
+        comment = comment,
+        properties = properties,
+        originalText = originalText,
+        plan = child,
+        allowExisting = allowExisting,
+        replace = replace,
+        viewType = PersistedView)
 
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>
       ns match {

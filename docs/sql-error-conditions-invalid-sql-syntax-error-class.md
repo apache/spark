@@ -41,6 +41,10 @@ CREATE TEMPORARY FUNCTION with specifying a database(`<database>`) is not allowe
 
 CREATE TEMPORARY FUNCTION with IF NOT EXISTS is not allowed.
 
+## DESCRIBE_PARTITION_FOR_VIEW
+
+DESCRIBE does not support partition for view.
+
 ## EMPTY_PARTITION_VALUE
 
 Partition key `<partKey>` must set value.

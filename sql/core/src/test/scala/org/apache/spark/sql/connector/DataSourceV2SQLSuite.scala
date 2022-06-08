@@ -2290,14 +2290,6 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("AlterTable: renaming views are not supported") {
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
-    }
-    checkErrorTableNotFound(e, "`testcat`.`ns`.`tbl`",
-      ExpectedContext("testcat.ns.tbl", 11, 10 + "testcat.ns.tbl".length))
-  }
-
   test("ANALYZE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -2730,21 +2722,6 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'def'")
       assert(partTable.partitionExists(expectedPartitionIdent))
     }
-  }
-
-  test("View commands are not supported in v2 catalogs") {
-    def validateViewCommand(sqlStatement: String): Unit = {
-      val e = intercept[AnalysisException](sql(sqlStatement))
-      checkError(
-        e,
-        errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
-    }
-
-    validateViewCommand("DROP VIEW testcat.v")
-    validateViewCommand("ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')")
-    validateViewCommand("ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')")
-    validateViewCommand("ALTER VIEW testcat.v AS SELECT 1")
   }
 
   test("SPARK-33924: INSERT INTO .. PARTITION preserves the partition location") {

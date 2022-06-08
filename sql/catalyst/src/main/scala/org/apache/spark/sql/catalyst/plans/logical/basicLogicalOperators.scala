@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, V1ViewDescription, ViewDescription}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -711,22 +711,23 @@ case class InsertIntoDir(
 }
 
 /**
- * A container for holding the view description(CatalogTable) and info whether the view is temporary
+ * A container for holding the view description, and the output of the view. The
+ * child should be a logical plan parsed from the view text.
+ * A container for holding the view description and info whether the view is temporary
  * or not. If it's a SQL (temp) view, the child should be a logical plan parsed from the
- * `CatalogTable.viewText`. Otherwise, the view is a temporary one created from a dataframe and the
+ * `viewText`. Otherwise, the view is a temporary one created from a dataframe and the
  * view description should contain a `VIEW_CREATED_FROM_DATAFRAME` property; in this case, the child
  * must be already resolved.
  *
  * This operator will be removed at the end of analysis stage.
  *
- * @param desc A view description(CatalogTable) that provides necessary information to resolve the
- *             view.
+ * @param desc A view description that provides necessary information to resolve the view.
  * @param isTempView A flag to indicate whether the view is temporary or not.
  * @param child The logical plan of a view operator. If the view description is available, it should
- *              be a logical plan parsed from the `CatalogTable.viewText`.
+ *              be a logical plan parsed from the view text.
  */
 case class View(
-    desc: CatalogTable,
+    desc: ViewDescription,
     isTempView: Boolean,
     child: LogicalPlan) extends UnaryNode {
   require(!isTempViewStoringAnalyzedPlan || child.resolved)
@@ -736,7 +737,7 @@ case class View(
   override def metadataOutput: Seq[Attribute] = Nil
 
   override def simpleString(maxFields: Int): String = {
-    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+    s"View (${desc.ident}, ${output.mkString("[", ",", "]")})"
   }
 
   override def doCanonicalize(): LogicalPlan = child match {
@@ -768,6 +769,9 @@ case class View(
 }
 
 object View {
+  def apply(desc: CatalogTable, isTempView: Boolean, child: LogicalPlan): View =
+    View(V1ViewDescription(desc), isTempView, child)
+
   def effectiveSQLConf(configs: Map[String, String], isTempView: Boolean): SQLConf = {
     val activeConf = SQLConf.get
     // For temporary view, we always use captured sql configs

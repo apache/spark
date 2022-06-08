@@ -1369,6 +1369,12 @@ Invalid usage of `<elem>` in `<prettyName>`.
 
 Variable type must be string type but got `<varType>`.
 
+### INVALID_VIEW_CURRENT_CATALOG
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Invalid current catalog `<currentCatalog>` in view `<viewName>`
+
 ### INVALID_VIEW_TEXT
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
@@ -1609,6 +1615,12 @@ ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing `<table>`'s column
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 `<cmd>` is not supported for v2 tables.
+
+### NOT_SUPPORTED_COMMAND_FOR_V2_VIEW
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+`<cmd>` is not supported for v2 views.
 
 ### NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT
 

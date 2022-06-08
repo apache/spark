@@ -237,6 +237,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
+   * Override to provide additional rules for the "Substitution" batch.
+   */
+  val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Override to provide additional rules for the "Resolution" batch.
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
@@ -256,16 +261,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
   override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
-      new SubstituteExecuteImmediate(catalogManager),
+      new SubstituteExecuteImmediate(catalogManager) +:
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
       // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early
       // at the beginning of analysis.
-      OptimizeUpdateFields,
-      CTESubstitution,
-      WindowsSubstitution,
-      EliminateUnions,
-      SubstituteUnresolvedOrdinals),
+      OptimizeUpdateFields +:
+      CTESubstitution +:
+      WindowsSubstitution +:
+      EliminateUnions +:
+      SubstituteUnresolvedOrdinals +:
+      extendedSubstitutionRules : _*),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -1054,7 +1060,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(desc, isTempView, child) if !child.resolved =>
+      case view @ View(V1ViewDescription(desc), isTempView, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc) {
           val nestedViewDepth = AnalysisContext.get.nestedViewDepth
@@ -1106,8 +1112,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         write.table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).map(unwrapRelationPlan).map {
-              case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
-                v.desc.identifier, write)
+              case v: View => throw QueryCompilationErrors.expectTableNotViewError(
+                v.desc.identifier.nameParts, "V2WRITE", false, u)
               case r: DataSourceV2Relation => write.withNewTable(r)
               case u: UnresolvedCatalogRelation =>
                 throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
@@ -1140,7 +1146,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         }.getOrElse(u)
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
-        lookupTableOrView(identifier, viewOnly = true).map {
+        lookupTableOrView(identifier).map {
           case _: ResolvedTempView if !allowTemp =>
             throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
               identifier, cmd, u)
@@ -1187,31 +1193,37 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * Resolves relations to `ResolvedTable` or `Resolved[Temp/Persistent]View`. This is
      * for resolving DDL and misc commands.
      */
-    private def lookupTableOrView(
-        identifier: Seq[String],
-        viewOnly: Boolean = false): Option[LogicalPlan] = {
+    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
       lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
         expandIdentifier(identifier) match {
-          case CatalogAndIdentifier(catalog, ident) =>
-            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog)) {
-              throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
-            }
-            CatalogV2Util.loadTable(catalog, ident).map {
-              case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
-                v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                val v1Ident = v1Table.catalogTable.identifier
-                val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
-                ResolvedPersistentView(
-                  catalog, v2Ident, v1Table.catalogTable)
-              case table =>
-                ResolvedTable.create(catalog.asTableCatalog, ident, table)
-            }
-          case _ => None
+          case SessionCatalogAndIdentifier(catalog, ident) =>
+            lookupTable(catalog, ident)
+          case NonSessionCatalogAndIdentifier(catalog, ident) =>
+            lookupView(catalog, ident)
+                .orElse(lookupTable(catalog, ident))
+          case _ =>
+            None
         }
       }
     }
+
+    private def lookupView(catalog: CatalogPlugin, ident: Identifier): Option[LogicalPlan] =
+      CatalogV2Util.loadView(catalog, ident)
+          .map(V2ViewDescription(ident, _))
+          .map(ResolvedPersistentView(catalog.asViewCatalog, ident, _))
+
+    private def lookupTable(catalog: CatalogPlugin, ident: Identifier): Option[LogicalPlan] =
+      CatalogV2Util.loadTable(catalog, ident).map {
+        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+            v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+          val v1Ident = v1Table.catalogTable.identifier
+          val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+          ResolvedPersistentView(catalog, v2Ident, V1ViewDescription(v1Table.catalogTable))
+        case table =>
+          ResolvedTable.create(catalog.asTableCatalog, ident, table)
+      }
 
     private def createRelation(
         catalog: CatalogPlugin,

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, Table, TableCatalog, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -196,12 +196,19 @@ case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
 /**
  * A plan containing resolved persistent views.
  */
-// TODO: create a generic representation for views, after we add view support to v2 catalog. For now
-//       we only hold the view schema.
 case class ResolvedPersistentView(
     catalog: CatalogPlugin,
     identifier: Identifier,
-    metadata: CatalogTable) extends LeafNodeWithoutStats {
+    metadata: ViewDescription) extends LeafNodeWithoutStats {
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * A plan containing resolved identifier with view catalog determined.
+ */
+case class ResolvedViewIdentifier(
+    catalog: ViewCatalog,
+    identifier: Identifier) extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
