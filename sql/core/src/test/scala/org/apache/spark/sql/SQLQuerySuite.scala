@@ -27,8 +27,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.mapreduce.TaskAttemptContext
 
-import org.apache.spark.{AccumulatorSuite, SparkException}
+import org.apache.spark.{AccumulatorSuite, SparkException, TaskContext}
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
@@ -41,7 +43,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -4456,6 +4458,46 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         """.stripMargin),
       Seq(Row(2), Row(1)))
   }
+
+  test("SPARK-39195: Spark OutputCommitCoordinator should abort stage " +
+    "when commit file not consiste with task status") {
+    withTable("t") {
+      withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[ThrowExceptionAfterCommitTaskSuccessCommitProtocol].getCanonicalName) {
+        val e = intercept[SparkException] {
+          sql(
+            """
+              |CREATE TABLE `t`
+              |USING parquet
+              |AS
+              |SELECT * FROM VALUES(1, 1), (1, 1), (1, 1) AS t1(a, b)""".stripMargin)
+        }.getCause
+        assert(e.isInstanceOf[SparkException])
+        assert(e.getMessage.startsWith(
+          "Job aborted due to stage failure: Authorized committer"))
+        assert(e.getMessage.endsWith(
+          "failed; but task commit success, should fail the job"))
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
+
+private class ThrowExceptionAfterCommitTaskSuccessCommitProtocol(
+    jobId: String,
+    path: String,
+    dynamicPartitionOverwrite: Boolean = false)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
+    with Serializable {
+  override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
+    val ret = super.commitTask(taskContext)
+    // After commit success, fail one task
+    val ctx = TaskContext.get()
+    if (ctx.partitionId() == 0) {
+      throw new java.io.FileNotFoundException("Intentional exception")
+    }
+    ret
+  }
+}
+
