@@ -43,7 +43,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
 
-  var defaultColumnAnalyzer: Analyzer
+  var defaultColumnAnalyzer: Analyzer = null
 
   override val defaultNamespace: Array[String] = Array("default")
 
