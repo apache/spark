@@ -103,7 +103,6 @@ private[spark] class OutputCommitCoordinator(
     val msg = AskPermissionToCommitOutput(stage, stageAttempt, partition, attemptNumber)
     coordinatorRef match {
       case Some(endpointRef) =>
-        endpointRef.send()
         ThreadUtils.awaitResult(endpointRef.ask[Boolean](msg),
           RpcUtils.askRpcTimeout(conf).duration)
       case None =>
@@ -159,7 +158,7 @@ private[spark] class OutputCommitCoordinator(
         val taskId = TaskIdentifier(stageAttempt, attemptNumber)
         stageState.failures.getOrElseUpdate(partition, mutable.Set()) += taskId
         if (stageState.authorizedCommitters(partition) == taskId) {
-          sc.foreach(_.dagScheduler.abortStage(stage, s"Authorized committer " +
+          sc.foreach(_.dagScheduler.stageFailed(stage, s"Authorized committer " +
             s"(attemptNumber=$attemptNumber, stage=$stage, partition=$partition) failed; " +
             s"but task commit success, should fail the job"))
         }
