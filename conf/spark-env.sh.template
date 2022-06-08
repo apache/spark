@@ -81,5 +81,5 @@
 # - SPARK_BEELINE_OPTS, to set config properties only for the beeline cli (e.g. "-Dx=y")
 # - SPARK_BEELINE_MEMORY, Memory for beeline (e.g. 1000M, 2G) (Default: 1G)
 
-# Options for spark-submit
-# - SPARK_SUBMIT_OPTS, to set config properties only for the spark-submit (e.g. "-Dx=y")
+# Options for spark-submit, spark-shell, pyspark, run-example, sparkR
+# - SPARK_SUBMIT_OPTS, to set config properties for spark-submit and the command that depends on spark-submit (e.g. "-Dx=y")
