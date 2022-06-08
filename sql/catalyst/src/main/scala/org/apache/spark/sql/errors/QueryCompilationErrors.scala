@@ -2186,8 +2186,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {
-    val fullName = ident.quoted
-    new AnalysisException(s"Table or view '$fullName' not found")
+    new AnalysisException(s"Table or view '${ident.quoted}' not found")
   }
 
   def unexpectedTypeOfRelationError(relation: LogicalPlan, tableName: String): Throwable = {

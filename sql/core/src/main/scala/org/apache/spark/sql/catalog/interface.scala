@@ -56,7 +56,7 @@ class Database(
  *
  * @param name name of the table.
  * @param catalog name of the catalog that the table belongs to.
- * @param namespace qualifier of the namespace that the table belongs to.
+ * @param namespace the namespace that the table belongs to.
  * @param description description of the table.
  * @param tableType type of the table (e.g. view, table).
  * @param isTemporary whether the table is a temporary table.
@@ -72,16 +72,18 @@ class Table(
     val isTemporary: Boolean)
   extends DefinedByConstructorParams {
 
-  def this(name: String, database: String, description: String, tableType: String,
-    isTemporary: Boolean) = {
+  def this(
+      name: String,
+      database: String,
+      description: String,
+      tableType: String,
+      isTemporary: Boolean) = {
     this(name, null, Array(database), description, tableType, isTemporary)
   }
 
   def database: String = {
     if (namespace == null) {
       null
-    } else if (namespace.length == 2) {
-      namespace(1)
     } else if (namespace.length == 1) {
       namespace(0)
     } else {

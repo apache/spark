@@ -314,10 +314,9 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val functionFields = ScalaReflection.getConstructorParameterValues(function)
     val columnFields = ScalaReflection.getConstructorParameterValues(column)
     assert(dbFields == Seq("nama", "descripta", "locata"))
-    assert(Seq(tableFields.apply(0), tableFields.apply(1), tableFields.apply(3),
-      tableFields.apply(4), tableFields.apply(5)) ==
+    assert(Seq(tableFields(0), tableFields(1), tableFields(3), tableFields(4), tableFields(5)) ==
       Seq("nama", "cataloa", "descripta", "typa", false))
-    assert(tableFields.apply(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))
+    assert(tableFields(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))
     assert(functionFields == Seq("nama", "databasa", "descripta", "classa", false))
     assert(columnFields == Seq("nama", "descripta", "typa", false, true, true))
     val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
