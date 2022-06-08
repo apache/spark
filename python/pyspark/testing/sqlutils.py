@@ -47,7 +47,7 @@ except ImportError as e:
 
 numpy_requirement_message = None
 try:
-    import numpy
+    import numpy  # noqa: F401
 
 except ImportError as e:
     # If numpy is not installed, skip related tests.
