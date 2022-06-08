@@ -2596,7 +2596,7 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Called by the OutputCommitCoordinator to cancel stage due to data duplicate may happen.
+   * Called by the OutputCommitCoordinator to cancel stage due to data duplication may happen.
    */
   private[scheduler] def stageFailed(stageId: Int, reason: String): Unit = {
     eventProcessLoop.post(StageFailed(stageId, reason, None))
