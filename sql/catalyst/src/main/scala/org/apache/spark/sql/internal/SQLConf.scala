@@ -3831,7 +3831,7 @@ object SQLConf {
   val LEGACY_ARRAY_SORT_HANDLES_COMPARISON_RESULT_NULL_VALUE_AS_ZERO =
     buildConf("spark.sql.legacy.arraySortHandlesComparisonResultNullAsZero")
       .internal()
-      .doc("When set to true, it throws an error if the comparator function returns null. " +
+      .doc("When set to false, it throws an error if the comparator function returns null. " +
         "If set to true, it restores the legacy behavior that handles null as zero (equal).")
       .version("3.4.0")
       .booleanConf

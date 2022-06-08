@@ -839,7 +839,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq(1d, 2d, Double.NaN, null))
   }
 
-  test("SPARK-39419: ArraySort should throw an exception when the comparison result is null") {
+  test("SPARK-39419: ArraySort should throw an exception when the comparator returns null") {
     val comparator = {
       val comp = ArraySort.comparator _
       (left: Expression, right: Expression) =>
