@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, UnspecifiedDistribution}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledJoin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -116,8 +116,24 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
       case s: SparkPlan if canUseLocalShuffleRead(s) =>
         createLocalRead(s)
       case s: SparkPlan =>
-        createProbeSideLocalRead(s)
+        createPossibleLocalRead(s)
     }
+  }
+
+  private def createPossibleLocalRead(plan: SparkPlan): SparkPlan = plan match {
+    case shuffleJoin: ShuffledJoin => shuffleJoin
+    case other =>
+      val newChildren = other.requiredChildDistribution.zip(other.children).map {
+        case (UnspecifiedDistribution, child: SparkPlan) =>
+          if (canUseLocalShuffleRead(child)) {
+            createLocalRead(child)
+          } else {
+            createPossibleLocalRead(child)
+          }
+        case (_, child) =>
+          child
+      }
+      other.withNewChildren(newChildren)
   }
 
   object BroadcastJoinWithShuffleLeft {
