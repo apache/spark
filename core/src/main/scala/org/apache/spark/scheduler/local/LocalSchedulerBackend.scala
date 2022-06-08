@@ -21,8 +21,12 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -114,6 +118,8 @@ private[spark] class LocalSchedulerBackend(
     override def conf: SparkConf = LocalSchedulerBackend.this.conf
     override def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
   }
+  // The token manager used to create security tokens.
+  private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
   /**
    * Returns a list of URLs representing the user classpath.
@@ -131,6 +137,27 @@ private[spark] class LocalSchedulerBackend(
     val rpcEnv = SparkEnv.get.rpcEnv
     val executorEndpoint = new LocalEndpoint(rpcEnv, userClassPath, scheduler, this, totalCores)
     localEndpoint = rpcEnv.setupEndpoint("LocalSchedulerBackendEndpoint", executorEndpoint)
+    if (UserGroupInformation.isSecurityEnabled()) {
+      delegationTokenManager = Some(new HadoopDelegationTokenManager(
+        conf, scheduler.sc.hadoopConfiguration, localEndpoint))
+      delegationTokenManager.foreach { dtm =>
+        val ugi = UserGroupInformation.getCurrentUser()
+        val tokens = if (dtm.renewalEnabled) {
+          dtm.start()
+        } else {
+          val creds = ugi.getCredentials()
+          dtm.obtainDelegationTokens(creds)
+          if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
+            SparkHadoopUtil.get.serialize(creds)
+          } else {
+            null
+          }
+        }
+        if (tokens != null) {
+          SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
+        }
+      }
+    }
     listenerBus.post(SparkListenerExecutorAdded(
       System.currentTimeMillis,
       executorEndpoint.localExecutorId,
@@ -141,6 +168,7 @@ private[spark] class LocalSchedulerBackend(
   }
 
   override def stop(): Unit = {
+    delegationTokenManager.foreach(_.stop())
     stop(SparkAppHandle.State.FINISHED)
   }
 
