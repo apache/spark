@@ -4460,7 +4460,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-39195: Spark OutputCommitCoordinator should abort stage " +
-    "when commit file not consiste with task status") {
+    "when committed file not consistent with task status") {
     withTable("t") {
       withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
         classOf[ThrowExceptionAfterCommitTaskSuccessCommitProtocol].getCanonicalName) {
