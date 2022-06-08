@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -57,7 +58,17 @@ case class DynamicPruningSubquery(
 
   override def nullable: Boolean = false
 
-  override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = copy(buildQuery = plan)
+  override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = {
+    if (buildQuery.output.size == plan.output.size &&
+      buildQuery.output.zip(plan.output).forall { case (b, p) => b.dataType == p.dataType }) {
+      val outputMap = buildQuery.output.map(_.canonicalized).zip(plan.output).toMap
+      val newBuildKeys = buildKeys.map(k => outputMap(k.canonicalized))
+      copy(buildKeys = newBuildKeys, buildQuery = plan)
+    } else {
+      throw new AnalysisException("Failed to update the plan, please make sure the new plan's " +
+        "output and the original plan's output are the same(including data type and order).")
+    }
+  }
 
   override lazy val resolved: Boolean = {
     pruningKey.resolved &&
