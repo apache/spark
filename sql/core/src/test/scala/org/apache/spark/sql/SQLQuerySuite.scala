@@ -4470,7 +4470,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
               |CREATE TABLE `t`
               |USING parquet
               |AS
-              |SELECT * FROM VALUES(1, 1), (1, 1), (1, 1) AS t1(a, b)""".stripMargin)
+              |SELECT /*+ REPARTITION(3) */ *
+              |FROM VALUES(1, 1), (1, 1), (1, 1) AS t1(a, b)""".stripMargin)
         }.getCause
         assert(e.isInstanceOf[SparkException])
         assert(e.getMessage.startsWith(
@@ -4494,7 +4495,7 @@ private class ThrowExceptionAfterCommitTaskSuccessCommitProtocol(
     val ret = super.commitTask(taskContext)
     // After commit success, fail one task
     val ctx = TaskContext.get()
-    if (ctx.partitionId() == 0) {
+    if (ctx.partitionId() == 2) {
       throw new java.io.FileNotFoundException("Intentional exception")
     }
     ret
