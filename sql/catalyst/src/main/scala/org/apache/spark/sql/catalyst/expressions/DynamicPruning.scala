@@ -62,7 +62,10 @@ case class DynamicPruningSubquery(
     if (buildQuery.output.size == plan.output.size &&
       buildQuery.output.zip(plan.output).forall { case (b, p) => b.dataType == p.dataType }) {
       val outputMap = buildQuery.output.map(_.canonicalized).zip(plan.output).toMap
-      val newBuildKeys = buildKeys.map(k => outputMap(k.canonicalized))
+      val newBuildKeys = buildKeys.map(_.transformUp {
+        case a: Attribute => outputMap.getOrElse(a.canonicalized, a)
+        case e => e
+      })
       copy(buildKeys = newBuildKeys, buildQuery = plan)
     } else {
       throw new AnalysisException("Failed to update the plan, please make sure the new plan's " +

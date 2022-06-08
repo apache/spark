@@ -39,6 +39,13 @@ class DynamicPruningSuite extends PlanTest {
     assert(withNewPlan.buildKeys.head.semanticEquals(testRelation.output.head))
   }
 
+  test("Test withNewPlan can successfully update buildKeys with Literal") {
+    val testRelation = LocalRelation($"x1".int, $"y1".long)
+    val withNewPlan =
+      originDynamicPruningSubquery.copy(buildKeys = Seq(x + 1)).withNewPlan(testRelation)
+    assert(withNewPlan.buildKeys.head.semanticEquals(testRelation.output.head + 1))
+  }
+
   test("Test withNewPlan can not update plan") {
     val e1 = intercept[AnalysisException] {
       originDynamicPruningSubquery.withNewPlan(LocalRelation($"x1".long, $"y1".long))
