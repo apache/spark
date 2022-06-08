@@ -674,7 +674,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   test("list tables when there is `default` catalog") {
     spark.conf.set("spark.sql.catalog.default", classOf[InMemoryCatalog].getName)
 
-    assert(spark.catalog.listTables().collect().isEmpty)
+    assert(spark.catalog.listTables("default").collect().isEmpty)
     createTable("my_table1")
     createTable("my_table2")
     createTempTable("my_temp_table")
