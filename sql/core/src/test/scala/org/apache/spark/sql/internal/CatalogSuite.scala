@@ -670,4 +670,15 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
         expectedTable2.isTemporary == t.isTemporary))
     }
   }
+
+  test("list tables when there is `default` catalog") {
+    spark.conf.set("spark.sql.catalog.default", classOf[InMemoryCatalog].getName)
+
+    assert(spark.catalog.listTables().collect().isEmpty)
+    createTable("my_table1")
+    createTable("my_table2")
+    createTempTable("my_temp_table")
+    assert(spark.catalog.listTables("default").collect().map(_.name).toSet ==
+      Set("my_table1", "my_table2", "my_temp_table"))
+  }
 }

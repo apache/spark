@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
@@ -98,10 +98,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
-    // dbName could be either 2-part name or 3-part name. We assume it is 2-part name
+    // `dbName` could be either a single database name (behavior in Spark 3.3 and prior) or
+    // a qualified namespace with catalog name. We assume it's a single database name
     // and check if we can find the dbName in sessionCatalog. If so we listTables under
     // that database. Otherwise we try 3-part name parsing and locate the database.
-    if (sessionCatalog.databaseExists(dbName) || sessionCatalog.isGlobalTempView(dbName)) {
+    if (sessionCatalog.databaseExists(dbName) || sessionCatalog.isGlobalTempViewDB(dbName)) {
       val tables = sessionCatalog.listTables(dbName).map(makeTable)
       CatalogImpl.makeDataset(tables, sparkSession)
     } else {
@@ -132,10 +133,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
     val isTemp = sessionCatalog.isTempView(tableIdent)
     val qualifier =
-      Array(metadata.map(_.identifier.database).getOrElse(tableIdent.database).orNull)
+      metadata.map(_.identifier.database).getOrElse(tableIdent.database).map(Array(_)).orNull
     new Table(
       name = tableIdent.table,
-      catalog = "spark_catalog",
+      catalog = CatalogManager.SESSION_CATALOG_NAME,
       namespace = qualifier,
       description = metadata.map(_.comment.orNull).orNull,
       tableType = if (isTemp) "TEMPORARY" else metadata.map(_.tableType.name).orNull,
