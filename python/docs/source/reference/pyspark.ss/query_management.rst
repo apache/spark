@@ -38,8 +38,6 @@ Query Management
     StreamingQuery.status
     StreamingQuery.stop
     StreamingQueryManager.active
-    StreamingQueryManager.addListener
     StreamingQueryManager.awaitAnyTermination
     StreamingQueryManager.get
-    StreamingQueryManager.removeListener
     StreamingQueryManager.resetTerminated

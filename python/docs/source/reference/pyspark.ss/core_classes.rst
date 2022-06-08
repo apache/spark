@@ -29,4 +29,3 @@ Core Classes
     DataStreamWriter
     StreamingQuery
     StreamingQueryManager
-    StreamingQueryListener
