@@ -140,9 +140,9 @@ private[spark] class SparkUnsupportedOperationException(
     with SparkThrowable {
 
   def this(
-            errorClass: String,
-            errorSubClass: String,
-            messageParameters: Array[String]) =
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Array[String]) =
     this(
       errorClass = errorClass,
       errorSubClass = Some(errorSubClass),
