@@ -358,14 +358,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       origin = t.origin)
   }
 
-  def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
+  def insertIntoViewNotAllowedError(identifier: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1010",
-      messageParameters = Map("identifier" -> identifier.toString),
+      messageParameters = Map("identifier" -> identifier),
       origin = t.origin)
   }
 
-  def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
+  def writeIntoViewNotAllowedError(identifier: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1011",
       messageParameters = Map("identifier" -> identifier.toString),
@@ -2669,12 +2669,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def recursiveViewDetectedError(
-      viewIdent: TableIdentifier,
-      newPath: Seq[TableIdentifier]): Throwable = {
+      viewIdent: String,
+      newPath: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1281",
       messageParameters = Map(
-        "viewIdent" -> viewIdent.toString,
+        "viewIdent" -> viewIdent,
         "newPath" -> newPath.mkString(" -> ")))
   }
 
@@ -3426,4 +3426,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "NULLABLE_ROW_ID_ATTRIBUTES",
       messageParameters = Map("nullableRowIdAttrs" -> nullableRowIdAttrs.mkString(", ")))
   }
+
+  def cannotUnsetNonExistentViewProperty(ident: Identifier, property: String): Throwable =
+    throw new AnalysisException(
+      s"Attempted to unset non-existent property '$property' in view $ident")
+
+  def cannotMoveViewBetweenCatalogs(oldCatalog: String, newCatalog: String): Throwable =
+    throw new AnalysisException(
+      s"Cannot move view between catalogs: from=$oldCatalog and to=$newCatalog")
 }

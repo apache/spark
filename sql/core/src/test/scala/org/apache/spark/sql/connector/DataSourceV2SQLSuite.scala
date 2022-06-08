@@ -1946,7 +1946,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("AlterTable: renaming views are not supported") {
+  test("ALTER VIEW RENAME: not a view catalog") {
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
@@ -2369,7 +2369,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("View commands are not supported in v2 catalogs") {
+  ignore("View commands are not supported in v2 catalogs") {
     def validateViewCommand(sqlStatement: String): Unit = {
       val e = intercept[AnalysisException](sql(sqlStatement))
       checkError(

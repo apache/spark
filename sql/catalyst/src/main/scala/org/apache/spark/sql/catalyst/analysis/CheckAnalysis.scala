@@ -607,6 +607,44 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
 
+          case c: CreateView =>
+            if (c.originalText.isEmpty) {
+              throw new AnalysisException(
+                "'originalText' must be provided to create permanent view")
+            }
+
+            if (c.allowExisting && c.replace) {
+              throw new AnalysisException(
+                "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
+            }
+
+          // If the view output doesn't have the same number of columns neither with the child
+          // output, nor with the query column names, throw an AnalysisException.
+          // If the view's child output can't up cast to the view output,
+          // throw an AnalysisException, too.
+          case v @ View(desc, _, child) if child.resolved && v.output != child.output =>
+            val queryColumnNames = desc.viewQueryColumnNames
+            val queryOutput = if (queryColumnNames.nonEmpty) {
+              if (v.output.length != queryColumnNames.length) {
+                // If the view output doesn't have the same number of columns with the query column
+                // names, throw an AnalysisException.
+                throw new AnalysisException(
+                  s"The view output ${v.output.mkString("[", ",", "]")} doesn't have the same" +
+                    "number of columns with the query column names " +
+                    s"${queryColumnNames.mkString("[", ",", "]")}")
+              }
+              val resolver = SQLConf.get.resolver
+              queryColumnNames.map { colName =>
+                child.output.find { attr =>
+                  resolver(attr.name, colName)
+                }.getOrElse(throw new AnalysisException(
+                  s"Attribute with name '$colName' is not found in " +
+                    s"'${child.output.map(_.name).mkString("(", ",", ")")}'"))
+              }
+            } else {
+              child.output
+            }
+
           case _ => // Falls back to the following checks
         }
 

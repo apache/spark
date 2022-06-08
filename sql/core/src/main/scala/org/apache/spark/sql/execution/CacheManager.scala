@@ -26,7 +26,7 @@ import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CatalogTableViewDescription, IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -185,7 +185,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         isSameName(ident.qualifier :+ ident.name) &&
           isSameName(catalog.name() +: v2Ident.namespace() :+ v2Ident.name())
 
-      case SubqueryAlias(ident, View(catalogTable, _, _)) =>
+      case SubqueryAlias(ident, View(CatalogTableViewDescription(catalogTable), _, _)) =>
         val v1Ident = catalogTable.identifier
         isSameName(ident.qualifier :+ ident.name) &&
           isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)

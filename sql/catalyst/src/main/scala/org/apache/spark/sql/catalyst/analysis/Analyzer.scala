@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields
+import org.apache.spark.sql.catalyst.parser.{ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -43,7 +44,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{View => _, _}
+import org.apache.spark.sql.connector.catalog.{View => V2View, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
@@ -240,6 +241,11 @@ class Analyzer(override val catalogManager: CatalogManager)
       maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
+   * Override to provide additional rules for the "Substitution" batch.
+   */
+  val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Override to provide additional rules for the "Resolution" batch.
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
@@ -263,11 +269,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
       // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early
       // at the beginning of analysis.
-      OptimizeUpdateFields,
-      CTESubstitution,
-      WindowsSubstitution,
-      EliminateUnions,
-      SubstituteUnresolvedOrdinals),
+      OptimizeUpdateFields +:
+      CTESubstitution +:
+      WindowsSubstitution +:
+      EliminateUnions +:
+      SubstituteUnresolvedOrdinals +:
+      extendedSubstitutionRules : _*),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -449,6 +456,74 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
       }
     }
+  }
+
+  /**
+   * Substitute persisted views in parsed plans with parsed view sql text.
+   */
+  case class ViewSubstitution(sqlParser: ParserInterface) extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case u @ UnresolvedRelation(nameParts, _, _) if v1SessionCatalog.isTempView(nameParts) =>
+        u
+      case u @ UnresolvedRelation(
+          parts @ NonSessionCatalogAndIdentifier(catalog, ident), _, _) if !isSQLOnFile(parts) =>
+        CatalogV2Util.loadView(catalog, ident)
+            .map(createViewRelation(parts.quoted, _))
+            .getOrElse(u)
+    }
+
+    private def isSQLOnFile(parts: Seq[String]): Boolean = parts match {
+      case Seq(_, path) if path.contains("/") => true
+      case _ => false
+    }
+
+    private def createViewRelation(name: String, view: V2View): LogicalPlan = {
+      if (!catalogManager.isCatalogRegistered(view.currentCatalog)) {
+        throw new AnalysisException(
+          s"Invalid current catalog '${view.currentCatalog}' in view '$name'")
+      }
+
+      val child = parseViewText(name, view.query)
+      val desc = V2ViewDescription(name, view)
+      val qualifiedChild = desc.viewCatalogAndNamespace match {
+        case Seq() =>
+          // Views from Spark 2.2 or prior do not store catalog or namespace,
+          // however its sql text should already be fully qualified.
+          child
+        case catalogAndNamespace =>
+          // Substitute CTEs within the view before qualifying table identifiers
+          qualifyTableIdentifiers(CTESubstitution.apply(child), catalogAndNamespace)
+      }
+
+      // The relation is a view, so we wrap the relation by:
+      // 1. Add a [[View]] operator over the relation to keep track of the view desc;
+      // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
+      SubqueryAlias(name, View(desc, false, qualifiedChild))
+    }
+
+    private def parseViewText(name: String, viewText: String): LogicalPlan = {
+      try {
+        sqlParser.parsePlan(viewText)
+      } catch {
+        case _: ParseException =>
+          throw QueryCompilationErrors.invalidViewText(viewText, name)
+      }
+    }
+
+    /**
+     * Qualify table identifiers with default catalog and namespace if necessary.
+     */
+    private def qualifyTableIdentifiers(
+        child: LogicalPlan,
+        catalogAndNamespace: Seq[String]): LogicalPlan =
+      child transform {
+        case u @ UnresolvedRelation(Seq(table), _, _) =>
+          u.copy(multipartIdentifier = catalogAndNamespace :+ table)
+        case u @ UnresolvedRelation(parts, _, _)
+            if !catalogManager.isCatalogRegistered(parts.head) =>
+          u.copy(multipartIdentifier = catalogAndNamespace.head +: parts)
+      }
   }
 
   /**
@@ -1067,7 +1142,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(desc, isTempView, child) if !child.resolved =>
+      case view @ View(CatalogTableViewDescription(desc), isTempView, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc) {
           val nestedViewDepth = AnalysisContext.get.nestedViewDepth
@@ -1206,22 +1281,31 @@ class Analyzer(override val catalogManager: CatalogManager)
       }.orElse {
         expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog)) {
-              throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
-            }
-            CatalogV2Util.loadTable(catalog, ident).map {
-              case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
-                v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                val v1Ident = v1Table.catalogTable.identifier
-                val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
-                ResolvedPersistentView(catalog, v2Ident, v1Table.catalogTable.schema)
-              case table =>
-                ResolvedTable.create(catalog.asTableCatalog, ident, table)
-            }
+            lookupView(catalog, ident)
+                .orElse(lookupTable(catalog, ident))
           case _ => None
         }
       }
     }
+
+    private def lookupView(catalog: CatalogPlugin, ident: Identifier): Option[LogicalPlan] =
+      CatalogV2Util.loadView(catalog, ident).map {
+        case view if CatalogV2Util.isSessionCatalog(catalog) =>
+          ResolvedPersistentView(catalog, ident, view.schema)
+        case view =>
+          ResolvedV2View(catalog.asViewCatalog, ident, view)
+      }
+
+    private def lookupTable(catalog: CatalogPlugin, ident: Identifier): Option[LogicalPlan] =
+      CatalogV2Util.loadTable(catalog, ident).map {
+        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+            v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+          val v1Ident = v1Table.catalogTable.identifier
+          val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+          analysis.ResolvedPersistentView(catalog, v2Ident, v1Table.catalogTable.schema)
+        case table =>
+          ResolvedTable.create(catalog.asTableCatalog, ident, table)
+      }
 
     private def createRelation(
         catalog: CatalogPlugin,

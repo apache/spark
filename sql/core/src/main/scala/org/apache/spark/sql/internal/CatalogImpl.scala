@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, TableSpec, View}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, FunctionCatalog, Identifier, SupportsNamespaces, Table => V2Table, TableCatalog, V1Table}
+import org.apache.spark.sql.catalyst.plans.logical.{CatalogTableViewDescription, CreateTable, LocalRelation, LogicalPlan, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, TableSpec, View}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, FunctionCatalog, Identifier, SupportsNamespaces, TableCatalog, V1Table, Table => V2Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.ShowTablesCommand
@@ -805,8 +805,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // Temporary and global temporary views are not supposed to be put into the relation cache
     // since they are tracked separately. V1 and V2 plans are cache invalidated accordingly.
     def invalidateCache(plan: LogicalPlan): Unit = plan match {
-      case v: View =>
-        if (!v.isTempView) sessionCatalog.invalidateCachedTable(v.desc.identifier)
+      case v @ View(CatalogTableViewDescription(desc), _, _) =>
+        if (!v.isTempView) sessionCatalog.invalidateCachedTable(desc.identifier)
       case r: LogicalRelation =>
         sessionCatalog.invalidateCachedTable(r.catalogTable.get.identifier)
       case h: HiveTableRelation =>
