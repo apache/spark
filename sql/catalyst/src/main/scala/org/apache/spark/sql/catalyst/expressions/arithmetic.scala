@@ -29,7 +29,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.Utils
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
@@ -608,7 +607,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       "\"\""
     }
-    val operation = operandsDataType match {
+    val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalValue = ctx.freshName("decimalValue")
         s"""
@@ -795,7 +794,7 @@ case class IntegralDivide(
         LongType.integral.asInstanceOf[Integral[Any]]
     }
     (x, y) => {
-      val res = dataType match {
+      val res = super.dataType match {
         case DecimalType.Fixed(precision, scale) =>
           checkDecimalOverflow(integral.quot(x, y).asInstanceOf[Decimal], precision, scale)
         case _ => integral.quot(x, y)
@@ -921,7 +920,7 @@ case class Pmod(
 
   override def nullable: Boolean = true
 
-  override protected def decimalMethod: String = "remainder"
+  override def decimalMethod: String = "remainder"
 
   // This follows Remainder rule
   override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
@@ -953,15 +952,16 @@ case class Pmod(
           // when we reach here, failOnError must bet true.
           throw QueryExecutionErrors.divideByZeroError(queryContext)
         }
-        input1 match {
-          case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
-          case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
-          case s: Short => pmod(s, input2.asInstanceOf[java.lang.Short])
-          case b: Byte => pmod(b, input2.asInstanceOf[java.lang.Byte])
-          case f: Float => pmod(f, input2.asInstanceOf[java.lang.Float])
-          case d: Double => pmod(d, input2.asInstanceOf[java.lang.Double])
-          case d: Decimal => checkOverflow(
-            pmod(d, input2.asInstanceOf[Decimal]), dataType.asInstanceOf[DecimalType])
+
+        dataType match {
+          case _: IntegerType => pmod(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
+          case _: LongType => pmod(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+          case _: ShortType => pmod(input1.asInstanceOf[Short], input2.asInstanceOf[Short])
+          case _: ByteType => pmod(input1.asInstanceOf[Byte], input2.asInstanceOf[Byte])
+          case _: FloatType => pmod(input1.asInstanceOf[Float], input2.asInstanceOf[Float])
+          case _: DoubleType => pmod(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
+          case DecimalType.Fixed(precision, scale) => checkDecimalOverflow(
+            pmod(input1.asInstanceOf[Decimal], input2.asInstanceOf[Decimal]), precision, scale)
         }
       }
     }
