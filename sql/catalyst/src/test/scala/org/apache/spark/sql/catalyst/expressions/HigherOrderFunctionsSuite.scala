@@ -838,4 +838,21 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
       Seq(1d, 2d, Double.NaN, null))
   }
+
+  test("SPARK-39419: ArraySort should throw an exception when the comparison result is null") {
+    val comparator = {
+      val comp = ArraySort.comparator _
+      (left: Expression, right: Expression) =>
+        If(comp(left, right) === 0, Literal.create(null, IntegerType), comp(left, right))
+    }
+
+    checkExceptionInExpression[NullPointerException](
+      arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator), "The comparison result is null")
+
+    withSQLConf(
+        SQLConf.LEGACY_ARRAY_SORT_HANDLES_COMPARISON_RESULT_NULL_VALUE_AS_ZERO.key -> "true") {
+      checkEvaluation(arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator),
+        Seq(1, 1, 2, 3))
+    }
+  }
 }
