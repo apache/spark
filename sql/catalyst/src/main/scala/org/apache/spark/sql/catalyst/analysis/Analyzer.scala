@@ -2647,10 +2647,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       (extraAggExprs.toSeq, transformed)
     }
 
-    private def trimTempResolvedField(input: Expression): Expression = input.transform {
-      case t: TempResolvedColumn => t.child
-    }
-
     private def buildAggExprList(
         expr: Expression,
         agg: Aggregate,
@@ -2666,12 +2662,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       } else {
         expr match {
           case ae: AggregateExpression =>
-            val cleaned = trimTempResolvedField(ae)
+            val cleaned = RemoveTempResolvedColumn.trimTempResolvedColumn(ae)
             val alias = Alias(cleaned, cleaned.toString)()
             aggExprList += alias
             alias.toAttribute
           case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
-            trimTempResolvedField(grouping) match {
+            RemoveTempResolvedColumn.trimTempResolvedColumn(grouping) match {
               case ne: NamedExpression =>
                 aggExprList += ne
                 ne.toAttribute
@@ -2683,7 +2679,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case t: TempResolvedColumn =>
             // Undo the resolution as this column is neither inside aggregate functions nor a
             // grouping column. It shouldn't be resolved with `agg.child.output`.
-            CurrentOrigin.withOrigin(t.origin)(UnresolvedAttribute(t.nameParts))
+            RemoveTempResolvedColumn.restoreTempResolvedColumn(t)
           case other =>
             other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprList)))
         }
@@ -4352,25 +4348,37 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.foreachUp {
-      // HAVING clause will be resolved as a Filter. When having func(column with wrong data type),
-      // the column could be wrapped by a TempResolvedColumn, e.g. mean(tempresolvedcolumn(t.c)).
-      // Because TempResolvedColumn can still preserve column data type, here is a chance to check
-      // if the data type matches with the required data type of the function. We can throw an error
-      // when data types mismatches.
-      case operator: Filter =>
-        operator.expressions.foreach(_.foreachUp {
-          case e: Expression if e.childrenResolved && e.checkInputDataTypes().isFailure =>
-            e.checkInputDataTypes() match {
-              case TypeCheckResult.TypeCheckFailure(message) =>
-                e.setTagValue(DATA_TYPE_MISMATCH_ERROR_MESSAGE, message)
-            }
-          case _ =>
-        })
-      case _ =>
+      case f @ Filter(cond, agg: Aggregate) if agg.resolved =>
+        withOrigin(f.origin)(f.copy(condition = trimOrRestoreTempResolvedColumn(agg, cond)))
+      case s @ Sort(sortOrder, _, agg: Aggregate) if agg.resolved =>
+        val newSortOrder = sortOrder.map { order =>
+          trimOrRestoreTempResolvedColumn(agg, order).asInstanceOf[SortOrder]
+        }
+        withOrigin(s.origin)(s.copy(order = newSortOrder))
     }
 
     plan.resolveExpressions {
-      case t: TempResolvedColumn => UnresolvedAttribute(t.nameParts)
+      case t: TempResolvedColumn => restoreTempResolvedColumn(t)
     }
+  }
+
+  // The code here matches `ResolveAggregateFunctions.buildAggExprList`.
+  private def trimOrRestoreTempResolvedColumn(agg: Aggregate, e: Expression): Expression = e match {
+    case ae: AggregateExpression =>
+      trimTempResolvedColumn(ae)
+    case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
+      trimTempResolvedColumn(grouping)
+    case t: TempResolvedColumn =>
+      // Undo the resolution as this column is neither inside aggregate functions nor a
+      // grouping column. It shouldn't be resolved with `agg.child.output`.
+      restoreTempResolvedColumn(t)
+  }
+
+  def trimTempResolvedColumn(input: Expression): Expression = input.transform {
+    case t: TempResolvedColumn => t.child
+  }
+
+  def restoreTempResolvedColumn(t: TempResolvedColumn): Expression = {
+    CurrentOrigin.withOrigin(t.origin)(UnresolvedAttribute(t.nameParts))
   }
 }
