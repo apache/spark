@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission._
 import java.util.EnumSet
-import java.util.concurrent.Semaphore
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -303,11 +302,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     s1._conf = yarnConfig
     yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
-    val semaphore = new Semaphore(0)
     val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
     s1.setShuffleMergeManager(
       ShuffleTestAccessor.createMergeShuffleFileManagerForTest(transportConf,
-        s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME), semaphore))
+        s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME)))
     s1.init(yarnConfig)
     val secretsFile = s1.secretsFile
     secretsFile should be (null)
@@ -367,8 +365,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s1.stopApplication(new ApplicationTerminationContext(app2Id))
     s1.stopApplication(new ApplicationTerminationContext(app3Id))
     s1.stopApplication(new ApplicationTerminationContext(app4Id))
-    semaphore.acquire()
-    semaphore.acquire()
     ShuffleTestAccessor.reloadRegisteredExecutors(blockResolverDB) shouldBe empty
     ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager, mergeManagerDB) shouldBe empty
   }

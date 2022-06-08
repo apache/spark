@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
+import java.rmi.Remote;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -44,6 +45,7 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.apache.spark.network.shuffle.MergedShuffleFileManager;
 import org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager;
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -244,10 +246,9 @@ public class YarnShuffleService extends AuxiliaryService {
         mergeManagerFile = initRecoveryDb(SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME);
       }
 
-      TransportConf transportConf = new TransportConf("shuffle",new HadoopConfigProvider(_conf));
+      TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
       if (shuffleMergeManager == null) {
-        shuffleMergeManager = newMergedShuffleFileManagerInstance(
-          transportConf, mergeManagerFile);
+        shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
       }
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
@@ -301,7 +302,7 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   @VisibleForTesting
-  public void setShuffleMergeManager(MergedShuffleFileManager mergeManager) {
+  void setShuffleMergeManager(MergedShuffleFileManager mergeManager) {
     this.shuffleMergeManager = mergeManager;
   }
 
@@ -472,7 +473,6 @@ public class YarnShuffleService extends AuxiliaryService {
     Preconditions.checkNotNull(_recoveryPath,
       "recovery path should not be null if NM recovery is enabled");
 
-    logger.info("recoverPath for db = " + dbName);
     File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbName);
     if (recoveryFile.exists()) {
       return recoveryFile;

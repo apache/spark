@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -218,7 +219,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 "merge metadata since received shuffleMergeId is higher than latest " +
                 "shuffleMergeId {}", appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId,
                 shuffleMergeId, latestShuffleMergeId);
-            mergedShuffleCleaner.execute(() ->
+            submitCleanupTask(() ->
                 closeAndDeleteOutdatedPartitions(mergePartitionsInfo.shuffleMergePartitions));
             return new AppShuffleMergePartitionsInfo(shuffleMergeId, false);
           } else {
@@ -238,16 +239,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     return shuffleMergePartitions.computeIfAbsent(reduceId, key -> {
       // It only gets here when the key is not present in the map. The first time the merge
       // manager receives a pushed block for a given application shuffle partition.
-      File dataFile = appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
+      File dataFile =
+        appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
       File indexFile = new File(
         appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
       File metaFile =
         appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
       try {
-        AppShufflePartitionInfo appShufflePartitionInfo =
-            newAppShufflePartitionInfo(appShuffleInfo, shuffleId, shuffleMergeId, reduceId,
-                dataFile, indexFile, metaFile);
-        return appShufflePartitionInfo;
+        return newAppShufflePartitionInfo(appShuffleInfo, shuffleId, shuffleMergeId, reduceId,
+            dataFile, indexFile, metaFile);
       } catch (IOException e) {
         logger.error("{} attempt {} shuffle {} shuffleMerge {}: cannot create merged shuffle " +
             "partition with data file {}, index file {}, and meta file {}", appShuffleInfo.appId,
@@ -323,8 +323,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         shuffleId, shuffleMergeId, reduceId,
         ErrorHandler.BlockFetchErrorHandler.STALE_SHUFFLE_BLOCK_FETCH));
     }
-    File dataFile =
-      appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
+    File dataFile = appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
     if (!dataFile.exists()) {
       throw new RuntimeException(String.format("Merged shuffle data file %s not found",
         dataFile.getPath()));
@@ -355,7 +354,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
     AppShuffleInfo appShuffleInfo = appsShuffleInfo.remove(appId);
     if (null != appShuffleInfo) {
-      mergedShuffleCleaner.execute(
+      submitCleanupTask(
         () -> closeAndDeletePartitions(appShuffleInfo, cleanupLocalDirs, true));
     }
     removeAppAttemptPathInfoFromDB(
@@ -403,7 +402,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         .forEach((shuffleId, shuffleInfo) -> shuffleInfo.shuffleMergePartitions
           .forEach((shuffleMergeId, partitionInfo) -> {
             synchronized (partitionInfo) {
-              removeAppShufflePartitionInfoFromInDB(
+              removeAppShufflePartitionInfoFromDB(
                 new AppAttemptShuffleMergeId(
                   appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId));
             }
@@ -422,12 +421,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       .forEach((partitionId, partitionInfo) -> {
         synchronized (partitionInfo) {
           partitionInfo.closeAllFilesAndDeleteIfNeeded(true);
-          removeAppShufflePartitionInfoFromInDB(partitionInfo.appAttemptShuffleMergeId);
+          removeAppShufflePartitionInfoFromDB(partitionInfo.appAttemptShuffleMergeId);
         }
       });
   }
 
-  void removeAppShufflePartitionInfoFromInDB(AppAttemptShuffleMergeId appAttemptShuffleMergeId) {
+  void removeAppShufflePartitionInfoFromDB(AppAttemptShuffleMergeId appAttemptShuffleMergeId) {
     if (db != null) {
       try {
         db.delete(getDbAppAttemptShufflePartitionKey(appAttemptShuffleMergeId));
@@ -604,7 +603,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         } else if (msg.shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
           // If no blocks pushed for the finalizeShuffleMerge shuffleMergeId then return
           // empty MergeStatuses but cleanup the older shuffleMergeId files.
-          mergedShuffleCleaner.execute(() ->
+          submitCleanupTask(() ->
               closeAndDeleteOutdatedPartitions(mergePartitionsInfo.shuffleMergePartitions));
         } else {
           // This block covers:
@@ -728,7 +727,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             logger.warn("Cleanup shuffle info and merged shuffle files for {}_{} as new " +
                 "application attempt registered", appId, appShuffleInfo.attemptId);
             // Clean up all the merge shuffle related information in the DB for the former attempt
-            mergedShuffleCleaner.execute(
+            submitCleanupTask(
               () -> {
                 removeAppAttemptPathInfoFromDB(new AppAttemptId(appId, appShuffleInfo.attemptId));
                 closeAndDeletePartitions(appShuffleInfo, true, true);
@@ -843,7 +842,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     List<byte[]> dbKeysToBeRemoved = reloadActiveAppAttemptsPathInfo(db);
     dbKeysToBeRemoved.addAll(reloadFinalizedAppAttemptsShuffleMergeInfo(db));
     // Clean up invalid data stored in DB
-    mergedShuffleCleaner.execute(() ->
+    submitCleanupTask(() ->
         dbKeysToBeRemoved.forEach(
             (key) -> {
               try {
@@ -881,9 +880,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             (appId, existingAppShuffleInfo) -> {
               if (existingAppShuffleInfo == null ||
                   existingAppShuffleInfo.attemptId < appAttemptId.attemptId) {
-                dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(
-                    new AppAttemptId(
-                        existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId)));
+                if (existingAppShuffleInfo != null) {
+                  dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(
+                      new AppAttemptId(
+                          existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId)));
+                }
                 return new AppShuffleInfo(
                     appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
               } else {
@@ -916,10 +917,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
               (shuffleId, existingMergePartitionInfo) -> {
                 if (existingMergePartitionInfo == null ||
                     existingMergePartitionInfo.shuffleMergeId < partitionId.shuffleMergeId) {
-                  dbKeysToBeRemoved.add(getDbAppAttemptShufflePartitionKey(
-                      new AppAttemptShuffleMergeId(
-                          appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId,
-                          existingMergePartitionInfo.shuffleMergeId)));
+                  if (existingMergePartitionInfo != null) {
+                    dbKeysToBeRemoved.add(getDbAppAttemptShufflePartitionKey(
+                        new AppAttemptShuffleMergeId(
+                            appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId,
+                            existingMergePartitionInfo.shuffleMergeId)));
+                  }
                   return new AppShuffleMergePartitionsInfo(partitionId.shuffleMergeId, true);
                 } else {
                   dbKeysToBeRemoved.add(e.getKey());
@@ -927,12 +930,17 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 }
               });
         } else {
-          logger.warn("Adding dangling key {} in DB to clean up list", key);
+          logger.info("Adding dangling key {} in DB to clean up list", key);
           dbKeysToBeRemoved.add(e.getKey());
         }
       }
     }
     return dbKeysToBeRemoved;
+  }
+
+  @VisibleForTesting
+  void submitCleanupTask(Runnable task) {
+    mergedShuffleCleaner.execute(task);
   }
 
   /**
@@ -1290,6 +1298,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      AppAttemptId appAttemptId = (AppAttemptId) o;
+      return Objects.equals(appId, appAttemptId.appId) &&
+          Objects.equals(attemptId, appAttemptId.attemptId);
+    }
+
+    @Override
     public String toString() {
       return String.format("Application %s_%s", appId, attemptId);
     }
@@ -1340,6 +1358,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.attemptId = attemptId;
       this.shuffleId = shuffleId;
       this.shuffleMergeId = shuffleMergeId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      AppAttemptShuffleMergeId appAttemptShuffleMergeId = (AppAttemptShuffleMergeId) o;
+      return Objects.equals(appId, appAttemptShuffleMergeId.appId) &&
+          Objects.equals(attemptId, appAttemptShuffleMergeId.attemptId) &&
+          Objects.equals(shuffleId, appAttemptShuffleMergeId.shuffleId) &&
+          Objects.equals(shuffleMergeId, appAttemptShuffleMergeId.shuffleMergeId);
     }
 
     @Override
@@ -1616,6 +1646,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         logger.info("Updated active local dirs {} and sub dirs {} for application {}",
           Arrays.toString(activeLocalDirs),subDirsPerLocalDir, appId);
       }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      AppPathsInfo appPathsInfo = (AppPathsInfo) o;
+      return Arrays.equals(activeLocalDirs, appPathsInfo.activeLocalDirs) &&
+          Objects.equals(subDirsPerLocalDir, appPathsInfo.subDirsPerLocalDir);
     }
   }
 

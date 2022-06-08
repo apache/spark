@@ -19,7 +19,6 @@ package org.apache.spark.network.shuffle
 import java.io.File
 import java.nio.channels.FileChannel
 import java.util.concurrent.ConcurrentMap
-import java.util.concurrent.Semaphore
 
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.fusesource.leveldbjni.JniDBFactory
@@ -77,16 +76,10 @@ object ShuffleTestAccessor {
 
   def createMergeShuffleFileManagerForTest(
       transportConf: TransportConf,
-      file: File,
-      semaphore: Semaphore): MergedShuffleFileManager = {
+      file: File): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
-      override private[shuffle] def closeAndDeletePartitions(
-          appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo,
-          cleanupLocalDirs: Boolean,
-          cleanupDB: Boolean): Unit = {
-        super.closeAndDeletePartitions(
-          appShuffleInfo, cleanupLocalDirs, cleanupDB)
-        semaphore.release()
+      override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
+        task.run()
       }
     }
   }
