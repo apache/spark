@@ -73,7 +73,7 @@ private[spark] object SparkThrowableHelper {
 
   def getMessage(
       errorClass: String,
-      errorSubClass: Option[String],
+      errorSubClass: String,
       messageParameters: Array[String],
       queryContext: String = ""): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
@@ -82,11 +82,12 @@ private[spark] object SparkThrowableHelper {
       (errorClass, messageParameters, errorInfo.messageFormat)
     } else {
       val subClasses = errorInfo.subClass.get
-      val subClass = errorSubClass.getOrElse(
-        throw new IllegalArgumentException(s"Subclass required for error class '$errorClass'"))
-      val errorSubInfo = subClasses.getOrElse(subClass,
-        throw new IllegalArgumentException(s"Cannot find sub error class '$subClass'"))
-      (errorClass + "." + subClass, messageParameters,
+      if (errorSubClass == null) {
+        throw new IllegalArgumentException(s"Subclass required for error class '$errorClass'")
+      }
+      val errorSubInfo = subClasses.getOrElse(errorSubClass,
+        throw new IllegalArgumentException(s"Cannot find sub error class '$errorSubClass'"))
+      (errorClass + "." + errorSubClass, messageParameters,
         errorInfo.messageFormat + " " + errorSubInfo.messageFormat)
     }
     val displayMessage = String.format(

@@ -258,7 +258,7 @@ class ParseException(
 
   def this(errorClass: String, messageParameters: Array[String], ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
-      SparkThrowableHelper.getMessage(errorClass, None, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       ParserUtils.position(ctx.getStart),
       ParserUtils.position(ctx.getStop),
       Some(errorClass),
@@ -270,7 +270,7 @@ class ParseException(
            messageParameters: Array[String],
            ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
-      SparkThrowableHelper.getMessage(errorClass, Some(errorSubClass), messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
       ParserUtils.position(ctx.getStart),
       ParserUtils.position(ctx.getStop),
       Some(errorClass),
@@ -286,7 +286,7 @@ class ParseException(
       messageParameters: Array[String]) =
     this(
       command,
-      SparkThrowableHelper.getMessage(errorClass, None, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       start,
       stop,
       Some(errorClass),

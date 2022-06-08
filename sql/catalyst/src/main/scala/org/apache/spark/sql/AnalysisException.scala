@@ -59,7 +59,7 @@ class AnalysisException protected[sql] (
 
   def this(errorClass: String, messageParameters: Array[String], cause: Option[Throwable]) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, None, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       errorClass = Some(errorClass),
       errorSubClass = None,
       messageParameters = messageParameters,
@@ -73,7 +73,7 @@ class AnalysisException protected[sql] (
       messageParameters: Array[String],
       origin: Origin) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, None, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       line = origin.line,
       startPosition = origin.startPosition,
       errorClass = Some(errorClass),
@@ -85,7 +85,7 @@ class AnalysisException protected[sql] (
       errorSubClass: String,
       messageParameters: Array[String]) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, Some(errorSubClass), messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
       errorClass = Some(errorClass),
       errorSubClass = Some(errorSubClass),
       messageParameters = messageParameters)
@@ -96,7 +96,7 @@ class AnalysisException protected[sql] (
       messageParameters: Array[String],
       origin: Origin) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, Some(errorSubClass), messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
       line = origin.line,
       startPosition = origin.startPosition,
       errorClass = Some(errorClass),
