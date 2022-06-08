@@ -381,54 +381,6 @@ class SparkExtensionsTest(unittest.TestCase):
         )
 
 
-class CreateDataFrame(unittest.TestCase):
-    @property
-    def one_d_arrs(self):
-        return [
-            np.array([1, 2]),  # dtype('int64')
-            np.array([0.1, 0.2]),  # dtype('float64')
-        ]
-
-    @property
-    def two_d_arrs(self):
-        return [
-            np.array([[1, 2], [3, 4]]),  # dtype('int64')
-            np.array([[0.1, 0.2], [0.3, 0.4]]),  # dtype('float64')
-        ]
-
-    def test_from_numpy_array(self):
-        spark = SparkSession.builder.master("local").getOrCreate()
-
-        try:
-            one_d_collected_dtypes = [
-                ([Row(value=1), Row(value=2)], [("value", "bigint")]),
-                ([Row(value=0.1), Row(value=0.2)], [("value", "double")]),
-            ]
-
-            for data, [collected, dtypes] in zip(self.one_d_arrs, one_d_collected_dtypes):
-                df = spark.createDataFrame(data)
-                self.assertEqual(df.collect(), collected)
-                self.assertEqual(df.dtypes, dtypes)
-
-            two_d_collected_dtypes = [
-                ([Row(_1=1, _2=2), Row(_1=3, _2=4)], [("_1", "bigint"), ("_2", "bigint")]),
-                ([Row(_1=0.1, _2=0.2), Row(_1=0.3, _2=0.4)], [("_1", "double"), ("_2", "double")]),
-            ]
-
-            for data, [collected, dtypes] in zip(self.two_d_arrs, two_d_collected_dtypes):
-                df = spark.createDataFrame(data)
-                self.assertEqual(df.collect(), collected)
-                self.assertEqual(df.dtypes, dtypes)
-
-            with self.assertRaisesRegex(
-                ImportError, "NumPy array input should be of 1 or 2 dimensions"
-            ):
-                spark.createDataFrame(np.array(0))
-
-        finally:
-            spark.stop()
-
-
 if __name__ == "__main__":
     from pyspark.sql.tests.test_session import *  # noqa: F401
 

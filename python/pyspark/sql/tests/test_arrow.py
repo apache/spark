@@ -48,8 +48,10 @@ from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
     have_pyarrow,
+    have_numpy,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    numpy_requirement_message,
 )
 from pyspark.testing.utils import QuietTest
 
@@ -59,6 +61,9 @@ if have_pandas:
 
 if have_pyarrow:
     import pyarrow as pa  # noqa: F401
+
+if have_numpy:
+    import numpy as np
 
 
 @unittest.skipIf(
@@ -178,6 +183,15 @@ class ArrowTests(ReusedSQLTestCase):
         data_dict["2_int_t"] = np.int32(data_dict["2_int_t"])
         data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
         return pd.DataFrame(data=data_dict)
+
+    @property
+    def create_np_arrs(self):
+        return [
+            np.array([1, 2]),  # dtype('int64')
+            np.array([0.1, 0.2]),  # dtype('float64')
+            np.array([[1, 2], [3, 4]]),  # dtype('int64')
+            np.array([[0.1, 0.2], [0.3, 0.4]]),  # dtype('float64')
+        ]
 
     def test_toPandas_fallback_enabled(self):
         ts = datetime.datetime(2015, 11, 1, 0, 30)
@@ -391,11 +405,11 @@ class ArrowTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(Exception, "My error"):
                 df.toPandas()
 
-    def _createDataFrame_toggle(self, pdf, schema=None):
+    def _createDataFrame_toggle(self, data, schema=None):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-            df_no_arrow = self.spark.createDataFrame(pdf, schema=schema)
+            df_no_arrow = self.spark.createDataFrame(data, schema=schema)
 
-        df_arrow = self.spark.createDataFrame(pdf, schema=schema)
+        df_arrow = self.spark.createDataFrame(data, schema=schema)
 
         return df_no_arrow, df_arrow
 
@@ -494,6 +508,22 @@ class ArrowTests(ReusedSQLTestCase):
         arrow_schema = to_arrow_schema(self.schema)
         schema_rt = from_arrow_schema(arrow_schema)
         self.assertEqual(self.schema, schema_rt)
+
+    @unittest.skipIf(not have_numpy, cast(str, numpy_requirement_message))
+    def test_createDataFrame_with_ndarray(self):
+        arrs = self.create_np_arrs
+        collected_dtypes = [
+            ([Row(value=1), Row(value=2)], [("value", "bigint")]),
+            ([Row(value=0.1), Row(value=0.2)], [("value", "double")]),
+            ([Row(_1=1, _2=2), Row(_1=3, _2=4)], [("_1", "bigint"), ("_2", "bigint")]),
+            ([Row(_1=0.1, _2=0.2), Row(_1=0.3, _2=0.4)], [("_1", "double"), ("_2", "double")]),
+        ]
+        for arr, [collected, dtypes] in zip(arrs, collected_dtypes):
+            df, df_arrow = self._createDataFrame_toggle(arr)
+            self.assertEqual(df.dtypes, dtypes)
+            self.assertEqual(df_arrow.dtypes, dtypes)
+            self.assertEqual(df.collect(), collected)
+            self.assertEqual(df_arrow.collect(), collected)
 
     def test_createDataFrame_with_array_type(self):
         pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [["x", "y"], ["y", "z"]]})
