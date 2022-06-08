@@ -2042,6 +2042,11 @@ object SQLConf {
         "must be positive.")
       .createWithDefault(100)
 
+  val CREATE_COMMON_VIEW = buildConf("spark.sql.createCommonView")
+    .doc("When true, create common view.")
+    .booleanConf
+    .createWithDefault(false)
+
   val ALLOW_PARAMETERLESS_COUNT =
     buildConf("spark.sql.legacy.allowParameterlessCount")
       .internal()
@@ -4448,6 +4453,8 @@ class SQLConf extends Serializable with Logging {
   def codegenSplitAggregateFunc: Boolean = getConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
+
+  def createCommonView: Boolean = getConf(SQLConf.CREATE_COMMON_VIEW)
 
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
 

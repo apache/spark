@@ -1686,7 +1686,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
   }
 
-  test("AlterTable: renaming views are not supported") {
+  test("ALTER VIEW RENAME: not a view catalog") {
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
@@ -1762,6 +1762,18 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       testNotSupportedV2Command("SHOW COLUMNS", s"FROM $t")
       testNotSupportedV2Command("SHOW COLUMNS", s"IN $t")
       testNotSupportedV2Command("SHOW COLUMNS", "FROM tbl IN testcat.ns1.ns2")
+    }
+  }
+
+  test("ALTER TABLE SerDe properties") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
+      }
+      assert(e.message.contains(
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables"))
     }
   }
 
@@ -2169,7 +2181,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
   }
 
-  test("View commands are not supported in v2 catalogs") {
+  ignore("View commands are not supported in v2 catalogs") {
     def validateViewCommand(
         sql: String,
         catalogName: String,

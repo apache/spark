@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
@@ -30,6 +32,35 @@ import org.apache.spark.sql.types.StructType;
  */
 @Experimental
 public interface ViewCatalog extends CatalogPlugin {
+
+  /**
+   * A reserved property to specify the description of the view.
+   */
+  String PROP_COMMENT = "comment";
+
+  /**
+   * A reserved property to specify the owner of the view.
+   */
+  String PROP_OWNER = "owner";
+
+  /**
+   * A reserved property to specify the software version used to create the view.
+   */
+  String PROP_CREATE_ENGINE_VERSION = "create_engine_version";
+
+  /**
+   * A reserved property to specify the software version used to change the view.
+   */
+  String PROP_ENGINE_VERSION = "engine_version";
+
+  /**
+   * All reserved properties of the view.
+   */
+  List<String> RESERVED_PROPERTIES = Arrays.asList(
+        PROP_COMMENT,
+        PROP_OWNER,
+        PROP_CREATE_ENGINE_VERSION,
+        PROP_ENGINE_VERSION);
 
   /**
    * List the views in a namespace from the catalog.

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException, V2ViewDescription}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, Unevaluable}
@@ -1219,3 +1219,75 @@ case class TableSpec(
     comment: Option[String],
     serde: Option[SerdeInfo],
     external: Boolean)
+
+/**
+ * Create or replace a view in a v2 catalog.
+ */
+case class CreateV2View(
+    catalog: ViewCatalog,
+    ident: Identifier,
+    sql: String,
+    comment: Option[String],
+    viewSchema: StructType,
+    columnAliases: Array[String],
+    columnComments: Array[String],
+    properties: Map[String, String],
+    allowExisting: Boolean,
+    replace: Boolean) extends LeafCommand
+
+/**
+ * Drop a view in a v2 catalog.
+ */
+case class DropV2View(
+    catalog: ViewCatalog,
+    ident: Identifier,
+    ifExists: Boolean) extends LeafCommand
+
+/**
+ * Alter a view in a v2 catalog.
+ */
+case class AlterV2View(
+    catalog: ViewCatalog,
+    ident: Identifier,
+    changes: Seq[ViewChange]) extends LeafCommand
+
+/**
+ * The logical plan of the ALTER VIEW RENAME command for v2 views.
+ */
+case class RenameV2View(
+    catalog: ViewCatalog,
+    oldIdent: Identifier,
+    newIdent: Identifier) extends LeafCommand
+
+/**
+ * Describe a view in a v2 catalog.
+ */
+case class DescribeV2View(desc: V2ViewDescription, isExtended: Boolean) extends LeafCommand {
+  override def output: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+}
+
+/**
+ * Show create statement for a view in a v2 catalog.
+ */
+case class ShowCreateV2View(desc: V2ViewDescription) extends LeafCommand {
+  override def output: Seq[Attribute] = Seq(
+    AttributeReference("create_statement", StringType, nullable = false)())
+}
+
+/**
+ * Show view properties.
+ */
+case class ShowV2ViewProperties(
+    desc: V2ViewDescription,
+    propertyKey: Option[String]) extends LeafCommand {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("key", StringType, nullable = false)(),
+    AttributeReference("value", StringType, nullable = false)())
+}
+
+/**
+ * Refresh a view
+ */
+case class RefreshView(
+    catalog: ViewCatalog,
+    ident: Identifier) extends LeafCommand

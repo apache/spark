@@ -84,6 +84,13 @@ private[sql] object CatalogV2Implicits {
         throw QueryCompilationErrors.missingCatalogAbilityError(plugin, "tables")
     }
 
+    def asViewCatalog: ViewCatalog = plugin match {
+      case viewCatalog: ViewCatalog =>
+        viewCatalog
+      case _ =>
+        throw QueryCompilationErrors.missingCatalogAbilityError(plugin, "views")
+    }
+
     def asNamespaceCatalog: SupportsNamespaces = plugin match {
       case namespaceCatalog: SupportsNamespaces =>
         namespaceCatalog

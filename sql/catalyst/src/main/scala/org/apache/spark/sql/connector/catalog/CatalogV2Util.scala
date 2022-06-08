@@ -22,7 +22,7 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, NoSuchViewException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
@@ -358,6 +358,16 @@ private[sql] object CatalogV2Util {
 
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
+  }
+
+  def loadView(catalog: CatalogPlugin, ident: Identifier): Option[View] = catalog match {
+    case viewCatalog: ViewCatalog =>
+      try {
+        Option(viewCatalog.loadView(ident))
+      } catch {
+        case _: NoSuchViewException => None
+      }
+    case _ => None
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {

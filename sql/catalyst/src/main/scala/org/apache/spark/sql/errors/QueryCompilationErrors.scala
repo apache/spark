@@ -291,7 +291,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       "around this.", t.origin.line, t.origin.startPosition)
   }
 
-  def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
+  def insertIntoViewNotAllowedError(identifier: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"Inserting into a view is not allowed. View: $identifier.",
       t.origin.line, t.origin.startPosition)
   }
@@ -2097,8 +2097,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def recursiveViewDetectedError(
-      viewIdent: TableIdentifier,
-      newPath: Seq[TableIdentifier]): Throwable = {
+      viewIdent: String,
+      newPath: Seq[String]): Throwable = {
     new AnalysisException(s"Recursive view $viewIdent detected " +
       s"(cycle: ${newPath.mkString(" -> ")})")
   }
@@ -2557,4 +2557,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
       messageParameters = Array(toSQLId(name), toSQLType(dt), toSQLType(expected)))
   }
+
+  def cannotUnsetNonExistentViewProperty(ident: Identifier, property: String): Throwable =
+    throw new AnalysisException(
+      s"Attempted to unset non-existent property '$property' in view $ident")
+
+  def cannotMoveViewBetweenCatalogs(oldCatalog: String, newCatalog: String): Throwable =
+    throw new AnalysisException(
+      s"Cannot move view between catalogs: from=$oldCatalog and to=$newCatalog")
 }
