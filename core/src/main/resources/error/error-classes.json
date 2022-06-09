@@ -31,19 +31,19 @@
   },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
-      "Cannot up cast <value> from <sourceType> to <targetType>.",
+      "Cannot up cast <expression> from <sourceType> to <targetType>.",
       "<details>"
     ]
   },
   "CAST_INVALID_INPUT" : {
     "message" : [
-      "The value <value> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
+      "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "42000"
   },
   "CAST_OVERFLOW" : {
     "message" : [
-      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
+      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22005"
   },
@@ -83,7 +83,7 @@
   },
   "FORBIDDEN_OPERATION" : {
     "message" : [
-      "The operation <statement> is not allowed on <objectType>: <objectName>"
+      "The operation <statement> is not allowed on the <objectType>: <objectName>"
     ]
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
@@ -157,8 +157,7 @@
           "See more details in SPARK-31404. You can set the SQL config <config> or",
           "the datasource option <option> to \"LEGACY\" to rebase the datetime values",
           "w.r.t. the calendar difference during reading. To read the datetime values",
-          "as it is, set the SQL config <config> or the datasource option <option>",
-          "to \"CORRECTED\"."
+          "as it is, set the SQL config or the datasource option to \"CORRECTED\"."
         ]
       },
       "WRITE_ANCIENT_DATETIME" : {
@@ -170,7 +169,7 @@
           "is different from Spark 3.0+'s Proleptic Gregorian calendar. See more",
           "details in SPARK-31404. You can set <config> to \"LEGACY\" to rebase the",
           "datetime values w.r.t. the calendar difference during writing, to get maximum",
-          "interoperability. Or set <config> to \"CORRECTED\" to write the datetime",
+          "interoperability. Or set the config to \"CORRECTED\" to write the datetime",
           "values as it is, if you are sure that the written files will only be read by",
           "Spark 3.0+ or other systems that use Proleptic Gregorian calendar."
         ]
@@ -190,12 +189,12 @@
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ]
   },
   "INVALID_BUCKET_FILE" : {
@@ -211,7 +210,7 @@
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
-      "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to \"false\" to bypass this error."
+      "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22023"
   },
@@ -222,7 +221,7 @@
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
-      "The group aggregate pandas UDF <functionName> cannot be invoked together with as other, non-pandas aggregate functions."
+      "The group aggregate pandas UDF <functionList> cannot be invoked together with as other, non-pandas aggregate functions."
     ]
   },
   "INVALID_PARAMETER_VALUE" : {
@@ -266,7 +265,7 @@
   },
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
-      "Not allowed to implement multiple UDF interfaces, UDF class <class>"
+      "Not allowed to implement multiple UDF interfaces, UDF class <className>"
     ]
   },
   "MULTI_VALUE_SUBQUERY_ERROR" : {
@@ -293,7 +292,7 @@
   },
   "NO_UDF_INTERFACE_ERROR" : {
     "message" : [
-      "UDF class <class> doesn't implement any UDF interface"
+      "UDF class <className> doesn't implement any UDF interface"
     ]
   },
   "PARSE_CHAR_MISSING_LENGTH" : {
@@ -333,7 +332,7 @@
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [
-      "The second argument of '<functionName>' function needs to be an integer."
+      "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
   },
@@ -361,7 +360,7 @@
     "subClass" : {
       "DATA_TYPE_MISMATCH" : {
         "message" : [
-          "need <quantifier> <desiredType> field but got <dataType>."
+          "need a(n) <desiredType> field but got <dataType>."
         ]
       },
       "FIELD_NUMBER_MISMATCH" : {
@@ -473,7 +472,7 @@
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
         "message" : [
-          "UDF class with <n> type arguments."
+          "UDF class with <num> type arguments."
         ]
       },
       "TRANSFORM_DISTINCT_ALL" : {
@@ -496,17 +495,17 @@
     "subClass" : {
       "MULTI_GENERATOR" : {
         "message" : [
-          "only one generator allowed per <clause> clause but found <size>: <generators>"
+          "only one generator allowed per <clause> clause but found <num>: <generators>"
         ]
       },
       "NESTED_IN_EXPRESSIONS" : {
         "message" : [
-          "nested in expressions <expressions>"
+          "nested in expressions <expression>"
         ]
       },
       "NOT_GENERATOR" : {
         "message" : [
-          "<name> is expected to be a generator. However, its class is <classCanonicalName>, which is not a generator."
+          "<functionName> is expected to be a generator. However, its class is <classCanonicalName>, which is not a generator."
         ]
       },
       "OUTSIDE_SELECT" : {
