@@ -116,9 +116,9 @@ private[spark] class TaskSetManager(
   private val executorDecommissionKillInterval =
     conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(TimeUnit.SECONDS.toMillis)
 
-  private[scheduler] val inefficientTaskCalculator =
+  private[scheduler] val taskProcessRateCalculator =
     if (sched.efficientTaskCalcualtionEnabled) {
-      Some(new InefficientTaskCalculator())
+      Some(new TaskProcessRateCalculator())
     } else {
       None
     }
@@ -815,10 +815,7 @@ private[spark] class TaskSetManager(
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
     if (speculationEnabled) {
       successfulTaskDurations.insert(info.duration)
-      inefficientTaskCalculator.foreach { inefficientTask =>
-        inefficientTask.updateTaskProgressThreshold(result)
-        inefficientTask.removeRuningTasksProgressRate(tid)
-      }
+      taskProcessRateCalculator.foreach(_.updateAvgTaskProcessRate(tid, result))
     }
     removeRunningTask(tid)
 
@@ -1100,35 +1097,30 @@ private[spark] class TaskSetManager(
         val runtimeMs = info.timeRunning(currentTimeMillis)
 
         def checkMaySpeculate(): Boolean = {
-          if (customizedThreshold || !inefficientTaskCalculator.isDefined) {
+          if (customizedThreshold || taskProcessRateCalculator.isEmpty) {
             true
           } else {
-            val longTimeTask = (numTasks <= 1) ||
-              runtimeMs > efficientTaskDurationFactor * threshold
-            longTimeTask || inefficientTaskCalculator.get.maySpeculateTask(tid, runtimeMs, info)
+            val longTimeTask = runtimeMs > efficientTaskDurationFactor * threshold
+            longTimeTask || taskProcessRateCalculator.exists(_.isEfficient(tid, runtimeMs, info))
           }
         }
 
-        val maySpeculate = (runtimeMs > threshold) && checkMaySpeculate()
-        val executorDecommissionSpeculate =
-          (!maySpeculate &&
-            executorDecommissionKillInterval.isDefined && !successfulTaskDurations.isEmpty()) && {
-            val taskInfo = taskInfos(tid)
-            val decomState = sched.getExecutorDecommissionState(taskInfo.executorId)
-            decomState.isDefined && {
+        def shouldSpeculateForExecutorDecomissioning(): Boolean = {
+          executorDecommissionKillInterval.isDefined && !successfulTaskDurations.isEmpty() &&
+            sched.getExecutorDecommissionState(info.executorId).exists { decomState =>
               // Check if this task might finish after this executor is decommissioned.
               // We estimate the task's finish time by using the median task duration.
               // Whereas the time when the executor might be decommissioned is estimated using the
               // config executorDecommissionKillInterval. If the task is going to finish after
               // decommissioning, then we will eagerly speculate the task.
               val taskEndTimeBasedOnMedianDuration =
-              taskInfos(tid).launchTime + successfulTaskDurations.median
-              val executorDecomTime =
-                decomState.get.startTime + executorDecommissionKillInterval.get
+                info.launchTime + successfulTaskDurations.median
+              val executorDecomTime = decomState.startTime + executorDecommissionKillInterval.get
               executorDecomTime < taskEndTimeBasedOnMedianDuration
             }
-          }
-        val speculated = maySpeculate || executorDecommissionSpeculate
+        }
+        val speculated = (runtimeMs > threshold) && checkMaySpeculate() ||
+          shouldSpeculateForExecutorDecomissioning()
         if (speculated) {
           addPendingTask(index, speculatable = true)
           logInfo(
@@ -1164,17 +1156,12 @@ private[spark] class TaskSetManager(
     // tasks that are submitted by this `TaskSetManager` and are completed successfully.
     val numSuccessfulTasks = successfulTaskDurations.size()
     val timeMs = clock.getTimeMillis()
-    if (numSuccessfulTasks >= minFinishedForSpeculation || numTasks == 1) {
-      val threshold = if (numSuccessfulTasks <= 0 && isSpeculationThresholdSpecified) {
-        speculationTaskDurationThresOpt.get
-      } else {
-        val medianDuration = successfulTaskDurations.median
-        speculationMultiplier * medianDuration
-      }
-      val newThreshold = max(threshold, minTimeToSpeculation)
-        // bound based on that.
-      logDebug("Task length threshold for speculation: " + newThreshold)
-      foundTasks = checkAndSubmitSpeculatableTasks(timeMs, newThreshold, numSuccessfulTasks)
+    if (numSuccessfulTasks >= minFinishedForSpeculation) {
+      val medianDuration = successfulTaskDurations.median
+      val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
+      // bound based on that.
+      logDebug("Task length threshold for speculation: " + threshold)
+      foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold, numSuccessfulTasks)
     } else if (isSpeculationThresholdSpecified && speculationTasksLessEqToSlots) {
       val threshold = max(speculationTaskDurationThresOpt.get, minTimeToSpeculation)
       logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")
@@ -1266,56 +1253,56 @@ private[spark] class TaskSetManager(
    * A class for checking inefficient tasks to be speculated, the inefficient tasks come from
    * the tasks which may be speculated by the previous strategy.
    */
-  private[scheduler] class InefficientTaskCalculator {
-    private var allTotalRecordsRead = 0L
-    private var allTotalExecutorRunTime = 0L
-    @volatile private var successTaskProgressThreshold = 0.0D
-    private val runingTasksProgressRate = new ConcurrentHashMap[Long, Double]()
+  private[TaskSetManager] class TaskProcessRateCalculator {
+    private var totalRecordsRead = 0L
+    private var totalExecutorRunTime = 0L
+    private var avgTaskProcessRate = 0.0D
+    private val runingTasksProcessRate = new ConcurrentHashMap[Long, Double]()
 
-    private[scheduler] def updateTaskProgressThreshold(result: DirectTaskResult[_]): Unit = {
-      var totalRecordsRead = 0L
-      var totalExecutorRunTime = 0L
+    private[TaskSetManager] def updateAvgTaskProcessRate(
+        taskId: Long,
+        result: DirectTaskResult[_]): Unit = {
+      var recordsRead = 0L
+      var executorRunTime = 0L
       result.accumUpdates.foreach { a =>
         if (a.name == Some(shuffleRead.RECORDS_READ) ||
           a.name == Some(input.RECORDS_READ)) {
           val acc = a.asInstanceOf[LongAccumulator]
-          totalRecordsRead += acc.value
+          recordsRead += acc.value
         } else if (a.name == Some(InternalAccumulator.EXECUTOR_RUN_TIME)) {
           val acc = a.asInstanceOf[LongAccumulator]
-          totalExecutorRunTime = acc.value
+          executorRunTime = acc.value
         }
       }
-      allTotalRecordsRead += totalRecordsRead
-      allTotalExecutorRunTime += totalExecutorRunTime
-      if (allTotalRecordsRead > 0 && allTotalExecutorRunTime > 0) {
-        successTaskProgressThreshold = allTotalRecordsRead / (allTotalExecutorRunTime / 1000.0)
+      totalRecordsRead += recordsRead
+      totalExecutorRunTime += executorRunTime
+      if (totalRecordsRead > 0 && totalExecutorRunTime > 0) {
+        avgTaskProcessRate = totalRecordsRead / (totalExecutorRunTime / 1000.0)
       }
+      runingTasksProcessRate.remove(taskId)
     }
 
-    private[scheduler] def updateRuningTasksProgressRate(
+    private[scheduler] def updateRuningTaskProcessRate(
         taskId: Long,
         taskProgressRate: Double): Unit = {
-      runingTasksProgressRate.put(taskId, taskProgressRate)
+      runingTasksProcessRate.put(taskId, taskProgressRate)
     }
 
-    private[scheduler] def removeRuningTasksProgressRate(taskId: Long): Unit = {
-      runingTasksProgressRate.remove(taskId)
-    }
-
-    private[scheduler] def maySpeculateTask(
+    private[TaskSetManager] def isEfficient(
         tid: Long,
         runtimeMs: Long,
         taskInfo: TaskInfo): Boolean = {
-      // Only check inefficient tasks when successTaskProgressThreshold > 0, because some stage
+      // Only check inefficient tasks when avgTaskProcessRate > 0, because some stage
       // tasks may have neither input records nor shuffleRead records, so the
-      // successTaskProgressThreshold may be zero all the time, this case we should make sure
+      // avgTaskProcessRate may be zero all the time, this case we should make sure
       // it can be speculated. eg: some spark-sql like that 'msck repair table' or 'drop table'
       // and so on.
-      lazy val currentTaskProgressRate = runingTasksProgressRate.getOrDefault(tid, 0.0)
-      if (successTaskProgressThreshold <= 0.0 || currentTaskProgressRate <= 0.0) {
+      if (avgTaskProcessRate <= 0.0) return true
+      val currentTaskProgressRate = runingTasksProcessRate.getOrDefault(tid, 0.0)
+      if (currentTaskProgressRate <= 0.0) {
         true
       } else {
-        val taskProgressThreshold = successTaskProgressThreshold * efficientTaskProgressMultiplier
+        val taskProgressThreshold = avgTaskProcessRate * efficientTaskProgressMultiplier
         val isInefficientTask = currentTaskProgressRate < taskProgressThreshold
         if (isInefficientTask) {
           logInfo(s"Marking task ${taskInfo.index} in stage ${taskSet.id} " +
