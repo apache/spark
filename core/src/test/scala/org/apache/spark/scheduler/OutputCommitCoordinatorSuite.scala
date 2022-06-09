@@ -85,13 +85,13 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       override private[spark] def createSparkEnv(
           conf: SparkConf,
           isLocal: Boolean,
-          listenerBus: LiveListenerBus,
-          driverOutputCommitCoordinator: OutputCommitCoordinator): SparkEnv = {
-        outputCommitCoordinator = spy(driverOutputCommitCoordinator)
+          listenerBus: LiveListenerBus): SparkEnv = {
+        outputCommitCoordinator =
+          spy(new OutputCommitCoordinator(conf, isDriver = true, Option(this)))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
         SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
-          SparkContext.numDriverCores(master), Some(outputCommitCoordinator))
+          SparkContext.numDriverCores(master), this, Some(outputCommitCoordinator))
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
@@ -188,8 +188,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // The authorized committer now fails, clearing the lock
     outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
       attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
-    // A new task should now be allowed to become the authorized committer
-    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+    // A new task should not be allowed to become stage failed because of may cause data duplication
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
       nonAuthorizedCommitter + 2))
     // There can only be one authorized committer
     assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
@@ -236,7 +236,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!outputCommitCoordinator.canCommit(stage, 3, partition, taskAttempt))
     outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
       ExecutorLostFailure("0", exitCausedByApp = true, None))
-    assert(outputCommitCoordinator.canCommit(stage, 4, partition, taskAttempt))
+    // A new task should not be allowed to become stage failed because of may cause data duplication
+    assert(!outputCommitCoordinator.canCommit(stage, 4, partition, taskAttempt))
   }
 
   test("SPARK-24589: Make sure stage state is cleaned up") {
