@@ -226,6 +226,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidFractionOfSecondError(): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
+      errorSubClass = None,
       Array(toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
@@ -274,14 +275,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("LITERAL_TYPE", s"${v.toString}", s"${v.getClass.toString}"))
+      errorSubClass = "LITERAL_TYPE",
+      messageParameters = Array( s"${v.toString}", s"${v.getClass.toString}"))
   }
 
   def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("PIVOT_TYPE",
-        s"${v.toString}", s"${toSQLType(dataType)}"))
+      errorSubClass = "PIVOT_TYPE",
+      messageParameters = Array(s"${v.toString}", s"${toSQLType(dataType)}"))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -555,15 +557,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def incompatibleDataSourceRegisterError(e: Throwable): Throwable = {
-    new SparkClassNotFoundException("INCOMPATIBLE_DATASOURCE_REGISTER", Array(e.getMessage), e)
+    new SparkClassNotFoundException("INCOMPATIBLE_DATASOURCE_REGISTER", None,
+      Array(e.getMessage), e)
   }
 
   def sparkUpgradeInReadingDatesError(
       format: String, config: String, option: String): SparkUpgradeException = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+      errorSubClass = Some("READ_ANCIENT_DATETIME"),
       messageParameters = Array(
-        "READ_ANCIENT_DATETIME",
         format,
         toSQLConf(config),
         toDSOption(option),
@@ -576,8 +579,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def sparkUpgradeInWritingDatesError(format: String, config: String): SparkUpgradeException = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+      errorSubClass = Some("WRITE_ANCIENT_DATETIME"),
       messageParameters = Array(
-        "WRITE_ANCIENT_DATETIME",
         format,
         toSQLConf(config),
         toSQLConf(config)),
@@ -610,9 +613,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
     pathExists match {
       case true => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
-        messageParameters = Array("EXISTENT_PATH", toSQLValue(saveMode, StringType)))
+        errorSubClass = Some("EXISTENT_PATH"),
+        messageParameters = Array(toSQLValue(saveMode, StringType)))
       case _ => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
-        messageParameters = Array("NON_EXISTENT_PATH", toSQLValue(saveMode, StringType)))
+        errorSubClass = Some("NON_EXISTENT_PATH"),
+        messageParameters = Array(toSQLValue(saveMode, StringType)))
     }
   }
 
@@ -796,7 +801,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def transactionUnsupportedByJdbcServerError(): Throwable = {
     new SparkSQLFeatureNotSupportedException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("JDBC_TRANSACTION"))
+      errorSubClass = "JDBC_TRANSACTION",
+      messageParameters = Array[String]())
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
@@ -1014,8 +1020,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def failToParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+      errorSubClass = Some("PARSE_DATETIME_BY_NEW_PARSER"),
       messageParameters = Array(
-        "PARSE_DATETIME_BY_NEW_PARSER",
         toSQLValue(s, StringType),
         toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
       e)
@@ -1025,8 +1031,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       resultCandidate: String, e: Throwable): Throwable = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+      errorSubClass = Some("PARSE_DATETIME_BY_NEW_PARSER"),
       messageParameters = Array(
-        "PARSE_DATETIME_BY_NEW_PARSER",
         toSQLValue(resultCandidate, StringType),
         toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
       e)
@@ -1035,8 +1041,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def failToRecognizePatternAfterUpgradeError(pattern: String, e: Throwable): Throwable = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+      errorSubClass = Some("DATETIME_PATTERN_RECOGNITION"),
       messageParameters = Array(
-        "DATETIME_PATTERN_RECOGNITION",
         toSQLValue(pattern, StringType),
         toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
       e)
@@ -1054,7 +1060,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def concurrentQueryInstanceError(): Throwable = {
-    new SparkConcurrentModificationException("CONCURRENT_QUERY", Array.empty)
+    new SparkConcurrentModificationException("CONCURRENT_QUERY", None, Array.empty)
   }
 
   def cannotParseJsonArraysAsStructsError(): Throwable = {
@@ -1333,7 +1339,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def indexOutOfBoundsOfArrayDataError(idx: Int): Throwable = {
     new SparkIndexOutOfBoundsException(
-      errorClass = "INDEX_OUT_OF_BOUNDS", Array(toSQLValue(idx, IntegerType)))
+      errorClass = "INDEX_OUT_OF_BOUNDS", None, Array(toSQLValue(idx, IntegerType)))
   }
 
   def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
@@ -1454,7 +1460,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
-    new SparkFileAlreadyExistsException(errorClass = "FAILED_RENAME_PATH",
+    new SparkFileAlreadyExistsException(errorClass = "FAILED_RENAME_PATH", None,
       Array(srcPath.toString, dstPath.toString))
   }
 
@@ -1463,7 +1469,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def renameSrcPathNotFoundError(srcPath: Path): Throwable = {
-    new SparkFileNotFoundException(errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+    new SparkFileNotFoundException(errorClass = "RENAME_SRC_PATH_NOT_FOUND", None,
       Array(srcPath.toString))
   }
 
@@ -1661,7 +1667,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       permission: FsPermission,
       path: Path,
       e: Throwable): Throwable = {
-    new SparkSecurityException(errorClass = "RESET_PERMISSION_TO_ORIGINAL",
+    new SparkSecurityException(errorClass = "RESET_PERMISSION_TO_ORIGINAL", None,
       Array(permission.toString, path.toString, e.getMessage))
   }
 
@@ -1908,13 +1914,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def repeatedPivotsUnsupportedError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("REPEATED_PIVOT"))
+      errorSubClass = "REPEATED_PIVOT",
+      messageParameters = Array[String]())
   }
 
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("PIVOT_AFTER_GROUP_BY"))
+      errorSubClass = "PIVOT_AFTER_GROUP_BY",
+      messageParameters = Array[String]())
   }
 
   private val aesFuncName = toSQLId("aes_encrypt") + "/" + toSQLId("aes_decrypt")
@@ -1924,14 +1932,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array(
         "key",
-        s"the $aesFuncName function",
+        aesFuncName,
         s"expects a binary value with 16, 24 or 32 bytes, but got ${actualLength.toString} bytes."))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("AES_MODE", mode, padding, aesFuncName))
+      errorSubClass = "AES_MODE",
+      messageParameters = Array(mode, padding, aesFuncName))
   }
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
@@ -1939,7 +1948,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array(
         "expr, key",
-        s"the $aesFuncName function",
+        aesFuncName,
         s"Detail message: $detailMessage"))
   }
 
@@ -1950,16 +1959,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("ORC_TYPE_CAST",
-        toSQLType(TimestampType),
+      errorSubClass = "ORC_TYPE_CAST",
+      messageParameters = Array(toSQLType(TimestampType),
         toSQLType(TimestampNTZType)))
   }
 
   def cannotConvertOrcTimestampNTZToTimestampLTZError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("ORC_TYPE_CAST",
-        toSQLType(TimestampNTZType),
+      errorSubClass = "ORC_TYPE_CAST",
+      messageParameters = Array(toSQLType(TimestampNTZType),
         toSQLType(TimestampType)))
   }
 

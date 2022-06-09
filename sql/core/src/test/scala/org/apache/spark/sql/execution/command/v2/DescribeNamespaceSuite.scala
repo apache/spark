@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.Utils
 
@@ -30,28 +31,49 @@ class DescribeNamespaceSuite extends command.DescribeNamespaceSuiteBase with Com
   override def notFoundMsgPrefix: String = "Namespace"
 
   test("DescribeNamespace using v2 catalog") {
-    withNamespace(s"$catalog.ns1.ns2") {
-      sql(
-        s"""
-           | CREATE NAMESPACE IF NOT EXISTS $catalog.ns1.ns2
-           | COMMENT 'test namespace'
-           | LOCATION '/tmp/ns_test'
-           | WITH DBPROPERTIES (password = 'password')
+    withSQLConf(SQLConf.LEGACY_DESC_NAMESPACE_REDACT_PROPERTIES.key -> "false") {
+      withNamespace(s"$catalog.ns1.ns2") {
+        sql(
+          s"""
+             | CREATE NAMESPACE IF NOT EXISTS $catalog.ns1.ns2
+             | COMMENT 'test namespace'
+             | LOCATION '/tmp/ns_test'
+             | WITH DBPROPERTIES (password = 'password')
            """.stripMargin)
-      val descriptionDf = sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.ns1.ns2")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-        Seq(
-          ("info_name", StringType),
-          ("info_value", StringType)
-        ))
-      val description = descriptionDf.collect()
-      assert(description === Seq(
-        Row("Namespace Name", "ns2"),
-        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
-        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
-        Row(SupportsNamespaces.PROP_OWNER.capitalize, Utils.getCurrentUserName()),
-        Row("Properties", "((password,*********(redacted)))"))
-      )
+        val descriptionDf = sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.ns1.ns2")
+        assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+          Seq(
+            ("info_name", StringType),
+            ("info_value", StringType)
+          ))
+        val description = descriptionDf.collect()
+        assert(description === Seq(
+          Row("Namespace Name", "ns2"),
+          Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+          Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
+          Row(SupportsNamespaces.PROP_OWNER.capitalize, Utils.getCurrentUserName()),
+          Row("Properties", "((password,*********(redacted)))"))
+        )
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_DESC_NAMESPACE_REDACT_PROPERTIES.key -> "true") {
+      withNamespace(s"$catalog.ns1.ns2") {
+        sql(s"CREATE NAMESPACE IF NOT EXISTS $catalog.ns1.ns2 COMMENT " +
+          "'test namespace' LOCATION '/tmp/ns_test'")
+        val descriptionDf = sql(s"DESCRIBE NAMESPACE $catalog.ns1.ns2")
+        assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+          Seq(
+            ("info_name", StringType),
+            ("info_value", StringType)
+          ))
+        val description = descriptionDf.collect()
+        assert(description === Seq(
+          Row("Namespace Name", "ns2"),
+          Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+          Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
+          Row(SupportsNamespaces.PROP_OWNER.capitalize, Utils.getCurrentUserName()))
+        )
+      }
     }
   }
 
