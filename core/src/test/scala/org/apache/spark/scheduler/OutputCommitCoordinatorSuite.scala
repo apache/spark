@@ -181,6 +181,9 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // The authorized committer now fails, clearing the lock
     outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
       attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
+    // A new task should not be allowed to become stage failed because of potential data duplication
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 2))
   }
 
   test("SPARK-19631: Do not allow failed attempts to be authorized for committing") {
