@@ -3828,14 +3828,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_ARRAY_SORT_FAILS_ON_NULL_COMPARISON_RESULT =
-    buildConf("spark.sql.legacy.arraySortFailsOnNullComparisonResult")
+  val LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT =
+    buildConf("spark.sql.legacy.allowNullComparisonResultInArraySort")
       .internal()
-      .doc("When set to true, it throws an error if the comparator function returns null. " +
-        "If set to false, it restores the legacy behavior that handles null as zero (equal).")
+      .doc("When set to false, `array_sort` function throws an error " +
+        "if the comparator function returns null. " +
+        "If set to true, it restores the legacy behavior that handles null as zero (equal).")
       .version("3.2.2")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.

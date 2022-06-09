@@ -376,14 +376,14 @@ case class ArrayTransform(
 case class ArraySort(
     argument: Expression,
     function: Expression,
-    failOnNullComparisonResult: Boolean)
+    allowNullComparisonResult: Boolean)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
   def this(argument: Expression, function: Expression) = {
     this(
       argument,
       function,
-      SQLConf.get.getConf(SQLConf.LEGACY_ARRAY_SORT_FAILS_ON_NULL_COMPARISON_RESULT))
+      SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT))
   }
 
   def this(argument: Expression) = this(argument, ArraySort.defaultComparator)
@@ -425,10 +425,8 @@ case class ArraySort(
       firstElemVar.value.set(o1)
       secondElemVar.value.set(o2)
       val cmp = f.eval(inputRow)
-      if (failOnNullComparisonResult && cmp == null) {
-        throw QueryExecutionErrors.nullComparisonResultError(
-          SQLConf.LEGACY_ARRAY_SORT_FAILS_ON_NULL_COMPARISON_RESULT.key, "false"
-        )
+      if (!allowNullComparisonResult && cmp == null) {
+        throw QueryExecutionErrors.nullComparisonResultError()
       }
       cmp.asInstanceOf[Int]
     }

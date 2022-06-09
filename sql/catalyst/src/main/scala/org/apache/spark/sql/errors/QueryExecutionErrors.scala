@@ -2013,8 +2013,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "MULTI_VALUE_SUBQUERY_ERROR", messageParameters = Array(plan), cause = null)
   }
 
-  def nullComparisonResultError(config: String, value: String): Throwable = {
+  def nullComparisonResultError(): Throwable = {
     new SparkException(errorClass = "NULL_COMPARISON_RESULT",
-      messageParameters = Array(config, value), cause = null)
+      messageParameters = Array(), cause = null)
   }
 }

@@ -847,13 +847,13 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
 
     withSQLConf(
-        SQLConf.LEGACY_ARRAY_SORT_FAILS_ON_NULL_COMPARISON_RESULT.key -> "true") {
+        SQLConf.LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT.key -> "false") {
       checkExceptionInExpression[SparkException](
         arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator), "The comparison result is null")
     }
 
     withSQLConf(
-        SQLConf.LEGACY_ARRAY_SORT_FAILS_ON_NULL_COMPARISON_RESULT.key -> "false") {
+        SQLConf.LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT.key -> "true") {
       checkEvaluation(arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator),
         Seq(1, 1, 2, 3))
     }
