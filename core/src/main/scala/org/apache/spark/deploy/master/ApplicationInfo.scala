@@ -122,9 +122,7 @@ private[spark] class ApplicationInfo(
         rpIdToResourceProfile(rp.id) = rp
       }
 
-      if (!targetNumExecutorsPerResourceProfileId.get(rp.id).contains(num)) {
-        targetNumExecutorsPerResourceProfileId(rp.id) = num
-      }
+      targetNumExecutorsPerResourceProfileId(rp.id) = num
     }
   }
 
