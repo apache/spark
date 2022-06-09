@@ -101,7 +101,7 @@ private[spark] class ApplicationInfo(
         .map(_.toInt)
         .getOrElse(defaultMemoryMbPerExecutor)
       val customResources = ResourceUtils.executorResourceRequestToRequirement(
-        getCustomExecutorResources(resourceProfile).values.toSeq)
+        getCustomExecutorResources(resourceProfile).values.toSeq.sortBy(_.resourceName))
 
       rpIdToResourceDesc(resourceProfile.id) =
         ExecutorResourceDescription(coresPerExecutor, memoryMbPerExecutor, customResources)

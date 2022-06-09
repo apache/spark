@@ -105,7 +105,7 @@ class AppClientSuite
       // Send message to Master to request Executors, verify request by change in executor limit
       val numExecutorsRequested = 1
       whenReady(
-        ci.client.requestTotalExecutors(Map(ci.desc.defaultProfile -> numExecutorsRequested)),
+        ci.client.requestTotalExecutors(numExecutorsRequested),
         timeout(10.seconds),
         interval(10.millis)) { acknowledged =>
         assert(acknowledged)
@@ -149,7 +149,7 @@ class AppClientSuite
 
       // Verify that asking for executors on the decommissioned workers fails
       whenReady(
-        ci.client.requestTotalExecutors(Map(ci.desc.defaultProfile -> numExecutorsRequested)),
+        ci.client.requestTotalExecutors(numExecutorsRequested),
         timeout(10.seconds),
         interval(10.millis)) { acknowledged =>
         assert(acknowledged)
@@ -223,8 +223,7 @@ class AppClientSuite
     Utils.tryWithResource(new AppClientInst(masterRpcEnv.address.toSparkURL)) { ci =>
 
       // requests to master should fail immediately
-      whenReady(ci.client
-        .requestTotalExecutors(Map(ci.desc.defaultProfile -> 3)), timeout(1.seconds)) { success =>
+      whenReady(ci.client.requestTotalExecutors(3), timeout(1.seconds)) { success =>
         assert(success === false)
       }
     }

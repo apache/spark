@@ -295,8 +295,18 @@ private[spark] class StandaloneAppClient(
   }
 
   /**
-   * Request executors from the Master by specifying the total number desired,
-   * including existing pending and running executors.
+   * Request executors for default resource profile from the Master by specifying the
+   * total number desired, including existing pending and running executors.
+   *
+   * @return whether the request is acknowledged.
+   */
+  def requestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+    requestTotalExecutors(Map(appDescription.defaultProfile -> requestedTotal))
+  }
+
+  /**
+   * Request executors from the Master by specifying the total number desired for each
+   * resource profile, including existing pending and running executors.
    *
    * @return whether the request is acknowledged.
    */

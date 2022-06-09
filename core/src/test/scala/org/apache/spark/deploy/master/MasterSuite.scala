@@ -546,7 +546,7 @@ class MasterSuite extends SparkFunSuite
   private def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
     val appInfo: ApplicationInfo = if (withMaxCores) {
       makeAppInfo(
-      1024, maxCores = Some(30), initialExecutorLimit = Some(0))
+        1024, maxCores = Some(30), initialExecutorLimit = Some(0))
     } else {
       makeAppInfo(
         1024, maxCores = None, initialExecutorLimit = Some(0))
@@ -576,12 +576,18 @@ class MasterSuite extends SparkFunSuite
     assert(appInfo.executors.isEmpty)
 
     // Request executors with multiple resource profile.
-    val rp1 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(5))
-    val rp2 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(10))
+    // rp1 with 15 cores per executor, rp2 with 8192MB memory per executor, no worker can
+    // fulfill the resource requirement.
+    val rp1 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(15))
+    val rp2 = DeployTestUtils.createResourceProfile(Some(8192), Map.empty, Some(5))
+    val rp3 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(5))
+    val rp4 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(10))
     val requests = Map(
       appInfo.desc.defaultProfile -> 1,
       rp1 -> 1,
-      rp2 -> 2
+      rp2 -> 1,
+      rp3 -> 1,
+      rp4 -> 2
     )
     eventually(timeout(10.seconds)) {
       master.self.askSync[Boolean](RequestExecutors(appInfo.id, requests))
@@ -591,29 +597,33 @@ class MasterSuite extends SparkFunSuite
     if (withMaxCores) {
       assert(appInfo.executors.size === 3)
       assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 1)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 1)
     } else {
       assert(appInfo.executors.size === 4)
       assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 1)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 2)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 2)
     }
 
     // Verify executor information.
-    val executorForRp1 = appInfo.executors(appInfo.getOrUpdateExecutorsForRPId(rp1.id).head)
-    assert(executorForRp1.cores === 5)
-    assert(executorForRp1.memory === 2048)
-    assert(executorForRp1.rpId === rp1.id)
+    val executorForRp3 = appInfo.executors(appInfo.getOrUpdateExecutorsForRPId(rp3.id).head)
+    assert(executorForRp3.cores === 5)
+    assert(executorForRp3.memory === 2048)
+    assert(executorForRp3.rpId === rp3.id)
 
     // Verify LaunchExecutor message.
     val launchExecutorMsg = workers
-      .find(_.id === executorForRp1.worker.id)
-      .map(_.launchedExecutors(appInfo.id + "/" + executorForRp1.id))
+      .find(_.id === executorForRp3.worker.id)
+      .map(_.launchedExecutors(appInfo.id + "/" + executorForRp3.id))
       .get
     assert(launchExecutorMsg.cores === 5)
     assert(launchExecutorMsg.memory === 2048)
-    assert(launchExecutorMsg.rpId === rp1.id)
+    assert(launchExecutorMsg.rpId === rp3.id)
   }
 
   private def basicScheduling(spreadOut: Boolean): Unit = {
