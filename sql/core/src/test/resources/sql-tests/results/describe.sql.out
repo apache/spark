@@ -462,7 +462,7 @@ DESC temp_v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the temporary view: `temp_v`
+[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the TEMPORARY VIEW: `temp_v`
 
 
 -- !query
@@ -539,7 +539,7 @@ DESC v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the view: `v`
+[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the VIEW: `v`
 
 
 -- !query
