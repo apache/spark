@@ -137,7 +137,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
 
   private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {
     val literals = new scala.collection.mutable.ArrayBuffer[T]
-    plan.transformWithSubqueries { case subQuery =>
+    plan.transformDownWithSubqueries { case subQuery =>
       subQuery.transformAllExpressions { case expression: Literal =>
         literals += expression.value.asInstanceOf[T]
         expression

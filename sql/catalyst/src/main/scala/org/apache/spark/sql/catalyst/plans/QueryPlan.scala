@@ -442,14 +442,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * This method is similar to the transform method, but also applies the given partial function
-   * also to all the plans in the subqueries of a node. This method is useful when we want
-   * to rewrite the whole plan, include its subqueries, in one go.
-   */
-  def transformWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType =
-    transformDownWithSubqueries(f)
-
-  /**
    * Returns a copy of this node where the given partial function has been recursively applied
    * first to the subqueries in this node's children, then this node's children, and finally
    * this node itself (post-order). When the partial function does not apply to a given node,

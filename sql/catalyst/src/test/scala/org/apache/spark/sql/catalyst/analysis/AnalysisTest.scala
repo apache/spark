@@ -108,8 +108,7 @@ trait AnalysisTest extends PlanTest {
         case v: View if v.isTempViewStoringAnalyzedPlan => v.child
       }
       val actualPlan = if (inlineCTE) {
-        val inlineCTE = InlineCTE()
-        inlineCTE(transformed)
+        InlineCTE(transformed)
       } else {
         transformed
       }
