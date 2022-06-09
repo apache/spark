@@ -833,21 +833,6 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  ignore("SPARK-39387: BytesColumnVector throw RuntimeException due to overflow") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val df = spark.range(1, 22, 1, 1).map { _ =>
-        val byteData = Array.fill[Byte](1024 * 1024)('X')
-        val mapData = (1 to 100).map(i => (i, byteData))
-        mapData
-      }.toDF()
-      val e = intercept[Exception] {
-        df.write.format("orc").save(path)
-      }
-      assert(e.getCause.getMessage.contains("Overflow of newLength. smallBuffer.length=1073741824"))
-    }
-  }
-
   test("SPARK-39387: BytesColumnVector should not throw RuntimeException due to overflow") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
