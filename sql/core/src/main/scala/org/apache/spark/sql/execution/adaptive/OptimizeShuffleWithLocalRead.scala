@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, UnspecifiedDistribution}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledJoin}
+import org.apache.spark.sql.execution.joins.ShuffledJoin
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -40,19 +39,6 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
   override protected def isSupported(shuffle: ShuffleExchangeLike): Boolean = {
     shuffle.outputPartitioning != SinglePartition && super.isSupported(shuffle)
-  }
-
-  // The build side is a broadcast query stage which should have been optimized using local read
-  // already. So we only need to deal with probe side here.
-  private def createProbeSideLocalRead(plan: SparkPlan): SparkPlan = {
-    plan.transformDown {
-      case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildRight) =>
-        val localRead = createLocalRead(shuffleStage)
-        join.asInstanceOf[BroadcastHashJoinExec].copy(left = localRead)
-      case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildLeft) =>
-        val localRead = createLocalRead(shuffleStage)
-        join.asInstanceOf[BroadcastHashJoinExec].copy(right = localRead)
-    }
   }
 
   private def createLocalRead(plan: SparkPlan): AQEShuffleReadExec = {
@@ -113,45 +99,43 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
     }
 
     plan match {
-      case s: SparkPlan if canUseLocalShuffleRead(s) =>
-        createLocalRead(s)
+      case s: ShuffleQueryStageExec =>
+        if (canUseLocalShuffleRead(s)) {
+          createLocalRead(s)
+        } else {
+          s
+        }
+      case a: AQEShuffleReadExec =>
+        if (canUseLocalShuffleRead(a)) {
+          createLocalRead(a)
+        } else {
+          a
+        }
       case s: SparkPlan =>
         createPossibleLocalRead(s)
     }
   }
 
   private def createPossibleLocalRead(plan: SparkPlan): SparkPlan = plan match {
+    case l: LeafExecNode => l
     case shuffleJoin: ShuffledJoin => shuffleJoin
     case other =>
       val newChildren = other.requiredChildDistribution.zip(other.children).map {
         case (UnspecifiedDistribution, child: ShuffleQueryStageExec)
           if canUseLocalShuffleRead(child) =>
             createLocalRead(child)
-        case (UnspecifiedDistribution, child: AQEShuffleReadExec)
-          if canUseLocalShuffleRead(child) =>
+        case (UnspecifiedDistribution, child: AQEShuffleReadExec) =>
+          if (canUseLocalShuffleRead(child)) {
             createLocalRead(child)
+          } else {
+            child
+          }
         case (UnspecifiedDistribution, child: SparkPlan) =>
           createPossibleLocalRead(child)
         case (_, child) =>
           child
       }
       other.withNewChildren(newChildren)
-  }
-
-  object BroadcastJoinWithShuffleLeft {
-    def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleRead(join.left) =>
-        Some((join.left, join.buildSide))
-      case _ => None
-    }
-  }
-
-  object BroadcastJoinWithShuffleRight {
-    def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleRead(join.right) =>
-        Some((join.right, join.buildSide))
-      case _ => None
-    }
   }
 
   def canUseLocalShuffleRead(plan: SparkPlan): Boolean = plan match {

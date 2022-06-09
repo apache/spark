@@ -2576,6 +2576,21 @@ class AdaptiveQueryExecSuite
       assert(findTopLevelAggregate(adaptive5).size == 4)
     }
   }
+
+  test("SPARK-39126: After eliminating join to one side, that side should " +
+    "take advantage of LocalShuffleRead optimization") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1000") {
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData LEFT JOIN testData2 ON key = a and a > 10")
+      val localReads = collect(adaptivePlan) {
+        case read: AQEShuffleReadExec if read.isLocalRead => read
+      }
+      assert(localReads.length > 0)
+    }
+  }
 }
 
 /**
