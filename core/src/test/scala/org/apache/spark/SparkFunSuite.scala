@@ -264,6 +264,69 @@ abstract class SparkFunSuite
     }
   }
 
+  /**
+   * Checks an exception with an error class against expected results.
+   * @param exception     The exception to check
+   * @param errorClass    The expected error class identifying the error
+   * @param errorSubClass Optional the expected subclass, None if not given
+   * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
+   * @param parameters    A map of parameter names and values. The names are as defined
+   *                      in the error-classes file.
+   * @param matchPVals    Optionally treat the parameters value as regular expression pattern.
+   *                      false if not supplied.
+   */
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: Option[String],
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      matchPVals: Boolean = false): Unit = {
+    assert(exception.getErrorClass === errorClass)
+    if (exception.getErrorSubClass != null) {
+      assert(errorSubClass.isDefined)
+      assert(exception.getErrorSubClass === errorSubClass.get)
+    }
+    sqlState.foreach(state => assert(exception.getSqlState === state))
+    val expectedParameters = (exception.getParameterNames zip exception.getMessageParameters).toMap
+    if (matchPVals == true) {
+      assert(expectedParameters.size === parameters.size)
+      expectedParameters.foreach(
+        exp => {
+          val parm = parameters.getOrElse(exp._1,
+            throw new IllegalArgumentException("Missing parameter" + exp._1))
+          if (!exp._2.matches(parm)) {
+            throw new IllegalArgumentException("(" + exp._1 + ", " + exp._2 +
+              ") does not match: " + parm)
+          }
+        }
+      )
+    } else {
+      assert(expectedParameters === parameters)
+    }
+  }
+
+  protected def checkError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), Some(sqlState), parameters)
+
+  protected def checkError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, None, Some(sqlState), parameters)
+
+  protected def checkError(
+      exception: Exception with SparkThrowable,
+      errorClass: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, None, None, parameters)
+
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
       extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {
     private val _loggingEvents = new ArrayBuffer[LogEvent]()
