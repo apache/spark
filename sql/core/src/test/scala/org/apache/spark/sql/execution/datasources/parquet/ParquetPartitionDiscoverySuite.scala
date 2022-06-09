@@ -1260,7 +1260,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   }
 
   test("SPARK-39417: Null partition value") {
-    // null partition value are replace by DEFAULT_PARTITION_NAME before hitting getPathFragment.
+    // null partition value is replaced by DEFAULT_PARTITION_NAME before hitting getPathFragment.
     val spec = Map("p_int"-> ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
     val schema = new StructType().add("p_int", "int")
     val path = PartitioningUtils.getPathFragment(spec, schema)
