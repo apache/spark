@@ -938,14 +938,14 @@ case class Pmod(
     case _ => x => x == 0
   }
 
-  private lazy val pmodCache: (Any, Any) => Any = (l, r) => dataType match {
-    case _: IntegerType => pmod(l.asInstanceOf[Int], r.asInstanceOf[Int])
-    case _: LongType => pmod(l.asInstanceOf[Long], r.asInstanceOf[Long])
-    case _: ShortType => pmod(l.asInstanceOf[Short], r.asInstanceOf[Short])
-    case _: ByteType => pmod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
-    case _: FloatType => pmod(l.asInstanceOf[Float], r.asInstanceOf[Float])
-    case _: DoubleType => pmod(l.asInstanceOf[Double], r.asInstanceOf[Double])
-    case DecimalType.Fixed(precision, scale) => checkDecimalOverflow(
+  private lazy val pmodFunc: (Any, Any) => Any = dataType match {
+    case _: IntegerType => (l, r) => pmod(l.asInstanceOf[Int], r.asInstanceOf[Int])
+    case _: LongType => (l, r) => pmod(l.asInstanceOf[Long], r.asInstanceOf[Long])
+    case _: ShortType => (l, r) => pmod(l.asInstanceOf[Short], r.asInstanceOf[Short])
+    case _: ByteType => (l, r) => pmod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
+    case _: FloatType => (l, r) => pmod(l.asInstanceOf[Float], r.asInstanceOf[Float])
+    case _: DoubleType => (l, r) => pmod(l.asInstanceOf[Double], r.asInstanceOf[Double])
+    case DecimalType.Fixed(precision, scale) => (l, r) => checkDecimalOverflow(
       pmod(l.asInstanceOf[Decimal], r.asInstanceOf[Decimal]), precision, scale)
   }
 
@@ -963,7 +963,7 @@ case class Pmod(
           // when we reach here, failOnError must bet true.
           throw QueryExecutionErrors.divideByZeroError(queryContext)
         }
-        pmodCache(input1, input2)
+        pmodFunc(input1, input2)
       }
     }
   }
