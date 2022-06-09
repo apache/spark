@@ -27,10 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
-import org.apache.hadoop.mapreduce.TaskAttemptContext
 
-import org.apache.spark.{AccumulatorSuite, SparkException, TaskContext}
-import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
@@ -43,7 +41,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SQLHadoopMapReduceCommitProtocol}
+import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
