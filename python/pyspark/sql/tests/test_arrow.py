@@ -24,6 +24,8 @@ import warnings
 from distutils.version import LooseVersion
 from typing import cast
 
+import numpy as np
+
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf, assert_true, lit
@@ -48,10 +50,8 @@ from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
     have_pyarrow,
-    have_numpy,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    numpy_requirement_message,
 )
 from pyspark.testing.utils import QuietTest
 
@@ -61,9 +61,6 @@ if have_pandas:
 
 if have_pyarrow:
     import pyarrow as pa  # noqa: F401
-
-if have_numpy:
-    import numpy as np
 
 
 @unittest.skipIf(
@@ -509,7 +506,6 @@ class ArrowTests(ReusedSQLTestCase):
         schema_rt = from_arrow_schema(arrow_schema)
         self.assertEqual(self.schema, schema_rt)
 
-    @unittest.skipIf(not have_numpy, cast(str, numpy_requirement_message))
     def test_createDataFrame_with_ndarray(self):
         arrs = self.create_np_arrs
         collected_dtypes = [

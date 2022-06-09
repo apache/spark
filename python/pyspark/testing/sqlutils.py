@@ -45,14 +45,6 @@ except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
     pyarrow_requirement_message = str(e)
 
-numpy_requirement_message = None
-try:
-    import numpy  # noqa: F401
-
-except ImportError as e:
-    # If numpy is not installed, skip related tests.
-    numpy_requirement_message = str(e)
-
 test_not_compiled_message = None
 try:
     from pyspark.sql.utils import require_test_compiled
@@ -63,7 +55,6 @@ except Exception as e:
 
 have_pandas = pandas_requirement_message is None
 have_pyarrow = pyarrow_requirement_message is None
-have_numpy = numpy_requirement_message is None
 test_compiled = test_not_compiled_message is None
 
 
