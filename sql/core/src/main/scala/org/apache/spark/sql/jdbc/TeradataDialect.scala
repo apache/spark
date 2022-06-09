@@ -106,10 +106,12 @@ private case object TeradataDialect extends JdbcDialect {
           Some(DecimalType.SYSTEM_DEFAULT)
         } else {
           val scale = md.build().getLong("scale")
-          // In Teradata, Number or Number(*) means precision and scale is flexible.
-          // However, in this case, the scale returned from JDBC is 0,
-          // which will lead to fractional part loss.
-          // The precision returned from JDBC is 40, which conflicts to DecimalType.MAX_PRECISION.
+          // In Teradata, Number or Number(*) means precision and scale is flexible
+          // to system limit. See https://docs.teradata.com/r/Teradata-Database-SQL-Data-Types
+          // -and-Literals/June-2017/Numeric-Data-Types/NUMBER-Data-Type
+          // However, in this case, the scale returned from JDBC is 0, which will lead to
+          // fractional part loss. And the precision returned from JDBC is 40, which conflicts to
+          // DecimalType.MAX_PRECISION.
           // Handle this special case by adding explicit conversion to system default decimal type.
           if (size == 40) {
             if (scale == 0) Some(DecimalType.SYSTEM_DEFAULT)
