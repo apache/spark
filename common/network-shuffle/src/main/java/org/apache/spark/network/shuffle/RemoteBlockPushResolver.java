@@ -1303,8 +1303,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       if (o == null || getClass() != o.getClass()) return false;
 
       AppAttemptId appAttemptId = (AppAttemptId) o;
-      return Objects.equals(appId, appAttemptId.appId) &&
-          Objects.equals(attemptId, appAttemptId.attemptId);
+      return Objects.equals(attemptId, appAttemptId.attemptId) &&
+          Objects.equals(appId, appAttemptId.appId);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(appId, attemptId);
     }
 
     @Override
@@ -1366,10 +1371,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       if (o == null || getClass() != o.getClass()) return false;
 
       AppAttemptShuffleMergeId appAttemptShuffleMergeId = (AppAttemptShuffleMergeId) o;
-      return Objects.equals(appId, appAttemptShuffleMergeId.appId) &&
-          Objects.equals(attemptId, appAttemptShuffleMergeId.attemptId) &&
+      return Objects.equals(attemptId, appAttemptShuffleMergeId.attemptId) &&
           Objects.equals(shuffleId, appAttemptShuffleMergeId.shuffleId) &&
-          Objects.equals(shuffleMergeId, appAttemptShuffleMergeId.shuffleMergeId);
+          Objects.equals(shuffleMergeId, appAttemptShuffleMergeId.shuffleMergeId) &&
+          Objects.equals(appId, appAttemptShuffleMergeId.appId);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(appId, attemptId, shuffleId, shuffleMergeId);
     }
 
     @Override
@@ -1654,8 +1664,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       if (o == null || getClass() != o.getClass()) return false;
 
       AppPathsInfo appPathsInfo = (AppPathsInfo) o;
-      return Arrays.equals(activeLocalDirs, appPathsInfo.activeLocalDirs) &&
-          Objects.equals(subDirsPerLocalDir, appPathsInfo.subDirsPerLocalDir);
+      return Objects.equals(subDirsPerLocalDir, appPathsInfo.subDirsPerLocalDir) &&
+          Arrays.equals(activeLocalDirs, appPathsInfo.activeLocalDirs);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(subDirsPerLocalDir) * 41 + Arrays.hashCode(activeLocalDirs);
     }
   }
 
