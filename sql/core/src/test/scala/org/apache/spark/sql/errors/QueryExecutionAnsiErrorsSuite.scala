@@ -27,17 +27,16 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
   private val ansiConf = "\"" + SQLConf.ANSI_ENABLED.key + "\""
 
   test("CAST_OVERFLOW: from timestamp to int") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkArithmeticException] {
         sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
       },
       errorClass = "CAST_OVERFLOW",
-      msg =
-        "The value TIMESTAMP '9999-12-31 04:13:14.56789' of the type \"TIMESTAMP\" cannot be cast" +
-        " to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return " +
-          "NULL instead. " +
-        s"""If necessary set $ansiConf to "false" to bypass this error.""",
-      sqlState = Some("22005"))
+      parameters = Map("value" -> "TIMESTAMP '9999-12-31 04:13:14.56789'",
+        "sourceType" -> "\"TIMESTAMP\"",
+        "targetType" -> "\"INT\"",
+        "ansiConfig" -> ansiConf),
+      sqlState = "22005")
   }
 
   test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
@@ -59,14 +58,13 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkDateTimeException] {
         sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
       },
       errorClass = "INVALID_FRACTION_OF_SECOND",
-      msg = "The fraction of sec must be zero. Valid range is [0, 60]. " +
-        s"""If necessary set $ansiConf to "false" to bypass this error.""",
-      sqlState = Some("22023"))
+      parameters = Map("ansiConfig" -> ansiConf),
+      sqlState = "22023")
   }
 
   test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
@@ -87,26 +85,22 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
   }
 
   test("INVALID_ARRAY_INDEX: get element from array") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkArrayIndexOutOfBoundsException] {
         sql("select array(1, 2, 3, 4, 5)[8]").collect()
       },
       errorClass = "INVALID_ARRAY_INDEX",
-      msg = "The index 8 is out of bounds. The array has 5 elements. " +
-        s"""If necessary set $ansiConf to "false" to bypass this error."""
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf)
     )
   }
 
   test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkArrayIndexOutOfBoundsException] {
         sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
       },
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      msg = "The index 8 is out of bounds. The array has 5 elements. " +
-        "Use `try_element_at` to tolerate accessing element at invalid index and return " +
-        "NULL instead. " +
-        s"""If necessary set $ansiConf to "false" to bypass this error."""
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf)
     )
   }
 

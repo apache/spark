@@ -166,7 +166,7 @@
       See: SPARK-36547, SPARK-38394.
        -->
 
-    <scala-maven-plugin.version>4.6.1</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.6.2</scala-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>

@@ -96,14 +96,16 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("TRANSFORM_DISTINCT_ALL"),
+      errorSubClass = "TRANSFORM_DISTINCT_ALL",
+        messageParameters = Array[String](),
       ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("TRANSFORM_NON_HIVE"),
+      errorSubClass = "TRANSFORM_NON_HIVE",
+        messageParameters = Array[String](),
       ctx)
   }
 
@@ -114,21 +116,24 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("LATERAL_NATURAL_JOIN"),
+      errorSubClass = "LATERAL_NATURAL_JOIN",
+        messageParameters = Array[String](),
       ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("LATERAL_JOIN_USING"),
+      errorSubClass = "LATERAL_JOIN_USING",
+        messageParameters = Array[String](),
       ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("LATERAL_JOIN_OF_TYPE", s"${toSQLStmt(joinType)}"),
+      errorSubClass = "LATERAL_JOIN_OF_TYPE",
+      messageParameters = Array(s"${toSQLStmt(joinType)}"),
       ctx)
   }
 
@@ -155,7 +160,10 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL_CROSS_JOIN"), ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "NATURAL_CROSS_JOIN",
+        messageParameters = Array[String](),
+      ctx = ctx)
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
@@ -269,14 +277,16 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("SET_NAMESPACE_PROPERTY", property, msg),
+      errorSubClass = "SET_NAMESPACE_PROPERTY",
+      messageParameters = Array(property, msg),
       ctx)
   }
 
   def propertiesAndDbPropertiesBothSpecifiedError(ctx: CreateNamespaceContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("SET_PROPERTIES_AND_DBPROPERTIES"),
+      errorSubClass = "SET_PROPERTIES_AND_DBPROPERTIES",
+        messageParameters = Array[String](),
       ctx
     )
   }
@@ -285,7 +295,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("SET_TABLE_PROPERTY", property, msg),
+      errorSubClass = "SET_TABLE_PROPERTY",
+      messageParameters = Array(property, msg),
       ctx)
   }
 
@@ -318,7 +329,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def descColumnForPartitionUnsupportedError(ctx: DescribeRelationContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("DESC_TABLE_COLUMN_PARTITION"),
+      errorSubClass = "DESC_TABLE_COLUMN_PARTITION",
+      messageParameters = Array[String](),
       ctx)
   }
 

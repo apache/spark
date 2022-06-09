@@ -67,6 +67,7 @@ trait QueryErrorsSuiteBase extends SharedSparkSession {
       errorClass
     }
     assert(exception.getErrorClass === errorClass)
+    assert(exception.getErrorSubClass === errorSubClass.orNull)
     assert(exception.getSqlState === sqlState)
     assert(exception.getMessage === s"""\n[$fullErrorClass] """ + message)
   }
