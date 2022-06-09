@@ -938,6 +938,17 @@ case class Pmod(
     case _ => x => x == 0
   }
 
+  private lazy val pmodCache: (Any, Any) => Any = (l, r) => dataType match {
+    case _: IntegerType => pmod(l.asInstanceOf[Int], r.asInstanceOf[Int])
+    case _: LongType => pmod(l.asInstanceOf[Long], r.asInstanceOf[Long])
+    case _: ShortType => pmod(l.asInstanceOf[Short], r.asInstanceOf[Short])
+    case _: ByteType => pmod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
+    case _: FloatType => pmod(l.asInstanceOf[Float], r.asInstanceOf[Float])
+    case _: DoubleType => pmod(l.asInstanceOf[Double], r.asInstanceOf[Double])
+    case DecimalType.Fixed(precision, scale) => checkDecimalOverflow(
+      pmod(l.asInstanceOf[Decimal], r.asInstanceOf[Decimal]), precision, scale)
+  }
+
   final override def eval(input: InternalRow): Any = {
     // evaluate right first as we have a chance to skip left if right is 0
     val input2 = right.eval(input)
@@ -952,17 +963,7 @@ case class Pmod(
           // when we reach here, failOnError must bet true.
           throw QueryExecutionErrors.divideByZeroError(queryContext)
         }
-
-        dataType match {
-          case _: IntegerType => pmod(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
-          case _: LongType => pmod(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
-          case _: ShortType => pmod(input1.asInstanceOf[Short], input2.asInstanceOf[Short])
-          case _: ByteType => pmod(input1.asInstanceOf[Byte], input2.asInstanceOf[Byte])
-          case _: FloatType => pmod(input1.asInstanceOf[Float], input2.asInstanceOf[Float])
-          case _: DoubleType => pmod(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
-          case DecimalType.Fixed(precision, scale) => checkDecimalOverflow(
-            pmod(input1.asInstanceOf[Decimal], input2.asInstanceOf[Decimal]), precision, scale)
-        }
+        pmodCache(input1, input2)
       }
     }
   }
