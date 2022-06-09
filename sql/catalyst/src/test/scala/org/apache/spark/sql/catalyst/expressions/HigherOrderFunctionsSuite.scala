@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -846,11 +846,14 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         If(comp(left, right) === 0, Literal.create(null, IntegerType), comp(left, right))
     }
 
-    checkExceptionInExpression[NullPointerException](
-      arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator), "The comparison result is null")
+    withSQLConf(
+        SQLConf.LEGACY_ARRAY_SORT_FAILS_ON_NULL_COMPARISON_RESULT.key -> "true") {
+      checkExceptionInExpression[SparkException](
+        arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator), "The comparison result is null")
+    }
 
     withSQLConf(
-        SQLConf.LEGACY_ARRAY_SORT_HANDLES_COMPARISON_RESULT_NULL_VALUE_AS_ZERO.key -> "true") {
+        SQLConf.LEGACY_ARRAY_SORT_FAILS_ON_NULL_COMPARISON_RESULT.key -> "false") {
       checkEvaluation(arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator),
         Seq(1, 1, 2, 3))
     }
