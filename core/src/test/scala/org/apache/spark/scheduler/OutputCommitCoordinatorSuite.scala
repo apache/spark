@@ -188,12 +188,6 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // The authorized committer now fails, clearing the lock
     outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
       attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
-    // A new task should not be allowed to become stage failed because of potential data duplication
-    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
-      nonAuthorizedCommitter + 2))
-    // There can only be one authorized committer
-    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
-      nonAuthorizedCommitter + 3))
   }
 
   test("SPARK-19631: Do not allow failed attempts to be authorized for committing") {
@@ -236,8 +230,6 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!outputCommitCoordinator.canCommit(stage, 3, partition, taskAttempt))
     outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
       ExecutorLostFailure("0", exitCausedByApp = true, None))
-    // A new task should not be allowed to become stage failed because of potential data duplication
-    assert(!outputCommitCoordinator.canCommit(stage, 4, partition, taskAttempt))
   }
 
   test("SPARK-24589: Make sure stage state is cleaned up") {
@@ -271,6 +263,32 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(sc.env.outputCommitCoordinator, times(2))
       .stageStart(meq(retriedStage.head), any())
     verify(sc.env.outputCommitCoordinator).stageEnd(meq(retriedStage.head))
+  }
+
+  test("SPARK-39195: Spark OutputCommitCoordinator should abort stage " +
+    "when committed file not consistent with task status") {
+    val stage: Int = 1
+    val stageAttempt: Int = 1
+    val partition: Int = 2
+    val authorizedCommitter: Int = 3
+    val nonAuthorizedCommitter: Int = 100
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
+
+    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, authorizedCommitter))
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter))
+    // The non-authorized committer fails
+    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
+      attemptNumber = nonAuthorizedCommitter, reason = TaskKilled("test"))
+    // New tasks should still not be able to commit because the authorized committer has not failed
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 1))
+    // The authorized committer now fails, clearing the lock
+    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
+      attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
+    // A new task should not be allowed to become stage failed because of potential data duplication
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 2))
   }
 }
 
