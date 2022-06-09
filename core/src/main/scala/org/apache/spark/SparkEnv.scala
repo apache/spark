@@ -250,6 +250,7 @@ object SparkEnv extends Logging {
       listenerBus: LiveListenerBus = null,
       sc: Option[SparkContext] = None,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
+    // scalastyle:on argcount
 
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
 
@@ -432,7 +433,6 @@ object SparkEnv extends Logging {
 
     envInstance
   }
-  // scalastyle:on argcount
 
   /**
    * Return a map representation of jvm information, Spark properties, system properties, and
