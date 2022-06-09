@@ -157,7 +157,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.12.15</scala.version>
+    <scala.version>2.12.16</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
     <!--
@@ -2908,7 +2908,7 @@
               <compilerPlugin>
                 <groupId>com.github.ghik</groupId>
                 <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>1.7.6</version>
+                <version>1.7.9</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
@@ -3573,7 +3573,7 @@
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
          property correctly.
         -->
-        <scala.version>2.12.15</scala.version>
+        <scala.version>2.12.16</scala.version>
       </properties>
       <build>
         <pluginManagement>

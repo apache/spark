@@ -103,10 +103,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.info = new PrintStream(System.err, true, UTF_8.name())
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
-      case e: UnsupportedEncodingException => System.exit(ERROR_PATH_NOT_FOUND)
+      case e: UnsupportedEncodingException =>
+        sessionState.close()
+        System.exit(ERROR_PATH_NOT_FOUND)
     }
 
     if (!oproc.process_stage2(sessionState)) {
+      sessionState.close()
       System.exit(ERROR_MISUSE_SHELL_BUILTIN)
     }
 
@@ -140,7 +143,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     SessionState.setCurrentSessionState(sessionState)
 
     // Clean up after we exit
-    ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
+    ShutdownHookManager.addShutdownHook { () =>
+      sessionState.close()
+      SparkSQLEnv.stop()
+    }
 
     if (isRemoteMode(sessionState)) {
       // Hive 1.2 + not supported in CLI

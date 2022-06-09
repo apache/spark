@@ -29,21 +29,21 @@ class PercentileQuerySuite extends QueryTest with SharedSparkSession {
 
   private val table = "percentile_test"
 
-  test("SPARK-37138: Support Ansi Interval type in Percentile") {
+  test("SPARK-37138, SPARK-39427: Disable Ansi Interval type in Percentile") {
     withTempView(table) {
       Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
         (Period.ofMonths(200), Duration.ofSeconds(200L)),
         (Period.ofMonths(300), Duration.ofSeconds(300L)))
         .toDF("col1", "col2").createOrReplaceTempView(table)
-      checkAnswer(
+      val e = intercept[AnalysisException] {
         spark.sql(
           s"""SELECT
-             |  CAST(percentile(col1, 0.5) AS STRING),
-             |  SUM(null),
-             |  CAST(percentile(col2, 0.5) AS STRING)
-             |FROM $table
-           """.stripMargin),
-        Row("200.0", null, "2.0E8"))
+            |  CAST(percentile(col1, 0.5) AS STRING),
+            |  SUM(null),
+            |  CAST(percentile(col2, 0.5) AS STRING)
+            |FROM $table""".stripMargin).collect()
+      }
+      assert(e.getMessage.contains("data type mismatch"))
     }
   }
 }
