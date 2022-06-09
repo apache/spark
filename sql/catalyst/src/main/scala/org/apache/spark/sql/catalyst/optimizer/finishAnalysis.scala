@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable
+import java.time.Instant
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -72,21 +73,19 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
  */
 object ComputeCurrentTime extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val currentDates = mutable.Map.empty[String, Literal]
-    val timeExpr = CurrentTimestamp()
-    val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
-    val currentTime = Literal.create(timestamp, timeExpr.dataType)
+    val instant = Instant.now()
+    val currentTimestampMicros = instantToMicros(instant)
+    val currentTime = Literal.create(currentTimestampMicros, TimestampType)
     val timezone = Literal.create(SQLConf.get.sessionLocalTimeZone, StringType)
 
-    plan transformAllExpressions {
-      case currentDate @ CurrentDate(Some(timeZoneId)) =>
-        currentDates.getOrElseUpdate(timeZoneId, {
-          Literal.create(
-            DateTimeUtils.microsToDays(timestamp, currentDate.zoneId),
-            DateType)
-        })
-      case CurrentTimestamp() | Now() => currentTime
-      case CurrentTimeZone() => timezone
+    plan.transformDownWithSubqueries {
+      case subQuery =>
+        subQuery.transformAllExpressions {
+          case cd: CurrentDate =>
+            Literal.create(DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
+          case CurrentTimestamp() | Now() => currentTime
+          case CurrentTimeZone() => timezone
+        }
     }
   }
 }
