@@ -371,9 +371,12 @@ private[spark] class SparkSecurityException(
 private[spark] class SparkArrayIndexOutOfBoundsException(
     errorClass: String,
     errorSubClass: Option[String] = None,
-    messageParameters: Array[String])
+    messageParameters: Array[String],
+    queryContext: String)
   extends ArrayIndexOutOfBoundsException(
-    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters))
+    // scalastyle:off line.size.limit
+    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, queryContext))
+    // scalastyle:on line.size.limit
     with SparkThrowable {
 
   override def getMessageParameters: Array[String] = messageParameters
