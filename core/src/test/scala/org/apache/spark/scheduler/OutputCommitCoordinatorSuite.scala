@@ -144,13 +144,6 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(tempDir.list().size === 1)
   }
 
-  test("If commit fails, if task is retried it should not be locked, and will succeed.") {
-    val rdd = sc.parallelize(Seq(1), 1)
-    sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
-      0 until rdd.partitions.size)
-    assert(tempDir.list().size === 1)
-  }
-
   test("Job should not complete if all commits are denied") {
     // Create a mock OutputCommitCoordinator that denies all attempts to commit
     doReturn(false).when(outputCommitCoordinator).handleAskPermissionToCommit(
@@ -267,28 +260,13 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-39195: Spark OutputCommitCoordinator should abort stage " +
     "when committed file not consistent with task status") {
-    val stage: Int = 1
-    val stageAttempt: Int = 1
-    val partition: Int = 2
-    val authorizedCommitter: Int = 3
-    val nonAuthorizedCommitter: Int = 100
-    outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
-
-    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, authorizedCommitter))
-    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
-      nonAuthorizedCommitter))
-    // The non-authorized committer fails
-    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
-      attemptNumber = nonAuthorizedCommitter, reason = TaskKilled("test"))
-    // New tasks should still not be able to commit because the authorized committer has not failed
-    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
-      nonAuthorizedCommitter + 1))
-    // The authorized committer now fails, clearing the lock
-    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
-      attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
-    // A new task should not be allowed to become stage failed because of potential data duplication
-    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
-      nonAuthorizedCommitter + 2))
+    val e = intercept[SparkException] {
+      val rdd = sc.parallelize(Seq(1, 2, 3, 4, 5), 5)
+      sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
+        0 until rdd.partitions.size)
+    }.getMessage
+    assert(e.contains("Authorized committer (attemptNumber=0, stage=0, partition=0) failed; " +
+      "but task commit success, data duplication may happen"))
   }
 }
 
@@ -309,6 +287,7 @@ private case class OutputCommitFunctions(tempDirPath: String) {
   // Mock output committer that simulates a failed commit (after commit is authorized)
   private def failingOutputCommitter = new FakeOutputCommitter {
     override def commitTask(taskAttemptContext: TaskAttemptContext): Unit = {
+      super.commitTask(taskAttemptContext)
       throw new RuntimeException
     }
   }
