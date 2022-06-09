@@ -20,7 +20,7 @@ package org.apache.spark.deploy.master
 import org.apache.spark.resource.ResourceRequirement
 
 /**
- * Describe resource requests for different resource profiles. Used for executor schedule.
+ * Describe resource requirements for different resource profiles. Used for executor schedule.
  *
  * @param coresPerExecutor cores for each executor.
  * @param memoryMbPerExecutor memory for each executor.
