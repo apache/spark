@@ -265,8 +265,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
         0 until rdd.partitions.size)
     }.getMessage
-    assert(e.contains("Authorized committer (attemptNumber=0, stage=0, partition=0) failed; " +
-      "but task commit success, data duplication may happen"))
+    assert(e.endsWith("failed; but task commit success, data duplication may happen."))
   }
 }
 
