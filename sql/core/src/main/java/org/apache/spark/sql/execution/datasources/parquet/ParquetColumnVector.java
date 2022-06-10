@@ -60,17 +60,9 @@ final class ParquetColumnVector {
       WritableColumnVector vector,
       int capacity,
       MemoryMode memoryMode,
-      Set<ParquetColumn> missingColumns) {
-    this(column, vector, capacity, memoryMode, missingColumns, true);
-  }
-
-  ParquetColumnVector(
-      ParquetColumn column,
-      WritableColumnVector vector,
-      int capacity,
-      MemoryMode memoryMode,
       Set<ParquetColumn> missingColumns,
-      boolean isTopLevel) {
+      boolean isTopLevel,
+      Object defaultValue) {
     DataType sparkType = column.sparkType();
     if (!sparkType.sameType(vector.dataType())) {
       throw new IllegalArgumentException("Spark type: " + sparkType +
@@ -83,8 +75,21 @@ final class ParquetColumnVector {
     this.isPrimitive = column.isPrimitive();
 
     if (missingColumns.contains(column)) {
-      vector.setAllNull();
-      return;
+      if (defaultValue == null) {
+        vector.setAllNull();
+        return;
+      }
+      // For Parquet tables whose columns have associated DEFAULT values, this reader must return
+      // those values instead of NULL when the corresponding columns are not present in storage.
+      // Here we write the 'defaultValue' to each element in the new WritableColumnVector using
+      // the appendObjects method. This delegates to some specific append* method depending on the
+      // type of 'defaultValue'; for example, if 'defaultValue' is a Float, then we call the
+      // appendFloats method.
+      if (!vector.appendObjects(capacity, defaultValue).isPresent()) {
+        throw new IllegalArgumentException("Cannot assign default column value to result " +
+          "column batch in vectorized Parquet reader because the data type is not supported: " +
+          defaultValue);
+      }
     }
 
     if (isPrimitive) {
@@ -101,7 +106,7 @@ final class ParquetColumnVector {
 
       for (int i = 0; i < column.children().size(); i++) {
         ParquetColumnVector childCv = new ParquetColumnVector(column.children().apply(i),
-          vector.getChild(i), capacity, memoryMode, missingColumns, false);
+          vector.getChild(i), capacity, memoryMode, missingColumns, false, null);
         children.add(childCv);
 
 

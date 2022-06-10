@@ -477,6 +477,7 @@ object FunctionRegistry {
     expression[Min]("min"),
     expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
+    expression[Median]("median"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
     expression[ApproximatePercentile]("approx_percentile", true),
@@ -505,6 +506,8 @@ object FunctionRegistry {
     expression[RegrSXX]("regr_sxx"),
     expression[RegrSXY]("regr_sxy"),
     expression[RegrSYY]("regr_syy"),
+    expression[RegrSlope]("regr_slope"),
+    expression[RegrIntercept]("regr_intercept"),
 
     // string functions
     expression[Ascii]("ascii"),

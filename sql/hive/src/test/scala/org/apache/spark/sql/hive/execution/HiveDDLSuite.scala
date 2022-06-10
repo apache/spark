@@ -1650,8 +1650,8 @@ class HiveDDLSuite
         // Even if index tables exist, listTables and getTable APIs should still work
         checkAnswer(
           spark.catalog.listTables().toDF(),
-          Row(indexTabName, "default", null, null, false) ::
-            Row(tabName, "default", null, "MANAGED", false) :: Nil)
+          Row(indexTabName, "spark_catalog", Array("default"), null, null, false) ::
+            Row(tabName, "spark_catalog", Array("default"), null, "MANAGED", false) :: Nil)
         assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
 
         intercept[TableAlreadyExistsException] {

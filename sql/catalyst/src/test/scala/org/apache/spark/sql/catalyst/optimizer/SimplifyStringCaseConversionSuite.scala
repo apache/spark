@@ -37,12 +37,12 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
   test("simplify UPPER(UPPER(str))") {
     val originalQuery =
       testRelation
-        .select(Upper(Upper($"a")) as Symbol("u"))
+        .select(Upper(Upper($"a")) as "u")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select(Upper($"a") as Symbol("u"))
+        .select(Upper($"a") as "u")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -51,12 +51,12 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
   test("simplify UPPER(LOWER(str))") {
     val originalQuery =
       testRelation
-        .select(Upper(Lower($"a")) as Symbol("u"))
+        .select(Upper(Lower($"a")) as "u")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select(Upper($"a") as Symbol("u"))
+        .select(Upper($"a") as "u")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -65,11 +65,11 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
   test("simplify LOWER(UPPER(str))") {
     val originalQuery =
       testRelation
-        .select(Lower(Upper($"a")) as Symbol("l"))
+        .select(Lower(Upper($"a")) as "l")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Lower($"a") as Symbol("l"))
+      .select(Lower($"a") as "l")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -78,11 +78,11 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
   test("simplify LOWER(LOWER(str))") {
     val originalQuery =
       testRelation
-        .select(Lower(Lower($"a")) as Symbol("l"))
+        .select(Lower(Lower($"a")) as "l")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Lower($"a") as Symbol("l"))
+      .select(Lower($"a") as "l")
       .analyze
 
     comparePlans(optimized, correctAnswer)

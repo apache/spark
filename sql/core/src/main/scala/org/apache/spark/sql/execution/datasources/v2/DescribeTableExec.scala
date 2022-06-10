@@ -51,7 +51,7 @@ case class DescribeTableExec(
       }
     })
     val properties =
-      table.properties.asScala.toList
+      conf.redactOptions(table.properties.asScala.toMap).toList
         .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
         .sortBy(_._1).map {
         case (key, value) => key + "=" + value

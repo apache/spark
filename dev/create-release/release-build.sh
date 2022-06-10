@@ -265,7 +265,12 @@ if [[ "$1" == "package" ]]; then
     # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
     # to dev0 to be closer to PEP440.
     PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -e "s/-/./" -e "s/SNAPSHOT/dev0/" -e "s/preview/dev/"`
-    echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
+
+    if [[ $SPARK_VERSION == 3.0* ]] || [[ $SPARK_VERSION == 3.1* ]] || [[ $SPARK_VERSION == 3.2* ]]; then
+      echo "__version__ = '$PYSPARK_VERSION'" > python/pyspark/version.py
+    else
+      echo "__version__: str = '$PYSPARK_VERSION'" > python/pyspark/version.py
+    fi
 
     # Get maven home set by MVN
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`

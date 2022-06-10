@@ -52,8 +52,7 @@ class SparkOptimizer(
     Batch("PartitionPruning", Once,
       PartitionPruning) :+
     Batch("InjectRuntimeFilter", FixedPoint(1),
-      InjectRuntimeFilter,
-      RewritePredicateSubquery) :+
+      InjectRuntimeFilter) :+
     Batch("MergeScalarSubqueries", Once,
       MergeScalarSubqueries) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
