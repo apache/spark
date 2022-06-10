@@ -54,7 +54,7 @@ Condition : (i_category#10 IN (Jewelry                                          
 
 (7) BroadcastExchange
 Input [6]: [i_item_sk#5, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=1]
 
 (8) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_item_sk#1]
@@ -66,62 +66,62 @@ Output [7]: [ss_ext_sales_price#2, ss_sold_date_sk#3, i_item_id#6, i_item_desc#7
 Input [9]: [ss_item_sk#1, ss_ext_sales_price#2, ss_sold_date_sk#3, i_item_sk#5, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
 
 (10) ReusedExchange [Reuses operator id: 27]
-Output [1]: [d_date_sk#12]
+Output [1]: [d_date_sk#11]
 
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#3]
-Right keys [1]: [d_date_sk#12]
+Right keys [1]: [d_date_sk#11]
 Join condition: None
 
 (12) Project [codegen id : 3]
 Output [6]: [ss_ext_sales_price#2, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
-Input [8]: [ss_ext_sales_price#2, ss_sold_date_sk#3, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10, d_date_sk#12]
+Input [8]: [ss_ext_sales_price#2, ss_sold_date_sk#3, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10, d_date_sk#11]
 
 (13) HashAggregate [codegen id : 3]
 Input [6]: [ss_ext_sales_price#2, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
 Keys [5]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8]
 Functions [1]: [partial_sum(UnscaledValue(ss_ext_sales_price#2))]
-Aggregate Attributes [1]: [sum#13]
-Results [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, sum#14]
+Aggregate Attributes [1]: [sum#12]
+Results [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, sum#13]
 
 (14) Exchange
-Input [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, sum#14]
-Arguments: hashpartitioning(i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, 5), ENSURE_REQUIREMENTS, [id=#15]
+Input [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, sum#13]
+Arguments: hashpartitioning(i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (15) HashAggregate [codegen id : 4]
-Input [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, sum#14]
+Input [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, sum#13]
 Keys [5]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#2))#16]
-Results [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#16,17,2) AS itemrevenue#17, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#16,17,2) AS _w0#18, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#16,17,2) AS _w1#19, i_item_id#6]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#2))#14]
+Results [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#14,17,2) AS itemrevenue#15, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#14,17,2) AS _w0#16, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#14,17,2) AS _w1#17, i_item_id#6]
 
 (16) Exchange
-Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, _w0#18, _w1#19, i_item_id#6]
-Arguments: hashpartitioning(i_class#9, 5), ENSURE_REQUIREMENTS, [id=#20]
+Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, _w0#16, _w1#17, i_item_id#6]
+Arguments: hashpartitioning(i_class#9, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (17) Sort [codegen id : 5]
-Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, _w0#18, _w1#19, i_item_id#6]
+Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, _w0#16, _w1#17, i_item_id#6]
 Arguments: [i_class#9 ASC NULLS FIRST], false, 0
 
 (18) Window
-Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, _w0#18, _w1#19, i_item_id#6]
-Arguments: [sum(_w1#19) windowspecdefinition(i_class#9, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#21], [i_class#9]
+Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, _w0#16, _w1#17, i_item_id#6]
+Arguments: [sum(_w1#17) windowspecdefinition(i_class#9, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#18], [i_class#9]
 
 (19) Project [codegen id : 6]
-Output [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#18) * 100.00), DecimalType(21,2)) as decimal(27,2))) / promote_precision(_we0#21)), DecimalType(38,17)) AS revenueratio#22, i_item_id#6]
-Input [9]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, _w0#18, _w1#19, i_item_id#6, _we0#21]
+Output [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#16) * 100.00), DecimalType(21,2)) as decimal(27,2))) / promote_precision(_we0#18)), DecimalType(38,17)) AS revenueratio#19, i_item_id#6]
+Input [9]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, _w0#16, _w1#17, i_item_id#6, _we0#18]
 
 (20) Exchange
-Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, revenueratio#22, i_item_id#6]
-Arguments: rangepartitioning(i_category#10 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_item_id#6 ASC NULLS FIRST, i_item_desc#7 ASC NULLS FIRST, revenueratio#22 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#23]
+Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, revenueratio#19, i_item_id#6]
+Arguments: rangepartitioning(i_category#10 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_item_id#6 ASC NULLS FIRST, i_item_desc#7 ASC NULLS FIRST, revenueratio#19 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
 (21) Sort [codegen id : 7]
-Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, revenueratio#22, i_item_id#6]
-Arguments: [i_category#10 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_item_id#6 ASC NULLS FIRST, i_item_desc#7 ASC NULLS FIRST, revenueratio#22 ASC NULLS FIRST], true, 0
+Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, revenueratio#19, i_item_id#6]
+Arguments: [i_category#10 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_item_id#6 ASC NULLS FIRST, i_item_desc#7 ASC NULLS FIRST, revenueratio#19 ASC NULLS FIRST], true, 0
 
 (22) Project [codegen id : 7]
-Output [6]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, revenueratio#22]
-Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, revenueratio#22, i_item_id#6]
+Output [6]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, revenueratio#19]
+Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, revenueratio#19, i_item_id#6]
 
 ===== Subqueries =====
 
@@ -134,25 +134,25 @@ BroadcastExchange (27)
 
 
 (23) Scan parquet default.date_dim
-Output [2]: [d_date_sk#12, d_date#24]
+Output [2]: [d_date_sk#11, d_date#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2001-01-01), LessThanOrEqual(d_date,2001-01-31), GreaterThanOrEqual(d_date_sk,2451911), LessThanOrEqual(d_date_sk,2451941), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (24) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#12, d_date#24]
+Input [2]: [d_date_sk#11, d_date#20]
 
 (25) Filter [codegen id : 1]
-Input [2]: [d_date_sk#12, d_date#24]
-Condition : (((((isnotnull(d_date#24) AND (d_date#24 >= 2001-01-01)) AND (d_date#24 <= 2001-01-31)) AND (d_date_sk#12 >= 2451911)) AND (d_date_sk#12 <= 2451941)) AND isnotnull(d_date_sk#12))
+Input [2]: [d_date_sk#11, d_date#20]
+Condition : (((((isnotnull(d_date#20) AND (d_date#20 >= 2001-01-01)) AND (d_date#20 <= 2001-01-31)) AND (d_date_sk#11 >= 2451911)) AND (d_date_sk#11 <= 2451941)) AND isnotnull(d_date_sk#11))
 
 (26) Project [codegen id : 1]
-Output [1]: [d_date_sk#12]
-Input [2]: [d_date_sk#12, d_date#24]
+Output [1]: [d_date_sk#11]
+Input [2]: [d_date_sk#11, d_date#20]
 
 (27) BroadcastExchange
-Input [1]: [d_date_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#25]
+Input [1]: [d_date_sk#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
 
 

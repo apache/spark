@@ -78,6 +78,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
   private val referenceRegex = "#\\d+".r
   private val normalizeRegex = "#\\d+L?".r
+  private val planIdRegex = "plan_id=\\d+".r
 
   private val clsName = this.getClass.getCanonicalName
 
@@ -232,7 +233,15 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     val map = new mutable.HashMap[String, String]()
     normalizeRegex.findAllMatchIn(plan).map(_.toString)
       .foreach(map.getOrElseUpdate(_, (map.size + 1).toString))
-    normalizeRegex.replaceAllIn(plan, regexMatch => s"#${map(regexMatch.toString)}")
+    val exprIdNormalized = normalizeRegex.replaceAllIn(
+      plan, regexMatch => s"#${map(regexMatch.toString)}")
+
+    // Normalize the plan id in Exchange nodes. See `Exchange.stringArgs`.
+    val planIdMap = new mutable.HashMap[String, String]()
+    planIdRegex.findAllMatchIn(exprIdNormalized).map(_.toString)
+      .foreach(planIdMap.getOrElseUpdate(_, (planIdMap.size + 1).toString))
+    planIdRegex.replaceAllIn(
+      exprIdNormalized, regexMatch => s"plan_id=${planIdMap(regexMatch.toString)}")
   }
 
   private def normalizeLocation(plan: String): String = {
