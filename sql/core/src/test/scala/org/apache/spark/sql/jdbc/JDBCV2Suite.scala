@@ -425,6 +425,24 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkFiltersRemoved(df10)
     checkPushedInfo(df10, "PushedFilters: [ID IS NOT NULL, ID > 1], ")
     checkAnswer(df10, Row("mary", 2))
+
+    val df11 = sql(
+      """
+        |SELECT * FROM h2.test.employee
+        |WHERE GREATEST(bonus, 1100) > 1200 AND LEAST(salary, 10000) > 9000 AND RAND(1) < 1
+        |""".stripMargin)
+    checkFiltersRemoved(df11)
+    checkPushedInfo(df11, "PushedFilters: " +
+      "[(GREATEST(BONUS, 1100.0)) > 1200.0, (LEAST(SALARY, 10000.00)) > 9000.00, RAND(1) < 1.0]")
+    checkAnswer(df11, Row(2, "david", 10000, 1300, true))
+
+    val df12 = sql("""
+                     |SELECT * FROM h2.test.employee
+                     |WHERE IF(SALARY > 10000, BONUS, BONUS + 200) > 1200
+                     |""".stripMargin)
+    checkFiltersRemoved(df12, false)
+    checkPushedInfo(df12, "PushedFilters: []")
+    checkAnswer(df12, Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
   }
 
   test("scan with filter push-down with ansi mode") {
