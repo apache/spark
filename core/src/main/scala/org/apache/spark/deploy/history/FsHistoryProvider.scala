@@ -747,6 +747,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         listing.synchronized {
           listing.delete(classOf[LogInfo], rootPath.toString)
         }
+      case _: FileNotFoundException
+          if reader.rootPath.getName.endsWith(EventLogFileWriter.IN_PROGRESS) =>
+        logWarning(s"In-progress file does not exist: ${reader.rootPath}. The application may be " +
+          s"completed during processing.")
       case e: Exception =>
         logError("Exception while merging application listings", e)
     } finally {
