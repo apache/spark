@@ -26,7 +26,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 /**
  * Base class for launcher implementations.
  *
- * @since Spark 2.3.0
+ * @since 2.3.0
  */
 public abstract class AbstractLauncher<T extends AbstractLauncher<T>> {
 

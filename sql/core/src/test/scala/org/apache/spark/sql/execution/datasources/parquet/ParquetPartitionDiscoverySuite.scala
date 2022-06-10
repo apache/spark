@@ -1259,6 +1259,14 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     assert("p_int=10/p_float=1.0" === path)
   }
 
+  test("SPARK-39417: Null partition value") {
+    // null partition value is replaced by DEFAULT_PARTITION_NAME before hitting getPathFragment.
+    val spec = Map("p_int"-> ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
+    val schema = new StructType().add("p_int", "int")
+    val path = PartitioningUtils.getPathFragment(spec, schema)
+    assert(s"p_int=${ExternalCatalogUtils.DEFAULT_PARTITION_NAME}" === path)
+  }
+
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
       for {

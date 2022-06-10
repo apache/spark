@@ -27,9 +27,9 @@ Pandas API on Spark follows the API specifications of pandas 1.3.
 .. toctree::
    :maxdepth: 2
 
-   pyspark.sql
+   pyspark.sql/index
    pyspark.pandas/index
-   pyspark.ss
+   pyspark.ss/index
    pyspark.ml
    pyspark.streaming
    pyspark.mllib

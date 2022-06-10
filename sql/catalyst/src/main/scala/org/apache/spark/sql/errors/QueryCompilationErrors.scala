@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-object QueryCompilationErrors extends QueryErrorsBase {
+private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -1989,7 +1989,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
         s"${table.identifier}, which is created by Hive and uses the " +
         "following unsupported serde configuration\n" +
-        builder.toString()
+        builder.toString() + "\n" +
+        s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` to show Hive DDL instead."
     )
   }
 

@@ -125,7 +125,8 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     // Does not fail with too many args (expects 0 args)
     assert(getMessage("DIVIDE_BY_ZERO", Array("foo", "bar", "baz")) ==
-      "Division by zero. To return NULL instead, use `try_divide`. If necessary set foo " +
+      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
+        "If necessary set foo " +
       "to \"false\" (except for ANSI interval type) to bypass this error.")
   }
 

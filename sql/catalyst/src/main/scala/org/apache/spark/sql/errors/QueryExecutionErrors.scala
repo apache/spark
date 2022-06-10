@@ -66,7 +66,7 @@ import org.apache.spark.util.CircularBuffer
  * This does not include exceptions thrown during the eager execution of commands, which are
  * grouped into [[QueryCompilationErrors]].
  */
-object QueryExecutionErrors extends QueryErrorsBase {
+private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
     new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
@@ -493,7 +493,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
       message: String,
       hint: String = "",
       errorContext: String = ""): ArithmeticException = {
-    val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
+    val alternative = if (hint.nonEmpty) {
+      s" Use '$hint' to tolerate overflow and return NULL instead."
+    } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
       messageParameters = Array(message, alternative, SQLConf.ANSI_ENABLED.key),
@@ -1098,7 +1100,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
       value: Any, from: DataType, to: DataType, errorContext: String): Throwable = {
     val valueString = toSQLValue(value, from)
     new DateTimeException(s"Invalid input syntax for type ${toSQLType(to)}: $valueString. " +
-      s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
+      s"Use `try_cast` to tolerate malformed input and return NULL instead. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} " +
       s"to false to bypass this error." + errorContext)
   }
 
