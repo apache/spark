@@ -4346,7 +4346,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
  */
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.foreachUp {
+    plan.resolveOperatorsUp {
       case f @ Filter(cond, agg: Aggregate) if agg.resolved =>
         withOrigin(f.origin)(f.copy(condition = trimOrRestoreTempResolvedColumn(agg, cond)))
       case s @ Sort(sortOrder, _, agg: Aggregate) if agg.resolved =>
@@ -4354,10 +4354,9 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
           trimOrRestoreTempResolvedColumn(agg, order).asInstanceOf[SortOrder]
         }
         withOrigin(s.origin)(s.copy(order = newSortOrder))
-    }
-
-    plan.resolveExpressions {
-      case t: TempResolvedColumn => restoreTempResolvedColumn(t)
+      case other => other.transformExpressionsUp {
+        case t: TempResolvedColumn => restoreTempResolvedColumn(t)
+      }
     }
   }
 
@@ -4371,6 +4370,8 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
       // Undo the resolution as this column is neither inside aggregate functions nor a
       // grouping column. It shouldn't be resolved with `agg.child.output`.
       restoreTempResolvedColumn(t)
+    case other =>
+      other.withNewChildren(other.children.map(trimOrRestoreTempResolvedColumn(agg, _)))
   }
 
   def trimTempResolvedColumn(input: Expression): Expression = input.transform {
