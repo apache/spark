@@ -3818,16 +3818,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
- val LEGACY_DESC_NAMESPACE_REDACT_PROPERTIES =
-    buildConf("spark.sql.legacy.descNamespaceRedactProperties")
-      .internal()
-      .doc("When set to false, redact sensitive information in the result of DESC NAMESPACE " +
-        "EXTENDED. If set to true, it restores the legacy behavior that this sensitive " +
-        "information was included in the output.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
-
   /**
    * Holds information about keys that have been deprecated.
    *
