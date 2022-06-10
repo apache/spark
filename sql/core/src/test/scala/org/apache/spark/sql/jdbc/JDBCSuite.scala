@@ -1903,8 +1903,8 @@ class JDBCSuite extends QueryTest
   test("SPARK-39339: TimestampNTZType with different local time zones") {
     val tableName = "timestamp_ntz_diff_tz_support_table"
 
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      DateTimeTestUtils.withDefaultTimeZone(zoneId) {
         Seq(
           "1972-07-04 03:30:00",
           "2019-01-20 12:00:00.502",
