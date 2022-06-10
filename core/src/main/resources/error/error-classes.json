@@ -295,6 +295,11 @@
       "UDF class <className> doesn't implement any UDF interface"
     ]
   },
+  "NULL_COMPARISON_RESULT" : {
+    "message" : [
+      "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
+    ]
+  },
   "PARSE_CHAR_MISSING_LENGTH" : {
     "message" : [
       "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
