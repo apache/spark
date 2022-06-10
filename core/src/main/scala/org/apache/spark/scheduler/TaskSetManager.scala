@@ -82,8 +82,8 @@ private[spark] class TaskSetManager(
   val copiesRunning = new Array[Int](numTasks)
 
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
-  private val efficientTaskProgressMultiplier =
-    conf.get(SPECULATION_EFFICIENCY_TASK_PROGRESS_MULTIPLIER)
+  private val efficientTaskProcessMultiplier =
+    conf.get(SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER)
   private val efficientTaskDurationFactor = conf.get(SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR)
 
   // Quantile of tasks at which to start speculation
@@ -1159,6 +1159,7 @@ private[spark] class TaskSetManager(
     if (numSuccessfulTasks >= minFinishedForSpeculation) {
       val medianDuration = successfulTaskDurations.median
       val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
+      // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
       foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold, numSuccessfulTasks)
@@ -1284,8 +1285,8 @@ private[spark] class TaskSetManager(
 
     private[scheduler] def updateRuningTaskProcessRate(
         taskId: Long,
-        taskProgressRate: Double): Unit = {
-      runingTasksProcessRate.put(taskId, taskProgressRate)
+        taskProcessRate: Double): Unit = {
+      runingTasksProcessRate.put(taskId, taskProcessRate)
     }
 
     private[TaskSetManager] def isEfficient(
@@ -1298,16 +1299,16 @@ private[spark] class TaskSetManager(
       // it can be speculated. eg: some spark-sql like that 'msck repair table' or 'drop table'
       // and so on.
       if (avgTaskProcessRate <= 0.0) return true
-      val currentTaskProgressRate = runingTasksProcessRate.getOrDefault(tid, 0.0)
-      if (currentTaskProgressRate <= 0.0) {
+      val currentTaskProcessRate = runingTasksProcessRate.getOrDefault(tid, 0.0)
+      if (currentTaskProcessRate <= 0.0) {
         true
       } else {
-        val taskProgressThreshold = avgTaskProcessRate * efficientTaskProgressMultiplier
-        val isInefficientTask = currentTaskProgressRate < taskProgressThreshold
+        val taskProcessThreshold = avgTaskProcessRate * efficientTaskProcessMultiplier
+        val isInefficientTask = currentTaskProcessRate < taskProcessThreshold
         if (isInefficientTask) {
           logInfo(s"Marking task ${taskInfo.index} in stage ${taskSet.id} " +
             s"(on ${taskInfo.host}) as speculatable because it ran ${runtimeMs}ms and " +
-            s"it's progress ($currentTaskProgressRate) is less than ($taskProgressThreshold).")
+            s"it's process rate ($currentTaskProcessRate) is less than ($taskProcessThreshold).")
         }
         isInefficientTask
       }

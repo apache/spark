@@ -858,10 +858,10 @@ private[spark] class TaskSchedulerImpl(
     val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = {
       accumUpdates.flatMap { case (id, updates) =>
         Option(taskIdToTaskSetManager.get(id)).map { taskSetMgr =>
-          val (accInfos, taskProgressRate) = getTaskAccumulableInfosAndProgressRate(updates)
-          if (efficientTaskCalcualtionEnabled && taskProgressRate > 0.0) {
+          val (accInfos, taskProcessRate) = getTaskAccumulableInfosAndProcessRate(updates)
+          if (efficientTaskCalcualtionEnabled && taskProcessRate > 0.0) {
             taskSetMgr.taskProcessRateCalculator.foreach {
-              _.updateRuningTaskProcessRate(id, taskProgressRate)
+              _.updateRuningTaskProcessRate(id, taskProcessRate)
             }
           }
           (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
@@ -872,7 +872,7 @@ private[spark] class TaskSchedulerImpl(
       executorUpdates)
   }
 
- private def getTaskAccumulableInfosAndProgressRate(
+ private def getTaskAccumulableInfosAndProcessRate(
       updates: Seq[AccumulatorV2[_, _]]): (Seq[AccumulableInfo], Double) = {
    var recordsRead = 0L
    var executorRunTime = 0L
@@ -887,13 +887,13 @@ private[spark] class TaskSchedulerImpl(
      }
      acc.toInfo(Some(acc.value), None)
    }
-   val taskProgressRate = if (efficientTaskCalcualtionEnabled &&
+   val taskProcessRate = if (efficientTaskCalcualtionEnabled &&
      executorRunTime > 0 && recordsRead > 0) {
      recordsRead / (executorRunTime / 1000.0)
    } else {
      0.0D
    }
-   (accInfos, taskProgressRate)
+   (accInfos, taskProcessRate)
  }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {

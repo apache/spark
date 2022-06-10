@@ -2273,7 +2273,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf()
       .set(config.SPECULATION_MULTIPLIER.key, "0.0")
       .set(config.SPECULATION_ENABLED, true)
-      .set(config.SPECULATION_EFFICIENCY_TASK_PROGRESS_MULTIPLIER.key, "0.5")
+      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER.key, "0.5")
     sc = new SparkContext("local", "test", conf)
     Seq(0, 15).foreach { duration =>
       sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, duration.toString)
@@ -2305,7 +2305,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf()
       .set(config.SPECULATION_MULTIPLIER.key, "0.0")
       .set(config.SPECULATION_ENABLED, true)
-      .set(config.SPECULATION_EFFICIENCY_TASK_PROGRESS_MULTIPLIER.key, "0.5")
+      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER.key, "0.5")
       .set(config.SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
@@ -2365,9 +2365,9 @@ class TaskSetManagerSuite
       .set(config.SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
-    Seq(0.5, 0.8).foreach { progressMultiplier => {
-      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_PROGRESS_MULTIPLIER.key,
-        progressMultiplier.toString)
+    Seq(0.5, 0.8).foreach { processMultiplier => {
+      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER.key,
+        processMultiplier.toString)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
       val taskSet = FakeTask.createTaskSet(4)
       val clock = new ManualClock()
@@ -2399,7 +2399,7 @@ class TaskSetManagerSuite
         }
       }
       // 0.5 < 0.6 < 0.8
-      if (progressMultiplier == 0.8) {
+      if (processMultiplier == 0.8) {
         assert(manager.checkSpeculatableTasks(100))
         assert(sched.speculativeTasks.toSet === Set(3))
       } else {
@@ -2416,7 +2416,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf()
       .set(config.SPECULATION_MULTIPLIER.key, "0.0")
       .set(config.SPECULATION_ENABLED, true)
-      .set(config.SPECULATION_EFFICIENCY_TASK_PROGRESS_MULTIPLIER.key, "0.5")
+      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER.key, "0.5")
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
     Seq(1, 2).foreach { factor => {

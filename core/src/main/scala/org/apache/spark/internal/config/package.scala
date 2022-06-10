@@ -2083,8 +2083,8 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val SPECULATION_EFFICIENCY_TASK_PROGRESS_MULTIPLIER =
-    ConfigBuilder("spark.speculation.efficiency.progress.multiplier")
+  private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER =
+    ConfigBuilder("spark.speculation.efficiency.process.multiplier")
       .doc("A multiplier for evaluating the efficiency of task processing. A task is inefficient " +
         "when its data process rate is less than the average data process rate of all " +
         "successful tasks in the stage multiplied by the multiplier.")
