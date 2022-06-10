@@ -23,12 +23,13 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
@@ -250,8 +251,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * table/view. This throws an `AnalysisException` when no `Table` can be found.
    */
   override def getTable(tableName: String): Table = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    getTable(tableIdent.database.orNull, tableIdent.table)
+    try {
+      val ident = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+      getTable(ident.database.orNull, ident.table)
+    } catch {
+      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+        makeTable(ident)
+    }
   }
 
   /**
@@ -287,7 +294,27 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Checks if the database with the specified name exists.
    */
   override def databaseExists(dbName: String): Boolean = {
-    sessionCatalog.databaseExists(dbName)
+    // To maintain backwards compatibility, we first treat the input is a simple dbName and check
+    // if sessionCatalog contains it. If no, we try to parse it as 3 part name. If the parased
+    // identifier contains both catalog name and database name, we then search the database in the
+    // catalog.
+    if (!sessionCatalog.databaseExists(dbName)) {
+      val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+      if (ident.length == 2) {
+        val catalog =
+          sparkSession.sessionState.catalogManager.catalog(ident(0)).asTableCatalog
+        try {
+          catalog.listTables(Array(ident(1)))
+          true
+        } catch {
+          case e: NoSuchNamespaceException => false
+        }
+      } else {
+        false
+      }
+    } else {
+      true
+    }
   }
 
   /**
@@ -295,8 +322,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * view or a table/view.
    */
   override def tableExists(tableName: String): Boolean = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    tableExists(tableIdent.database.orNull, tableIdent.table)
+    try {
+      val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+      tableExists(tableIdent.database.orNull, tableIdent.table)
+    } catch {
+      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+        val catalog =
+          sparkSession.sessionState.catalogManager.catalog(ident(0)).asTableCatalog
+        catalog.tableExists(Identifier.of(Array(ident(1)), ident(2)))
+    }
   }
 
   /**

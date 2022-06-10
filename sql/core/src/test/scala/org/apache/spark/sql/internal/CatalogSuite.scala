@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -680,5 +680,61 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     createTempTable("my_temp_table")
     assert(spark.catalog.listTables("default").collect().map(_.name).toSet ==
       Set("my_table1", "my_table2", "my_temp_table"))
+  }
+
+  test("three layer namespace compatibility - get table") {
+    val catalogName = "testcat"
+    val dbName = "my_db"
+    val tableName = "my_table"
+    val tableSchema = new StructType().add("i", "int")
+    val description = "this is a test table"
+
+    spark.catalog.createTable(
+      tableName = Array(catalogName, dbName, tableName).mkString("."),
+      source = classOf[FakeV2Provider].getName,
+      schema = tableSchema,
+      description = description,
+      options = Map.empty[String, String])
+
+    val t = spark.catalog.getTable(Array(catalogName, dbName, tableName).mkString("."))
+    val expectedTable =
+      new Table(
+        tableName,
+        catalogName,
+        Array(dbName),
+        description,
+        CatalogTableType.MANAGED.name,
+        false)
+    assert(expectedTable.toString == t.toString)
+  }
+
+  test("three layer namespace compatibility - table exists") {
+    val catalogName = "testcat"
+    val dbName = "my_db"
+    val tableName = "my_table"
+    val tableSchema = new StructType().add("i", "int")
+
+    assert(!spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
+
+    spark.catalog.createTable(
+      tableName = Array(catalogName, dbName, tableName).mkString("."),
+      source = classOf[FakeV2Provider].getName,
+      schema = tableSchema,
+      description = "",
+      options = Map.empty[String, String])
+
+    assert(spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
+  }
+
+  test("three layer namespace compatibility - database exists") {
+    val catalogName = "testcat"
+    val dbName = "my_db"
+    assert(!spark.catalog.databaseExists(Array(catalogName, dbName).mkString(".")))
+
+    val e = intercept[CatalogNotFoundException] {
+      val catalogName2 = "catalog_not_exists"
+      spark.catalog.databaseExists(Array(catalogName2, dbName).mkString("."))
+    }
+    assert(e.getMessage.contains("catalog_not_exists is not defined"))
   }
 }
