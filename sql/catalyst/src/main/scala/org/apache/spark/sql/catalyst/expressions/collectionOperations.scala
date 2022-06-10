@@ -2098,7 +2098,7 @@ case class ElementAt(
     // The value to return if index is out of bound
     defaultValueOutOfBound: Option[Literal] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant with SupportQueryContext {
+  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
 
   def this(left: Expression, right: Expression) = this(left, right, None, SQLConf.get.ansiEnabled)
 
