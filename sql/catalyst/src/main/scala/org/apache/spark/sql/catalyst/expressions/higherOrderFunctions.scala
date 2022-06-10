@@ -357,9 +357,9 @@ case class ArrayTransform(
     Since 3.0.0 this function also sorts and returns the array based on the
     given comparator function. The comparator will take two arguments representing
     two elements of the array.
-    It returns -1, 0, or 1 as the first element is less than, equal to, or greater
-    than the second element. If the comparator function returns other
-    values (including null), the function will fail and raise an error.
+    It returns a negative integer, 0, or a positive integer as the first element is less than,
+    equal to, or greater than the second element. If the comparator function returns null,
+    the function will fail and raise an error.
     """,
   examples = """
     Examples:
@@ -375,8 +375,16 @@ case class ArrayTransform(
 // scalastyle:on line.size.limit
 case class ArraySort(
     argument: Expression,
-    function: Expression)
+    function: Expression,
+    allowNullComparisonResult: Boolean)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  def this(argument: Expression, function: Expression) = {
+    this(
+      argument,
+      function,
+      SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT))
+  }
 
   def this(argument: Expression) = this(argument, ArraySort.defaultComparator)
 
@@ -416,7 +424,11 @@ case class ArraySort(
     (o1: Any, o2: Any) => {
       firstElemVar.value.set(o1)
       secondElemVar.value.set(o2)
-      f.eval(inputRow).asInstanceOf[Int]
+      val cmp = f.eval(inputRow)
+      if (!allowNullComparisonResult && cmp == null) {
+        throw QueryExecutionErrors.nullComparisonResultError()
+      }
+      cmp.asInstanceOf[Int]
     }
   }
 
@@ -436,6 +448,10 @@ case class ArraySort(
 }
 
 object ArraySort {
+
+  def apply(argument: Expression, function: Expression): ArraySort = {
+    new ArraySort(argument, function)
+  }
 
   def comparator(left: Expression, right: Expression): Expression = {
     val lit0 = Literal(0)
