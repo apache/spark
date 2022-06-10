@@ -184,34 +184,31 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       queryContext = context)
   }
 
-  def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
-    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_ENABLED.key)
-  }
-
-  def invalidInputIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
-    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_ENABLED.key)
-  }
-
-  private def invalidArrayIndexErrorInternal(
+  def invalidArrayIndexError(
       index: Int,
       numElements: Int,
-      key: String): ArrayIndexOutOfBoundsException = {
+      context: String): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Array(
-        toSQLValue(index, IntegerType), toSQLValue(numElements, IntegerType), toSQLConf(key)))
+        toSQLValue(index, IntegerType),
+        toSQLValue(numElements, IntegerType),
+        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      queryContext = context)
   }
 
   def invalidElementAtIndexError(
-       index: Int,
-       numElements: Int): ArrayIndexOutOfBoundsException = {
+      index: Int,
+      numElements: Int,
+      context: String): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters =
         Array(
           toSQLValue(index, IntegerType),
           toSQLValue(numElements, IntegerType),
-          toSQLConf(SQLConf.ANSI_ENABLED.key)))
+          toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      queryContext = context)
   }
 
   def mapKeyNotExistError(key: Any, dataType: DataType, context: String): NoSuchElementException = {
