@@ -1816,4 +1816,9 @@ private[sql] object QueryExecutionErrors {
         s". To solve this try to set $maxDynamicPartitionsKey" +
         s" to at least $numWrittenParts.")
   }
+
+  def nullComparisonResultError(): Throwable = {
+    new SparkException(errorClass = "NULL_COMPARISON_RESULT",
+      messageParameters = Array(), cause = null)
+  }
 }
