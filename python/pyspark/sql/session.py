@@ -971,7 +971,7 @@ class SparkSession(SparkConversionMixin):
 
             require_minimum_pandas_version()
             if data.ndim not in [1, 2]:
-                raise ImportError("NumPy array input should be of 1 or 2 dimensions.")
+                raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
             column_names = ["value"] if data.ndim == 1 else ["_1", "_2"]
             data = pd.DataFrame(data, columns=column_names)
 

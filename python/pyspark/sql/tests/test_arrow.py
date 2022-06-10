@@ -521,6 +521,9 @@ class ArrowTests(ReusedSQLTestCase):
             self.assertEqual(df.collect(), collected)
             self.assertEqual(df_arrow.collect(), collected)
 
+        with self.assertRaisesRegex(ValueError, "NumPy array input should be of 1 or 2 dimensions"):
+            self.spark.createDataFrame(np.array(0))
+
     def test_createDataFrame_with_array_type(self):
         pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [["x", "y"], ["y", "z"]]})
         df, df_arrow = self._createDataFrame_toggle(pdf)
