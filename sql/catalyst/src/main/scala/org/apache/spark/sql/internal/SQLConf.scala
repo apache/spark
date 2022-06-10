@@ -2166,6 +2166,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val NOT_INLINE_CTE_THRESHOLD = buildConf("spark.sql.optimizer.notInlineCTEThreshold")
+    .internal()
+    .doc("The optimizer will not in line CTE if the CTE is referenced at least this threshold " +
+      s"and `${EXCHANGE_REUSE_ENABLED.key}` is enabled.")
+    .version("3.4.0")
+    .intConf
+    .checkValue(threshold => threshold > 0, "The not inline CTE threshold must be positive.")
+    .createWithDefault(1)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -4322,6 +4331,8 @@ class SQLConf extends Serializable with Logging {
   def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
 
   def csvExpressionOptimization: Boolean = getConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION)
+
+  def notInlineCteThreshold: Int = getConf(SQLConf.NOT_INLINE_CTE_THRESHOLD)
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)

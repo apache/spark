@@ -59,13 +59,17 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
   }
 
   private def shouldInline(cteDef: CTERelationDef, refCount: Int): Boolean = alwaysInline || {
-    // We do not need to check enclosed `CTERelationRef`s for `deterministic` or `OuterReference`,
-    // because:
-    // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
-    // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
-    refCount == 1 ||
-      cteDef.deterministic ||
-      cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
+    if (conf.notInlineCteThreshold > 1 && conf.exchangeReuseEnabled) {
+      refCount < conf.notInlineCteThreshold
+    } else {
+      // We do not need to check enclosed `CTERelationRef`s for `deterministic` or `OuterReference`,
+      // because:
+      // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
+      // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
+      refCount == 1 ||
+        cteDef.deterministic ||
+        cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
+    }
   }
 
   private def buildCTEMap(

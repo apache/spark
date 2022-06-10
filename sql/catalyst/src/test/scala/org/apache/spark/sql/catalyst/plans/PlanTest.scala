@@ -137,6 +137,10 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
           }
         }.asInstanceOf[Seq[NamedExpression]]
         Project(projList, child)
+      case c: CTERelationDef =>
+        c.copy(id = 0)
+      case c: CTERelationRef =>
+        c.copy(cteId = 0)
     }
   }
 
