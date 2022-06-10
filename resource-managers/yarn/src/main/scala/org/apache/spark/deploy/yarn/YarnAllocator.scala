@@ -447,22 +447,17 @@ private[yarn] class YarnAllocator(
   }
 
   private def handleNodesInDecommissioningState(allocateResponse: AllocateResponse): Unit = {
-    try {
-      // Some of the nodes are put in decommissioning state where RM did allocate
-      // resources on those nodes for earlier allocateResource calls, so notifying driver
-      // to put those executors in decommissioning state
-      allocateResponse.getUpdatedNodes.asScala.filter (node =>
-        node.getNodeState == NodeState.DECOMMISSIONING &&
-          !decommissioningNodesCache.containsKey(getHostAddress(node)))
-        .foreach { node =>
-          val host = getHostAddress(node)
-          driverRef.send(DecommissionExecutorsOnHost(host))
-          decommissioningNodesCache.put(host, true)
-        }
-    } catch {
-      case e: Exception => logError("Sending Message to Driver to Decommission Executors " +
-        "on Decommissioning Nodes failed", e)
-    }
+    // Some of the nodes are put in decommissioning state where RM did allocate
+    // resources on those nodes for earlier allocateResource calls, so notifying driver
+    // to put those executors in decommissioning state
+    allocateResponse.getUpdatedNodes.asScala.filter (node =>
+      node.getNodeState == NodeState.DECOMMISSIONING &&
+        !decommissioningNodesCache.containsKey(getHostAddress(node)))
+      .foreach { node =>
+        val host = getHostAddress(node)
+        driverRef.send(DecommissionExecutorsOnHost(host))
+        decommissioningNodesCache.put(host, true)
+      }
   }
 
   private def getHostAddress(nodeReport: NodeReport): String = nodeReport.getNodeId.getHost
