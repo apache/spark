@@ -69,6 +69,14 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
       empty(j)
   }
 
+  // Only non-broadcast query stage can propagate empty relation,
+  // otherwise AdaptiveSparkPlanExec.doExecuteBroadcast will fail.
+  private def eliminateLogicalQueryStage: PartialFunction[LogicalPlan, LogicalPlan] = {
+    case p: LogicalQueryStage
+        if isEmpty(p) && !p.physicalPlan.isInstanceOf[BroadcastQueryStageExec] =>
+      empty(p)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     // LOCAL_RELATION and TRUE_OR_FALSE_LITERAL pattern are matched at
     // `PropagateEmptyRelationBase.commonApplyFunc`
@@ -76,6 +84,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     // and `AQEPropagateEmptyRelation.eliminateSingleColumnNullAwareAntiJoin`
     // Note that, We can not specify ruleId here since the LogicalQueryStage is not immutable.
     _.containsAnyPattern(LOGICAL_QUERY_STAGE, LOCAL_RELATION, TRUE_OR_FALSE_LITERAL)) {
-    eliminateSingleColumnNullAwareAntiJoin.orElse(commonApplyFunc)
+    eliminateSingleColumnNullAwareAntiJoin
+      .orElse(eliminateLogicalQueryStage)
+      .orElse(commonApplyFunc)
   }
 }
