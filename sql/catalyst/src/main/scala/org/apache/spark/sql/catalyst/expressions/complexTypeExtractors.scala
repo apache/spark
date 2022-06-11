@@ -235,8 +235,11 @@ case class GetArrayStructFields(
 case class GetArrayItem(
     child: Expression,
     ordinal: Expression,
-    failOnError: Boolean = SQLConf.get.strictIndexOperator)
-  extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue {
+    failOnError: Boolean = SQLConf.get.strictIndexOperator) extends BinaryExpression
+  with GetArrayItemUtil
+  with ExpectsInputTypes
+  with ExtractValue
+  with SupportQueryContext {
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
@@ -263,7 +266,8 @@ case class GetArrayItem(
     val index = ordinal.asInstanceOf[Number].intValue()
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
-        throw QueryExecutionErrors.invalidArrayIndexError(index, baseValue.numElements)
+        throw QueryExecutionErrors.invalidArrayIndexError(
+          index, baseValue.numElements, queryContext)
       } else {
         null
       }
@@ -287,7 +291,10 @@ case class GetArrayItem(
       }
 
       val indexOutOfBoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
+        val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+        // scalastyle:off line.size.limit
+        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements(), $errorContext);"
+        // scalastyle:on line.size.limit
       } else {
         s"${ev.isNull} = true;"
       }
@@ -306,6 +313,12 @@ case class GetArrayItem(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetArrayItem =
     copy(child = newLeft, ordinal = newRight)
+
+  override def initQueryContext(): String = if (failOnError) {
+    origin.context
+  } else {
+    ""
+  }
 }
 
 /**
