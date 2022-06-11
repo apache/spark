@@ -45,6 +45,7 @@ class OutputCommitCoordinatorIntegrationSuite
   }
 
   test("exception thrown in OutputCommitter.commitTask()") {
+    // Regression test for SPARK-10381
     val e = intercept[SparkException] {
       withTempDir { tempDir =>
         sc.parallelize(1 to 4, 2).map(_.toString).saveAsTextFile(tempDir.getAbsolutePath + "/out")
@@ -57,9 +58,9 @@ class OutputCommitCoordinatorIntegrationSuite
 private class ThrowExceptionOnFirstAttemptOutputCommitter extends FileOutputCommitter {
   override def commitTask(context: TaskAttemptContext): Unit = {
     val ctx = TaskContext.get()
-    super.commitTask(context)
     if (ctx.attemptNumber < 1) {
       throw new java.io.FileNotFoundException("Intentional exception")
     }
+    super.commitTask(context)
   }
 }
