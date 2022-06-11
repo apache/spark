@@ -54,7 +54,7 @@ trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
       child.outputPartitioning
     }
 
-    flattenPartitioning(normalizedOutputPartitioning).filter {
+    (extraPartitioning :+ normalizedOutputPartitioning).flatMap(flattenPartitioning).filter {
       case hashPartitioning: HashPartitioning => hashPartitioning.references.subsetOf(outputSet)
       case _ => true
     } match {
@@ -72,6 +72,8 @@ trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
         rest +: Nil
     }
   }
+
+  protected def extraPartitioning: Seq[Partitioning] = Nil
 }
 
 /**
@@ -82,10 +84,21 @@ trait AliasAwareOutputOrdering extends AliasAwareOutputExpression {
   protected def orderingExpressions: Seq[SortOrder]
 
   final override def outputOrdering: Seq[SortOrder] = {
-    if (hasAlias) {
+    val ordering = if (hasAlias) {
       orderingExpressions.map(normalizeExpression(_).asInstanceOf[SortOrder])
     } else {
       orderingExpressions
     }
+    // Let's say 'ordering' is [a asc, b desc, c asc] and 'extraOrdering' is [mono_id asc],
+    // then following orderings are equivalent:
+    //   1, ordering : [a asc, b desc, c asc]
+    //   2, extraOrdering: [mono_id asc]
+    //   3, ordering ++ extraOrdering: [a asc, b desc, c asc, mono_id asc]
+    //   4, extraOrdering ++ ordering: [mono_id asc, a asc, b desc, c asc]
+    // but there's not something like 'PartitioningCollection',
+    // so simply apply ordering ++ extraOrdering for now.
+    ordering ++ extraOrdering
   }
+
+  protected def extraOrdering: Seq[SortOrder] = Nil
 }

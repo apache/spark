@@ -403,7 +403,8 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           //   greater(i.e. smaller or equal to) than any [a, b] in the following partition. Thus
           //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
-          requiredOrdering.take(minSize) == ordering.take(minSize)
+          ordering.take(minSize).zip(requiredOrdering.take(minSize))
+            .forall { case (s1, s2) => s1.satisfies(s2) }
         case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
           val expressions = ordering.map(_.child)
           if (requireAllClusterKeys) {

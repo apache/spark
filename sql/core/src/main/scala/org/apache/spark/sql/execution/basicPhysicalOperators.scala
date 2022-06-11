@@ -102,6 +102,31 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
 
+  override def extraPartitioning: Seq[Partitioning] = {
+    val numPartitions = child.outputPartitioning.numPartitions
+    if (numPartitions > 0) {
+      projectList.flatMap {
+        case alias @ Alias(MonotonicallyIncreasingID(), _) =>
+          Some(RangePartitioning(Seq(SortOrder(alias.toAttribute, Ascending)), numPartitions))
+        case _ => None
+      }
+    } else {
+      Nil
+    }
+  }
+
+  override def extraOrdering: Seq[SortOrder] = {
+    val attributes = projectList.flatMap {
+      case alias @ Alias(MonotonicallyIncreasingID(), _) => Some(alias.toAttribute)
+      case _ => None
+    }
+    if (attributes.nonEmpty) {
+      SortOrder(attributes.head, Ascending, attributes.tail) :: Nil
+    } else {
+      Nil
+    }
+  }
+
   override def verboseStringWithOperatorId(): String = {
     s"""
        |$formattedNodeName
