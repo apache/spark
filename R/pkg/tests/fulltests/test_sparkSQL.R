@@ -663,7 +663,7 @@ test_that("test tableNames and tables", {
   expect_equal(count(tables), count + 1)
   expect_equal(count(tables()), count(tables))
   expect_true("tableName" %in% colnames(tables()))
-  expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
+  expect_true(all(c("tableName", "namespace", "isTemporary") %in% colnames(tables())))
 
   suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
@@ -4026,7 +4026,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   tb <- listTables()
   count <- count(tables())
   expect_equal(nrow(tb), count)
-  expect_equal(colnames(tb), c("name", "database", "description", "tableType", "isTemporary"))
+  expect_equal(colnames(tb),
+               c("name", "catalog", "namespace", "description", "tableType", "isTemporary"))
 
   createOrReplaceTempView(as.DataFrame(cars), "cars")
 

@@ -81,11 +81,11 @@ class SetOperationSuite extends PlanTest {
 
   test("Remove unnecessary distincts in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as(Symbol("a")))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as(Symbol("b")))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as(Symbol("c")))
+      .select(Literal(3).as("c"))
 
     // D - U - D - U - query1
     //     |       |
@@ -113,13 +113,13 @@ class SetOperationSuite extends PlanTest {
 
   test("Keep necessary distincts in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as(Symbol("a")))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as(Symbol("b")))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as(Symbol("c")))
+      .select(Literal(3).as("c"))
     val query4 = OneRowRelation()
-      .select(Literal(4).as(Symbol("d")))
+      .select(Literal(4).as("d"))
 
     // U - D - U - query1
     // |       |
@@ -148,11 +148,11 @@ class SetOperationSuite extends PlanTest {
 
   test("SPARK-34283: Remove unnecessary deduplicate in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as(Symbol("a")))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as(Symbol("b")))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as(Symbol("c")))
+      .select(Literal(3).as("c"))
 
     // D - U - D - U - query1
     //     |       |
@@ -195,13 +195,13 @@ class SetOperationSuite extends PlanTest {
 
   test("SPARK-34283: Keep necessary deduplicate in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as(Symbol("a")))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as(Symbol("b")))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as(Symbol("c")))
+      .select(Literal(3).as("c"))
     val query4 = OneRowRelation()
-      .select(Literal(4).as(Symbol("d")))
+      .select(Literal(4).as("d"))
 
     // U - D - U - query1
     // |       |

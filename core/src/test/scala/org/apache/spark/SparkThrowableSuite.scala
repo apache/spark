@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.IllegalFormatException
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
@@ -89,7 +90,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       if (rewrittenString.trim != errorClassFileContents.trim) {
         val errorClassesFile = new File(errorClassDir, new File(errorClassesUrl.getPath).getName)
         logInfo(s"Regenerating error class file $errorClassesFile")
-        FileUtils.delete(errorClassesFile)
+        Files.delete(errorClassesFile.toPath)
         FileUtils.writeStringToFile(errorClassesFile, rewrittenString, StandardCharsets.UTF_8)
       }
     } else {
@@ -146,12 +147,12 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Check if error class is missing") {
     val ex1 = intercept[IllegalArgumentException] {
-      getMessage("", Array.empty)
+      getMessage("", null, Array.empty)
     }
     assert(ex1.getMessage == "Cannot find error class ''")
 
     val ex2 = intercept[IllegalArgumentException] {
-      getMessage("LOREM_IPSUM", Array.empty)
+      getMessage("LOREM_IPSUM", null, Array.empty)
     }
     assert(ex2.getMessage == "Cannot find error class 'LOREM_IPSUM'")
   }
@@ -159,18 +160,19 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Check if message parameters match message format") {
     // Requires 2 args
     intercept[IllegalFormatException] {
-      getMessage("MISSING_COLUMN", Array.empty)
+      getMessage("MISSING_COLUMN", null, Array.empty)
     }
 
     // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO", Array("foo", "bar", "baz")) ==
+    assert(getMessage("DIVIDE_BY_ZERO", null, Array("foo", "bar", "baz")) ==
       "[DIVIDE_BY_ZERO] Division by zero. " +
-      "To return NULL instead, use `try_divide`. If necessary set foo to \"false\" " +
+      "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
+        "If necessary set foo to \"false\" " +
         "(except for ANSI interval type) to bypass this error.")
   }
 
   test("Error message is formatted") {
-    assert(getMessage("MISSING_COLUMN", Array("foo", "bar, baz")) ==
+    assert(getMessage("MISSING_COLUMN", null, Array("foo", "bar, baz")) ==
       "[MISSING_COLUMN] Column 'foo' does not exist. Did you mean one of the following? [bar, baz]")
   }
 

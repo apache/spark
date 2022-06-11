@@ -23,13 +23,14 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedTable
+import org.apache.spark.sql.catalyst.analysis.{ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, RecoverPartitions, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
@@ -97,8 +98,22 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
-    val tables = sessionCatalog.listTables(dbName).map(makeTable)
-    CatalogImpl.makeDataset(tables, sparkSession)
+    // `dbName` could be either a single database name (behavior in Spark 3.3 and prior) or
+    // a qualified namespace with catalog name. We assume it's a single database name
+    // and check if we can find the dbName in sessionCatalog. If so we listTables under
+    // that database. Otherwise we try 3-part name parsing and locate the database.
+    if (sessionCatalog.databaseExists(dbName) || sessionCatalog.isGlobalTempViewDB(dbName)) {
+      val tables = sessionCatalog.listTables(dbName).map(makeTable)
+      CatalogImpl.makeDataset(tables, sparkSession)
+    } else {
+      val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+      val plan = ShowTables(UnresolvedNamespace(ident), None)
+      val ret = sparkSession.sessionState.executePlan(plan).toRdd.collect()
+      val tables = ret
+        .map(row => ident ++ Seq(row.getString(1)))
+        .map(makeTable)
+      CatalogImpl.makeDataset(tables, sparkSession)
+    }
   }
 
   /**
@@ -117,12 +132,43 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case NonFatal(_) => None
     }
     val isTemp = sessionCatalog.isTempView(tableIdent)
+    val qualifier =
+      metadata.map(_.identifier.database).getOrElse(tableIdent.database).map(Array(_)).orNull
     new Table(
       name = tableIdent.table,
-      database = metadata.map(_.identifier.database).getOrElse(tableIdent.database).orNull,
+      catalog = CatalogManager.SESSION_CATALOG_NAME,
+      namespace = qualifier,
       description = metadata.map(_.comment.orNull).orNull,
       tableType = if (isTemp) "TEMPORARY" else metadata.map(_.tableType.name).orNull,
       isTemporary = isTemp)
+  }
+
+  private def makeTable(ident: Seq[String]): Table = {
+    val plan = UnresolvedTableOrView(ident, "Catalog.listTables", true)
+    val node = sparkSession.sessionState.executePlan(plan).analyzed
+    node match {
+      case t: ResolvedTable =>
+        val isExternal = t.table.properties().getOrDefault(
+          TableCatalog.PROP_EXTERNAL, "false").equals("true")
+        new Table(
+          name = t.identifier.name(),
+          catalog = t.catalog.name(),
+          namespace = t.identifier.namespace(),
+          description = t.table.properties().get("comment"),
+          tableType =
+            if (isExternal) CatalogTableType.EXTERNAL.name
+            else CatalogTableType.MANAGED.name,
+          isTemporary = false)
+      case v: ResolvedView =>
+        new Table(
+          name = v.identifier.name(),
+          catalog = null,
+          namespace = v.identifier.namespace(),
+          description = null,
+          tableType = if (v.isTemp) "TEMPORARY" else "VIEW",
+          isTemporary = v.isTemp)
+      case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
+    }
   }
 
   /**
@@ -367,24 +413,38 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       schema: StructType,
       description: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val storage = DataSource.buildStorageFormatFromOptions(options)
     val tableType = if (storage.locationUri.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
     }
-    val tableDesc = CatalogTable(
-      identifier = tableIdent,
-      tableType = tableType,
-      storage = storage,
-      schema = schema,
+    val location = if (storage.locationUri.isDefined) {
+      val locationStr = storage.locationUri.get.toString
+      Some(locationStr)
+    } else {
+      None
+    }
+
+    val tableSpec = TableSpec(
+      properties = Map(),
       provider = Some(source),
-      comment = { if (description.isEmpty) None else Some(description) }
-    )
-    val plan = CreateTable(tableDesc, SaveMode.ErrorIfExists, None)
+      options = options,
+      location = location,
+      comment = { if (description.isEmpty) None else Some(description) },
+      serde = None,
+      external = tableType == CatalogTableType.EXTERNAL)
+
+    val plan = CreateTable(
+      name = UnresolvedDBObjectName(ident, isNamespace = false),
+      tableSchema = schema,
+      partitioning = Seq(),
+      tableSpec = tableSpec,
+      ignoreIfExists = false)
+
     sparkSession.sessionState.executePlan(plan).toRdd
-    sparkSession.table(tableIdent)
+    sparkSession.table(tableName)
   }
 
   /**

@@ -35,26 +35,10 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for data type casting expression [[Cast]] with ANSI mode disabled.
- * Note: for new test cases that work for [[Cast]], [[AnsiCast]] and [[TryCast]], please add them
- *       in `CastSuiteBase` instead of this file to ensure the test coverage.
  */
-class CastSuite extends CastSuiteBase {
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, false)
-  }
+class CastWithAnsiOffSuite extends CastSuiteBase {
 
-  override def afterAll(): Unit = {
-    super.afterAll()
-    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
-  }
-
-  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
-    v match {
-      case lit: Expression => Cast(lit, targetType, timeZoneId)
-      case _ => Cast(Literal(v), targetType, timeZoneId)
-    }
-  }
+  override def ansiEnabled: Boolean = false
 
   test("null cast #2") {
     import DataTypeTestUtils._
@@ -81,11 +65,11 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("cast string to date #2") {
-    checkEvaluation(Cast(Literal("2015-03-18X"), DateType), null)
-    checkEvaluation(Cast(Literal("2015/03/18"), DateType), null)
-    checkEvaluation(Cast(Literal("2015.03.18"), DateType), null)
-    checkEvaluation(Cast(Literal("20150318"), DateType), null)
-    checkEvaluation(Cast(Literal("2015-031-8"), DateType), null)
+    checkEvaluation(cast(Literal("2015-03-18X"), DateType), null)
+    checkEvaluation(cast(Literal("2015/03/18"), DateType), null)
+    checkEvaluation(cast(Literal("2015.03.18"), DateType), null)
+    checkEvaluation(cast(Literal("20150318"), DateType), null)
+    checkEvaluation(cast(Literal("2015-031-8"), DateType), null)
   }
 
   test("casting to fixed-precision decimals") {
