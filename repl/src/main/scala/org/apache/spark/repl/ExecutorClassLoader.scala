@@ -54,7 +54,7 @@ class ExecutorClassLoader(
     classUri: String,
     parent: ClassLoader,
     userClassPathFirst: Boolean) extends ClassLoader(null) with Logging {
-  val uri = new URI(classUri)
+  val uri = new URI(classUri.replace('\\', '/'))
   val directory = uri.getPath
 
   val parentLoader = new ParentClassLoader(parent)
