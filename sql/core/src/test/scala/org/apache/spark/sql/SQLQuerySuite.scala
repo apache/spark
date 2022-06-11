@@ -33,7 +33,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite, ReplaceCTERefWithRepartition}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
@@ -4455,6 +4455,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           |SELECT 1 AS a
         """.stripMargin),
       Seq(Row(2), Row(1)))
+  }
+
+  test("SPARK-39448: Add ReplaceCTERefWithRepartition into nonExcludableRules list") {
+    withSQLConf(
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ReplaceCTERefWithRepartition.ruleName) {
+      val df = sql(
+        """
+          |SELECT
+          |  (SELECT min(id) FROM range(10)),
+          |  (SELECT sum(id) FROM range(10)),
+          |  (SELECT count(distinct id) FROM range(10))
+        """.stripMargin)
+      checkAnswer(df, Seq(Row(0, 45, 10)))
+    }
   }
 }
 
