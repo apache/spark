@@ -19,11 +19,10 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider}
-import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryCompilationErrorsDSv2Suite
   extends QueryTest
-  with SharedSparkSession
+  with QueryErrorsSuiteBase
   with DatasourceV2SQLBase {
 
   test("UNSUPPORTED_FEATURE: IF PARTITION NOT EXISTS not supported by INSERT") {
@@ -42,10 +41,12 @@ class QueryCompilationErrorsDSv2Suite
         }
 
         checkAnswer(spark.table(tbl), spark.emptyDataFrame)
-        assert(e.getMessage === "The feature is not supported: " +
-          s"""IF NOT EXISTS for the table `testcat`.`ns1`.`ns2`.`tbl` by INSERT INTO.""")
-        assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
-        assert(e.getSqlState === "0A000")
+        checkErrorClass(
+          exception = e,
+          errorClass = "UNSUPPORTED_FEATURE",
+          sqlState = Some("0A000"),
+          msg = "The feature is not supported: " +
+            s"""IF NOT EXISTS for the table `testcat`.`ns1`.`ns2`.`tbl` by INSERT INTO.""")
       }
     }
   }

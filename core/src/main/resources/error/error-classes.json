@@ -182,7 +182,7 @@
     "message" : [ "The operation is not supported: <operation>" ]
   },
   "UNSUPPORTED_SAVE_MODE" : {
-    "message" : [ "The save mode <saveMode> is not supported for: " ],
+    "message" : [ "The save mode <saveMode> is not supported for:" ],
     "subClass" : {
       "EXISTENT_PATH" : {
         "message" : [ "an existent path." ]

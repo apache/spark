@@ -51,14 +51,15 @@ class QueryExecutionErrorsSuite extends QueryTest
   test("INVALID_PARAMETER_VALUE: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame): Unit = {
-      val e = intercept[SparkException] {
-        df.collect
-      }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
-      assert(e.getSqlState === "22023")
-      assert(e.getMessage.matches(
-        "The value of parameter\\(s\\) 'key' in the `aes_encrypt`/`aes_decrypt` function " +
-        "is invalid: expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes."))
+      checkErrorClass(
+        exception = intercept[SparkException] {
+          df.collect
+        }.getCause.asInstanceOf[SparkRuntimeException],
+        errorClass = "INVALID_PARAMETER_VALUE",
+        sqlState = Some("22023"),
+        msg = "The value of parameter\\(s\\) 'key' in the `aes_encrypt`/`aes_decrypt` function " +
+          "is invalid: expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes.",
+        matchMsg = true)
     }
 
     // Encryption failure - invalid key length
@@ -88,13 +89,16 @@ class QueryExecutionErrorsSuite extends QueryTest
       val e = intercept[SparkException] {
         df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
       }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
-      assert(e.getSqlState === "22023")
-      assert(e.getMessage ===
-        "The value of parameter(s) 'expr, key' in the `aes_encrypt`/`aes_decrypt` function " +
-        "is invalid: Detail message: " +
-        "Given final block not properly padded. " +
-        "Such issues can arise if a bad key is used during decryption.")
+      checkErrorClass(
+        exception = e,
+        errorClass = "INVALID_PARAMETER_VALUE",
+        sqlState = Some("22023"),
+        msg =
+          "The value of parameter(s) 'expr, key' in the `aes_encrypt`/`aes_decrypt` function " +
+          "is invalid: Detail message: " +
+          "Given final block not properly padded. " +
+          "Such issues can arise if a bad key is used during decryption."
+      )
     }
   }
 
@@ -106,10 +110,14 @@ class QueryExecutionErrorsSuite extends QueryTest
       val e = intercept[SparkException] {
         df.collect
       }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
-      assert(e.getSqlState === "0A000")
-      assert(e.getMessage.matches("""The feature is not supported: AES-\w+ with the padding \w+""" +
-        " by the `aes_encrypt`/`aes_decrypt` function."))
+      checkErrorClass(
+        exception = e,
+        errorClass = "UNSUPPORTED_FEATURE",
+        sqlState = Some("0A000"),
+        msg = """The feature is not supported: AES-\w+ with the padding \w+""" +
+          " by the `aes_encrypt`/`aes_decrypt` function.",
+        matchMsg = true
+      )
     }
 
     // Unsupported AES mode and padding in encrypt
@@ -125,9 +133,13 @@ class QueryExecutionErrorsSuite extends QueryTest
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
     def checkUnsupportedTypeInLiteral(v: Any): Unit = {
       val e1 = intercept[SparkRuntimeException] { lit(v) }
-      assert(e1.getErrorClass === "UNSUPPORTED_FEATURE")
-      assert(e1.getSqlState === "0A000")
-      assert(e1.getMessage.matches("""The feature is not supported: literal for '.+' of .+\."""))
+      checkErrorClass(
+        exception = e1,
+        errorClass = "UNSUPPORTED_FEATURE",
+        sqlState = Some("0A000"),
+        msg = """The feature is not supported: literal for '.+' of .+\.""",
+        matchMsg = true
+      )
     }
     checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2))
     checkUnsupportedTypeInLiteral(("mike", 29, 1.0))
@@ -139,8 +151,13 @@ class QueryExecutionErrorsSuite extends QueryTest
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(e2.getMessage === "The feature is not supported: pivoting by the value" +
-      """ '[dotnet,Dummies]' of the column data type "STRUCT<col1: STRING, training: STRING>".""")
+    checkErrorClass(
+      exception = e2,
+      errorClass = "UNSUPPORTED_FEATURE",
+      sqlState = Some("0A000"),
+      msg = "The feature is not supported: pivoting by the value" +
+        """ '[dotnet,Dummies]' of the column data type "STRUCT<col1: STRING, training: STRING>"."""
+    )
   }
 
   test("UNSUPPORTED_FEATURE: unsupported pivot operations") {
@@ -152,9 +169,12 @@ class QueryExecutionErrorsSuite extends QueryTest
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(e1.getErrorClass === "UNSUPPORTED_FEATURE")
-    assert(e1.getSqlState === "0A000")
-    assert(e1.getMessage === """The feature is not supported: Repeated PIVOTs.""")
+    checkErrorClass(
+      exception = e1,
+      errorClass = "UNSUPPORTED_FEATURE",
+      sqlState = Some("0A000"),
+      msg = """The feature is not supported: Repeated PIVOTs."""
+    )
 
     val e2 = intercept[SparkUnsupportedOperationException] {
       trainingSales
@@ -163,9 +183,12 @@ class QueryExecutionErrorsSuite extends QueryTest
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(e2.getErrorClass === "UNSUPPORTED_FEATURE")
-    assert(e2.getSqlState === "0A000")
-    assert(e2.getMessage === """The feature is not supported: PIVOT not after a GROUP BY.""")
+    checkErrorClass(
+      exception = e2,
+      errorClass = "UNSUPPORTED_FEATURE",
+      sqlState = Some("0A000"),
+      msg = """The feature is not supported: PIVOT not after a GROUP BY."""
+    )
   }
 
   test("INCONSISTENT_BEHAVIOR_CROSS_VERSION: " +
@@ -182,20 +205,22 @@ class QueryExecutionErrorsSuite extends QueryTest
       val format = "Parquet"
       val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_READ.key + "\""
       val option = "\"" + "datetimeRebaseMode" + "\""
-      assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
-      assert(e.getMessage ===
-        "You may get a different result due to the upgrading to Spark >= 3.0: " +
-        s"""
-          |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
-          |from $format files can be ambiguous, as the files may be written by
-          |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
-          |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
-          |See more details in SPARK-31404. You can set the SQL config $config or
-          |the datasource option $option to "LEGACY" to rebase the datetime values
-          |w.r.t. the calendar difference during reading. To read the datetime values
-          |as it is, set the SQL config $config or the datasource option $option
-          |to "CORRECTED".
-          |""".stripMargin)
+      checkErrorClass(
+        exception = e,
+        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+        msg =
+          "You may get a different result due to the upgrading to Spark >= 3.0: " +
+          s"""
+            |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+            |from $format files can be ambiguous, as the files may be written by
+            |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
+            |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
+            |See more details in SPARK-31404. You can set the SQL config $config or
+            |the datasource option $option to "LEGACY" to rebase the datetime values
+            |w.r.t. the calendar difference during reading. To read the datetime values
+            |as it is, set the SQL config $config or the datasource option $option
+            |to "CORRECTED".
+            |""".stripMargin)
     }
 
     // Fail to write ancient datetime values.
@@ -208,20 +233,22 @@ class QueryExecutionErrorsSuite extends QueryTest
 
         val format = "Parquet"
         val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
-        assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
-        assert(e.getMessage ===
-          "You may get a different result due to the upgrading to Spark >= 3.0: " +
-          s"""
-            |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
-            |into $format files can be dangerous, as the files may be read by Spark 2.x
-            |or legacy versions of Hive later, which uses a legacy hybrid calendar that
-            |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
-            |details in SPARK-31404. You can set $config to "LEGACY" to rebase the
-            |datetime values w.r.t. the calendar difference during writing, to get maximum
-            |interoperability. Or set $config to "CORRECTED" to write the datetime
-            |values as it is, if you are 100% sure that the written files will only be read by
-            |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
-            |""".stripMargin)
+        checkErrorClass(
+          exception = e,
+          errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+          msg =
+            "You may get a different result due to the upgrading to Spark >= 3.0: " +
+            s"""
+              |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+              |into $format files can be dangerous, as the files may be read by Spark 2.x
+              |or legacy versions of Hive later, which uses a legacy hybrid calendar that
+              |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
+              |details in SPARK-31404. You can set $config to "LEGACY" to rebase the
+              |datetime values w.r.t. the calendar difference during writing, to get maximum
+              |interoperability. Or set $config to "CORRECTED" to write the datetime
+              |values as it is, if you are 100% sure that the written files will only be read by
+              |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
+              |""".stripMargin)
       }
     }
   }
@@ -233,10 +260,11 @@ class QueryExecutionErrorsSuite extends QueryTest
         val e = intercept[SparkException] {
           spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
         }.getCause.asInstanceOf[SparkUnsupportedOperationException]
-
-        assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
-        assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert \"TIMESTAMP\" of Orc to data type \"TIMESTAMP_NTZ\".")
+        checkErrorClass(
+          exception = e,
+          errorClass = "UNSUPPORTED_OPERATION",
+          msg = "The operation is not supported: " +
+            "Unable to convert \"TIMESTAMP\" of Orc to data type \"TIMESTAMP_NTZ\".")
       }
     }
   }
@@ -248,10 +276,11 @@ class QueryExecutionErrorsSuite extends QueryTest
         val e = intercept[SparkException] {
           spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
         }.getCause.asInstanceOf[SparkUnsupportedOperationException]
-
-        assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
-        assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert \"TIMESTAMP_NTZ\" of Orc to data type \"TIMESTAMP\".")
+        checkErrorClass(
+          exception = e,
+          errorClass = "UNSUPPORTED_OPERATION",
+          msg = "The operation is not supported: " +
+            "Unable to convert \"TIMESTAMP_NTZ\" of Orc to data type \"TIMESTAMP\".")
       }
     }
   }
@@ -260,10 +289,11 @@ class QueryExecutionErrorsSuite extends QueryTest
     val e = intercept[SparkArithmeticException] {
       sql("select timestampadd(YEAR, 1000000, timestamp'2022-03-09 01:02:03')").collect()
     }
-    assert(e.getErrorClass === "DATETIME_OVERFLOW")
-    assert(e.getSqlState === "22008")
-    assert(e.getMessage ===
-      "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
+    checkErrorClass(
+      exception = e,
+      errorClass = "DATETIME_OVERFLOW",
+      sqlState = Some("22008"),
+      msg = "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
   }
 
   test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
