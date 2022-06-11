@@ -36,7 +36,9 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
       // check the plans can be properly generated
       val df = sql(queryString)
       val plan = df.queryExecution.executedPlan
-      df.collect()
+      if (injectStats) {
+        df.collect()
+      }
       checkGeneratedCode(plan)
     }
   }
@@ -48,7 +50,9 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
       // check the plans can be properly generated
       val df = sql(queryString)
       val plan = df.queryExecution.executedPlan
-      df.collect()
+      if (injectStats) {
+        df.collect()
+      }
       checkGeneratedCode(plan)
     }
   }
@@ -66,7 +70,9 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
       // check the plans can be properly generated
       val df = sql(queryString)
       val plan = df.queryExecution.executedPlan
-      df.collect()
+      if (injectStats) {
+        df.collect()
+      }
       checkGeneratedCode(plan, !excludeListForMethodCodeSizeCheck.contains(testName))
     }
   }
