@@ -40,8 +40,9 @@ class StreamingAggregationDistributionSuite extends StreamTest
     "from children") {
 
     val input = MemoryStream[Int]
-    val df1 = input.toDF().select('value as 'key1, 'value * 2 as 'key2, 'value * 3 as 'value)
-    val agg = df1.repartition('key1).groupBy('key1, 'key2).agg(count('*))
+    val df1 = input.toDF().select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
+      $"value" * 3 as Symbol("value"))
+    val agg = df1.repartition($"key1").groupBy($"key1", $"key2").agg(count($"*"))
 
     testStream(agg, OutputMode.Update())(
       AddData(input, 1, 1, 2, 3, 4),
@@ -90,8 +91,9 @@ class StreamingAggregationDistributionSuite extends StreamTest
     "from children if the query starts from checkpoint in prior to 3.3") {
 
     val inputData = MemoryStream[Int]
-    val df1 = inputData.toDF().select('value as 'key1, 'value * 2 as 'key2, 'value * 3 as 'value)
-    val agg = df1.repartition('key1).groupBy('key1, 'key2).agg(count('*))
+    val df1 = inputData.toDF().select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
+      $"value" * 3 as Symbol("value"))
+    val agg = df1.repartition($"key1").groupBy($"key1", $"key2").agg(count($"*"))
 
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-3.2.0-streaming-aggregate-with-repartition/").toURI

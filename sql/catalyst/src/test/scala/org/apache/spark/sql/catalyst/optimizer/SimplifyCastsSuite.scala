@@ -31,15 +31,15 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable element array to nullable element array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType, false)))
-    val plan = input.select('a.cast(ArrayType(IntegerType, true)).as("casted")).analyze
+    val input = LocalRelation($"a".array(ArrayType(IntegerType, false)))
+    val plan = input.select($"a".cast(ArrayType(IntegerType, true)).as("casted")).analyze
     val optimized = Optimize.execute(plan)
-    val expected = input.select('a.as("casted")).analyze
+    val expected = input.select($"a".as("casted")).analyze
     comparePlans(optimized, expected)
   }
 
   test("nullable element to non-nullable element array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
+    val input = LocalRelation($"a".array(ArrayType(IntegerType, true)))
     val attr = input.output.head
     val plan = input.select(attr.cast(ArrayType(IntegerType, false)).as("casted"))
     val optimized = Optimize.execute(plan)
@@ -49,16 +49,16 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable value map to nullable value map cast") {
-    val input = LocalRelation('m.map(MapType(StringType, StringType, false)))
-    val plan = input.select('m.cast(MapType(StringType, StringType, true))
+    val input = LocalRelation(Symbol("m").map(MapType(StringType, StringType, false)))
+    val plan = input.select($"m".cast(MapType(StringType, StringType, true))
       .as("casted")).analyze
     val optimized = Optimize.execute(plan)
-    val expected = input.select('m.as("casted")).analyze
+    val expected = input.select($"m".as("casted")).analyze
     comparePlans(optimized, expected)
   }
 
   test("nullable value map to non-nullable value map cast") {
-    val input = LocalRelation('m.map(MapType(StringType, StringType, true)))
+    val input = LocalRelation(Symbol("m").map(MapType(StringType, StringType, true)))
     val attr = input.output.head
     val plan = input.select(attr.cast(MapType(StringType, StringType, false))
       .as("casted"))
@@ -70,39 +70,39 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("SPARK-37922: Combine to one cast if we can safely up-cast two casts") {
-    val input = LocalRelation('a.int, 'b.decimal(18, 2), 'c.date, 'd.timestamp)
+    val input = LocalRelation($"a".int, $"b".decimal(18, 2), $"c".date, $"d".timestamp)
 
     // Combine casts
     comparePlans(
       Optimize.execute(
-        input.select('a.cast(DecimalType(18, 1)).cast(DecimalType(19, 1)).as("casted")).analyze),
-      input.select('a.cast(DecimalType(19, 1)).as("casted")).analyze)
+        input.select($"a".cast(DecimalType(18, 1)).cast(DecimalType(19, 1)).as("casted")).analyze),
+      input.select($"a".cast(DecimalType(19, 1)).as("casted")).analyze)
     comparePlans(
       Optimize.execute(
-        input.select('a.cast(LongType).cast(DecimalType(22, 1)).as("casted")).analyze),
-      input.select('a.cast(DecimalType(22, 1)).as("casted")).analyze)
+        input.select($"a".cast(LongType).cast(DecimalType(22, 1)).as("casted")).analyze),
+      input.select($"a".cast(DecimalType(22, 1)).as("casted")).analyze)
     comparePlans(
       Optimize.execute(
-        input.select('b.cast(DecimalType(20, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
-      input.select('b.cast(DecimalType(24, 2)).as("casted")).analyze)
+        input.select($"b".cast(DecimalType(20, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
+      input.select($"b".cast(DecimalType(24, 2)).as("casted")).analyze)
 
     // Can not combine casts
     comparePlans(
       Optimize.execute(
-        input.select('a.cast(DecimalType(2, 1)).cast(DecimalType(3, 1)).as("casted")).analyze),
-      input.select('a.cast(DecimalType(2, 1)).cast(DecimalType(3, 1)).as("casted")).analyze)
+        input.select($"a".cast(DecimalType(2, 1)).cast(DecimalType(3, 1)).as("casted")).analyze),
+      input.select($"a".cast(DecimalType(2, 1)).cast(DecimalType(3, 1)).as("casted")).analyze)
     comparePlans(
       Optimize.execute(
-        input.select('b.cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
-      input.select('b.cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
+        input.select($"b".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
+      input.select($"b".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
 
     comparePlans(
       Optimize.execute(
-        input.select('c.cast(TimestampType).cast(StringType).as("casted")).analyze),
-      input.select('c.cast(TimestampType).cast(StringType).as("casted")).analyze)
+        input.select($"c".cast(TimestampType).cast(StringType).as("casted")).analyze),
+      input.select($"c".cast(TimestampType).cast(StringType).as("casted")).analyze)
     comparePlans(
       Optimize.execute(
-        input.select('d.cast(LongType).cast(StringType).as("casted")).analyze),
-      input.select('d.cast(LongType).cast(StringType).as("casted")).analyze)
+        input.select($"d".cast(LongType).cast(StringType).as("casted")).analyze),
+      input.select($"d".cast(LongType).cast(StringType).as("casted")).analyze)
   }
 }

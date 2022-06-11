@@ -37,6 +37,7 @@ import org.apache.spark.rdd.RDD
  *                   partition of the given RDD. Once deserialized, the type should be
  *                   (RDD[T], (TaskContext, Iterator[T]) => U).
  * @param partition partition of the RDD this task is associated with
+ * @param numPartitions Total number of partitions in the stage that this task belongs to.
  * @param locs preferred task execution locations for locality scheduling
  * @param outputId index of the task in this job (a job can launch tasks on only a subset of the
  *                 input RDD's partitions).
@@ -56,6 +57,7 @@ private[spark] class ResultTask[T, U](
     stageAttemptId: Int,
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
+    numPartitions: Int,
     locs: Seq[TaskLocation],
     val outputId: Int,
     localProperties: Properties,
@@ -64,8 +66,8 @@ private[spark] class ResultTask[T, U](
     appId: Option[String] = None,
     appAttemptId: Option[String] = None,
     isBarrier: Boolean = false)
-  extends Task[U](stageId, stageAttemptId, partition.index, localProperties, serializedTaskMetrics,
-    jobId, appId, appAttemptId, isBarrier)
+  extends Task[U](stageId, stageAttemptId, partition.index, numPartitions, localProperties,
+    serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
   with Serializable {
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {

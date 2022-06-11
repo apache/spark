@@ -27,6 +27,7 @@ import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.TestUtils
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -46,6 +47,13 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     null.asInstanceOf[Period],
     null.asInstanceOf[Duration],
     null.asInstanceOf[java.lang.Boolean])
+
+  private def withMemoryModes(f: String => Unit): Unit = {
+    Seq(MemoryMode.OFF_HEAP, MemoryMode.ON_HEAP).foreach(mode => {
+      val offHeap = if (mode == MemoryMode.OFF_HEAP) "true" else "false"
+      f(offHeap)
+    })
+  }
 
   test("All Types Dictionary") {
     (1 :: 1000 :: Nil).foreach { n => {
@@ -141,45 +149,54 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     )
 
     val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
-    withSQLConf(
-      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
-      withTempPath { dir =>
-        val path = s"${dir.getCanonicalPath}/test.parquet"
+    withMemoryModes { offHeapMode =>
+      withSQLConf(
+        SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+        ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/test.parquet"
+          // Have more than 2 * 4096 records (so we have multiple tasks and each task
+          // reads at least twice from the reader). This will catch any issues with state
+          // maintained by the reader(s)
+          // Add at least one string with a null
+          val data = (1 to 8193).map { i =>
+            (i,
+              i.toLong, i.toShort, Array[Byte](i.toByte),
+              if (i % 2 == 1) s"test_$i" else null,
+              DateTimeUtils.fromJavaDate(Date.valueOf(s"2021-11-0" + ((i % 9) + 1))),
+              DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(s"2020-11-01 12:00:0" + (i % 10))),
+              Period.of(1, (i % 11) + 1, 0),
+              Duration.ofMillis(((i % 9) + 1) * 100),
+              new BigDecimal(java.lang.Long.toUnsignedString(i * 100000))
+            )
+          }
 
-        val data = (1 to 3).map { i =>
-          ( i, i.toLong, i.toShort, Array[Byte](i.toByte), s"test_${i}",
-            DateTimeUtils.fromJavaDate(Date.valueOf(s"2021-11-0" + i)),
-            DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(s"2020-11-01 12:00:0" + i)),
-            Period.of(1, i, 0), Duration.ofMillis(i * 100),
-            new BigDecimal(java.lang.Long.toUnsignedString(i*100000))
-          )
+          spark.createDataFrame(data)
+            .write.options(extraOptions).mode("overwrite").parquet(path)
+
+          val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+          val columnChunkMetadataList = blockMetadata.getColumns.asScala
+
+          // Verify that indeed delta encoding is used for each column
+          assert(columnChunkMetadataList.length === 10)
+          assert(columnChunkMetadataList(0).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+          assert(columnChunkMetadataList(1).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+          assert(columnChunkMetadataList(2).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+          // Both fixed-length byte array and variable-length byte array (also called BINARY)
+          // are use DELTA_BYTE_ARRAY for encoding
+          assert(columnChunkMetadataList(3).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+          assert(columnChunkMetadataList(4).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+
+          assert(columnChunkMetadataList(5).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+          assert(columnChunkMetadataList(6).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+          assert(columnChunkMetadataList(7).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+          assert(columnChunkMetadataList(8).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+          assert(columnChunkMetadataList(9).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+
+          val actual = spark.read.parquet(path).collect()
+          assert(actual.sortBy(_.getInt(0)) === data.map(Row.fromTuple));
         }
-
-        spark.createDataFrame(data)
-          .write.options(extraOptions).mode("overwrite").parquet(path)
-
-        val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
-        val columnChunkMetadataList = blockMetadata.getColumns.asScala
-
-        // Verify that indeed delta encoding is used for each column
-        assert(columnChunkMetadataList.length === 10)
-        assert(columnChunkMetadataList(0).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
-        assert(columnChunkMetadataList(1).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
-        assert(columnChunkMetadataList(2).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
-        // Both fixed-length byte array and variable-length byte array (also called BINARY)
-        // are use DELTA_BYTE_ARRAY for encoding
-        assert(columnChunkMetadataList(3).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
-        assert(columnChunkMetadataList(4).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
-
-        assert(columnChunkMetadataList(5).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
-        assert(columnChunkMetadataList(6).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
-        assert(columnChunkMetadataList(7).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
-        assert(columnChunkMetadataList(8).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
-        assert(columnChunkMetadataList(9).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
-
-        val actual = spark.read.parquet(path).collect()
-        assert(actual.sortBy(_.getInt(0)) === data.map(Row.fromTuple));
       }
     }
   }

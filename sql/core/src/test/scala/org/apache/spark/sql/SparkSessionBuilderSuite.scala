@@ -199,11 +199,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
       .config("spark.app.name", "test-app-SPARK-31234")
       .getOrCreate()
 
-    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+    assert(session.conf.get("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
     session.sql("RESET")
-    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+    assert(session.conf.get("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
   }
 
   test("SPARK-31354: SparkContext only register one SparkSession ApplicationEnd listener") {

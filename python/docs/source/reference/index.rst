@@ -22,12 +22,14 @@ API Reference
 
 This page lists an overview of all public PySpark modules, classes, functions and methods.
 
+Pandas API on Spark follows the API specifications of latest pandas release.
+
 .. toctree::
    :maxdepth: 2
 
-   pyspark.sql
+   pyspark.sql/index
    pyspark.pandas/index
-   pyspark.ss
+   pyspark.ss/index
    pyspark.ml
    pyspark.streaming
    pyspark.mllib

@@ -100,7 +100,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       properties: util.Map[String, String],
       distribution: Distribution,
       ordering: Array[SortOrder],
-      requiredNumPartitions: Option[Int]): Table = {
+      requiredNumPartitions: Option[Int],
+      distributionStrictlyRequired: Boolean = true): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident)
     }
@@ -109,7 +110,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     val tableName = s"$name.${ident.quoted}"
     val table = new InMemoryTable(tableName, schema, partitions, properties, distribution,
-      ordering, requiredNumPartitions)
+      ordering, requiredNumPartitions, distributionStrictlyRequired)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table

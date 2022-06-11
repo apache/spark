@@ -369,7 +369,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("SELECT * WHERE (quoted strings)") {
-    assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
+    assert(sql("select * from foobar").where($"NAME" === "joe 'foo' \"bar\"").collect().size === 1)
   }
 
   test("SELECT first field") {
@@ -1141,7 +1141,7 @@ class JDBCSuite extends QueryTest
          """.stripMargin)
 
       val show = ShowCreateTableCommand(TableIdentifier(tableName), ShowCreateTable.getoutputAttrs)
-      spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+      spark.sessionState.executePlan(show).executedPlan.executeCollectPublic().foreach { r =>
         assert(!r.toString.contains(password))
         assert(r.toString.contains(dbTable))
         assert(r.toString.contains(userName))
@@ -1154,7 +1154,7 @@ class JDBCSuite extends QueryTest
       }
 
       withSQLConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN.key -> "(?i)dbtable|user") {
-        spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+        spark.sessionState.executePlan(show).executedPlan.executeCollectPublic().foreach { r =>
           assert(!r.toString.contains(password))
           assert(!r.toString.contains(dbTable))
           assert(!r.toString.contains(userName))

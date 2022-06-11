@@ -399,6 +399,38 @@ private[spark] object BLAS extends Serializable {
   }
 
   /**
+   * CValues[0: A.numRows * B.numCols] := alpha * A * B + beta * CValues[0: A.numRows * B.numCols]
+   * @param alpha a scalar to scale the multiplication A * B.
+   * @param A the matrix A that will be left multiplied to B. Size of m x k.
+   * @param B the matrix B that will be left multiplied by A. Size of k x n.
+   * @param beta a scalar that can be used to scale matrix C.
+   * @param CValues the values of matrix C. C.isTransposed is supposed to be false.
+   */
+  def gemm(
+      alpha: Double,
+      A: Matrix,
+      B: DenseMatrix,
+      beta: Double,
+      CValues: Array[Double]): Unit = {
+    require(A.numRows * B.numCols <= CValues.length,
+      s"the length of CValues must be no less than ${A.numRows} X ${B.numCols}")
+    if (alpha == 0.0 && beta == 1.0) {
+      // gemm: alpha is equal to 0 and beta is equal to 1. Returning C.
+      return
+    } else if (alpha == 0.0) {
+      val n = A.numRows * B.numCols
+      getBLAS(n).dscal(n, beta, CValues, 1)
+    } else {
+      A match {
+        case sparse: SparseMatrix => gemmImpl(alpha, sparse, B, beta, CValues)
+        case dense: DenseMatrix => gemmImpl(alpha, dense, B, beta, CValues)
+        case _ =>
+          throw new IllegalArgumentException(s"gemm doesn't support matrix type ${A.getClass}.")
+      }
+    }
+  }
+
+  /**
    * C := alpha * A * B + beta * C
    * For `DenseMatrix` A.
    */
@@ -408,6 +440,25 @@ private[spark] object BLAS extends Serializable {
       B: DenseMatrix,
       beta: Double,
       C: DenseMatrix): Unit = {
+    require(A.numCols == B.numRows,
+      s"The columns of A don't match the rows of B. A: ${A.numCols}, B: ${B.numRows}")
+    require(A.numRows == C.numRows,
+      s"The rows of C don't match the rows of A. C: ${C.numRows}, A: ${A.numRows}")
+    require(B.numCols == C.numCols,
+      s"The columns of C don't match the columns of B. C: ${C.numCols}, A: ${B.numCols}")
+    gemmImpl(alpha, A, B, beta, C.values)
+  }
+
+  /**
+   * CValues[0: A.numRows * B.numCols] := alpha * A * B + beta * CValues[0: A.numRows * B.numCols]
+   * For `DenseMatrix` A.
+   */
+  private def gemmImpl(
+      alpha: Double,
+      A: DenseMatrix,
+      B: DenseMatrix,
+      beta: Double,
+      CValues: Array[Double]): Unit = {
     val tAstr = if (A.isTransposed) "T" else "N"
     val tBstr = if (B.isTransposed) "T" else "N"
     val lda = if (!A.isTransposed) A.numRows else A.numCols
@@ -415,12 +466,9 @@ private[spark] object BLAS extends Serializable {
 
     require(A.numCols == B.numRows,
       s"The columns of A don't match the rows of B. A: ${A.numCols}, B: ${B.numRows}")
-    require(A.numRows == C.numRows,
-      s"The rows of C don't match the rows of A. C: ${C.numRows}, A: ${A.numRows}")
-    require(B.numCols == C.numCols,
-      s"The columns of C don't match the columns of B. C: ${C.numCols}, A: ${B.numCols}")
+
     nativeBLAS.dgemm(tAstr, tBstr, A.numRows, B.numCols, A.numCols, alpha, A.values, lda,
-      B.values, ldb, beta, C.values, C.numRows)
+      B.values, ldb, beta, CValues, A.numRows)
   }
 
   /**
@@ -443,9 +491,29 @@ private[spark] object BLAS extends Serializable {
     require(nB == C.numCols,
       s"The columns of C don't match the columns of B. C: ${C.numCols}, A: $nB")
 
+    gemmImpl(alpha, A, B, beta, C.values)
+  }
+
+  /**
+   * CValues[0: A.numRows * B.numCols] := alpha * A * B + beta * CValues[0: A.numRows * B.numCols]
+   * For `SparseMatrix` A.
+   */
+  private def gemmImpl(
+      alpha: Double,
+      A: SparseMatrix,
+      B: DenseMatrix,
+      beta: Double,
+      CValues: Array[Double]): Unit = {
+    val mA: Int = A.numRows
+    val nB: Int = B.numCols
+    val kA: Int = A.numCols
+    val kB: Int = B.numRows
+
+    require(kA == kB, s"The columns of A don't match the rows of B. A: $kA, B: $kB")
+
     val Avals = A.values
     val Bvals = B.values
-    val Cvals = C.values
+    val Cvals = CValues
     val ArowIndices = A.rowIndices
     val AcolPtrs = A.colPtrs
 
@@ -493,7 +561,8 @@ private[spark] object BLAS extends Serializable {
     } else {
       // Scale matrix first if `beta` is not equal to 1.0
       if (beta != 1.0) {
-        getBLAS(C.values.length).dscal(C.values.length, beta, C.values, 1)
+        val n = A.numRows * B.numCols
+        getBLAS(n).dscal(n, beta, Cvals, 1)
       }
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
       // B, and added to C.

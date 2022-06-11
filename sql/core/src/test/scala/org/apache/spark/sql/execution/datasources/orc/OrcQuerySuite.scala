@@ -372,7 +372,7 @@ abstract class OrcQueryTest extends OrcTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      spark.range(0, 10).select(Symbol("id") as "Acol").write.orc(path)
+      spark.range(0, 10).select($"id" as "Acol").write.orc(path)
       spark.read.orc(path).schema("Acol")
       intercept[IllegalArgumentException] {
         spark.read.orc(path).schema("acol")
@@ -417,19 +417,19 @@ abstract class OrcQueryTest extends OrcTest {
             s"No data was filtered for predicate: $pred")
         }
 
-        checkPredicate(Symbol("a") === 5, List(5).map(Row(_, null)))
-        checkPredicate(Symbol("a") <=> 5, List(5).map(Row(_, null)))
-        checkPredicate(Symbol("a") < 5, List(1, 3).map(Row(_, null)))
-        checkPredicate(Symbol("a") <= 5, List(1, 3, 5).map(Row(_, null)))
-        checkPredicate(Symbol("a") > 5, List(7, 9).map(Row(_, null)))
-        checkPredicate(Symbol("a") >= 5, List(5, 7, 9).map(Row(_, null)))
-        checkPredicate(Symbol("a").isNull, List(null).map(Row(_, null)))
-        checkPredicate(Symbol("b").isNotNull, List())
-        checkPredicate(Symbol("a").isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
-        checkPredicate(Symbol("a") > 0 && Symbol("a") < 3, List(1).map(Row(_, null)))
-        checkPredicate(Symbol("a") < 1 || Symbol("a") > 8, List(9).map(Row(_, null)))
-        checkPredicate(!(Symbol("a") > 3), List(1, 3).map(Row(_, null)))
-        checkPredicate(!(Symbol("a") > 0 && Symbol("a") < 3), List(3, 5, 7, 9).map(Row(_, null)))
+        checkPredicate($"a" === 5, List(5).map(Row(_, null)))
+        checkPredicate($"a" <=> 5, List(5).map(Row(_, null)))
+        checkPredicate($"a" < 5, List(1, 3).map(Row(_, null)))
+        checkPredicate($"a" <= 5, List(1, 3, 5).map(Row(_, null)))
+        checkPredicate($"a" > 5, List(7, 9).map(Row(_, null)))
+        checkPredicate($"a" >= 5, List(5, 7, 9).map(Row(_, null)))
+        checkPredicate($"a".isNull, List(null).map(Row(_, null)))
+        checkPredicate($"b".isNotNull, List())
+        checkPredicate($"a".isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
+        checkPredicate($"a" > 0 && $"a" < 3, List(1).map(Row(_, null)))
+        checkPredicate($"a" < 1 || $"a" > 8, List(9).map(Row(_, null)))
+        checkPredicate(!($"a" > 3), List(1, 3).map(Row(_, null)))
+        checkPredicate(!($"a" > 0 && $"a" < 3), List(3, 5, 7, 9).map(Row(_, null)))
       }
     }
   }
@@ -814,19 +814,34 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
                       | timestamp_ntz '2021-03-14 02:15:00.0' as ts_ntz3
                       |""".stripMargin
 
-      val df = sql(sqlText)
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = sql(sqlText)
 
-      df.write.mode("overwrite").orc("ts_ntz_orc")
+        df.write.mode("overwrite").orc(path)
 
-      val query = "select * from `orc`.`ts_ntz_orc`"
+        val query = s"select * from `orc`.`$path`"
 
-      DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-        DateTimeTestUtils.withDefaultTimeZone(zoneId) {
-          withAllNativeOrcReaders {
-            checkAnswer(sql(query), df)
+        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            withAllNativeOrcReaders {
+              checkAnswer(sql(query), df)
+            }
           }
         }
       }
+    }
+  }
+
+  test("SPARK-39387: BytesColumnVector should not throw RuntimeException due to overflow") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(1, 22, 1, 1).map { _ =>
+        val byteData = Array.fill[Byte](1024 * 1024)('X')
+        val mapData = (1 to 100).map(i => (i, byteData))
+        mapData
+      }.toDF()
+      df.write.format("orc").save(path)
     }
   }
 }

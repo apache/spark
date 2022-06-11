@@ -127,43 +127,10 @@ public class RowBasedKeyValueBatchSuite {
     try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
         valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       Assert.assertEquals(0, batch.numRows());
-
-      boolean asserted = false;
-      try {
-        batch.getKeyRow(-1);
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-        asserted = true;
-      }
-      Assert.assertTrue("Should not be able to get row -1", asserted);
-
-      asserted = false;
-      try {
-        batch.getValueRow(-1);
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-        asserted = true;
-      }
-      Assert.assertTrue("Should not be able to get row -1", asserted);
-
-      asserted = false;
-      try {
-        batch.getKeyRow(0);
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-        asserted = true;
-      }
-      Assert.assertTrue("Should not be able to get row 0 when batch is empty", asserted);
-
-      asserted = false;
-      try {
-        batch.getValueRow(0);
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-        asserted = true;
-      }
-      Assert.assertTrue("Should not be able to get row 0 when batch is empty", asserted);
-
+      Assert.assertThrows(AssertionError.class, () -> batch.getKeyRow(-1));
+      Assert.assertThrows(AssertionError.class, () -> batch.getValueRow(-1));
+      Assert.assertThrows(AssertionError.class, () -> batch.getKeyRow(0));
+      Assert.assertThrows(AssertionError.class, () -> batch.getValueRow(0));
       Assert.assertFalse(batch.rowIterator().next());
     }
   }
@@ -199,23 +166,8 @@ public class RowBasedKeyValueBatchSuite {
       UnsafeRow retrievedValue2 = batch.getValueRow(2);
       Assert.assertTrue(checkValue(retrievedValue2, 3, 3));
 
-      boolean asserted = false;
-      try {
-        batch.getKeyRow(3);
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-        asserted = true;
-      }
-      Assert.assertTrue("Should not be able to get row 3", asserted);
-
-      asserted = false;
-      try {
-        batch.getValueRow(3);
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-        asserted = true;
-      }
-      Assert.assertTrue("Should not be able to get row 3", asserted);
+      Assert.assertThrows(AssertionError.class, () -> batch.getKeyRow(3));
+      Assert.assertThrows(AssertionError.class, () -> batch.getValueRow(3));
     }
   }
 

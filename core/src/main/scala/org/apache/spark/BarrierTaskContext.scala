@@ -55,10 +55,6 @@ class BarrierTaskContext private[spark] (
   // with the driver side epoch.
   private var barrierEpoch = 0
 
-  // Number of tasks of the current barrier stage, a barrier() call must collect enough requests
-  // from different tasks within the same barrier stage attempt to succeed.
-  private lazy val numTasks = getTaskInfos().size
-
   private def runBarrier(message: String, requestMethod: RequestMethod.Value): Array[String] = {
     logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) has entered " +
       s"the global sync, current barrier epoch is $barrierEpoch.")
@@ -78,7 +74,7 @@ class BarrierTaskContext private[spark] (
 
     try {
       val abortableRpcFuture = barrierCoordinator.askAbortable[Array[String]](
-        message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
+        message = RequestToSync(numPartitions, stageId, stageAttemptNumber, taskAttemptId,
           barrierEpoch, partitionId, message, requestMethod),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
@@ -214,6 +210,8 @@ class BarrierTaskContext private[spark] (
   override def stageAttemptNumber(): Int = taskContext.stageAttemptNumber()
 
   override def partitionId(): Int = taskContext.partitionId()
+
+  override def numPartitions(): Int = taskContext.numPartitions()
 
   override def attemptNumber(): Int = taskContext.attemptNumber()
 

@@ -35,11 +35,33 @@ class TaskInfo(
      */
     val index: Int,
     val attemptNumber: Int,
+    /**
+     * The actual RDD partition ID in this task.
+     * The ID of the RDD partition is always same across task attempts.
+     * This will be -1 for historical data, and available for all applications since Spark 3.3.
+     */
+    val partitionId: Int,
     val launchTime: Long,
     val executorId: String,
     val host: String,
     val taskLocality: TaskLocality.TaskLocality,
     val speculative: Boolean) {
+
+  /**
+   * This api doesn't contains partitionId, please use the new api.
+   * Remain it for backward compatibility before Spark 3.3.
+   */
+  def this(
+      taskId: Long,
+      index: Int,
+      attemptNumber: Int,
+      launchTime: Long,
+      executorId: String,
+      host: String,
+      taskLocality: TaskLocality.TaskLocality,
+      speculative: Boolean) = {
+    this(taskId, index, attemptNumber, -1, launchTime, executorId, host, taskLocality, speculative)
+  }
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the

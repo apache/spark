@@ -537,7 +537,7 @@ class DataFrameTests(ReusedSQLTestCase):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
         from pyspark.sql import Observation
 
-        df = SparkSession(self.sc).createDataFrame(
+        df = self.spark.createDataFrame(
             [
                 (1, 1.0, "one"),
                 (2, 2.0, "two"),
@@ -581,14 +581,49 @@ class DataFrameTests(ReusedSQLTestCase):
             Observation("")
 
         # dataframe.observe requires at least one expr
-        with self.assertRaisesRegex(AssertionError, "exprs should not be empty"):
+        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
             df.observe(Observation())
 
         # dataframe.observe requires non-None Columns
         for args in [(None,), ("id",), (lit(1), None), (lit(1), "id")]:
             with self.subTest(args=args):
-                with self.assertRaisesRegex(AssertionError, "all exprs should be Column"):
+                with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
                     df.observe(Observation(), *args)
+
+    def test_observe_str(self):
+        # SPARK-38760: tests the DataFrame.observe(str, *Column) method
+        from pyspark.sql.streaming import StreamingQueryListener
+
+        observed_metrics = None
+
+        class TestListener(StreamingQueryListener):
+            def onQueryStarted(self, event):
+                pass
+
+            def onQueryProgress(self, event):
+                nonlocal observed_metrics
+                observed_metrics = event.progress.observedMetrics
+
+            def onQueryTerminated(self, event):
+                pass
+
+        self.spark.streams.addListener(TestListener())
+
+        df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        df = df.observe("metric", count(lit(1)).alias("cnt"), sum(col("value")).alias("sum"))
+        q = df.writeStream.format("noop").queryName("test").start()
+        self.assertTrue(q.isActive)
+        time.sleep(10)
+        q.stop()
+
+        self.assertTrue(isinstance(observed_metrics, dict))
+        self.assertTrue("metric" in observed_metrics)
+        row = observed_metrics["metric"]
+        self.assertTrue(isinstance(row, Row))
+        self.assertTrue(hasattr(row, "cnt"))
+        self.assertTrue(hasattr(row, "sum"))
+        self.assertGreaterEqual(row.cnt, 0)
+        self.assertGreaterEqual(row.sum, 0)
 
     def test_sample(self):
         self.assertRaisesRegex(

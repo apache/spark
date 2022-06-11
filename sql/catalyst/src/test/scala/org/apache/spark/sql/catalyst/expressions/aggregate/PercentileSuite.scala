@@ -83,8 +83,8 @@ class PercentileSuite extends SparkFunSuite {
   }
 
   private def runTest(agg: Percentile,
-        rows : Seq[Seq[Any]],
-        expectedPercentiles : Seq[Double]): Unit = {
+      rows : Seq[Seq[Any]],
+      expectedPercentiles : Seq[Double]): Unit = {
     assert(agg.nullable)
     val group1 = (0 until rows.length / 2)
     val group1Buffer = agg.createAggregationBuffer()
@@ -170,8 +170,8 @@ class PercentileSuite extends SparkFunSuite {
       val child = AttributeReference("a", dataType)()
       val percentile = new Percentile(child, percentage)
       assertEqual(percentile.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 1 requires (numeric or interval year to month or " +
-          s"interval day to second) type, however, 'a' is of ${dataType.simpleString} type."))
+        TypeCheckFailure(s"argument 1 requires numeric type," +
+          s" however, 'a' is of ${dataType.simpleString} type."))
     }
 
     val invalidFrequencyDataTypes = Seq(FloatType, DoubleType, BooleanType,
@@ -184,8 +184,8 @@ class PercentileSuite extends SparkFunSuite {
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
       assertEqual(percentile.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 1 requires (numeric or interval year to month or " +
-          s"interval day to second) type, however, 'a' is of ${dataType.simpleString} type."))
+        TypeCheckFailure(s"argument 1 requires numeric type," +
+          s" however, 'a' is of ${dataType.simpleString} type."))
     }
 
     for(dataType <- validDataTypes;
@@ -218,7 +218,7 @@ class PercentileSuite extends SparkFunSuite {
       val percentile2 = new Percentile(child, percentage)
       assertEqual(percentile2.checkInputDataTypes(),
         TypeCheckFailure(s"Percentage(s) must be between 0.0 and 1.0, " +
-        s"but got ${percentage.simpleString(100)}"))
+          s"but got ${percentage.simpleString(100)}"))
     }
 
     val nonFoldablePercentage = Seq(NonFoldableLiteral(0.5),
@@ -270,7 +270,6 @@ class PercentileSuite extends SparkFunSuite {
   }
 
   test("nulls in percentage expression") {
-
     assert(new Percentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
@@ -280,9 +279,9 @@ class PercentileSuite extends SparkFunSuite {
       Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))
 
     nullPercentageExprs.foreach { percentageExpression =>
-        val wrongPercentage = new Percentile(
-          AttributeReference("a", DoubleType)(),
-          percentageExpression = percentageExpression)
+      val wrongPercentage = new Percentile(
+        AttributeReference("a", DoubleType)(),
+        percentageExpression = percentageExpression)
         assert(
           wrongPercentage.checkInputDataTypes() match {
             case TypeCheckFailure(msg) if msg.contains("argument 2 requires array<double>") => true

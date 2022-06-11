@@ -2,15 +2,15 @@
 radix sort
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 radix sort 25000000:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-reference TimSort key prefix array                11369          11478         155          2.2         454.7       1.0X
-reference Arrays.sort                              3518           3521           4          7.1         140.7       3.2X
-radix sort one byte                                 249            267           8        100.4          10.0      45.7X
-radix sort two bytes                                493            501           7         50.7          19.7      23.1X
-radix sort eight bytes                             1775           1784          12         14.1          71.0       6.4X
-radix sort key prefix array                        3081           3115          49          8.1         123.2       3.7X
+reference TimSort key prefix array                13519          13584          92          1.8         540.8       1.0X
+reference Arrays.sort                              3158           3167          12          7.9         126.3       4.3X
+radix sort one byte                                 461            474          10         54.3          18.4      29.4X
+radix sort two bytes                                913            931          16         27.4          36.5      14.8X
+radix sort eight bytes                             3516           3581          92          7.1         140.6       3.8X
+radix sort key prefix array                        6750           6771          29          3.7         270.0       2.0X
 
 

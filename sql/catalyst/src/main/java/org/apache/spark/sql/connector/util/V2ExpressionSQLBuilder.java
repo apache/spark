@@ -30,6 +30,8 @@ import org.apache.spark.sql.types.DataType;
 
 /**
  * The builder to generate SQL from V2 expressions.
+ *
+ * @since 3.3.0
  */
 public class V2ExpressionSQLBuilder {
 
@@ -93,11 +95,38 @@ public class V2ExpressionSQLBuilder {
           return visitNot(build(e.children()[0]));
         case "~":
           return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
+        case "ABS":
+        case "COALESCE":
+        case "LN":
+        case "EXP":
+        case "POWER":
+        case "SQRT":
+        case "FLOOR":
+        case "CEIL":
+        case "WIDTH_BUCKET":
+        case "SUBSTRING":
+        case "UPPER":
+        case "LOWER":
+        case "TRANSLATE":
+          return visitSQLFunction(name,
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "CASE_WHEN": {
           List<String> children =
             Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
           return visitCaseWhen(children.toArray(new String[e.children().length]));
         }
+        case "TRIM":
+          return visitTrim("BOTH",
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+        case "LTRIM":
+          return visitTrim("LEADING",
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+        case "RTRIM":
+          return visitTrim("TRAILING",
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+        case "OVERLAY":
+          return visitOverlay(
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         // TODO supports other expressions
         default:
           return visitUnexpectedExpr(expr);
@@ -210,7 +239,30 @@ public class V2ExpressionSQLBuilder {
     return sb.toString();
   }
 
+  protected String visitSQLFunction(String funcName, String[] inputs) {
+    return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+  }
+
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
     throw new IllegalArgumentException("Unexpected V2 expression: " + expr);
+  }
+
+  protected String visitOverlay(String[] inputs) {
+    assert(inputs.length == 3 || inputs.length == 4);
+    if (inputs.length == 3) {
+      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] + ")";
+    } else {
+      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] +
+        " FOR " + inputs[3]+ ")";
+    }
+  }
+
+  protected String visitTrim(String direction, String[] inputs) {
+    assert(inputs.length == 1 || inputs.length == 2);
+    if (inputs.length == 1) {
+      return "TRIM(" + direction + " FROM " + inputs[0] + ")";
+    } else {
+      return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
+    }
   }
 }

@@ -450,7 +450,7 @@ class RocksDB(
   }
 
   private def closePrefixScanIterators(): Unit = {
-    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
+    prefixScanReuseIter.values().asScala.foreach(_.close())
     prefixScanReuseIter.clear()
   }
 

@@ -792,9 +792,9 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val windowedAggregation = kafka
       .withWatermark("timestamp", "10 seconds")
-      .groupBy(window($"timestamp", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
-      .select($"window".getField("start") as 'window, $"count")
+      .groupBy(window($"timestamp", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
+      .select($"window".getField("start") as Symbol("window"), $"count")
 
     val query = windowedAggregation
       .writeStream
@@ -1448,7 +1448,8 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),
           KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
-        withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
+        withClue(s"minPartitions = $minPartitions generated factories " +
+          s"${inputPartitions.mkString("inputPartitions(", ", ", ")")}\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
         }
       }

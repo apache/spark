@@ -103,11 +103,11 @@ class KafkaDataConsumerSuite
       val kafkaParams = getKafkaParams()
       val key = CacheKey(groupId, topicPartition)
 
-      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, null, null)
       TaskContext.setTaskContext(context1)
       val consumer1Underlying = initSingleConsumer(kafkaParams, key)
 
-      val context2 = new TaskContextImpl(0, 0, 0, 0, 1, null, null, null)
+      val context2 = new TaskContextImpl(0, 0, 0, 0, 1, 1, null, null, null)
       TaskContext.setTaskContext(context2)
       val consumer2Underlying = initSingleConsumer(kafkaParams, key)
 
@@ -123,7 +123,7 @@ class KafkaDataConsumerSuite
       val kafkaParams = getKafkaParams()
       val key = new CacheKey(groupId, topicPartition)
 
-      val context = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+      val context = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, null, null)
       TaskContext.setTaskContext(context)
       setSparkEnv(
         Map(
@@ -145,7 +145,7 @@ class KafkaDataConsumerSuite
       val kafkaParams = getKafkaParams()
       val key = new CacheKey(groupId, topicPartition)
 
-      val context = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+      val context = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, null, null)
       TaskContext.setTaskContext(context)
       setSparkEnv(
         Map(
@@ -198,7 +198,8 @@ class KafkaDataConsumerSuite
 
     def consume(i: Int): Unit = {
       val taskContext = if (Random.nextBoolean) {
-        new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), null, null, null)
+        new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), 1,
+          null, null, null)
       } else {
         null
       }

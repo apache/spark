@@ -509,7 +509,8 @@ private[spark] class TaskSetManager(
     // Do various bookkeeping
     copiesRunning(index) += 1
     val attemptNum = taskAttempts(index).size
-    val info = new TaskInfo(taskId, index, attemptNum, launchTime,
+    val info = new TaskInfo(
+      taskId, index, attemptNum, task.partitionId, launchTime,
       execId, host, taskLocality, speculative)
     taskInfos(taskId) = info
     taskAttempts(index) = info :: taskAttempts(index)
@@ -540,7 +541,8 @@ private[spark] class TaskSetManager(
     val tName = taskName(taskId)
     logInfo(s"Starting $tName ($host, executor ${info.executorId}, " +
       s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
-      s"taskResourceAssignments ${taskResourceAssignments}")
+      (if (taskResourceAssignments.nonEmpty) s"taskResourceAssignments ${taskResourceAssignments}"
+      else ""))
 
     sched.dagScheduler.taskStarted(task, info)
     new TaskDescription(

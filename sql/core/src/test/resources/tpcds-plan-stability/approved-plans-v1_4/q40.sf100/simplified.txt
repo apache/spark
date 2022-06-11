@@ -20,6 +20,16 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                       Exchange [cs_order_number,cs_item_sk] #2
                                         WholeStageCodegen (1)
                                           Filter [cs_warehouse_sk,cs_item_sk]
+                                            Subquery #2
+                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 1019, 8152, 0, 0),bloomFilter,buf]
+                                                Exchange #4
+                                                  ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                    WholeStageCodegen (1)
+                                                      Project [i_item_sk]
+                                                        Filter [i_current_price,i_item_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.item [i_item_sk,i_current_price]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.catalog_sales [cs_warehouse_sk,cs_item_sk,cs_order_number,cs_sales_price,cs_sold_date_sk]
@@ -34,7 +44,7 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                 WholeStageCodegen (4)
                                   Sort [cr_order_number,cr_item_sk]
                                     InputAdapter
-                                      Exchange [cr_order_number,cr_item_sk] #4
+                                      Exchange [cr_order_number,cr_item_sk] #5
                                         WholeStageCodegen (3)
                                           Project [cr_item_sk,cr_order_number,cr_refunded_cash]
                                             Filter [cr_order_number,cr_item_sk]
@@ -42,7 +52,7 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                                 InputAdapter
                                                   Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_refunded_cash,cr_returned_date_sk]
                           InputAdapter
-                            BroadcastExchange #5
+                            BroadcastExchange #6
                               WholeStageCodegen (5)
                                 Project [i_item_sk,i_item_id]
                                   Filter [i_current_price,i_item_sk]
@@ -52,7 +62,7 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                       InputAdapter
                         ReusedExchange [d_date_sk,d_date] #3
                   InputAdapter
-                    BroadcastExchange #6
+                    BroadcastExchange #7
                       WholeStageCodegen (7)
                         Filter [w_warehouse_sk]
                           ColumnarToRow

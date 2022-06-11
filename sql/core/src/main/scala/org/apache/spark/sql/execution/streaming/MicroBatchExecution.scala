@@ -582,9 +582,8 @@ class MicroBatchExecution(
             case FileSourceMetadataAttribute(_) => true
             case _ => false
           }
-          val finalDataPlan = dataPlan match {
+          val finalDataPlan = dataPlan transformUp {
             case l: LogicalRelation if hasFileMetadata => l.withMetadataColumns()
-            case _ => dataPlan
           }
           val maxFields = SQLConf.get.maxToStringFields
           assert(output.size == finalDataPlan.output.size,
@@ -672,9 +671,11 @@ class MicroBatchExecution(
     withProgressLocked {
       sinkCommitProgress = batchSinkProgress
       watermarkTracker.updateWatermark(lastExecution.executedPlan)
-      assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
-        "Concurrent update to the commit log. Multiple streaming jobs detected for " +
-          s"$currentBatchId")
+      reportTimeTaken("commitOffsets") {
+        assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
+          "Concurrent update to the commit log. Multiple streaming jobs detected for " +
+            s"$currentBatchId")
+      }
       committedOffsets ++= availableOffsets
     }
     logDebug(s"Completed batch ${currentBatchId}")

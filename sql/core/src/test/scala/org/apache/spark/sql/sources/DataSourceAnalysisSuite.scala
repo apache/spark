@@ -21,8 +21,9 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.DataSourceAnalysis
 import org.apache.spark.sql.internal.SQLConf
@@ -36,7 +37,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    targetAttributes = Seq(Symbol("a").int, Symbol("d").int, Symbol("b").int, Symbol("c").int)
+    targetAttributes = Seq($"a".int, $"d".int, $"b".int, $"c".int)
     targetPartitionSchema = new StructType()
       .add("b", IntegerType)
       .add("c", IntegerType)
@@ -63,18 +64,20 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
     def cast(e: Expression, dt: DataType): Expression = {
       SQLConf.get.storeAssignmentPolicy match {
         case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
-          AnsiCast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
+          val cast = Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone), ansiEnabled = true)
+          cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+          cast
         case _ =>
           Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
       }
     }
-    val rule = DataSourceAnalysis
+    val rule = DataSourceAnalysis(SimpleAnalyzer)
     testRule(
       "convertStaticPartitions only handle INSERT having at least static partitions",
         caseSensitive) {
       intercept[AssertionError] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
+          sourceAttributes = Seq($"e".int, $"f".int),
           providedPartitions = Map("b" -> None, "c" -> None),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -85,7 +88,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Missing columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq(Symbol("e").int),
+          sourceAttributes = Seq($"e".int),
           providedPartitions = Map("b" -> Some("1"), "c" -> None),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -96,7 +99,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Missing partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
+          sourceAttributes = Seq($"e".int, $"f".int),
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -105,7 +108,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Missing partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int, Symbol("g").int),
+          sourceAttributes = Seq($"e".int, $"f".int, $"g".int),
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -114,7 +117,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Wrong partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
+          sourceAttributes = Seq($"e".int, $"f".int),
           providedPartitions = Map("b" -> Some("1"), "d" -> None),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -125,7 +128,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Wrong partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
+          sourceAttributes = Seq($"e".int, $"f".int),
           providedPartitions = Map("b" -> Some("1"), "d" -> Some("2")),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -134,7 +137,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Wrong partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq(Symbol("e").int),
+          sourceAttributes = Seq($"e".int),
           providedPartitions = Map("b" -> Some("1"), "c" -> Some("3"), "d" -> Some("2")),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -144,7 +147,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
         // Wrong partitioning columns.
         intercept[AnalysisException] {
           rule.convertStaticPartitions(
-            sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
+            sourceAttributes = Seq($"e".int, $"f".int),
             providedPartitions = Map("b" -> Some("1"), "C" -> Some("3")),
             targetAttributes = targetAttributes,
             targetPartitionSchema = targetPartitionSchema)
@@ -156,7 +159,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Static partitions need to appear before dynamic partitions.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq('e.int, 'f.int),
+          sourceAttributes = Seq($"e".int, $"f".int),
           providedPartitions = Map("b" -> None, "c" -> Some("3")),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -165,7 +168,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
 
     testRule("All static partitions", caseSensitive) {
       if (!caseSensitive) {
-        val nonPartitionedAttributes = Seq('e.int, 'f.int)
+        val nonPartitionedAttributes = Seq($"e".int, $"f".int)
         val expected = nonPartitionedAttributes ++
           Seq(cast(Literal("1"), IntegerType), cast(Literal("3"), IntegerType))
         val actual = rule.convertStaticPartitions(
@@ -177,7 +180,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       }
 
       {
-        val nonPartitionedAttributes = Seq('e.int, 'f.int)
+        val nonPartitionedAttributes = Seq($"e".int, $"f".int)
         val expected = nonPartitionedAttributes ++
           Seq(cast(Literal("1"), IntegerType), cast(Literal("3"), IntegerType))
         val actual = rule.convertStaticPartitions(
@@ -190,20 +193,20 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
 
       // Test the case having a single static partition column.
       {
-        val nonPartitionedAttributes = Seq('e.int, 'f.int)
+        val nonPartitionedAttributes = Seq($"e".int, $"f".int)
         val expected = nonPartitionedAttributes ++ Seq(cast(Literal("1"), IntegerType))
         val actual = rule.convertStaticPartitions(
           sourceAttributes = nonPartitionedAttributes,
           providedPartitions = Map("b" -> Some("1")),
-          targetAttributes = Seq('a.int, 'd.int, 'b.int),
+          targetAttributes = Seq($"a".int, $"d".int, $"b".int),
           targetPartitionSchema = new StructType().add("b", IntegerType))
         checkProjectList(actual, expected)
       }
     }
 
     testRule("Static partition and dynamic partition", caseSensitive) {
-      val nonPartitionedAttributes = Seq('e.int, 'f.int)
-      val dynamicPartitionAttributes = Seq('g.int)
+      val nonPartitionedAttributes = Seq($"e".int, $"f".int)
+      val dynamicPartitionAttributes = Seq($"g".int)
       val expected =
         nonPartitionedAttributes ++
           Seq(cast(Literal("1"), IntegerType)) ++

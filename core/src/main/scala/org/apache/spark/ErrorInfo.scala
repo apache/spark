@@ -29,13 +29,29 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.spark.util.Utils
 
 /**
- * Information associated with an error class.
+ * Information associated with an error subclass.
  *
- * @param sqlState SQLSTATE associated with this class.
+ * @param subClass SubClass associated with this class.
  * @param message C-style message format compatible with printf.
  *                The error message is constructed by concatenating the lines with newlines.
  */
-private[spark] case class ErrorInfo(message: Seq[String], sqlState: Option[String]) {
+private[spark] case class ErrorSubInfo(message: Seq[String]) {
+  // For compatibility with multi-line error messages
+  @JsonIgnore
+  val messageFormat: String = message.mkString("\n")
+}
+
+/**
+ * Information associated with an error class.
+ *
+ * @param sqlState SQLSTATE associated with this class.
+ * @param subClass A sequence of subclasses
+ * @param message C-style message format compatible with printf.
+ *                The error message is constructed by concatenating the lines with newlines.
+ */
+private[spark] case class ErrorInfo(message: Seq[String],
+                                    subClass: Option[Map[String, ErrorSubInfo]],
+                                    sqlState: Option[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
   val messageFormat: String = message.mkString("\n")
@@ -55,10 +71,57 @@ private[spark] object SparkThrowableHelper {
     mapper.readValue(errorClassesUrl, new TypeReference[SortedMap[String, ErrorInfo]]() {})
   }
 
-  def getMessage(errorClass: String, messageParameters: Array[String]): String = {
+  def getMessage(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Array[String],
+      queryContext: String = ""): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
-    String.format(errorInfo.messageFormat, messageParameters: _*)
+    val (displayClass, displayMessageParameters, displayFormat) = if (errorInfo.subClass.isEmpty) {
+      (errorClass, messageParameters, errorInfo.messageFormat)
+    } else {
+      val subClasses = errorInfo.subClass.get
+      if (errorSubClass == null) {
+        throw new IllegalArgumentException(s"Subclass required for error class '$errorClass'")
+      }
+      val errorSubInfo = subClasses.getOrElse(errorSubClass,
+        throw new IllegalArgumentException(s"Cannot find sub error class '$errorSubClass'"))
+      (errorClass + "." + errorSubClass, messageParameters,
+        errorInfo.messageFormat + " " + errorSubInfo.messageFormat)
+    }
+    val displayMessage = String.format(
+      displayFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
+      displayMessageParameters : _*)
+    val displayQueryContext = if (queryContext.isEmpty) {
+      ""
+    } else {
+      s"\n$queryContext"
+    }
+    s"[$displayClass] $displayMessage$displayQueryContext"
+  }
+
+  def getParameterNames(errorClass: String, errorSubCLass: String): Array[String] = {
+    val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
+      throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
+    if (errorInfo.subClass.isEmpty && errorSubCLass != null) {
+      throw new IllegalArgumentException(s"'$errorClass' has no subclass")
+    }
+    if (errorInfo.subClass.isDefined && errorSubCLass == null) {
+      throw new IllegalArgumentException(s"'$errorClass' requires subclass")
+    }
+    var parameterizedMessage = errorInfo.messageFormat
+    if (errorInfo.subClass.isDefined) {
+      val givenSubClass = errorSubCLass
+      val errorSubInfo = errorInfo.subClass.get.getOrElse(givenSubClass,
+        throw new IllegalArgumentException(s"Cannot find sub error class '$givenSubClass'"))
+      parameterizedMessage = parameterizedMessage + errorSubInfo.messageFormat
+    }
+    val pattern = "<[a-zA-Z0-9_-]+>".r
+    val matches = pattern.findAllIn(parameterizedMessage)
+    val parameterSeq = matches.toArray
+    val parameterNames = parameterSeq.map(p => p.stripPrefix("<").stripSuffix(">"))
+    parameterNames
   }
 
   def getSqlState(errorClass: String): String = {
