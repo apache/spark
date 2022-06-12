@@ -341,6 +341,28 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
+   * Returns a copy of this node where the given partial function has been recursively applied
+   * first to this node, then this node's subqueries and finally this node's children.
+   * When the partial function does not apply to a given node, it is left unchanged.
+   */
+  def transformDownWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
+    val g: PartialFunction[PlanType, PlanType] = new PartialFunction[PlanType, PlanType] {
+      override def isDefinedAt(x: PlanType): Boolean = true
+
+      override def apply(plan: PlanType): PlanType = {
+        val transformed = f.applyOrElse[PlanType, PlanType](plan, identity)
+        transformed transformExpressionsDown {
+          case planExpression: PlanExpression[PlanType] =>
+            val newPlan = planExpression.plan.transformDownWithSubqueries(f)
+            planExpression.withNewPlan(newPlan)
+        }
+      }
+    }
+
+    transformDown(g)
+  }
+
+  /**
    * A variant of `collect`. This method not only apply the given function to all elements in this
    * plan, also considering all the plans in its (nested) subqueries
    */
