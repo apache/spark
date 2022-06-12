@@ -29,7 +29,9 @@ class OptimizerRuleExclusionSuite extends PlanTest {
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
   private def verifyExcludedRules(optimizer: Optimizer, rulesToExclude: Seq[String]): Unit = {
+    // Remove ReplaceCTERefWithRepartition because it is in SparkOptimizer. We can't test it here.
     val nonExcludableRules = optimizer.nonExcludableRules
+      .filterNot(_.equals(ReplaceCTERefWithRepartition.ruleName))
 
     val excludedRuleNames = rulesToExclude.filter(!nonExcludableRules.contains(_))
     // Batches whose rules are all to be excluded should be removed as a whole.
