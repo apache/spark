@@ -69,7 +69,7 @@ private[spark] object Config extends Logging {
         "instead of the executor pods")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_DRIVER_REUSE_PVC =
     ConfigBuilder("spark.kubernetes.driver.reusePersistentVolumeClaim")
@@ -83,7 +83,7 @@ private[spark] object Config extends Logging {
         s"sometimes. This config requires ${KUBERNETES_DRIVER_OWN_PVC.key}=true.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
