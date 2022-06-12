@@ -715,7 +715,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  private def mergeApplicationListing(
+  private[history] def mergeApplicationListing(
       reader: EventLogFileReader,
       scanTime: Long,
       enableOptimizations: Boolean): Unit = {
@@ -749,8 +749,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       case _: FileNotFoundException
           if reader.rootPath.getName.endsWith(EventLogFileWriter.IN_PROGRESS) =>
-        logInfo(s"In-progress file does not exist: ${reader.rootPath}. The application may be " +
-          "completed during processing.")
+        val finalFileName = reader.rootPath.getName.stripSuffix(EventLogFileWriter.IN_PROGRESS)
+        val finalFilePath = new Path(reader.rootPath.getParent, finalFileName)
+        if (fs.exists(finalFilePath)) {
+          // Do nothing, the application completed during processing, the final event log file
+          // will be processed by next around.
+        } else {
+          logWarning(s"In-progress event log file does not exist: ${reader.rootPath}, " +
+            s"neither does the final event log file: $finalFilePath.")
+        }
       case e: Exception =>
         logError("Exception while merging application listings", e)
     } finally {

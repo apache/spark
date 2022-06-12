@@ -30,6 +30,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
+import org.apache.logging.log4j.Level
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
@@ -218,6 +219,48 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     updateAndCheck(provider) { list =>
       list.size should be (1)
       provider.getAttempt("app1", None).logPath should not endWith(EventLogFileWriter.IN_PROGRESS)
+    }
+  }
+
+  test("SPARK-39439: Check final file if in-progress event log file does not exist") {
+    withTempDir { dir =>
+      val conf = createTestConf()
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN, 1)
+      conf.set(EVENT_LOG_COMPACTION_SCORE_THRESHOLD, 0.0d)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+      val provider = new FsHistoryProvider(conf)
+
+      val inProgressFile = newLogFile("app1", None, inProgress = true)
+      val logAppender1 = new LogAppender("in-progress and final event log files does not exist")
+      withLogAppender(logAppender1, level = Some(Level.ERROR)) {
+        provider.mergeApplicationListing(
+          EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
+          System.currentTimeMillis,
+          true
+        )
+      }
+      val logs1 = logAppender1.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains(s"In-progress event log file does not exist: "))
+      assert(logs1.size === 1)
+
+      writeFile(inProgressFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
+        SparkListenerApplicationEnd(2L))
+      val finalFile = newLogFile("app1", None, inProgress = false)
+      inProgressFile.renameTo(finalFile)
+      val logAppender2 = new LogAppender("in-progress event log file has been renamed to final")
+      withLogAppender(logAppender2, level = Some(Level.ERROR)) {
+        provider.mergeApplicationListing(
+          EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
+          System.currentTimeMillis,
+          true
+        )
+      }
+      val logs2 = logAppender2.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains(s"In-progress event log file does not exist: "))
+      assert(logs2.isEmpty)
     }
   }
 
