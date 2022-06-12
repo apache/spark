@@ -1616,19 +1616,42 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * Removes filters that can be evaluated trivially.  This can be done through the following ways:
  * 1) by eliding the filter for cases where it will always evaluate to `true`.
  * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
- * 3) by eliminating the always-true conditions given the constraints on the child's output.
+ * 3) by pushing EqualTo with Literal to other conditions.
+ * 4) by eliminating the always-true conditions given the constraints on the child's output.
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(FILTER), ruleId) {
     // If the filter condition always evaluate to true, remove the filter.
-    case Filter(Literal(true, BooleanType), child) => child
+    case Filter(Literal.TrueLiteral, child) => child
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
     case Filter(Literal(null, _), child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
-    case Filter(Literal(false, BooleanType), child) =>
+    case Filter(Literal.FalseLiteral, child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+    case f @ Filter(condition, _: LeafNode) =>
+      val predicates = splitConjunctivePredicates(condition)
+      val equalToWithLiterals = predicates.collect {
+        case eq @ EqualTo(e: Expression, l: Literal) if e.deterministic =>
+          eq -> (e.canonicalized -> l)
+        case eq @ EqualTo(l: Literal, e: Expression) if e.deterministic =>
+          eq -> (e.canonicalized -> l)
+      }
+      if (equalToWithLiterals.nonEmpty) {
+        val newCondition = predicates.map {
+          case ue: UnaryExpression => ue // Do not replace UnaryExpressions. For example: IsNotNull
+          case other =>
+            val exceptCurrentEqualKeyValues =
+              equalToWithLiterals.filterNot(_._1.semanticEquals(other)).map(_._2).toMap
+            other.transformUp {
+              case e: Expression => exceptCurrentEqualKeyValues.getOrElse(e.canonicalized, e)
+            }
+        }.reduceLeft(And)
+        f.copy(condition = newCondition)
+      } else {
+        f
+      }
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>
