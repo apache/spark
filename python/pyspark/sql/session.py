@@ -967,6 +967,8 @@ class SparkSession(SparkConversionMixin):
             has_numpy = False
 
         if has_numpy and isinstance(data, np.ndarray):
+            # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
+            # so pandas is required.
             from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
             require_minimum_pandas_version()
