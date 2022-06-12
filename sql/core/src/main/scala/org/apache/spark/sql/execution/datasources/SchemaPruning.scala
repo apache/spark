@@ -41,7 +41,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
       l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
-          if canPruneDataSchema(hadoopFsRelation) =>
+          if containsNestedColumn(hadoopFsRelation) =>
         prunePhysicalColumns(l, projects, filters, hadoopFsRelation,
           (prunedDataSchema, prunedMetadataSchema) => {
             val prunedHadoopRelation =
@@ -70,7 +70,13 @@ object SchemaPruning extends Rule[LogicalPlan] {
     // If requestedRootFields includes a nested field, continue. Otherwise,
     // return op
     if (requestedRootFields.exists { root: RootField => !root.derivedFromAtt }) {
-      val prunedDataSchema = pruneSchema(hadoopFsRelation.dataSchema, requestedRootFields)
+
+      val prunedDataSchema = if (canPruneDataSchema(hadoopFsRelation)) {
+        pruneSchema(hadoopFsRelation.dataSchema, requestedRootFields)
+      } else {
+        hadoopFsRelation.dataSchema
+      }
+
       val metadataSchema =
         relation.output.collect { case FileSourceMetadataAttribute(attr) => attr }.toStructType
       val prunedMetadataSchema = if (metadataSchema.nonEmpty) {
@@ -98,17 +104,19 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
   }
 
+  private def containsNestedColumn(fsRelation: HadoopFsRelation): Boolean =
+    fsRelation.schema.exists { _.dataType match {
+      case _: StructType | _: ArrayType |  _: MapType => true
+      case _ => false
+    }}
+
   /**
-   * Checks to see if the given relation can be pruned. Currently we support Parquet and ORC v1.
+   * Checks to see if the given relation can be pruned. Currently we support Parquet and ORC.
    */
   private def canPruneDataSchema(fsRelation: HadoopFsRelation): Boolean =
     conf.nestedSchemaPruningEnabled && (
       fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
-        fsRelation.fileFormat.isInstanceOf[OrcFileFormat]) &&
-      fsRelation.schema.exists { _.dataType match {
-        case _: StructType | _: ArrayType |  _: MapType => true
-        case _ => false
-      }}
+        fsRelation.fileFormat.isInstanceOf[OrcFileFormat])
 
   /**
    * Normalizes the names of the attribute references in the given projects and filters to reflect
