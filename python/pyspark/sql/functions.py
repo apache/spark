@@ -1244,7 +1244,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age")
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
     >>> df.groupby("name").agg(first("age")).orderBy("name").show()
     +-----+----------+
     | name|first(age)|
