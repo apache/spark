@@ -845,7 +845,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-39387: Make vectorized orc columar writer batch size configurable") {
+  test("SPARK-39381: Make vectorized orc columar writer batch size configurable") {
     Seq(10, 100).foreach(batchSize => {
       withSQLConf(SQLConf.ORC_VECTORIZED_WRITER_BATCH_SIZE.key -> batchSize.toString) {
         withTempPath { dir =>
