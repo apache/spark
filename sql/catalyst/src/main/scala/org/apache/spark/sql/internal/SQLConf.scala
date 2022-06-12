@@ -3818,13 +3818,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
- val LEGACY_DESC_NAMESPACE_REDACT_PROPERTIES =
-    buildConf("spark.sql.legacy.descNamespaceRedactProperties")
+  val LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT =
+    buildConf("spark.sql.legacy.allowNullComparisonResultInArraySort")
       .internal()
-      .doc("When set to false, redact sensitive information in the result of DESC NAMESPACE " +
-        "EXTENDED. If set to true, it restores the legacy behavior that this sensitive " +
-        "information was included in the output.")
-      .version("3.4.0")
+      .doc("When set to false, `array_sort` function throws an error " +
+        "if the comparator function returns null. " +
+        "If set to true, it restores the legacy behavior that handles null as zero (equal).")
+      .version("3.2.2")
       .booleanConf
       .createWithDefault(false)
 
