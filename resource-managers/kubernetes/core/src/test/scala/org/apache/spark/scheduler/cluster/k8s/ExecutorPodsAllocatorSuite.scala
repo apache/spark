@@ -117,6 +117,10 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
     when(schedulerBackend.getExecutorIds).thenReturn(Seq.empty)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+    when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
+    when(persistentVolumeClaims.withLabel(any(), any())).thenReturn(labeledPersistentVolumeClaims)
+    when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
+    when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
   }
 
   test("SPARK-36052: test splitSlots") {
@@ -694,9 +698,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .set(s"$prefix.option.sizeLimit", "200Gi")
       .set(s"$prefix.option.storageClass", "gp2")
 
-    when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
-    when(persistentVolumeClaims.withLabel(any(), any())).thenReturn(labeledPersistentVolumeClaims)
-    when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
     when(persistentVolumeClaimList.getItems)
       .thenReturn(Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")).asJava)
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),

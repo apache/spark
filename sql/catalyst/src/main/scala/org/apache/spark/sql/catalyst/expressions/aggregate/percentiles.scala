@@ -67,8 +67,7 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType),
-      percentageExpType, IntegralType)
+    Seq(NumericType, percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -288,7 +287,7 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
   usage =
     """
       _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
-       or ansi interval column `col` at the given percentage. The value of percentage must be
+       column `col` at the given percentage. The value of percentage must be
        between 0.0 and 1.0. The value of frequency should be positive integral
 
       _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
@@ -303,10 +302,6 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
        3.0
       > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
        [2.5,7.5]
-      > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
-       5.0
-      > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
-       [2000000.0,5000000.0]
   """,
   group = "agg_funcs",
   since = "2.1.0")
@@ -360,12 +355,10 @@ case class Percentile(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(col) - Returns the median of numeric or ansi interval column `col`.",
+  usage = "_FUNC_(col) - Returns the median of numeric column `col`.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
-       5.0
-      > SELECT _FUNC_(col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
        5.0
   """,
   group = "agg_funcs",
@@ -385,7 +378,7 @@ case class Median(child: Expression)
 
 /**
  * Return a percentile value based on a continuous distribution of
- * numeric or ansi interval column at the given percentage (specified in ORDER BY clause).
+ * numeric column at the given percentage (specified in ORDER BY clause).
  * The value of percentage must be between 0.0 and 1.0.
  */
 case class PercentileCont(left: Expression, right: Expression, reverse: Boolean = false)

@@ -359,7 +359,7 @@ object PartitioningUtils extends SQLConfHelper{
   def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String =
     dataType match {
       case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
-        castPartValueToDesiredType(dataType, value, null).toString
+        Option(castPartValueToDesiredType(dataType, value, null)).map(_.toString).orNull
       case _ => value
     }
 

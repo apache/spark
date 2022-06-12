@@ -2780,7 +2780,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
         val generators = projectList.filter(hasGenerator).map(trimAlias)
-        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "select")
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
       case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
@@ -3424,9 +3424,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         i.userSpecifiedCols, "in the column list", resolver)
 
       i.userSpecifiedCols.map { col =>
-          i.table.resolve(Seq(col), resolver)
-            .getOrElse(throw QueryCompilationErrors.cannotResolveUserSpecifiedColumnsError(
-              col, i.table))
+        i.table.resolve(Seq(col), resolver)
+          .getOrElse(i.failAnalysis(
+            errorClass = "MISSING_COLUMN",
+            messageParameters = Array(col, i.table.output.map(_.name).mkString(", "))))
       }
     }
 

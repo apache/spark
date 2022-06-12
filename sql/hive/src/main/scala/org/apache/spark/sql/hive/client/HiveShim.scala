@@ -1146,8 +1146,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     // client-side filtering cannot be used with TimeZoneAwareExpression.
     def hasTimeZoneAwareExpression(e: Expression): Boolean = {
       e.exists {
-        case cast: CastBase => cast.needsTimeZone
-        case tz: TimeZoneAwareExpression => !tz.isInstanceOf[CastBase]
+        case cast: Cast => cast.needsTimeZone
+        case tz: TimeZoneAwareExpression => !tz.isInstanceOf[Cast]
         case _ => false
       }
     }
