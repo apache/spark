@@ -58,43 +58,43 @@ Results [3]: [l_suppkey#5, sum#11, isEmpty#12]
 
 (9) Exchange
 Input [3]: [l_suppkey#5, sum#11, isEmpty#12]
-Arguments: hashpartitioning(l_suppkey#5, 5), ENSURE_REQUIREMENTS, [id=#13]
+Arguments: hashpartitioning(l_suppkey#5, 5), ENSURE_REQUIREMENTS, [plan_id=1]
 
 (10) HashAggregate [codegen id : 2]
 Input [3]: [l_suppkey#5, sum#11, isEmpty#12]
 Keys [1]: [l_suppkey#5]
 Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#14]
-Results [2]: [l_suppkey#5 AS supplier_no#15, sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#14 AS total_revenue#16]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#13]
+Results [2]: [l_suppkey#5 AS supplier_no#14, sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#13 AS total_revenue#15]
 
 (11) Filter [codegen id : 2]
-Input [2]: [supplier_no#15, total_revenue#16]
-Condition : (isnotnull(total_revenue#16) AND (total_revenue#16 = Subquery scalar-subquery#17, [id=#18]))
+Input [2]: [supplier_no#14, total_revenue#15]
+Condition : (isnotnull(total_revenue#15) AND (total_revenue#15 = Subquery scalar-subquery#16, [id=#17]))
 
 (12) BroadcastExchange
-Input [2]: [supplier_no#15, total_revenue#16]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#19]
+Input [2]: [supplier_no#14, total_revenue#15]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (13) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [s_suppkey#1]
-Right keys [1]: [supplier_no#15]
+Right keys [1]: [supplier_no#14]
 Join condition: None
 
 (14) Project [codegen id : 3]
-Output [5]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4, total_revenue#16]
-Input [6]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4, supplier_no#15, total_revenue#16]
+Output [5]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4, total_revenue#15]
+Input [6]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4, supplier_no#14, total_revenue#15]
 
 (15) Exchange
-Input [5]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4, total_revenue#16]
-Arguments: rangepartitioning(s_suppkey#1 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#20]
+Input [5]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4, total_revenue#15]
+Arguments: rangepartitioning(s_suppkey#1 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (16) Sort [codegen id : 4]
-Input [5]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4, total_revenue#16]
+Input [5]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4, total_revenue#15]
 Arguments: [s_suppkey#1 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 11 Hosting Expression = Subquery scalar-subquery#17, [id=#18]
+Subquery:1 Hosting operator id = 11 Hosting Expression = Subquery scalar-subquery#16, [id=#17]
 * HashAggregate (26)
 +- Exchange (25)
    +- * HashAggregate (24)
@@ -129,36 +129,36 @@ Input [4]: [l_suppkey#5, l_extendedprice#6, l_discount#7, l_shipdate#8]
 Input [3]: [l_suppkey#5, l_extendedprice#6, l_discount#7]
 Keys [1]: [l_suppkey#5]
 Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [2]: [sum#21, isEmpty#22]
-Results [3]: [l_suppkey#5, sum#23, isEmpty#24]
+Aggregate Attributes [2]: [sum#18, isEmpty#19]
+Results [3]: [l_suppkey#5, sum#20, isEmpty#21]
 
 (22) Exchange
-Input [3]: [l_suppkey#5, sum#23, isEmpty#24]
-Arguments: hashpartitioning(l_suppkey#5, 5), ENSURE_REQUIREMENTS, [id=#25]
+Input [3]: [l_suppkey#5, sum#20, isEmpty#21]
+Arguments: hashpartitioning(l_suppkey#5, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
 (23) HashAggregate [codegen id : 2]
-Input [3]: [l_suppkey#5, sum#23, isEmpty#24]
+Input [3]: [l_suppkey#5, sum#20, isEmpty#21]
 Keys [1]: [l_suppkey#5]
 Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#14]
-Results [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#14 AS total_revenue#16]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#13]
+Results [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#13 AS total_revenue#15]
 
 (24) HashAggregate [codegen id : 2]
-Input [1]: [total_revenue#16]
+Input [1]: [total_revenue#15]
 Keys: []
-Functions [1]: [partial_max(total_revenue#16)]
-Aggregate Attributes [1]: [max#26]
-Results [1]: [max#27]
+Functions [1]: [partial_max(total_revenue#15)]
+Aggregate Attributes [1]: [max#22]
+Results [1]: [max#23]
 
 (25) Exchange
-Input [1]: [max#27]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#28]
+Input [1]: [max#23]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 
 (26) HashAggregate [codegen id : 3]
-Input [1]: [max#27]
+Input [1]: [max#23]
 Keys: []
-Functions [1]: [max(total_revenue#16)]
-Aggregate Attributes [1]: [max(total_revenue#16)#29]
-Results [1]: [max(total_revenue#16)#29 AS max(total_revenue)#30]
+Functions [1]: [max(total_revenue#15)]
+Aggregate Attributes [1]: [max(total_revenue#15)#24]
+Results [1]: [max(total_revenue#15)#24 AS max(total_revenue)#25]
 
 

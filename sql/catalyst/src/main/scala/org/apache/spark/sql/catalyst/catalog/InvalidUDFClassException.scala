@@ -30,5 +30,5 @@ class InvalidUDFClassException private[sql](
   extends AnalysisException(message = message, errorClass = errorClass) {
 
   def this(errorClass: String, messageParameters: Array[String]) =
-    this(SparkThrowableHelper.getMessage(errorClass, messageParameters), Some(errorClass))
+    this(SparkThrowableHelper.getMessage(errorClass, null, messageParameters), Some(errorClass))
 }

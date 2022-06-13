@@ -1578,10 +1578,30 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "y timestamp default timestamp'0000', " +
           "z timestamp_ntz default cast(timestamp'0000' as timestamp_ntz), " +
           "a1 timestamp_ltz default cast(timestamp'0000' as timestamp_ltz), " +
-          "a2 decimal(5, 2) default 123.45)")
-        checkAnswer(sql("select s, t, u, v, w, x is not null, " +
-          "y is not null, z is not null, a1 is not null, a2 is not null from t"),
-          Row(true, null, 42, 0.0f, 0.0d, true, true, true, true, true))
+          "a2 decimal(5, 2) default 123.45," +
+          "a3 bigint default 43," +
+          "a4 smallint default cast(5 as smallint)," +
+          "a5 tinyint default cast(6 as tinyint))")
+        // Manually inspect the result row values rather than using the 'checkAnswer' helper method
+        // in order to ensure the values' correctness while avoiding minor type incompatibilities.
+        val result: Array[Row] =
+          sql("select s, t, u, v, w, x, y, z, a1, a2, a3, a4, a5 from t").collect()
+        assert(result.length == 1)
+        val row: Row = result(0)
+        assert(row.length == 13)
+        assert(row(0) == true)
+        assert(row(1) == null)
+        assert(row(2) == 42)
+        assert(row(3) == 0.0f)
+        assert(row(4) == 0.0d)
+        assert(row(5).toString == "0001-01-01")
+        assert(row(6).toString == "0001-01-01 00:00:00.0")
+        assert(row(7).toString == "0000-01-01T00:00")
+        assert(row(8).toString == "0001-01-01 00:00:00.0")
+        assert(row(9).toString == "123.45")
+        assert(row(10) == 43L)
+        assert(row(11) == 5)
+        assert(row(12) == 6)
       }
     }
 
@@ -1633,6 +1653,21 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           // Run the test with default settings.
           runTest(testCase.dataSource, config)
         }
+      }
+    }
+  }
+
+  test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,json,orc") {
+      val unsupported = "DEFAULT values are not supported for target data source"
+      assert(intercept[AnalysisException] {
+        sql(s"create table t(a string default 'abc') using parquet")
+      }.getMessage.contains(unsupported))
+      withTable("t") {
+        sql(s"create table t(a string, b int) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("alter table t add column s bigint default 42")
+        }.getMessage.contains(unsupported))
       }
     }
   }

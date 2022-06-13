@@ -147,10 +147,10 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
-      val newTableDesc: CatalogTable =
-        tableDesc.copy(schema =
-          ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-            analyzer, tableDesc.schema, "CREATE TABLE"))
+      val newSchema: StructType =
+        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
+          analyzer, tableDesc.schema, tableDesc.provider, "CREATE TABLE")
+      val newTableDesc = tableDesc.copy(schema = newSchema)
       CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
