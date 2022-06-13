@@ -109,6 +109,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
    */
   private def newSparkContext(
       killEnabled: Boolean = true,
+      timelineEnabled: Boolean = true,
       master: String = "local",
       additionalConfs: Map[String, String] = Map.empty): SparkContext = {
     val conf = new SparkConf()
@@ -117,6 +118,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .set(UI_ENABLED, true)
       .set(UI_PORT, 0)
       .set(UI_KILL_ENABLED, killEnabled)
+      .set(UI_TIMELINE_ENABLED, timelineEnabled)
       .set(MEMORY_OFFHEAP_SIZE.key, "64m")
     additionalConfs.foreach { case (k, v) => conf.set(k, v) }
     val sc = new SparkContext(conf)
@@ -796,6 +798,24 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         val descriptions = findAll(className("description-input")).toArray
         descriptions(0).text should be (description)
         descriptions(1).text should include ("collect")
+      }
+    }
+  }
+
+  test("Support disable event timeline") {
+    Seq(true, false).foreach { timelineEnabled =>
+      withSpark(newSparkContext(timelineEnabled = timelineEnabled)) { sc =>
+        sc.range(1, 3).collect()
+        eventually(timeout(10.seconds), interval(50.milliseconds)) {
+          goToUi(sc, "/jobs")
+          assert(findAll(className("expand-application-timeline")).nonEmpty === timelineEnabled)
+
+          goToUi(sc, "/jobs/job/?id=0")
+          assert(findAll(className("expand-job-timeline")).nonEmpty === timelineEnabled)
+
+          goToUi(sc, "/stages/stage/?id=0&attempt=0")
+          assert(findAll(className("expand-task-assignment-timeline")).nonEmpty === timelineEnabled)
+        }
       }
     }
   }

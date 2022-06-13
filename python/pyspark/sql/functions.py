@@ -141,6 +141,7 @@ def lit(col: Any) -> Column:
 def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+
     Examples
     --------
     >>> col('x')
@@ -1240,6 +1241,17 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     -----
     The function is non-deterministic because its results depends on the order of the
     rows which may be non-deterministic after a shuffle.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.groupby("name").agg(first("age")).orderBy("name").show()
+    +-----+----------+
+    | name|first(age)|
+    +-----+----------+
+    |Alice|         2|
+    |  Bob|         5|
+    +-----+----------+
     """
     return _invoke_function("first", _to_java_column(col), ignorenulls)
 

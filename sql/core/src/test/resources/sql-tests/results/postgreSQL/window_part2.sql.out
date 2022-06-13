@@ -225,7 +225,7 @@ from range(9223372036854775804, 9223372036854775807) x
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] long overflow. To return NULL instead, use 'try_add'. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] long overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -235,7 +235,7 @@ from range(-9223372036854775806, -9223372036854775805) x
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] long overflow. To return NULL instead, use 'try_add'. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] long overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -462,7 +462,7 @@ window w as (order by f_numeric range between
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'NaN' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_INVALID_INPUT] The value 'NaN' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 3, position 13) ==
 window w as (order by f_numeric range between
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
