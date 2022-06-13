@@ -1438,6 +1438,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.3</td>
 </tr>
 <tr>
+  <td><code>spark.ui.timelineEnabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to display event timeline data on UI pages.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.timeline.executors.maximum</code></td>
   <td>250</td>
   <td>

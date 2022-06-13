@@ -2557,8 +2557,9 @@ object SQLConf {
     buildConf("spark.sql.execution.arrow.pyspark.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers in PySpark. " +
         "This optimization applies to: " +
-        "1. pyspark.sql.DataFrame.toPandas " +
+        "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
+        "or a NumPy ndarray. " +
         "The following data types are unsupported: " +
         "ArrayType of TimestampType, and nested StructType.")
       .version("3.0.0")
@@ -2880,6 +2881,15 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DEFAULT_COLUMN_ALLOWED_PROVIDERS =
+    buildConf("spark.sql.defaultColumn.allowedProviders")
+      .internal()
+      .doc("List of table providers wherein SQL commands are permitted to assign DEFAULT column " +
+        "values. Comma-separated list, whitespace ignored, case-insensitive.")
+      .version("3.4.0")
+      .stringConf
+      .createWithDefault("csv,json,orc,parquet")
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
@@ -3809,6 +3819,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT =
+    buildConf("spark.sql.legacy.allowNullComparisonResultInArraySort")
+      .internal()
+      .doc("When set to false, `array_sort` function throws an error " +
+        "if the comparator function returns null. " +
+        "If set to true, it restores the legacy behavior that handles null as zero (equal).")
+      .version("3.2.2")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4453,6 +4473,8 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
+
+  def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
 
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)

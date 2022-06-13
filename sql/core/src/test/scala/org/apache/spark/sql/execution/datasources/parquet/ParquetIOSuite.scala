@@ -1181,7 +1181,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val errorMessage = intercept[Throwable] {
       spark.read.parquet("hdfs://nonexistent")
     }.toString
-    assert(errorMessage.contains("UnknownHostException"))
+    assert(errorMessage.contains("UnknownHostException") ||
+        errorMessage.contains("is not a valid DFS filename"))
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {

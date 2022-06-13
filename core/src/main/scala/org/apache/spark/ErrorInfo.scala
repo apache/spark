@@ -73,6 +73,7 @@ private[spark] object SparkThrowableHelper {
 
   def getMessage(
       errorClass: String,
+      errorSubClass: String,
       messageParameters: Array[String],
       queryContext: String = ""): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
@@ -80,11 +81,13 @@ private[spark] object SparkThrowableHelper {
     val (displayClass, displayMessageParameters, displayFormat) = if (errorInfo.subClass.isEmpty) {
       (errorClass, messageParameters, errorInfo.messageFormat)
     } else {
-      val subClass = errorInfo.subClass.get
-      val subErrorClass = messageParameters.head
-      val errorSubInfo = subClass.getOrElse(subErrorClass,
-        throw new IllegalArgumentException(s"Cannot find sub error class '$subErrorClass'"))
-      (errorClass + "." + subErrorClass, messageParameters.tail,
+      val subClasses = errorInfo.subClass.get
+      if (errorSubClass == null) {
+        throw new IllegalArgumentException(s"Subclass required for error class '$errorClass'")
+      }
+      val errorSubInfo = subClasses.getOrElse(errorSubClass,
+        throw new IllegalArgumentException(s"Cannot find sub error class '$errorSubClass'"))
+      (errorClass + "." + errorSubClass, messageParameters,
         errorInfo.messageFormat + " " + errorSubInfo.messageFormat)
     }
     val displayMessage = String.format(
@@ -96,6 +99,29 @@ private[spark] object SparkThrowableHelper {
       s"\n$queryContext"
     }
     s"[$displayClass] $displayMessage$displayQueryContext"
+  }
+
+  def getParameterNames(errorClass: String, errorSubCLass: String): Array[String] = {
+    val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
+      throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
+    if (errorInfo.subClass.isEmpty && errorSubCLass != null) {
+      throw new IllegalArgumentException(s"'$errorClass' has no subclass")
+    }
+    if (errorInfo.subClass.isDefined && errorSubCLass == null) {
+      throw new IllegalArgumentException(s"'$errorClass' requires subclass")
+    }
+    var parameterizedMessage = errorInfo.messageFormat
+    if (errorInfo.subClass.isDefined) {
+      val givenSubClass = errorSubCLass
+      val errorSubInfo = errorInfo.subClass.get.getOrElse(givenSubClass,
+        throw new IllegalArgumentException(s"Cannot find sub error class '$givenSubClass'"))
+      parameterizedMessage = parameterizedMessage + errorSubInfo.messageFormat
+    }
+    val pattern = "<[a-zA-Z0-9_-]+>".r
+    val matches = pattern.findAllIn(parameterizedMessage)
+    val parameterSeq = matches.toArray
+    val parameterNames = parameterSeq.map(p => p.stripPrefix("<").stripSuffix(">"))
+    parameterNames
   }
 
   def getSqlState(errorClass: String): String = {
