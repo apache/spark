@@ -30,7 +30,6 @@ import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
-import org.apache.logging.log4j.Level
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
@@ -239,7 +238,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
 
       val inProgressFile = newLogFile("app1", None, inProgress = true)
       val logAppender1 = new LogAppender("in-progress and final event log files does not exist")
-      withLogAppender(logAppender1, level = Some(Level.WARN)) {
+      withLogAppender(logAppender1) {
         provider invokePrivate mergeApplicationListing(
           EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
           System.currentTimeMillis,
@@ -256,7 +255,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
       val finalFile = newLogFile("app1", None, inProgress = false)
       inProgressFile.renameTo(finalFile)
       val logAppender2 = new LogAppender("in-progress event log file has been renamed to final")
-      withLogAppender(logAppender2, level = Some(Level.WARN)) {
+      withLogAppender(logAppender2) {
         provider invokePrivate mergeApplicationListing(
           EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
           System.currentTimeMillis,
