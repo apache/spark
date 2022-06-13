@@ -2780,7 +2780,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
         val generators = projectList.filter(hasGenerator).map(trimAlias)
-        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "select")
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
       case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get

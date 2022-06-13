@@ -232,7 +232,7 @@ select next_day("xx", "Mon")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value 'xx' of the type "STRING" cannot be cast to "DATE" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_INVALID_INPUT] The value 'xx' of the type "STRING" cannot be cast to "DATE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select next_day("xx", "Mon")
        ^^^^^^^^^^^^^^^^^^^^^
@@ -327,7 +327,7 @@ select date_add('2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value '1.2' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_INVALID_INPUT] The value '1.2' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select date_add('2011-11-11', '1.2')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -438,7 +438,7 @@ select date_sub(date'2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value '1.2' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. To return NULL instead, use `try_cast`. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[CAST_INVALID_INPUT] The value '1.2' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select date_sub(date'2011-11-11', '1.2')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -3916,7 +3916,7 @@ class Dataset[T] private[sql](
 
   /**
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
-   * user-registered callback functions, and also to convert asserts/illegal states to
+   * user-registered callback functions, and also to convert asserts/NPE to
    * the internal error exception.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
