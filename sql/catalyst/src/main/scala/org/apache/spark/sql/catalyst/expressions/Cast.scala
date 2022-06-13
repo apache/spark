@@ -108,8 +108,9 @@ object Cast {
     case (TimestampType, TimestampNTZType) => true
 
     case (StringType, _: CalendarIntervalType) => true
-    case (StringType, _: DayTimeIntervalType) => true
-    case (StringType, _: YearMonthIntervalType) => true
+    case (StringType, _: AnsiIntervalType) => true
+
+    case (_: AnsiIntervalType, _: IntegralType) => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
