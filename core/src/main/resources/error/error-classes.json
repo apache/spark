@@ -191,7 +191,7 @@
         "message" : [ "an existent path." ]
       },
       "NON_EXISTENT_PATH" : {
-        "message" : [ "a not existent path." ]
+        "message" : [ "a non-existent path." ]
       }
     }
   },
