@@ -251,6 +251,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * table/view. This throws an `AnalysisException` when no `Table` can be found.
    */
   override def getTable(tableName: String): Table = {
+    // calling `sqlParser.parseTableIdentifier` to parse tableName. If it contains only table name
+    // and optionally contains a database name(thus a TableIdentifier), then that is used to get
+    // the table. Otherwise we try `sqlParser.parseMultipartIdentifier` to have a sequence of string
+    // as the qualified identifier and resolve the table.
     try {
       val ident = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
       getTable(ident.database.orNull, ident.table)

@@ -731,6 +731,9 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val dbName = "my_db"
     assert(!spark.catalog.databaseExists(Array(catalogName, dbName).mkString(".")))
 
+    sql("CREATE NAMESPACE testcat.my_db")
+    assert(spark.catalog.databaseExists(Array(catalogName, dbName).mkString(".")))
+
     val e = intercept[CatalogNotFoundException] {
       val catalogName2 = "catalog_not_exists"
       spark.catalog.databaseExists(Array(catalogName2, dbName).mkString("."))
