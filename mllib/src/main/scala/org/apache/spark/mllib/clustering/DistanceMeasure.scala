@@ -255,19 +255,23 @@ object DistanceMeasure {
   val EUCLIDEAN = "euclidean"
   @Since("2.4.0")
   val COSINE = "cosine"
+  @Since("3.2.1")
+  val DTW = "dtw"
 
   private[spark] def decodeFromString(distanceMeasure: String): DistanceMeasure =
     distanceMeasure match {
       case EUCLIDEAN => new EuclideanDistanceMeasure
       case COSINE => new CosineDistanceMeasure
+      case DTW => new DtwDistanceMeasure
       case _ => throw new IllegalArgumentException(s"distanceMeasure must be one of: " +
-        s"$EUCLIDEAN, $COSINE. $distanceMeasure provided.")
+        s"$EUCLIDEAN, $COSINE, $DTW. $distanceMeasure provided.")
     }
 
   private[spark] def validateDistanceMeasure(distanceMeasure: String): Boolean = {
     distanceMeasure match {
       case DistanceMeasure.EUCLIDEAN => true
       case DistanceMeasure.COSINE => true
+      case DistanceMeasure.DTW => true
       case _ => false
     }
   }
@@ -533,5 +537,126 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
     scal(1.0 / left.norm, leftVector)
     scal(1.0 / right.norm, rightVector)
     (new VectorWithNorm(leftVector, 1.0), new VectorWithNorm(rightVector, 1.0))
+  }
+  
+  private[spark] class DtwDitstanceMeasure extends DistanceMeasure {
+   
+    override def ComputeStatistics(distance: Double): Double = {
+     0.25 * distance * distance 
+    }
+    /**
+     * @return the index of the closest center to the given point, as well as the cost.
+     */
+    override def findClosest(
+                              centers: Array[VectorWithNorm],
+                              statistics: Array[Double],
+                              point: VectorWithNorm): (Int, Double) = {
+      var bestDistance = distance(0, point)
+      if (bestDistance < statistics(0)) return (0, bestDistance)
+
+      val k = centers.length
+      var bestIndex = 0
+      var i = 1
+      while (i < k) {
+        val center = centers(i)
+        // Since `\|a - b\| \geq |\|a\| - \|b\||`, we can use this lower bound to avoid unnecessary
+        // distance computation.
+        val normDiff = center.norm - point.norm
+        val lowerBound = normDiff * normDiff
+        if (lowerBound < bestDistance) {
+          val index1 = indexUpperTriangular(k, i, bestIndex)
+          if (statistics(index1) < bestDistance) {
+            val d = distance(center, point)
+            val index2 = indexUpperTriangular(k, i, i)
+            if (d < statistics(index2)) return (i, d)
+            if (d < bestDistance) {
+              bestDistance = d
+              bestIndex = i
+            }
+          }
+        }
+        i += 1
+      }
+      (bestIndex, bestDistance)
+    }
+
+    /**
+     * @return the index of the closest center to the given point, as well as the squared distance.
+     */
+    override def findClosest(
+                              centers: Array[VectorWithNorm],
+                              point: VectorWithNorm): (Int, Double) = {
+      var bestDistance = Double.PositiveInfinity
+      var bestIndex = 0
+      var i = 0
+      while (i < centers.length) {
+        val center = centers(i)
+        // Since `\|a - b\| \geq |\|a\| - \|b\||`, we can use this lower bound to avoid unnecessary
+        // distance computation.
+        var lowerBoundOfSqDist = center.norm - point.norm
+        lowerBoundOfSqDist = lowerBoundOfSqDist * lowerBoundOfSqDist
+        if (lowerBoundOfSqDist < bestDistance) {
+          val distance = distance(center, point)
+          if (distance < bestDistance) {
+            bestDistance = distance
+            bestIndex = i
+          }
+        }
+        i += 1
+      }
+      (bestIndex, bestDistance)
+    }
+
+    /**
+     * @return whether a center converged or not, given the epsilon parameter.
+     */
+    override def isCenterConverged(
+                                    oldCenter: VectorWithNorm,
+                                    newCenter: VectorWithNorm,
+                                    epsilon: Double): Boolean = {
+      distance(newCenter, oldCenter) <= epsilon * epsilon
+    }
+
+    /**
+     * @param v1: first vector
+     * @param v2: second vector
+     * @return the DTW distance computed as the Euclidean distance between the two aligned input vectors
+     */
+    override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
+      val n = v1.length
+      val m = v2.length
+
+      var costMatrix = DenseMatrix.tabulate[Double](n+1, m+1){case (i, j) => Double.PositiveInfinity}
+      costMatrix.update(0, 0, 0D)
+
+      for(i <- 0 until n){
+        for(j <- 0 until m){
+          val dist = Math.sqrt(EuclideanDistanceMeasure.fastSquaredDistance(v1(i), v2(j)))
+          val cost = dist + min(min(costMatrux(i, j+1), costMatrix(i+1, j)), costMatrix(i, j))
+          costMatrix.update(i+1, j+1, cost)
+        }
+      }
+      costMatrix(n, m)
+    }
+
+    /**
+     * @return the total cost of the cluster from its aggregated properties
+     */
+    override def clusterCost(
+                              centroid: VectorWithNorm,
+                              pointsSum: VectorWithNorm,
+                              weightSum: Double,
+                              pointsSquaredNorm: Double): Double = {
+      math.max(pointsSquaredNorm - weightSum * centroid.norm * centroid.norm, 0.0)
+    }
+
+    /**
+     * @return the cost of a point to be assigned to the cluster centroid
+     */
+    override def cost(
+                       point: VectorWithNorm,
+                       centroid: VectorWithNorm): Double = {
+      distance(point, centroid)
+    }
   }
 }
