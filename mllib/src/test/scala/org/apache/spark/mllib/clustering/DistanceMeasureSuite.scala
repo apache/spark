@@ -51,7 +51,7 @@ class DistanceMeasureSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("predict with statistics") {
-    Seq(DistanceMeasure.COSINE, DistanceMeasure.EUCLIDEAN).foreach { distanceMeasure =>
+    Seq(DistanceMeasure.COSINE, DistanceMeasure.EUCLIDEAN, DistanceMeasure.DTW).foreach { distanceMeasure =>
       val distance = DistanceMeasure.decodeFromString(distanceMeasure)
       val statistics = distance.computeStatistics(centers)
       data.foreach { point =>
@@ -64,7 +64,7 @@ class DistanceMeasureSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("compute statistics distributedly") {
-    Seq(DistanceMeasure.COSINE, DistanceMeasure.EUCLIDEAN).foreach { distanceMeasure =>
+    Seq(DistanceMeasure.COSINE, DistanceMeasure.EUCLIDEAN, DistanceMeasure.DTW).foreach { distanceMeasure =>
       val distance = DistanceMeasure.decodeFromString(distanceMeasure)
       val statistics1 = distance.computeStatistics(centers)
       val sc = spark.sparkContext
