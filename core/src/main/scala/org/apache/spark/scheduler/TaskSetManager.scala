@@ -1101,7 +1101,7 @@ private[spark] class TaskSetManager(
             true
           } else {
             val longTimeTask = runtimeMs > efficientTaskDurationFactor * threshold
-            longTimeTask || taskProcessRateCalculator.exists(_.isEfficient(tid, runtimeMs, info))
+            longTimeTask || taskProcessRateCalculator.exists(_.isInefficient(tid, runtimeMs, info))
           }
         }
 
@@ -1164,7 +1164,7 @@ private[spark] class TaskSetManager(
       logDebug("Task length threshold for speculation: " + threshold)
       foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold, numSuccessfulTasks)
     } else if (isSpeculationThresholdSpecified && speculationTasksLessEqToSlots) {
-      val threshold = max(speculationTaskDurationThresOpt.get, minTimeToSpeculation)
+      val threshold = speculationTaskDurationThresOpt.get
       logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")
       foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold, numSuccessfulTasks,
         customizedThreshold = true)
@@ -1289,7 +1289,7 @@ private[spark] class TaskSetManager(
       runingTasksProcessRate.put(taskId, taskProcessRate)
     }
 
-    private[TaskSetManager] def isEfficient(
+    private[TaskSetManager] def isInefficient(
         tid: Long,
         runtimeMs: Long,
         taskInfo: TaskInfo): Boolean = {
