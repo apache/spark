@@ -34,6 +34,7 @@ import org.apache.logging.log4j.Level
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -58,7 +59,9 @@ import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
-abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
+abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging
+  with PrivateMethodTester {
+
   private var testDir: File = null
 
   override def beforeEach(): Unit = {
@@ -232,10 +235,12 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
       val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
       val provider = new FsHistoryProvider(conf)
 
+      val mergeApplicationListing = PrivateMethod[Unit]('mergeApplicationListing)
+
       val inProgressFile = newLogFile("app1", None, inProgress = true)
       val logAppender1 = new LogAppender("in-progress and final event log files does not exist")
       withLogAppender(logAppender1, level = Some(Level.WARN)) {
-        provider.mergeApplicationListing(
+        provider invokePrivate mergeApplicationListing(
           EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
           System.currentTimeMillis,
           true
@@ -252,7 +257,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
       inProgressFile.renameTo(finalFile)
       val logAppender2 = new LogAppender("in-progress event log file has been renamed to final")
       withLogAppender(logAppender2, level = Some(Level.WARN)) {
-        provider.mergeApplicationListing(
+        provider invokePrivate mergeApplicationListing(
           EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
           System.currentTimeMillis,
           true
