@@ -234,7 +234,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
 
       val inProgressFile = newLogFile("app1", None, inProgress = true)
       val logAppender1 = new LogAppender("in-progress and final event log files does not exist")
-      withLogAppender(logAppender1, level = Some(Level.ERROR)) {
+      withLogAppender(logAppender1, level = Some(Level.WARN)) {
         provider.mergeApplicationListing(
           EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
           System.currentTimeMillis,
@@ -251,7 +251,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
       val finalFile = newLogFile("app1", None, inProgress = false)
       inProgressFile.renameTo(finalFile)
       val logAppender2 = new LogAppender("in-progress event log file has been renamed to final")
-      withLogAppender(logAppender2, level = Some(Level.ERROR)) {
+      withLogAppender(logAppender2, level = Some(Level.WARN)) {
         provider.mergeApplicationListing(
           EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
           System.currentTimeMillis,
