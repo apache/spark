@@ -332,7 +332,7 @@ Input [8]: [cs_item_sk#19, cs_order_number#20, cs_ext_list_price#21, cr_item_sk#
 (28) HashAggregate [codegen id : 9]
 Input [5]: [cs_item_sk#19, cs_ext_list_price#21, cr_refunded_cash#25, cr_reversed_charge#26, cr_store_credit#27]
 Keys [1]: [cs_item_sk#19]
-Functions [2]: [partial_sum(UnscaledValue(cs_ext_list_price#21)), partial_sum(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cr_refunded_cash#25 as decimal(8,2))) + promote_precision(cast(cr_reversed_charge#26 as decimal(8,2)))), DecimalType(8,2)) as decimal(9,2))) + promote_precision(cast(cr_store_credit#27 as decimal(9,2)))), DecimalType(9,2)))]
+Functions [2]: [partial_sum(UnscaledValue(cs_ext_list_price#21)), partial_sum(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))]
 Aggregate Attributes [3]: [sum#29, sum#30, isEmpty#31]
 Results [4]: [cs_item_sk#19, sum#32, sum#33, isEmpty#34]
 
@@ -343,13 +343,13 @@ Arguments: hashpartitioning(cs_item_sk#19, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 (30) HashAggregate [codegen id : 10]
 Input [4]: [cs_item_sk#19, sum#32, sum#33, isEmpty#34]
 Keys [1]: [cs_item_sk#19]
-Functions [2]: [sum(UnscaledValue(cs_ext_list_price#21)), sum(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cr_refunded_cash#25 as decimal(8,2))) + promote_precision(cast(cr_reversed_charge#26 as decimal(8,2)))), DecimalType(8,2)) as decimal(9,2))) + promote_precision(cast(cr_store_credit#27 as decimal(9,2)))), DecimalType(9,2)))]
-Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_list_price#21))#35, sum(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cr_refunded_cash#25 as decimal(8,2))) + promote_precision(cast(cr_reversed_charge#26 as decimal(8,2)))), DecimalType(8,2)) as decimal(9,2))) + promote_precision(cast(cr_store_credit#27 as decimal(9,2)))), DecimalType(9,2)))#36]
-Results [3]: [cs_item_sk#19, MakeDecimal(sum(UnscaledValue(cs_ext_list_price#21))#35,17,2) AS sale#37, sum(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cr_refunded_cash#25 as decimal(8,2))) + promote_precision(cast(cr_reversed_charge#26 as decimal(8,2)))), DecimalType(8,2)) as decimal(9,2))) + promote_precision(cast(cr_store_credit#27 as decimal(9,2)))), DecimalType(9,2)))#36 AS refund#38]
+Functions [2]: [sum(UnscaledValue(cs_ext_list_price#21)), sum(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))]
+Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_list_price#21))#35, sum(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))#36]
+Results [3]: [cs_item_sk#19, MakeDecimal(sum(UnscaledValue(cs_ext_list_price#21))#35,17,2) AS sale#37, sum(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))#36 AS refund#38]
 
 (31) Filter [codegen id : 10]
 Input [3]: [cs_item_sk#19, sale#37, refund#38]
-Condition : (isnotnull(sale#37) AND (cast(sale#37 as decimal(21,2)) > CheckOverflow((2.00 * promote_precision(refund#38)), DecimalType(21,2))))
+Condition : ((isnotnull(sale#37) AND isnotnull(refund#38)) AND (cast(sale#37 as decimal(21,2)) > (2 * refund#38)))
 
 (32) Project [codegen id : 10]
 Output [1]: [cs_item_sk#19]

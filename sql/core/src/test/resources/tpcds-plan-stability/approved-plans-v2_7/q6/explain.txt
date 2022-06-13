@@ -26,12 +26,12 @@ TakeOrderedAndProject (39)
                   :     +- ReusedExchange (16)
                   +- BroadcastExchange (32)
                      +- * Project (31)
-                        +- * Filter (30)
-                           +- * BroadcastHashJoin LeftOuter BuildRight (29)
-                              :- * Filter (21)
-                              :  +- * ColumnarToRow (20)
-                              :     +- Scan parquet default.item (19)
-                              +- BroadcastExchange (28)
+                        +- * BroadcastHashJoin Inner BuildRight (30)
+                           :- * Filter (21)
+                           :  +- * ColumnarToRow (20)
+                           :     +- Scan parquet default.item (19)
+                           +- BroadcastExchange (29)
+                              +- * Filter (28)
                                  +- * HashAggregate (27)
                                     +- Exchange (26)
                                        +- * HashAggregate (25)
@@ -125,7 +125,7 @@ Input [4]: [ca_state#2, ss_item_sk#5, ss_sold_date_sk#7, d_date_sk#9]
 Output [3]: [i_item_sk#10, i_current_price#11, i_category#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_current_price), IsNotNull(i_category), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_category:string>
 
 (20) ColumnarToRow [codegen id : 6]
@@ -133,7 +133,7 @@ Input [3]: [i_item_sk#10, i_current_price#11, i_category#12]
 
 (21) Filter [codegen id : 6]
 Input [3]: [i_item_sk#10, i_current_price#11, i_category#12]
-Condition : (isnotnull(i_current_price#11) AND isnotnull(i_item_sk#10))
+Condition : ((isnotnull(i_current_price#11) AND isnotnull(i_category#12)) AND isnotnull(i_item_sk#10))
 
 (22) Scan parquet default.item
 Output [2]: [i_current_price#13, i_category#14]
@@ -167,18 +167,18 @@ Functions [1]: [avg(UnscaledValue(i_current_price#13))]
 Aggregate Attributes [1]: [avg(UnscaledValue(i_current_price#13))#19]
 Results [2]: [cast((avg(UnscaledValue(i_current_price#13))#19 / 100.0) as decimal(11,6)) AS avg(i_current_price)#20, i_category#14]
 
-(28) BroadcastExchange
+(28) Filter [codegen id : 5]
+Input [2]: [avg(i_current_price)#20, i_category#14]
+Condition : isnotnull(avg(i_current_price)#20)
+
+(29) BroadcastExchange
 Input [2]: [avg(i_current_price)#20, i_category#14]
 Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [plan_id=4]
 
-(29) BroadcastHashJoin [codegen id : 6]
+(30) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [i_category#12]
 Right keys [1]: [i_category#14]
-Join condition: None
-
-(30) Filter [codegen id : 6]
-Input [5]: [i_item_sk#10, i_current_price#11, i_category#12, avg(i_current_price)#20, i_category#14]
-Condition : (cast(i_current_price#11 as decimal(14,7)) > CheckOverflow((1.200000 * promote_precision(avg(i_current_price)#20)), DecimalType(14,7)))
+Join condition: (cast(i_current_price#11 as decimal(14,7)) > (1.2 * avg(i_current_price)#20))
 
 (31) Project [codegen id : 6]
 Output [1]: [i_item_sk#10]

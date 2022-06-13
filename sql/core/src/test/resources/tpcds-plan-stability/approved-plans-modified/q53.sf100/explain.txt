@@ -146,7 +146,7 @@ Arguments: [avg(_w0#22) windowspecdefinition(i_manufact_id#5, specifiedwindowfra
 
 (26) Filter [codegen id : 7]
 Input [4]: [i_manufact_id#5, sum_sales#21, _w0#22, avg_quarterly_sales#23]
-Condition : (isnotnull(avg_quarterly_sales#23) AND ((avg_quarterly_sales#23 > 0.000000) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_quarterly_sales#23 as decimal(22,6)))), DecimalType(22,6)))) / promote_precision(cast(avg_quarterly_sales#23 as decimal(22,6)))), DecimalType(38,16)) > 0.1000000000000000)))
+Condition : ((isnotnull(avg_quarterly_sales#23) AND isnotnull(sum_sales#21)) AND ((avg_quarterly_sales#23 > 0.000000) AND ((abs((sum_sales#21 - avg_quarterly_sales#23)) / avg_quarterly_sales#23) > 0.1000000000000000)))
 
 (27) Project [codegen id : 7]
 Output [3]: [i_manufact_id#5, sum_sales#21, avg_quarterly_sales#23]

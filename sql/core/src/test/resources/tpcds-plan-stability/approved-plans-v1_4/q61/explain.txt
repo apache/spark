@@ -365,7 +365,7 @@ Arguments: IdentityBroadcastMode, [plan_id=8]
 Join condition: None
 
 (67) Project [codegen id : 15]
-Output [3]: [promotions#24, total#39, CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(promotions#24 as decimal(15,4))) / promote_precision(cast(total#39 as decimal(15,4)))), DecimalType(35,20))) * 100.00000000000000000000), DecimalType(38,19)) AS ((CAST(promotions AS DECIMAL(15,4)) / CAST(total AS DECIMAL(15,4))) * 100)#40]
+Output [3]: [promotions#24, total#39, ((cast(promotions#24 as decimal(15,4)) / cast(total#39 as decimal(15,4))) * 100) AS ((CAST(promotions AS DECIMAL(15,4)) / CAST(total AS DECIMAL(15,4))) * 100)#40]
 Input [2]: [promotions#24, total#39]
 
 ===== Subqueries =====
