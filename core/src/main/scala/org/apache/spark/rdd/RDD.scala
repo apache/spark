@@ -1249,18 +1249,12 @@ abstract class RDD[T: ClassTag](
         }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
       }
       if (finalAggregateOnExecutor && partiallyAggregated.partitions.length > 1) {
-        // define a new partitioner that results in only 1 partition
-        val constantPartitioner = new Partitioner {
-          override def numPartitions: Int = 1
-
-          override def getPartition(key: Any): Int = 0
-        }
         // map the partially aggregated rdd into a key-value rdd
         // do the computation in the single executor with one partition
         // get the new RDD[U]
         partiallyAggregated = partiallyAggregated
           .map(v => (0.toByte, v))
-          .foldByKey(zeroValue, constantPartitioner)(cleanCombOp)
+          .foldByKey(zeroValue, new ConstantPartitioner)(cleanCombOp)
           .values
       }
       val copiedZeroValue = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())

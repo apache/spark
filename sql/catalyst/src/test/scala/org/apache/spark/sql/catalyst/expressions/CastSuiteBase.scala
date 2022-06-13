@@ -43,11 +43,19 @@ import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Common test suite for [[Cast]], [[AnsiCast]] and [[TryCast]] expressions.
+ * Common test suite for [[Cast]] with ansi mode on and off. It only includes test cases that work
+ * for both ansi on and off.
  */
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
-  protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase
+  protected def ansiEnabled: Boolean
+
+  protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
+    v match {
+      case lit: Expression => Cast(lit, targetType, timeZoneId, ansiEnabled)
+      case _ => Cast(Literal(v), targetType, timeZoneId, ansiEnabled)
+    }
+  }
 
   // expected cannot be null
   protected def checkCast(v: Any, expected: Any): Unit = {
@@ -58,7 +66,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
   }
 
-  protected def verifyCastFailure(c: CastBase, optionalExpectedMsg: Option[String] = None): Unit = {
+  protected def verifyCastFailure(c: Cast, optionalExpectedMsg: Option[String] = None): Unit = {
     val typeCheckResult = c.checkInputDataTypes()
     assert(typeCheckResult.isFailure)
     assert(typeCheckResult.isInstanceOf[TypeCheckFailure])
@@ -66,19 +74,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     if (optionalExpectedMsg.isDefined) {
       assert(message.contains(optionalExpectedMsg.get))
-    } else if (setConfigurationHint.nonEmpty) {
-      assert(message.contains("with ANSI mode on"))
-      assert(message.contains(setConfigurationHint))
     } else {
       assert("cannot cast [a-zA-Z]+ to [a-zA-Z]+".r.findFirstIn(message).isDefined)
+      if (ansiEnabled) {
+        assert(message.contains("with ANSI mode on"))
+        assert(message.contains(s"set ${SQLConf.ANSI_ENABLED.key} as false"))
+      }
     }
   }
-
-  // Whether the test suite is for TryCast. If yes, there is no exceptions and the result is
-  // always nullable.
-  protected def isTryCast: Boolean = false
-
-  protected def setConfigurationHint: String = ""
 
   test("null cast") {
     import DataTypeTestUtils._
@@ -281,8 +284,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from string") {
-    assert(cast("abcdef", StringType).nullable === isTryCast)
-    assert(cast("abcdef", BinaryType).nullable === isTryCast)
+    assert(!cast("abcdef", StringType).nullable)
+    assert(!cast("abcdef", BinaryType).nullable)
     assert(cast("abcdef", BooleanType).nullable)
     assert(cast("abcdef", TimestampType).nullable)
     assert(cast("abcdef", LongType).nullable)
@@ -981,14 +984,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         DayTimeIntervalType()), StringType), ansiInterval)
     }
 
-    if (!isTryCast) {
-      Seq("INTERVAL '-106751991 04:00:54.775809' DAY TO SECOND",
-        "INTERVAL '106751991 04:00:54.775808' DAY TO SECOND").foreach { interval =>
-        val e = intercept[ArithmeticException] {
-          cast(Literal.create(interval), DayTimeIntervalType()).eval()
-        }.getMessage
-        assert(e.contains("long overflow"))
-      }
+    Seq("INTERVAL '-106751991 04:00:54.775809' DAY TO SECOND",
+      "INTERVAL '106751991 04:00:54.775808' DAY TO SECOND").foreach { interval =>
+      val e = intercept[ArithmeticException] {
+        cast(Literal.create(interval), DayTimeIntervalType()).eval()
+      }.getMessage
+      assert(e.contains("long overflow"))
     }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
@@ -1027,15 +1028,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         YearMonthIntervalType()), StringType), ansiInterval)
     }
 
-    if (!isTryCast) {
-      Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
-        .foreach { interval =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), YearMonthIntervalType()).eval()
-          }.getMessage
-          assert(e.contains("Error parsing interval year-month string: integer overflow"))
-        }
-    }
+    Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
+      .foreach { interval =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), YearMonthIntervalType()).eval()
+        }.getMessage
+        assert(e.contains("Error parsing interval year-month string: integer overflow"))
+      }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
       .foreach { period =>
@@ -1098,9 +1097,27 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
 
-    if (!isTryCast) {
-      Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
-        val dataType = YearMonthIntervalType()
+    Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
+      val dataType = YearMonthIntervalType()
+      val e = intercept[IllegalArgumentException] {
+        cast(Literal.create(interval), dataType).eval()
+      }.getMessage
+      assert(e.contains(s"Interval string does not match year-month format of " +
+        s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+          .map(format => s"`$format`").mkString(", ")} " +
+        s"when cast to ${dataType.typeName}: $interval"))
+    }
+    Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
+      ("1", YearMonthIntervalType(YEAR, MONTH)),
+      ("1-1", YearMonthIntervalType(YEAR)),
+      ("1-1", YearMonthIntervalType(MONTH)),
+      ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(YEAR)),
+      ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(MONTH)),
+      ("INTERVAL '1' YEAR", YearMonthIntervalType(YEAR, MONTH)),
+      ("INTERVAL '1' YEAR", YearMonthIntervalType(MONTH)),
+      ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR)),
+      ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
+      .foreach { case (interval, dataType) =>
         val e = intercept[IllegalArgumentException] {
           cast(Literal.create(interval), dataType).eval()
         }.getMessage
@@ -1109,26 +1126,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
             .map(format => s"`$format`").mkString(", ")} " +
           s"when cast to ${dataType.typeName}: $interval"))
       }
-      Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
-        ("1", YearMonthIntervalType(YEAR, MONTH)),
-        ("1-1", YearMonthIntervalType(YEAR)),
-        ("1-1", YearMonthIntervalType(MONTH)),
-        ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(YEAR)),
-        ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(MONTH)),
-        ("INTERVAL '1' YEAR", YearMonthIntervalType(YEAR, MONTH)),
-        ("INTERVAL '1' YEAR", YearMonthIntervalType(MONTH)),
-        ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR)),
-        ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
-        .foreach { case (interval, dataType) =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), dataType).eval()
-          }.getMessage
-          assert(e.contains(s"Interval string does not match year-month format of " +
-            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-              .map(format => s"`$format`").mkString(", ")} " +
-            s"when cast to ${dataType.typeName}: $interval"))
-        }
-    }
   }
 
   test("SPARK-35735: Take into account day-time interval fields in cast") {
@@ -1218,63 +1215,61 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(Literal.create(interval), dataType), dt)
       }
 
-    if (!isTryCast) {
-      Seq(
-        ("INTERVAL '1 01:01:01.12345' DAY TO SECOND", DayTimeIntervalType(DAY, HOUR)),
-        ("INTERVAL '1 01:01:01.12345' DAY TO HOUR", DayTimeIntervalType(DAY, SECOND)),
-        ("INTERVAL '1 01:01:01.12345' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
-        ("1 01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
-        ("1 01:01:01.12345", DayTimeIntervalType(DAY, HOUR)),
-        ("1 01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
+    Seq(
+      ("INTERVAL '1 01:01:01.12345' DAY TO SECOND", DayTimeIntervalType(DAY, HOUR)),
+      ("INTERVAL '1 01:01:01.12345' DAY TO HOUR", DayTimeIntervalType(DAY, SECOND)),
+      ("INTERVAL '1 01:01:01.12345' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
+      ("1 01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
+      ("1 01:01:01.12345", DayTimeIntervalType(DAY, HOUR)),
+      ("1 01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
 
-        ("INTERVAL '01:01:01.12345' HOUR TO SECOND", DayTimeIntervalType(DAY, HOUR)),
-        ("INTERVAL '01:01:01.12345' HOUR TO HOUR", DayTimeIntervalType(DAY, SECOND)),
-        ("INTERVAL '01:01:01.12345' HOUR TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
-        ("01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
-        ("01:01:01.12345", DayTimeIntervalType(HOUR, HOUR)),
-        ("01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
-        ("INTERVAL '1.23' DAY", DayTimeIntervalType(DAY)),
-        ("INTERVAL '1.23' HOUR", DayTimeIntervalType(HOUR)),
-        ("INTERVAL '1.23' MINUTE", DayTimeIntervalType(MINUTE)),
-        ("INTERVAL '1.23' SECOND", DayTimeIntervalType(MINUTE)),
-        ("1.23", DayTimeIntervalType(DAY)),
-        ("1.23", DayTimeIntervalType(HOUR)),
-        ("1.23", DayTimeIntervalType(MINUTE)),
-        ("1.23", DayTimeIntervalType(MINUTE)))
-        .foreach { case (interval, dataType) =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), dataType).eval()
-          }.getMessage
-          assert(e.contains(s"Interval string does not match day-time format of " +
-            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-              .map(format => s"`$format`").mkString(", ")} " +
-            s"when cast to ${dataType.typeName}: $interval, " +
-            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
-            "to restore the behavior before Spark 3.0."))
-        }
+      ("INTERVAL '01:01:01.12345' HOUR TO SECOND", DayTimeIntervalType(DAY, HOUR)),
+      ("INTERVAL '01:01:01.12345' HOUR TO HOUR", DayTimeIntervalType(DAY, SECOND)),
+      ("INTERVAL '01:01:01.12345' HOUR TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
+      ("01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
+      ("01:01:01.12345", DayTimeIntervalType(HOUR, HOUR)),
+      ("01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
+      ("INTERVAL '1.23' DAY", DayTimeIntervalType(DAY)),
+      ("INTERVAL '1.23' HOUR", DayTimeIntervalType(HOUR)),
+      ("INTERVAL '1.23' MINUTE", DayTimeIntervalType(MINUTE)),
+      ("INTERVAL '1.23' SECOND", DayTimeIntervalType(MINUTE)),
+      ("1.23", DayTimeIntervalType(DAY)),
+      ("1.23", DayTimeIntervalType(HOUR)),
+      ("1.23", DayTimeIntervalType(MINUTE)),
+      ("1.23", DayTimeIntervalType(MINUTE)))
+      .foreach { case (interval, dataType) =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), dataType).eval()
+        }.getMessage
+        assert(e.contains(s"Interval string does not match day-time format of " +
+          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+            .map(format => s"`$format`").mkString(", ")} " +
+          s"when cast to ${dataType.typeName}: $interval, " +
+          s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
+          "to restore the behavior before Spark 3.0."))
+      }
 
-      // Check first field outof bound
-      Seq(("INTERVAL '1067519911' DAY", DayTimeIntervalType(DAY)),
-        ("INTERVAL '10675199111 04' DAY TO HOUR", DayTimeIntervalType(DAY, HOUR)),
-        ("INTERVAL '1067519911 04:00' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
-        ("INTERVAL '1067519911 04:00:54.775807' DAY TO SECOND", DayTimeIntervalType()),
-        ("INTERVAL '25620477881' HOUR", DayTimeIntervalType(HOUR)),
-        ("INTERVAL '25620477881:00' HOUR TO MINUTE", DayTimeIntervalType(HOUR, MINUTE)),
-        ("INTERVAL '25620477881:00:54.775807' HOUR TO SECOND", DayTimeIntervalType(HOUR, SECOND)),
-        ("INTERVAL '1537228672801' MINUTE", DayTimeIntervalType(MINUTE)),
-        ("INTERVAL '1537228672801:54.7757' MINUTE TO SECOND", DayTimeIntervalType(MINUTE, SECOND)),
-        ("INTERVAL '92233720368541.775807' SECOND", DayTimeIntervalType(SECOND)))
-        .foreach { case (interval, dataType) =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), dataType).eval()
-          }.getMessage
-          assert(e.contains(s"Interval string does not match day-time format of " +
-            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-              .map(format => s"`$format`").mkString(", ")} " +
-            s"when cast to ${dataType.typeName}: $interval, " +
-            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
-            "to restore the behavior before Spark 3.0."))
-        }
-    }
+    // Check first field outof bound
+    Seq(("INTERVAL '1067519911' DAY", DayTimeIntervalType(DAY)),
+      ("INTERVAL '10675199111 04' DAY TO HOUR", DayTimeIntervalType(DAY, HOUR)),
+      ("INTERVAL '1067519911 04:00' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
+      ("INTERVAL '1067519911 04:00:54.775807' DAY TO SECOND", DayTimeIntervalType()),
+      ("INTERVAL '25620477881' HOUR", DayTimeIntervalType(HOUR)),
+      ("INTERVAL '25620477881:00' HOUR TO MINUTE", DayTimeIntervalType(HOUR, MINUTE)),
+      ("INTERVAL '25620477881:00:54.775807' HOUR TO SECOND", DayTimeIntervalType(HOUR, SECOND)),
+      ("INTERVAL '1537228672801' MINUTE", DayTimeIntervalType(MINUTE)),
+      ("INTERVAL '1537228672801:54.7757' MINUTE TO SECOND", DayTimeIntervalType(MINUTE, SECOND)),
+      ("INTERVAL '92233720368541.775807' SECOND", DayTimeIntervalType(SECOND)))
+      .foreach { case (interval, dataType) =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), dataType).eval()
+        }.getMessage
+        assert(e.contains(s"Interval string does not match day-time format of " +
+          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+            .map(format => s"`$format`").mkString(", ")} " +
+          s"when cast to ${dataType.typeName}: $interval, " +
+          s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
+          "to restore the behavior before Spark 3.0."))
+      }
   }
 }
