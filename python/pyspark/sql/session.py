@@ -63,7 +63,7 @@ from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_prefer
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike
     from pyspark.sql.catalog import Catalog
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+    from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
     from pyspark.sql.udf import UDFRegistration
 
@@ -837,13 +837,14 @@ class SparkSession(SparkConversionMixin):
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union[RDD[Any], Iterable[Any], "PandasDataFrameLike"],
+        data: Union[RDD[Any], Iterable[Any], "PandasDataFrameLike", "ArrayLike"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True,
     ) -> DataFrame:
         """
-        Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
+        Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`
+        or a :class:`numpy.ndarray`.
 
         When ``schema`` is a list of column names, the type of each column
         will be inferred from ``data``.
@@ -870,8 +871,8 @@ class SparkSession(SparkConversionMixin):
         ----------
         data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
-            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
-            :class:`pandas.DataFrame`.
+            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
+            :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
@@ -952,12 +953,31 @@ class SparkSession(SparkConversionMixin):
             schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
 
         try:
-            import pandas
+            import pandas as pd
 
             has_pandas = True
         except Exception:
             has_pandas = False
-        if has_pandas and isinstance(data, pandas.DataFrame):
+
+        try:
+            import numpy as np
+
+            has_numpy = True
+        except Exception:
+            has_numpy = False
+
+        if has_numpy and isinstance(data, np.ndarray):
+            # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
+            # so pandas is required.
+            from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
+            require_minimum_pandas_version()
+            if data.ndim not in [1, 2]:
+                raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
+            column_names = ["value"] if data.ndim == 1 else ["_1", "_2"]
+            data = pd.DataFrame(data, columns=column_names)
+
+        if has_pandas and isinstance(data, pd.DataFrame):
             # Create a DataFrame from pandas DataFrame.
             return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema

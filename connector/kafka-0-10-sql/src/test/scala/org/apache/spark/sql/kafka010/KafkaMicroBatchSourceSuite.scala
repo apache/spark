@@ -34,7 +34,6 @@ import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{Dataset, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
@@ -667,10 +666,9 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         testUtils.sendMessages(topic2, Array("6"))
       },
       StartStream(),
-      ExpectFailure[SparkException](e => {
-        assert(e.asInstanceOf[SparkThrowable].getErrorClass === "INTERNAL_ERROR")
+      ExpectFailure[IllegalStateException](e => {
         // The offset of `topic2` should be changed from 2 to 1
-        assert(e.getCause.getMessage.contains("was changed from 2 to 1"))
+        assert(e.getMessage.contains("was changed from 2 to 1"))
       })
     )
   }
@@ -766,13 +764,12 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
       testStream(df)(
         StartStream(checkpointLocation = metadataPath.getAbsolutePath),
-        ExpectFailure[SparkException](e => {
-          assert(e.asInstanceOf[SparkThrowable].getErrorClass === "INTERNAL_ERROR")
+        ExpectFailure[IllegalStateException](e => {
           Seq(
             s"maximum supported log version is v1, but encountered v99999",
             "produced by a newer version of Spark and cannot be read by this version"
           ).foreach { message =>
-            assert(e.getCause.toString.contains(message))
+            assert(e.toString.contains(message))
           }
         }))
     }

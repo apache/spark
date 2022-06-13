@@ -293,6 +293,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def removeExecutor(execId: String): Unit = {
       // don't need to propagate to the driver, which we don't have
     }
+
+    override def removeShufflePushMergerLocation(host: String): Unit = {
+      // don't need to propagate to the driver, which we don't have
+    }
   }
 
   /** The list of results that DAGScheduler has collected. */
@@ -4342,6 +4346,101 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("SPARK-38987: corrupted merged shuffle block FetchFailure should unregister merge results") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs()
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+
+    scheduler = new MyDAGScheduler(
+      sc,
+      taskScheduler,
+      sc.listenerBus,
+      mapOutputTracker,
+      blockManagerMaster,
+      sc.env,
+      shuffleMergeFinalize = false,
+      shuffleMergeRegister = false)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+
+    val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage,
+      Seq((0, makeMergeStatus("hostA", shuffleDep.shuffleMergeId, isShufflePushMerger = true))))
+    scheduler.handleShuffleMergeFinalized(shuffleMapStage,
+      shuffleMapStage.shuffleDep.shuffleMergeId)
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage,
+      Seq((1, makeMergeStatus("hostA", shuffleDep.shuffleMergeId, isShufflePushMerger = true))))
+
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 1)
+
+    // Complete shuffle map stage with FetchFailed on hostA
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, _) =>
+        (FetchFailed(
+          makeBlockManagerId("hostA", execId = Some(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)),
+          shuffleDep.shuffleId, -1L, -1, 0, "corruption fetch failure"), null)
+    }.toSeq)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 0)
+  }
+
+  test("SPARK-38987: All shuffle outputs for a shuffle push" +
+    " merger executor should be cleaned up on a fetch failure when" +
+    "spark.files.fetchFailure.unRegisterOutputOnHost is true") {
+    initPushBasedShuffleConfs(conf)
+    conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
+
+    val shuffleMapRdd = new MyRDD(sc, 3, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 3, List(shuffleDep), tracker = mapOutputTracker)
+
+    submit(reduceRdd, Array(0, 1, 2))
+    // Map stage completes successfully,
+    // two tasks are run on an executor on hostA and one on an executor on hostB
+    completeShuffleMapStageSuccessfully(0, 0, 3, Seq("hostA", "hostA", "hostB"))
+    // Now the executor on hostA is lost
+    runEvent(ExecutorLost(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER,
+      ExecutorExited(-100, false, "Container marked as failed")))
+
+    // Shuffle push merger executor should not be removed and the shuffle files are not unregistered
+    verify(blockManagerMaster, times(0)).removeExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    verify(mapOutputTracker,
+      times(0)).removeOutputsOnExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+
+    // Now a fetch failure from the lost executor occurs
+    complete(taskSets(1), Seq(
+      (FetchFailed(BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, "hostA", 12345),
+        shuffleId, 0L, 0, 0, "ignored"), null)
+    ))
+
+    // Verify that we are not removing the executor,
+    // and that we are only removing the outputs on the host
+    verify(blockManagerMaster, times(0)).removeExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    verify(blockManagerMaster, times(1)).removeShufflePushMergerLocation("hostA")
+    verify(mapOutputTracker,
+      times(1)).removeOutputsOnHost("hostA")
+
+    // There should be no map statuses or merge statuses on the host
+    val shuffleStatuses = mapOutputTracker.shuffleStatuses(shuffleId)
+    val mapStatuses = shuffleStatuses.mapStatuses
+    val mergeStatuses = shuffleStatuses.mergeStatuses
+    assert(mapStatuses.count(_ != null) === 1)
+    assert(mapStatuses.count(s => s != null
+      && s.location.executorId == BlockManagerId.SHUFFLE_MERGER_IDENTIFIER) === 0)
+    assert(mergeStatuses.count(s => s != null
+      && s.location.executorId == BlockManagerId.SHUFFLE_MERGER_IDENTIFIER) === 0)
+    // hostB-exec should still have its shuffle files
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
+  }
+
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
@@ -4402,12 +4501,20 @@ object DAGSchedulerSuite {
   def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2, mapTaskId: Long = -1): MapStatus =
     MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId)
 
-  def makeBlockManagerId(host: String): BlockManagerId = {
-    BlockManagerId(host + "-exec", host, 12345)
+  def makeBlockManagerId(host: String, execId: Option[String] = None): BlockManagerId = {
+    BlockManagerId(execId.getOrElse(host + "-exec"), host, 12345)
   }
 
-  def makeMergeStatus(host: String, shuffleMergeId: Int, size: Long = 1000): MergeStatus =
-    MergeStatus(makeBlockManagerId(host), shuffleMergeId, mock(classOf[RoaringBitmap]), size)
+  def makeMergeStatus(host: String, shuffleMergeId: Int, size: Long = 1000,
+    isShufflePushMerger: Boolean = false): MergeStatus = {
+    val execId = if (isShufflePushMerger) {
+      Some(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    } else {
+      None
+    }
+    MergeStatus(makeBlockManagerId(host, execId),
+      shuffleMergeId, mock(classOf[RoaringBitmap]), size)
+  }
 
   def addMergerLocs(locs: Seq[String]): Unit = {
     locs.foreach { loc => mergerLocs.append(makeBlockManagerId(loc)) }

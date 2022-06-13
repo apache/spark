@@ -425,29 +425,54 @@ object Cast {
     }
 }
 
-abstract class CastBase extends UnaryExpression
-    with TimeZoneAwareExpression
-    with NullIntolerant
-    with SupportQueryContext {
+/**
+ * Cast the child expression to the target data type.
+ *
+ * When cast from/to timezone related types, we need timeZoneId, which will be resolved with
+ * session local timezone by an analyzer [[ResolveTimeZone]].
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('10' as int);
+       10
+  """,
+  since = "1.0.0",
+  group = "conversion_funcs")
+case class Cast(
+    child: Expression,
+    dataType: DataType,
+    timeZoneId: Option[String] = None,
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled) extends UnaryExpression
+  with TimeZoneAwareExpression with NullIntolerant with SupportQueryContext {
 
-  def child: Expression
+  def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
+    this(child, dataType, timeZoneId, ansiEnabled = SQLConf.get.ansiEnabled)
 
-  def dataType: DataType
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
 
-  /**
-   * Returns true iff we can cast `from` type to `to` type.
-   */
-  def canCast(from: DataType, to: DataType): Boolean
+  override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
-  /**
-   * Returns the error message if casting from one type to another one is invalid.
-   */
-  def typeCheckFailureMessage: String
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
-  override def toString: String = s"cast($child as ${dataType.simpleString})"
+  private def typeCheckFailureMessage: String = if (ansiEnabled) {
+    if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
+      Cast.typeCheckFailureMessage(child.dataType, dataType,
+        Some(SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString))
+    } else {
+      Cast.typeCheckFailureMessage(child.dataType, dataType,
+        Some(SQLConf.ANSI_ENABLED.key -> "false"))
+    }
+  } else {
+    s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (canCast(child.dataType, dataType)) {
+    if (ansiEnabled && Cast.canAnsiCast(child.dataType, dataType)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else if (!ansiEnabled && Cast.canCast(child.dataType, dataType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(typeCheckFailureMessage)
@@ -455,8 +480,6 @@ abstract class CastBase extends UnaryExpression
   }
 
   override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
-
-  protected def ansiEnabled: Boolean
 
   override def initQueryContext(): String = if (ansiEnabled) {
     origin.context
@@ -470,7 +493,7 @@ abstract class CastBase extends UnaryExpression
     childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
 
   override lazy val preCanonicalized: Expression = {
-    val basic = withNewChildren(Seq(child.preCanonicalized)).asInstanceOf[CastBase]
+    val basic = withNewChildren(Seq(child.preCanonicalized)).asInstanceOf[Cast]
     if (timeZoneId.isDefined && !needsTimeZone) {
       basic.withTimeZone(null)
     } else {
@@ -2246,6 +2269,8 @@ abstract class CastBase extends UnaryExpression
       """
   }
 
+  override def toString: String = s"cast($child as ${dataType.simpleString})"
+
   override def sql: String = dataType match {
     // HiveQL doesn't allow casting to complex types. For logical plans translated from HiveQL, this
     // type of casting can only be introduced by the analyzer, and can be omitted when converting
@@ -2253,57 +2278,6 @@ abstract class CastBase extends UnaryExpression
     case _: ArrayType | _: MapType | _: StructType => child.sql
     case _ => s"CAST(${child.sql} AS ${dataType.sql})"
   }
-}
-
-/**
- * Cast the child expression to the target data type.
- *
- * When cast from/to timezone related types, we need timeZoneId, which will be resolved with
- * session local timezone by an analyzer [[ResolveTimeZone]].
- */
-@ExpressionDescription(
-  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('10' as int);
-       10
-  """,
-  since = "1.0.0",
-  group = "conversion_funcs")
-case class Cast(
-    child: Expression,
-    dataType: DataType,
-    timeZoneId: Option[String] = None,
-    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
-  extends CastBase {
-
-  def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
-    this(child, dataType, timeZoneId, ansiEnabled = SQLConf.get.ansiEnabled)
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
-
-  override def canCast(from: DataType, to: DataType): Boolean = if (ansiEnabled) {
-    Cast.canAnsiCast(from, to)
-  } else {
-    Cast.canCast(from, to)
-  }
-
-  override def typeCheckFailureMessage: String = if (ansiEnabled) {
-    if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
-      Cast.typeCheckFailureMessage(child.dataType, dataType,
-        Some(SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString))
-    } else {
-      Cast.typeCheckFailureMessage(child.dataType, dataType,
-        Some(SQLConf.ANSI_ENABLED.key -> "false"))
-    }
-  } else {
-    s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
-  }
-
-  override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 }
 
 /**
