@@ -182,10 +182,6 @@ class PruneFiltersSuite extends PlanTest {
       testRelation.where('a > 2 && (Literal(2) + Literal(1)) > 'c && 'b === 2).analyze)
 
     comparePlans(
-      Optimize.execute(testRelation.where('a > 'b + 1 && 'b + 1 === 10).analyze),
-      testRelation.where('a > 10 && 'b + 1 === 10).analyze)
-
-    comparePlans(
       Optimize.execute(testRelation.where('b === 1 && 'b === 2).analyze),
       testRelation.where(Literal(2) === Literal(1) && Literal(1) === Literal(2)).analyze)
 
@@ -197,6 +193,12 @@ class PruneFiltersSuite extends PlanTest {
       Optimize.execute(testRelation
         .where('a === 'b + Rand(10).cast(IntegerType) && 'b === 10).analyze),
       testRelation.where('a === Literal(10) + Rand(10).cast(IntegerType) && 'b === 10).analyze)
+
+    val containsUnaryExpQuery = testRelation.where('b.isNotNull && 'b === 10).analyze
+    comparePlans(Optimize.execute(containsUnaryExpQuery), containsUnaryExpQuery)
+
+    val equalWithUdfQuery = testRelation.where('a > 'b + 1 && 'b + 1 === 10).analyze
+    comparePlans(Optimize.execute(equalWithUdfQuery), equalWithUdfQuery)
 
     val nonDeterministicQuery =
       testRelation

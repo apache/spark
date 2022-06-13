@@ -1633,19 +1633,17 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(condition, _: LeafNode) =>
       val predicates = splitConjunctivePredicates(condition)
       val equalToWithLiterals = predicates.collect {
-        case eq @ EqualTo(e: Expression, l: Literal) if e.deterministic =>
-          eq -> (e.canonicalized -> l)
-        case eq @ EqualTo(l: Literal, e: Expression) if e.deterministic =>
-          eq -> (e.canonicalized -> l)
+        case eq @ EqualTo(a: Attribute, l: Literal) => eq -> (a -> l)
+        case eq @ EqualTo(l: Literal, a: Attribute) => eq -> (a -> l)
       }
       if (equalToWithLiterals.nonEmpty) {
         val newCondition = predicates.map {
           case ue: UnaryExpression => ue // Do not replace UnaryExpressions. For example: IsNotNull
           case other =>
             val exceptCurrentEqualKeyValues =
-              equalToWithLiterals.filterNot(_._1.semanticEquals(other)).map(_._2).toMap
+              AttributeMap(equalToWithLiterals.filterNot(_._1.semanticEquals(other)).map(_._2))
             other.transformUp {
-              case e: Expression => exceptCurrentEqualKeyValues.getOrElse(e.canonicalized, e)
+              case a: Attribute => exceptCurrentEqualKeyValues.getOrElse(a, a)
             }
         }.reduceLeft(And)
         f.copy(condition = newCondition)
