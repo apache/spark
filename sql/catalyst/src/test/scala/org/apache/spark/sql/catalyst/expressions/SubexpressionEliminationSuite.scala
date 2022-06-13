@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
@@ -339,7 +340,20 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(commonExprs.head.useCount == 2)
     assert(commonExprs.head.expr eq add)
   }
-  
+
+  test("SPARK-36073: Transparently canonicalized expressions are not necessary subexpressions") {
+    val add = Add(Literal(1), Literal(2))
+    val transparent = ProxyExpression(add)
+
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(transparent)
+
+    val commonExprs = equivalence.getAllExprStates()
+    assert(commonExprs.size == 2)
+    assert(commonExprs.map(_.useCount) === Seq(1, 1))
+    assert(commonExprs.map(_.expr) === Seq(add, transparent))
+  }
+
 
   test("SPARK-35439: Children subexpr should come first than parent subexpr") {
     val add = Add(Literal(1), Literal(2))
@@ -423,7 +437,6 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       TaskContext.unset()
     }
   }
-  
 
   test("SPARK-39040: Respect NaNvl in EquivalentExpressions for expression elimination") {
     val add = Add(Literal(1), Literal(0))
@@ -444,5 +457,15 @@ case class CodegenFallbackExpression(child: Expression)
   extends UnaryExpression with CodegenFallback {
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): CodegenFallbackExpression =
+    copy(child = newChild)
+}
+
+case class ProxyExpression(child: Expression) extends UnaryExpression {
+  override lazy val preCanonicalized: Expression = child.preCanonicalized
+  override def dataType: DataType = child.dataType
+  override def eval(input: InternalRow): Any = child.eval(input)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    child.genCode(ctx)
+  override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 }

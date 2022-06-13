@@ -210,8 +210,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
   override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
-    with SupportQueryContext {
+abstract class BinaryArithmetic extends BinaryOperator
+  with NullIntolerant with SupportQueryContext {
 
   protected val failOnError: Boolean
 
@@ -264,7 +264,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
   }
 
   protected def checkDecimalOverflow(value: Decimal, precision: Int, scale: Int): Decimal = {
-    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError)
+    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError, queryContext)
   }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
@@ -284,6 +284,11 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case DecimalType.Fixed(precision, scale) =>
+      val errorContextCode = if (failOnError) {
+        ctx.addReferenceObj("errCtx", queryContext)
+      } else {
+        "\"\""
+      }
       val updateIsNull = if (failOnError) {
         ""
       } else {
@@ -292,7 +297,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
            |${ev.value} = $eval1.$decimalMethod($eval2).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError});
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
            |$updateIsNull
        """.stripMargin
       })
@@ -597,12 +602,17 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
+    val errorContext = if (failOnError) {
+      ctx.addReferenceObj("errCtx", queryContext)
+    } else {
+      "\"\""
+    }
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalValue = ctx.freshName("decimalValue")
         s"""
            |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError});
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
            |if ($decimalValue != null) {
            |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
            |} else {
@@ -611,7 +621,6 @@ trait DivModLike extends BinaryArithmetic {
            |""".stripMargin
       case _ => s"${ev.value} = ($javaType)(${eval1.value} $symbol ${eval2.value});"
     }
-    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
       s"""
         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
@@ -969,7 +978,11 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+    val errorContext = if (failOnError) {
+      ctx.addReferenceObj("errCtx", queryContext)
+    } else {
+      "\"\""
+    }
     val result = dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalAdd = "$plus"
@@ -981,7 +994,7 @@ case class Pmod(
            |  ${ev.value}=$remainder;
            |}
            |${ev.value} = ${ev.value}.toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError});
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
            |${ev.isNull} = ${ev.value} == null;
            |""".stripMargin
 
