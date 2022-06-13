@@ -614,21 +614,23 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
-    spark.sql("REPLACE TABLE testcat.table_name (id bigint NOT NULL DEFAULT 41 + 1) USING foo")
-    val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo") {
+      spark.sql("REPLACE TABLE testcat.table_name (id bigint NOT NULL DEFAULT 41 + 1) USING foo")
+      val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
+      assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
         "Replaced table should have no rows after committing.")
-    assert(replaced.schema().fields.length === 1,
+      assert(replaced.schema().fields.length === 1,
         "Replaced table should have new schema.")
-    val actual = replaced.schema().fields(0)
-    val expected = StructField("id", LongType, nullable = false,
-      new MetadataBuilder().putString(
-        ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1")
-        .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
-        .build())
-    assert(actual === expected,
-      "Replaced table should have new schema with DEFAULT column metadata.")
+      val actual = replaced.schema().fields(0)
+      val expected = StructField("id", LongType, nullable = false,
+        new MetadataBuilder().putString(
+          ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1")
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
+          .build())
+      assert(actual === expected,
+        "Replaced table should have new schema with DEFAULT column metadata.")
+    }
   }
 
   test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {
