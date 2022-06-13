@@ -185,7 +185,7 @@ class RankingMetrics[T: ClassTag](
                 }
               } else {
                 if (i < pred.length && labSet.contains(pred(i))) {
-                  dcg += (math.pow(2.0, relMap.getOrElse(pred(i), 0.0)) - 1 )/ math.log(i + 2)
+                  dcg += (math.pow(2.0, relMap.getOrElse(pred(i), 0.0)) - 1) / math.log(i + 2)
                 }
                 if (i < labSetSize) {
                   maxDcg += (math.pow(2.0, relMap.getOrElse(lab(i), 0.0)) - 1) / math.log(i + 2)
