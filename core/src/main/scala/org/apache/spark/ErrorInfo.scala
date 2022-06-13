@@ -31,7 +31,6 @@ import org.apache.spark.util.Utils
 /**
  * Information associated with an error subclass.
  *
- * @param subClass SubClass associated with this class.
  * @param message C-style message format compatible with printf.
  *                The error message is constructed by concatenating the lines with newlines.
  */
@@ -45,13 +44,14 @@ private[spark] case class ErrorSubInfo(message: Seq[String]) {
  * Information associated with an error class.
  *
  * @param sqlState SQLSTATE associated with this class.
- * @param subClass A sequence of subclasses
+ * @param subClass SubClass associated with this class.
  * @param message C-style message format compatible with printf.
  *                The error message is constructed by concatenating the lines with newlines.
  */
-private[spark] case class ErrorInfo(message: Seq[String],
-                                    subClass: Option[Map[String, ErrorSubInfo]],
-                                    sqlState: Option[String]) {
+private[spark] case class ErrorInfo(
+    message: Seq[String],
+    subClass: Option[Map[String, ErrorSubInfo]],
+    sqlState: Option[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
   val messageFormat: String = message.mkString("\n")
