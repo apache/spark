@@ -250,11 +250,14 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case LongType => input.asInstanceOf[Long]
-    case DoubleType => f(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
+  private lazy val ceilFunc: Any => Any = child.dataType match {
+    case LongType => input => input.asInstanceOf[Long]
+    case DoubleType => input => f(input.asInstanceOf[Double]).toLong
+    case DecimalType.Fixed(_, _) => input => input.asInstanceOf[Decimal].ceil
   }
+
+  protected override def nullSafeEval(input: Any): Any =
+    ceilFunc(input)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
@@ -508,11 +511,14 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case LongType => input.asInstanceOf[Long]
-    case DoubleType => f(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
+  private lazy val floorFunc: Any => Any = child.dataType match {
+    case LongType => input => input.asInstanceOf[Long]
+    case DoubleType => input => f(input.asInstanceOf[Double]).toLong
+    case DecimalType.Fixed(_, _) => input => input.asInstanceOf[Decimal].floor
   }
+
+  protected override def nullSafeEval(input: Any): Any =
+    floorFunc(input)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
@@ -1088,11 +1094,13 @@ case class Hex(child: Expression)
 
   override def dataType: DataType = StringType
 
-  protected override def nullSafeEval(num: Any): Any = child.dataType match {
-    case LongType => Hex.hex(num.asInstanceOf[Long])
-    case BinaryType => Hex.hex(num.asInstanceOf[Array[Byte]])
-    case StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
+  private lazy val hexFunc: Any => Any = child.dataType match {
+    case LongType => num => Hex.hex(num.asInstanceOf[Long])
+    case BinaryType => num => Hex.hex(num.asInstanceOf[Array[Byte]])
+    case StringType => num => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
   }
+
+  protected override def nullSafeEval(num: Any): Any = hexFunc(num)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (c) => {
@@ -1477,40 +1485,40 @@ abstract class RoundBase(child: Expression, scale: Expression,
   }
 
   // not overriding since _scale is a constant int at runtime
-  def nullSafeEval(input1: Any): Any = {
-    dataType match {
-      case DecimalType.Fixed(p, s) =>
-        val decimal = input1.asInstanceOf[Decimal]
-        if (_scale >= 0) {
-          // Overflow cannot happen, so no need to control nullOnOverflow
-          decimal.toPrecision(decimal.precision, s, mode)
-        } else {
-          Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
-        }
-      case ByteType =>
-        BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
-      case ShortType =>
-        BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
-      case IntegerType =>
-        BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
-      case LongType =>
-        BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
-      case FloatType =>
-        val f = input1.asInstanceOf[Float]
-        if (f.isNaN || f.isInfinite) {
-          f
-        } else {
-          BigDecimal(f.toDouble).setScale(_scale, mode).toFloat
-        }
-      case DoubleType =>
-        val d = input1.asInstanceOf[Double]
-        if (d.isNaN || d.isInfinite) {
-          d
-        } else {
-          BigDecimal(d).setScale(_scale, mode).toDouble
-        }
-    }
+  private lazy val roundFunc: Any => Any = dataType match {
+    case DecimalType.Fixed(p, s) => input =>
+      val decimal = input.asInstanceOf[Decimal]
+      if (_scale >= 0) {
+        // Overflow cannot happen, so no need to control nullOnOverflow
+        decimal.toPrecision(decimal.precision, s, mode)
+      } else {
+        Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
+      }
+    case ByteType => input =>
+      BigDecimal(input.asInstanceOf[Byte]).setScale(_scale, mode).toByte
+    case ShortType => input =>
+      BigDecimal(input.asInstanceOf[Short]).setScale(_scale, mode).toShort
+    case IntegerType => input =>
+      BigDecimal(input.asInstanceOf[Int]).setScale(_scale, mode).toInt
+    case LongType => input =>
+      BigDecimal(input.asInstanceOf[Long]).setScale(_scale, mode).toLong
+    case FloatType => input =>
+      val f = input.asInstanceOf[Float]
+      if (f.isNaN || f.isInfinite) {
+        f
+      } else {
+        BigDecimal(f.toDouble).setScale(_scale, mode).toFloat
+      }
+    case DoubleType => input =>
+      val d = input.asInstanceOf[Double]
+      if (d.isNaN || d.isInfinite) {
+        d
+      } else {
+        BigDecimal(d).setScale(_scale, mode).toDouble
+      }
   }
+
+  def nullSafeEval(input: Any): Any = roundFunc(input)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)

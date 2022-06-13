@@ -204,18 +204,20 @@ case class BitwiseCount(child: Expression)
 
   override def prettyName: String = "bit_count"
 
+  private lazy val bitCountFunc: Any => Any = child.dataType match {
+    case BooleanType => input => if (input.asInstanceOf[Boolean]) 1 else 0
+    case ByteType => input => java.lang.Long.bitCount(input.asInstanceOf[Byte])
+    case ShortType => input => java.lang.Long.bitCount(input.asInstanceOf[Short])
+    case IntegerType => input => java.lang.Long.bitCount(input.asInstanceOf[Int])
+    case LongType => input => java.lang.Long.bitCount(input.asInstanceOf[Long])
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
     case BooleanType => defineCodeGen(ctx, ev, c => s"if ($c) 1 else 0")
     case _ => defineCodeGen(ctx, ev, c => s"java.lang.Long.bitCount($c)")
   }
 
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case BooleanType => if (input.asInstanceOf[Boolean]) 1 else 0
-    case ByteType => java.lang.Long.bitCount(input.asInstanceOf[Byte])
-    case ShortType => java.lang.Long.bitCount(input.asInstanceOf[Short])
-    case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
-    case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
-  }
+  protected override def nullSafeEval(input: Any): Any = bitCountFunc(input)
 
   override protected def withNewChildInternal(newChild: Expression): BitwiseCount =
     copy(child = newChild)

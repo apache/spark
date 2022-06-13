@@ -53,6 +53,17 @@ case class UnaryMinus(
   override def toString: String = s"-$child"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
+  private lazy val unaryMinusFunc: Any => Any = dataType match {
+    case CalendarIntervalType if failOnError =>
+      input => IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
+    case CalendarIntervalType =>
+      input => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
+    case _: DayTimeIntervalType =>
+      input => MathUtils.negateExact(input.asInstanceOf[Long])
+    case _: YearMonthIntervalType =>
+      input => MathUtils.negateExact(input.asInstanceOf[Int])
+    case _ => input => numeric.negate(input)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
@@ -93,14 +104,7 @@ case class UnaryMinus(
       })
   }
 
-  protected override def nullSafeEval(input: Any): Any = dataType match {
-    case CalendarIntervalType if failOnError =>
-      IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
-    case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
-    case _: DayTimeIntervalType => MathUtils.negateExact(input.asInstanceOf[Long])
-    case _: YearMonthIntervalType => MathUtils.negateExact(input.asInstanceOf[Int])
-    case _ => numeric.negate(input)
-  }
+  protected override def nullSafeEval(input: Any): Any = unaryMinusFunc(input)
 
   override def sql: String = {
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("-") match {
@@ -398,26 +402,28 @@ case class Add(
   override def calendarIntervalMethod: String = if (failOnError) "addExact" else "add"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
-    case DecimalType.Fixed(precision, scale) =>
+  private lazy val addFunc: (Any, Any) => Any = dataType match {
+    case DecimalType.Fixed(precision, scale) => (input1, input2) =>
       checkDecimalOverflow(numeric.plus(input1, input2).asInstanceOf[Decimal], precision, scale)
-    case CalendarIntervalType if failOnError =>
+    case CalendarIntervalType if failOnError => (input1, input2) =>
       IntervalUtils.addExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-    case CalendarIntervalType =>
+    case CalendarIntervalType => (input1, input2) =>
       IntervalUtils.add(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-    case _: DayTimeIntervalType =>
+    case _: DayTimeIntervalType => (input1, input2) =>
       MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
-    case _: YearMonthIntervalType =>
+    case _: YearMonthIntervalType => (input1, input2) =>
       MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
-    case _: IntegerType if failOnError =>
+    case _: IntegerType if failOnError => (input1, input2) =>
       MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
-    case _: LongType if failOnError =>
+    case _: LongType if failOnError => (input1, input2) =>
       MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
-    case _ => numeric.plus(input1, input2)
+    case _ => (input1, input2) => numeric.plus(input1, input2)
   }
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any =
+    addFunc(input1, input2)
 
   override def exactMathMethod: Option[String] = Some("addExact")
 
@@ -467,26 +473,28 @@ case class Subtract(
   override def calendarIntervalMethod: String = if (failOnError) "subtractExact" else "subtract"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
-    case DecimalType.Fixed(precision, scale) =>
+  private lazy val subtractFunc: (Any, Any) => Any = dataType match {
+    case DecimalType.Fixed(precision, scale) => (input1, input2) =>
       checkDecimalOverflow(numeric.minus(input1, input2).asInstanceOf[Decimal], precision, scale)
-    case CalendarIntervalType if failOnError =>
+    case CalendarIntervalType if failOnError => (input1, input2) =>
       IntervalUtils.subtractExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-    case CalendarIntervalType =>
+    case CalendarIntervalType => (input1, input2) =>
       IntervalUtils.subtract(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-    case _: DayTimeIntervalType =>
+    case _: DayTimeIntervalType => (input1, input2) =>
       MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
-    case _: YearMonthIntervalType =>
+    case _: YearMonthIntervalType => (input1, input2) =>
       MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
-    case _: IntegerType if failOnError =>
+    case _: IntegerType if failOnError => (input1, input2) =>
       MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
-    case _: LongType if failOnError =>
+    case _: LongType if failOnError => (input1, input2) =>
       MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
-    case _ => numeric.minus(input1, input2)
+    case _ => (input1, input2) => numeric.minus(input1, input2)
   }
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any =
+    subtractFunc(input1, input2)
 
   override def exactMathMethod: Option[String] = Some("subtractExact")
 
@@ -533,16 +541,18 @@ case class Multiply(
   }
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
-    case DecimalType.Fixed(precision, scale) =>
+  private lazy val multiplyFunc: (Any, Any) => Any = dataType match {
+    case DecimalType.Fixed(precision, scale) => (input1, input2) =>
       checkDecimalOverflow(numeric.times(input1, input2).asInstanceOf[Decimal], precision, scale)
-    case _: IntegerType if failOnError =>
+    case _: IntegerType if failOnError => (input1, input2) =>
       MathUtils.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
-    case _: LongType if failOnError =>
+    case _: LongType if failOnError => (input1, input2) =>
       MathUtils.multiplyExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
-    case _ => numeric.times(input1, input2)
+    case _ => (input1, input2) => numeric.times(input1, input2)
   }
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any =
+    multiplyFunc(input1, input2)
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
 
