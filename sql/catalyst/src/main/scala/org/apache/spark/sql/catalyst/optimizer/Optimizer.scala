@@ -270,8 +270,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
-      RewriteLateralSubquery.ruleName ::
-      ReplaceCTERefWithRepartition.ruleName :: Nil
+      RewriteLateralSubquery.ruleName :: Nil
 
   /**
    * Apply finish-analysis rules for the entire plan including all subqueries.
