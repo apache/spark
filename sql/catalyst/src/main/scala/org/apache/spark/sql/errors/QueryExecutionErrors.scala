@@ -1199,10 +1199,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       "length must be greater than or equal to 0.")
   }
 
-  def sqlArrayIndexNotStartAtOneError(): ArrayIndexOutOfBoundsException = {
-    new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
-  }
-
   def concatArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
     new RuntimeException(
       s"""
