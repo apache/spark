@@ -4364,7 +4364,8 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   private def trimOrRestoreTempResolvedColumn(agg: Aggregate, e: Expression): Expression = e match {
     case ae: AggregateExpression =>
       trimTempResolvedColumn(ae)
-    case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
+    case grouping: Expression
+        if grouping.resolved && agg.groupingExpressions.exists(grouping.semanticEquals) =>
       trimTempResolvedColumn(grouping)
     case t: TempResolvedColumn =>
       // Undo the resolution as this column is neither inside aggregate functions nor a

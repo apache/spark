@@ -1172,7 +1172,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |FROM t
            |GROUP BY t.c, t.d
            |HAVING ${func}(c) > 0d""".stripMargin),
-        Seq(s"cannot resolve '$func(c)' due to data type mismatch"),
+        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
         false)
     }
   }
