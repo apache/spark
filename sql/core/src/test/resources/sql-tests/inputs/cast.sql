@@ -116,3 +116,9 @@ select cast(interval '10' day as bigint);
 
 select cast(interval '-1000' month as tinyint);
 select cast(interval '1000000' second as smallint);
+
+-- cast ANSI intervals to decimals
+select cast(interval '-1' year as decimal(10, 0));
+select cast(interval '1.000001' second as decimal(10, 6));
+select cast(interval '08:11:10.001' hour to second as decimal(10, 4));
+select cast(interval '1 01:02:03.1' day to second as decimal(8, 1));

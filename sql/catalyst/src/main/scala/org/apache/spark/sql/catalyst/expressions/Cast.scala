@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -194,8 +194,7 @@ object Cast {
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
-    case (_: DayTimeIntervalType, _: IntegralType) => true
-    case (_: YearMonthIntervalType, _: IntegralType) => true
+    case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -1016,8 +1015,7 @@ case class Cast(
         case _: NumberFormatException => null
       }
     case x: DayTimeIntervalType =>
-      buildCast[Long](_, dt =>
-        changePrecision(Decimal(dayTimeIntervalToLong(dt, x.startField, x.endField)), target))
+      buildCast[Long](_, dt => changePrecision(dayTimeIntervalToDecimal(dt, x.endField), target))
     case x: YearMonthIntervalType =>
       buildCast[Int](_, ym =>
         changePrecision(Decimal(yearMonthIntervalToInt(ym, x.startField, x.endField)), target))
@@ -1614,10 +1612,8 @@ case class Cast(
       case x: DayTimeIntervalType =>
         (c, evPrim, evNull) =>
           val u = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-          val tmpDt = ctx.freshVariable("tmpDt", classOf[Long])
           code"""
-            long $tmpDt = $u.dayTimeIntervalToLong($c, (byte)${x.startField}, (byte)${x.endField});
-            Decimal $tmp = Decimal.apply($tmpDt);
+            Decimal $tmp = $u.dayTimeIntervalToDecimal($c, (byte)${x.endField});
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case x: YearMonthIntervalType =>
