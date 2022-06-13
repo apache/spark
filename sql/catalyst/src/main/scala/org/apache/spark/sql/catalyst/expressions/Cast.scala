@@ -110,7 +110,7 @@ object Cast {
     case (StringType, _: CalendarIntervalType) => true
     case (StringType, _: AnsiIntervalType) => true
 
-    case (_: AnsiIntervalType, _: IntegralType) => true
+    case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
@@ -1015,6 +1015,12 @@ case class Cast(
       } catch {
         case _: NumberFormatException => null
       }
+    case x: DayTimeIntervalType =>
+      buildCast[Long](_, dt =>
+        changePrecision(Decimal(dayTimeIntervalToLong(dt, x.startField, x.endField)), target))
+    case x: YearMonthIntervalType =>
+      buildCast[Int](_, ym =>
+        changePrecision(Decimal(yearMonthIntervalToInt(ym, x.startField, x.endField)), target))
   }
 
   // DoubleConverter
@@ -1604,6 +1610,24 @@ case class Cast(
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }
+          """
+      case x: DayTimeIntervalType =>
+        (c, evPrim, evNull) =>
+          val u = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+          val tmpDt = ctx.freshVariable("tmpDt", classOf[Long])
+          code"""
+            long $tmpDt = $u.dayTimeIntervalToLong($c, (byte)${x.startField}, (byte)${x.endField});
+            Decimal $tmp = Decimal.apply($tmpDt);
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+          """
+      case x: YearMonthIntervalType =>
+        (c, evPrim, evNull) =>
+          val u = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+          val tmpYm = ctx.freshVariable("tmpYm", classOf[Int])
+          code"""
+            int $tmpYm = $u.dayTimeIntervalToInt($c, (byte)${x.startField}, (byte)${x.endField});
+            Decimal $tmp = Decimal.apply($tmpYm);
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
     }
   }
