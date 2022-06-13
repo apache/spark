@@ -242,7 +242,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
         )
       }
       val logs1 = logAppender1.loggingEvents.map(_.getMessage.getFormattedMessage)
-        .filter(_.contains(s"In-progress event log file does not exist: "))
+        .filter(_.contains("In-progress event log file does not exist: "))
       assert(logs1.size === 1)
 
       writeFile(inProgressFile, None,
@@ -259,7 +259,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
         )
       }
       val logs2 = logAppender2.loggingEvents.map(_.getMessage.getFormattedMessage)
-        .filter(_.contains(s"In-progress event log file does not exist: "))
+        .filter(_.contains("In-progress event log file does not exist: "))
       assert(logs2.isEmpty)
     }
   }
