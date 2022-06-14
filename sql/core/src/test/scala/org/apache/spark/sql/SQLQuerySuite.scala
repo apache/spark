@@ -4456,24 +4456,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         """.stripMargin),
       Seq(Row(2), Row(1)))
   }
-
-  test("SPARK-39444: Add OptimizeSubqueries into nonExcludableRules list") {
-    withSQLConf(
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-        "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries") {
-      val df = sql(
-        """
-          |WITH tmp AS (
-          |  SELECT id FROM range(2)
-          |  INTERSECT
-          |  SELECT id FROM range(4)
-          |)
-          |
-          |SELECT id FROM range(5) WHERE id > (SELECT max(id) FROM tmp)
-        """.stripMargin)
-      checkAnswer(df, Seq(Row(2), Row(3), Row(4)))
-    }
-  }
 }
 
 case class Foo(bar: Option[String])
