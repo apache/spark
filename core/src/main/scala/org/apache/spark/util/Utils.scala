@@ -1076,16 +1076,25 @@ private[spark] object Utils extends Logging {
 
   /**
    * Get the local machine's hostname.
+   * In case of IPv6, getHostAddress may return '0:0:0:0:0:0:0:1'.
    */
   def localHostName(): String = {
-    customHostname.getOrElse(localIpAddress.getHostAddress)
+    addBracketsIfNeeded(customHostname.getOrElse(localIpAddress.getHostAddress))
   }
 
   /**
    * Get the local machine's URI.
    */
   def localHostNameForURI(): String = {
-    customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
+    addBracketsIfNeeded(customHostname.getOrElse(InetAddresses.toUriString(localIpAddress)))
+  }
+
+  private def addBracketsIfNeeded(addr: String): String = {
+    if (addr.contains(":") && !addr.contains("[")) {
+      "[" + addr + "]"
+    } else {
+      addr
+    }
   }
 
   /**
