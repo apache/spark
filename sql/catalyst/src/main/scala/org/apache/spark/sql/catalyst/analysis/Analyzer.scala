@@ -4340,39 +4340,35 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes all [[TempResolvedColumn]]s in the query plan. This is the last resort, in case some
- * rules in the main resolution batch miss to remove [[TempResolvedColumn]]s. We should run this
- * rule right after the main resolution batch.
+ * The rule `ResolveAggregationFunctions` in the main resolution batch creates
+ * [[TempResolvedColumn]] in filter conditions and sort expressions to hold the temporarily resolved
+ * column with `agg.child`. When filter conditions or sort expressions are resolved,
+ * `ResolveAggregationFunctions` will turn [[TempResolvedColumn]] to [[AttributeReference]] if it's
+ * inside aggregate functions or group expressions, or turn it to [[UnresolvedAttribute]] otherwise,
+ * hoping other rules can resolve it.
+ *
+ * This rule runs after the main resolution batch, and can still hit [[TempResolvedColumn]] if
+ * filter conditions or sort expressions are not resolved. When this happens, there is no point to
+ * turn [[TempResolvedColumn]] to [[UnresolvedAttribute]], as we can't resolve the column
+ * differently, and query will fail. This rule strips all [[TempResolvedColumn]]s in Filter/Sort and
+ * turns them to `AttributeReference` so that the error message can tell users why the filter
+ * conditions or sort expressions were not resolved.
  */
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
       case f @ Filter(cond, agg: Aggregate) if agg.resolved =>
-        withOrigin(f.origin)(f.copy(condition = trimOrRestoreTempResolvedColumn(agg, cond)))
+        withOrigin(f.origin)(f.copy(condition = trimTempResolvedColumn(cond)))
       case s @ Sort(sortOrder, _, agg: Aggregate) if agg.resolved =>
         val newSortOrder = sortOrder.map { order =>
-          trimOrRestoreTempResolvedColumn(agg, order).asInstanceOf[SortOrder]
+          trimTempResolvedColumn(order).asInstanceOf[SortOrder]
         }
         withOrigin(s.origin)(s.copy(order = newSortOrder))
       case other => other.transformExpressionsUp {
+        // This should not happen. We restore TempResolvedColumn to UnresolvedAttribute to be safe.
         case t: TempResolvedColumn => restoreTempResolvedColumn(t)
       }
     }
-  }
-
-  // The code here matches `ResolveAggregateFunctions.buildAggExprList`.
-  private def trimOrRestoreTempResolvedColumn(agg: Aggregate, e: Expression): Expression = e match {
-    case ae: AggregateExpression =>
-      trimTempResolvedColumn(ae)
-    case grouping: Expression
-        if grouping.resolved && agg.groupingExpressions.exists(grouping.semanticEquals) =>
-      trimTempResolvedColumn(grouping)
-    case t: TempResolvedColumn =>
-      // Undo the resolution as this column is neither inside aggregate functions nor a
-      // grouping column. It shouldn't be resolved with `agg.child.output`.
-      restoreTempResolvedColumn(t)
-    case other =>
-      other.withNewChildren(other.children.map(trimOrRestoreTempResolvedColumn(agg, _)))
   }
 
   def trimTempResolvedColumn(input: Expression): Expression = input.transform {
