@@ -32,6 +32,7 @@ import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillD
 import org.apache.spark.deploy.DeployTestUtils._
 import org.apache.spark.deploy.master._
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
+import org.apache.spark.util.Utils
 
 
 class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
@@ -68,7 +69,7 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
 
     when(master.idToApp).thenReturn(HashMap[String, ApplicationInfo]((activeApp.id, activeApp)))
 
-    val url = s"http://localhost:${masterWebUI.boundPort}/app/kill/"
+    val url = s"http://${Utils.localCanonicalHostName()}:${masterWebUI.boundPort}/app/kill/"
     val body = convPostDataToString(Map(("id", activeApp.id), ("terminate", "true")))
     val conn = sendHttpRequest(url, "POST", body)
     conn.getResponseCode
@@ -79,7 +80,7 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("kill driver") {
     val activeDriverId = "driver-0"
-    val url = s"http://localhost:${masterWebUI.boundPort}/driver/kill/"
+    val url = s"http://${Utils.localCanonicalHostName()}:${masterWebUI.boundPort}/driver/kill/"
     val body = convPostDataToString(Map(("id", activeDriverId), ("terminate", "true")))
     val conn = sendHttpRequest(url, "POST", body)
     conn.getResponseCode
@@ -89,7 +90,7 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   private def testKillWorkers(hostnames: Seq[String]): Unit = {
-    val url = s"http://localhost:${masterWebUI.boundPort}/workers/kill/"
+    val url = s"http://${Utils.localCanonicalHostName()}:${masterWebUI.boundPort}/workers/kill/"
     val body = convPostDataToString(hostnames.map(("host", _)))
     val conn = sendHttpRequest(url, "POST", body)
     // The master is mocked here, so cannot assert on the response code
@@ -99,7 +100,7 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Kill one host") {
-    testKillWorkers(Seq("localhost"))
+    testKillWorkers(Seq("${Utils.localCanonicalHostName()}"))
   }
 
   test("Kill multiple hosts") {
