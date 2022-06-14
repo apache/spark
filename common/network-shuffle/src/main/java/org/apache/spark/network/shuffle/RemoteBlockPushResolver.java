@@ -727,7 +727,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                   mergeDir, executorInfo.subDirsPerLocalDir);
               // Clean up the outdated App Attempt local path info in the DB and
               // put the newly registered local path info from newer attempt into the DB.
-              removeAppAttemptPathInfoFromDB(new AppAttemptId(appId, appShuffleInfo.attemptId));
+              if (appShuffleInfo != null) {
+                removeAppAttemptPathInfoFromDB(new AppAttemptId(appId, appShuffleInfo.attemptId));
+              }
               writeAppPathsInfoToDb(appId, attemptId, appPathsInfo);
               appShuffleInfo =
                 new AppShuffleInfo(
