@@ -176,8 +176,8 @@ private[spark] object JsonProtocol {
     taskInfoToJson(taskEnd.taskInfo, g)
     g.writeFieldName("Task Executor Metrics")
     executorMetricsToJson(taskEnd.taskExecutorMetrics, g)
-    g.writeFieldName("Task Metrics")
     Option(taskEnd.taskMetrics).foreach { m =>
+      g.writeFieldName("Task Metrics")
       taskMetricsToJson(m, g)
     }
     g.writeEndObject()
