@@ -40,8 +40,8 @@ class CatalogSuite extends SparkFunSuite {
       .add("id", IntegerType)
       .add("data", StringType)
 
-  private def newCatalog(): InMemoryCatalog = {
-    val newCatalog = new InMemoryCatalog
+  private def newCatalog(): InMemoryFunctionCatalog = {
+    val newCatalog = new InMemoryFunctionCatalog
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }

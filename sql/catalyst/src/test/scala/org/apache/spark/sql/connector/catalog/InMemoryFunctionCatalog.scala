@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, NoSuchNamespaceException}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 
-class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog {
+class InMemoryFunctionCatalog extends InMemoryTableCatalog with FunctionCatalog {
   protected val functions: util.Map[Identifier, UnboundFunction] =
     new ConcurrentHashMap[Identifier, UnboundFunction]()
 

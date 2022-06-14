@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, InMemoryCatalog, InMemoryPartitionTableCatalog, StagingInMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, InMemoryFunctionCatalog, InMemoryPartitionTableCatalog, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -32,11 +32,11 @@ trait DatasourceV2SQLBase
   }
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryFunctionCatalog].getName)
     spark.conf.set("spark.sql.catalog.testpart", classOf[InMemoryPartitionTableCatalog].getName)
     spark.conf.set(
       "spark.sql.catalog.testcat_atomic", classOf[StagingInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryFunctionCatalog].getName)
     spark.conf.set(
       V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
 

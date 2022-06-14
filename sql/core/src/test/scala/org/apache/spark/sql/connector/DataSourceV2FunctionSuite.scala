@@ -28,8 +28,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
-import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryFunctionCatalog, SupportsNamespaces}
+import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -117,7 +117,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 
   private def addFunction(ident: Identifier, fn: UnboundFunction): Unit = {
-    catalog("testcat").asInstanceOf[InMemoryCatalog].createFunction(ident, fn)
+    catalog("testcat").asInstanceOf[InMemoryFunctionCatalog].createFunction(ident, fn)
   }
 
   test("undefined function") {

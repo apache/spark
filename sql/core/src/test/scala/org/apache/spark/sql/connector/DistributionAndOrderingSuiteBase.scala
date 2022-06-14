@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.connector.catalog.InMemoryCatalog
+import org.apache.spark.sql.connector.catalog.InMemoryFunctionCatalog
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -36,7 +36,7 @@ abstract class DistributionAndOrderingSuiteBase
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryFunctionCatalog].getName)
   }
 
   override def afterAll(): Unit = {
@@ -96,8 +96,8 @@ abstract class DistributionAndOrderingSuiteBase
     UnresolvedAttribute(name)
   }
 
-  protected def catalog: InMemoryCatalog = {
+  protected def catalog: InMemoryFunctionCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog("testcat")
-    catalog.asTableCatalog.asInstanceOf[InMemoryCatalog]
+    catalog.asTableCatalog.asInstanceOf[InMemoryFunctionCatalog]
   }
 }

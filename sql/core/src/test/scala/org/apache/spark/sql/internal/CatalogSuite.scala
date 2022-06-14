@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryFunctionCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -120,7 +120,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryFunctionCatalog].getName)
   }
 
   after {
@@ -672,7 +672,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("list tables when there is `default` catalog") {
-    spark.conf.set("spark.sql.catalog.default", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.default", classOf[InMemoryFunctionCatalog].getName)
 
     assert(spark.catalog.listTables("default").collect().isEmpty)
     createTable("my_table1")

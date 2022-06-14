@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryFunctionCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.internal.SQLConf
@@ -64,7 +64,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       N: Long,
       codegenEnabled: Boolean,
       resultNullable: Boolean): Unit = {
-    withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
+    withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryFunctionCatalog].getName) {
       createFunction("java_long_add_default",
         new JavaLongAdd(new JavaLongAddDefault(resultNullable)))
       createFunction("java_long_add_magic", new JavaLongAdd(new JavaLongAddMagic(resultNullable)))
@@ -97,7 +97,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
   private def createFunction(name: String, fn: UnboundFunction): Unit = {
     val catalog = spark.sessionState.catalogManager.catalog(catalogName)
     val ident = Identifier.of(Array.empty, name)
-    catalog.asInstanceOf[InMemoryCatalog].createFunction(ident, fn)
+    catalog.asInstanceOf[InMemoryFunctionCatalog].createFunction(ident, fn)
   }
 
   case class NativeAdd(

@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
@@ -489,7 +490,7 @@ class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession 
   }
 }
 
-class OneTableCatalog extends InMemoryCatalog {
+class OneTableCatalog extends BasicInMemoryTableCatalog {
   override def loadTable(ident: Identifier): Table = {
     if (ident.namespace.isEmpty && ident.name == "t") {
       new InMemoryTable(
@@ -498,7 +499,7 @@ class OneTableCatalog extends InMemoryCatalog {
         Array.empty,
         Map.empty[String, String].asJava)
     } else {
-      super.loadTable(ident)
+      throw new NoSuchTableException(ident)
     }
   }
 }
