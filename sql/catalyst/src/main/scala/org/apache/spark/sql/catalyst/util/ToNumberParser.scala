@@ -403,6 +403,9 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     parsedAfterDecimalPoint.clear()
     // Tracks whether we've reached the decimal point yet in either parsing or formatting.
     var reachedDecimalPoint = false
+    // Record whether we have consumed opening angle bracket characters in the input string.
+    var reachedOpeningAngleBracket = false
+    var reachedClosingAngleBracket = false
     // Record whether the input specified a negative result, such as with a minus sign.
     var negateResult = false
     // This is an index into the characters of the provided input string.
@@ -413,66 +416,79 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     // Iterate through the tokens representing the provided format string, in order.
     while (formatIndex < formatTokens.size) {
       val token: InputToken = formatTokens(formatIndex)
+      val inputChar: Option[Char] =
+        if (inputIndex < inputLength) {
+          Some(inputString(inputIndex))
+        } else {
+          Option.empty[Char]
+        }
       token match {
         case d: DigitGroups =>
           inputIndex = parseDigitGroups(d, inputString, inputIndex, reachedDecimalPoint).getOrElse(
             return formatMatchFailure(input, numberFormat))
         case DecimalPoint() =>
-          if (inputIndex < inputLength &&
-            inputString(inputIndex) == POINT_SIGN) {
-            reachedDecimalPoint = true
-            inputIndex += 1
-          } else {
-            // There is no decimal point. Consume the token and remain at the same character in the
-            // input string.
+          inputChar.foreach {
+            case POINT_SIGN =>
+              reachedDecimalPoint = true
+              inputIndex += 1
+            case _ =>
+              // There is no decimal point. Consume the token and remain at the same character in
+              // the input string.
           }
         case DollarSign() =>
-          if (inputIndex >= inputLength ||
-            inputString(inputIndex) != DOLLAR_SIGN) {
-            // The input string did not contain an expected dollar sign.
-            return formatMatchFailure(input, numberFormat)
+          inputChar.foreach {
+            case DOLLAR_SIGN =>
+              inputIndex += 1
+            case _ =>
+              // The input string did not contain an expected dollar sign.
+              return formatMatchFailure(input, numberFormat)
           }
-          inputIndex += 1
         case OptionalPlusOrMinusSign() =>
-          if (inputIndex < inputLength &&
-            inputString(inputIndex) == PLUS_SIGN) {
-            inputIndex += 1
-          } else if (inputIndex < inputLength &&
-            inputString(inputIndex) == MINUS_SIGN) {
-            negateResult = !negateResult
-            inputIndex += 1
-          } else {
-            // There is no plus or minus sign. Consume the token and remain at the same character in
-            // the input string.
+          inputChar.foreach {
+            case PLUS_SIGN =>
+              inputIndex += 1
+            case MINUS_SIGN =>
+              negateResult = !negateResult
+              inputIndex += 1
+            case _ =>
+              // There is no plus or minus sign. Consume the token and remain at the same character
+              // in the input string.
           }
         case OptionalMinusSign() =>
-          if (inputIndex < inputLength &&
-            inputString(inputIndex) == MINUS_SIGN) {
-            negateResult = !negateResult
-            inputIndex += 1
-          } else {
-            // There is no minus sign. Consume the token and remain at the same character in the
-            // input string.
+          inputChar.foreach {
+            case MINUS_SIGN =>
+              negateResult = !negateResult
+              inputIndex += 1
+            case _ =>
+              // There is no minus sign. Consume the token and remain at the same character in the
+              // input string.
           }
         case OpeningAngleBracket() =>
-          if (inputIndex >= inputLength ||
-            inputString(inputIndex) != ANGLE_BRACKET_OPEN) {
-            // The input string did not contain an expected opening angle bracket.
-            return formatMatchFailure(input, numberFormat)
+          inputChar.foreach {
+            case ANGLE_BRACKET_OPEN =>
+              if (reachedOpeningAngleBracket) {
+                return formatMatchFailure(input, numberFormat)
+              }
+              reachedOpeningAngleBracket = true
+              inputIndex += 1
+            case _ =>
           }
-          inputIndex += 1
         case ClosingAngleBracket() =>
-          if (inputIndex >= inputLength ||
-            inputString(inputIndex) != ANGLE_BRACKET_CLOSE) {
-            // The input string did not contain an expected closing angle bracket.
-            return formatMatchFailure(input, numberFormat)
+          inputChar.foreach {
+            case ANGLE_BRACKET_CLOSE =>
+              if (!reachedOpeningAngleBracket) {
+                return formatMatchFailure(input, numberFormat)
+              }
+              reachedClosingAngleBracket = true
+              negateResult = !negateResult
+              inputIndex += 1
+            case _ =>
           }
-          negateResult = !negateResult
-          inputIndex += 1
       }
       formatIndex += 1
     }
-    if (inputIndex < inputLength) {
+    if (inputIndex < inputLength ||
+      reachedOpeningAngleBracket != reachedClosingAngleBracket) {
       // If we have consumed all the tokens in the format string, but characters remain unconsumed
       // in the input string, then the input string does not match the format string.
       formatMatchFailure(input, numberFormat)
