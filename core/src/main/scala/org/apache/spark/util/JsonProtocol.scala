@@ -647,7 +647,9 @@ private[spark] object JsonProtocol {
     g.writeStartObject()
     g.writeNumberField("RDD ID", rddInfo.id)
     g.writeStringField("Name", rddInfo.name)
-    ("Scope", rddInfo.scope.map(_.toJson))
+    rddInfo.scope.foreach { s =>
+      g.writeStringField("Scope", s.toJson)
+    }
     g.writeStringField("Callsite", rddInfo.callSite)
     g.writeArrayFieldStart("Parent IDs")
     rddInfo.parentIds.foreach(g.writeNumber)
