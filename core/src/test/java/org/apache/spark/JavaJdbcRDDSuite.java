@@ -33,7 +33,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class JavaJdbcRDDSuite implements Serializable {
-  private String dbName = UUID.randomUUID().toString();
+  private String dbName = "db_" + UUID.randomUUID().toString().replace('-', '_');
   private transient JavaSparkContext sc;
 
   @Before
