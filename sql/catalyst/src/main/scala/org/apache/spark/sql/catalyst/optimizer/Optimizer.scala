@@ -132,7 +132,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
         CombineConcats,
-        PushdownPredicatesAndPruneColumnsForCTEDef) ++
+        PushdownPredicatesAndPruneColumnsForCTEDef,
+        ConvertInnerJoinToSemiJoin) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
