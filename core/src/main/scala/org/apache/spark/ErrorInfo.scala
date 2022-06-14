@@ -48,9 +48,10 @@ private[spark] case class ErrorSubInfo(message: Seq[String]) {
  * @param message C-style message format compatible with printf.
  *                The error message is constructed by concatenating the lines with newlines.
  */
-private[spark] case class ErrorInfo(message: Seq[String],
-                                    subClass: Option[Map[String, ErrorSubInfo]],
-                                    sqlState: Option[String]) {
+private[spark] case class ErrorInfo(
+    message: Seq[String],
+    subClass: Option[Map[String, ErrorSubInfo]],
+    sqlState: Option[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
   val messageFormat: String = message.mkString("\n")
