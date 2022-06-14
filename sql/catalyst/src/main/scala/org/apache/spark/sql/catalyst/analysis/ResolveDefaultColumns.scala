@@ -358,7 +358,7 @@ case class ResolveDefaultColumns(
     val updated: Seq[Seq[Expression]] = {
       table.rows.map { row: Seq[Expression] =>
         for {
-          i <- 0 until row.size
+          i <- row.indices
           expr = row(i)
           defaultExpr = if (i < defaultExpressions.size) defaultExpressions(i) else Literal(null)
         } yield replaceExplicitDefaultReferenceInExpression(
@@ -384,7 +384,7 @@ case class ResolveDefaultColumns(
     var replaced = false
     val updated: Seq[NamedExpression] = {
       for {
-        i <- 0 until project.projectList.size
+        i <- project.projectList.indices
         projectExpr = project.projectList(i)
         defaultExpr = if (i < defaultExpressions.size) defaultExpressions(i) else Literal(null)
       } yield replaceExplicitDefaultReferenceInExpression(

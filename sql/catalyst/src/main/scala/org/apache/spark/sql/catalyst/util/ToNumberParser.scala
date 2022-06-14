@@ -532,7 +532,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       // The input contains more thousands separators than the format string.
       return None
     }
-    for (i <- 0 until expectedDigits.length) {
+    for (i <- expectedDigits.indices) {
       val expectedToken: Digits = expectedDigits(i)
       val actualNumDigits: Int =
         if (i < parsedDigitGroupSizes.length) {
