@@ -263,16 +263,6 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       .stageStart(meq(retriedStage.head), any())
     verify(sc.env.outputCommitCoordinator).stageEnd(meq(retriedStage.head))
   }
-
-  test("SPARK-39195: Spark OutputCommitCoordinator should abort stage " +
-    "when committed file not consistent with task status") {
-    val e = intercept[SparkException] {
-      val rdd = sc.parallelize(Seq(1, 2, 3, 4, 5), 5)
-      sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
-        0 until rdd.partitions.size)
-    }.getMessage
-    assert(e.endsWith("failed; but task commit success, data duplication may happen."))
-  }
 }
 
 /**
