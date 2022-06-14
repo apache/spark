@@ -185,7 +185,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
       errorHandler.read(out)
     }
 
-    val e = intercept[SparkException] {
+    val e = intercept[SparkIOException] {
       errorHandler.read(out)
     }
     assert(e.getErrorClass === "STREAM_CLOSED")

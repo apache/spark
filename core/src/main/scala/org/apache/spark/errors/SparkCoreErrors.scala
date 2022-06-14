@@ -22,7 +22,7 @@ import java.util.concurrent.TimeoutException
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskNotSerializableException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIOException, TaskNotSerializableException}
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
@@ -332,7 +332,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def streamClosed(streamType: String): Throwable = {
-    new SparkException(errorClass = "STREAM_CLOSED",
-      messageParameters = Array(streamType), cause = null)
+    new SparkIOException(errorClass = "STREAM_CLOSED",
+      messageParameters = Array(streamType))
   }
 }
