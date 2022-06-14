@@ -17,18 +17,22 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util
 import java.util.Collections
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.net.{Node, NodeBase}
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -43,6 +47,7 @@ import org.apache.spark.resource.ResourceUtils.{AMOUNT, GPU}
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
 import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
@@ -63,6 +68,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   sparkConf.set(DRIVER_PORT, 4040)
   sparkConf.set(SPARK_JARS, Seq("notarealjar.jar"))
   sparkConf.set("spark.yarn.launchContainers", "false")
+  sparkConf.set(DECOMMISSION_ENABLED.key, "true")
 
   val appAttemptId = ApplicationAttemptId.newInstance(ApplicationId.newInstance(0, 0), 0)
 
@@ -80,6 +86,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   val RM_REQUEST_PRIORITY = Priority.newInstance(0)
   val defaultRPId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
   var defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+
+  var rpcEndPoint: RpcEndpointRef = _
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -122,9 +130,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     ResourceProfile.clearDefaultProfile()
     defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConfClone)
 
+    rpcEndPoint = mock(classOf[RpcEndpointRef])
     val allocator = new YarnAllocator(
       "not used",
-      mock(classOf[RpcEndpointRef]),
+      rpcEndPoint,
       conf,
       sparkConfClone,
       rmClient,
@@ -734,5 +743,77 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     } finally {
       sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
     }
+  }
+
+  test("Test YARN container decommissioning") {
+    val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
+    val rmClientSpy = spy(rmClient)
+    val allocateResponse = mock(classOf[AllocateResponse])
+    val (handler, sparkConfClone) = createAllocator(3, rmClientSpy)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    val container3 = createContainer("host3")
+    val containerList =
+      new util.ArrayList[Container](Seq(container1, container2, container3).asJava)
+
+    // Return 3 containers allocated by YARN for the first heart beat
+    when(allocateResponse.getAllocatedContainers).thenReturn(containerList)
+
+    // No nodes are in DECOMMISSIONING state in the first heart beat so return empty list
+    when(allocateResponse.getUpdatedNodes).thenReturn(new util.ArrayList[NodeReport]())
+    // when().thenReturn doesn't work on spied class. We will use doAnswer for this.
+    val allocateResponseAnswer = new Answer[AnyRef]() {
+      @throws[Throwable]
+      override def answer(invocationOnMock: InvocationOnMock): AllocateResponse = {
+        allocateResponse
+      }
+    }
+    doAnswer(allocateResponseAnswer).when(rmClientSpy)
+      .allocate(org.mockito.ArgumentMatchers.anyFloat())
+
+    handler.allocateResources()
+    // No DecommissionExecutor message should be sent
+    verify(rpcEndPoint, times(0)).
+      send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
+
+    handler.getNumExecutorsRunning should be (3)
+    handler.allocatedContainerToHostMap(container1.getId) should be ("host1")
+    handler.allocatedContainerToHostMap(container2.getId) should be ("host2")
+    handler.allocatedContainerToHostMap(container3.getId) should be ("host3")
+    val allocatedHostToContainersMap = handler.allocatedHostToContainersMapPerRPId(defaultRPId)
+    allocatedHostToContainersMap("host1") should contain (container1.getId)
+    allocatedHostToContainersMap("host2") should contain (container2.getId)
+    allocatedHostToContainersMap("host3") should contain (container3.getId)
+
+    // No new containers in this heartbeat
+    when(allocateResponse.getAllocatedContainers).thenReturn(new util.ArrayList[Container]())
+    val nodeReport = mock(classOf[NodeReport])
+    val nodeId = mock(classOf[NodeId])
+    val nodeReportList = new util.ArrayList[NodeReport](Seq(nodeReport).asJava)
+
+    // host1 is now in DECOMMISSIONING state
+    val httpAddress1 = "host1:420"
+    when(nodeReport.getNodeState).thenReturn(NodeState.DECOMMISSIONING)
+    when(nodeReport.getNodeId).thenReturn(nodeId)
+    when(nodeId.getHost).thenReturn("host1")
+    when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)
+
+    handler.allocateResources()
+    verify(rpcEndPoint, times(1)).
+      send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
+
+    // Test with config disabled
+    sparkConf.remove(DECOMMISSION_ENABLED.key)
+
+    // host2 is now in DECOMMISSIONING state
+    val httpAddress2 = "host2:420"
+    when(nodeReport.getNodeId).thenReturn(nodeId)
+    when(nodeId.getHost).thenReturn("host2")
+    when(nodeReport.getNodeId).thenReturn(nodeId)
+
+    // No DecommissionExecutor message should be sent when config is set to false
+    verify(rpcEndPoint, times(1)).
+      send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
   }
 }

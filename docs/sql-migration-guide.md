@@ -65,6 +65,8 @@ license: |
   - Since Spark 3.3, when reading values from a JSON attribute defined as `FloatType` or `DoubleType`, the strings `"+Infinity"`, `"+INF"`, and `"-INF"` are now parsed to the appropriate values, in addition to the already supported `"Infinity"` and `"-Infinity"` variations. This change was made to improve consistency with Jackson's parsing of the unquoted versions of these values. Also, the `allowNonNumericNumbers` option is now respected so these strings will now be considered invalid if this option is disabled.
 
   - Since Spark 3.3, Spark will try to use built-in data source writer instead of Hive serde in `INSERT OVERWRITE DIRECTORY`. This behavior is effective only if `spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is enabled respectively for Parquet and ORC formats. To restore the behavior before Spark 3.3, you can set `spark.sql.hive.convertMetastoreInsertDir` to `false`.
+  
+  - Since Spark 3.3, the precision of the return type of round-like functions has been fixed. This may cause Spark throw `AnalysisException` of the `CANNOT_UP_CAST_DATATYPE` error class when using views created by prior versions. In such cases, you need to recreate the views using ALTER VIEW AS or CREATE OR REPLACE VIEW AS with newer Spark versions.
 
 ## Upgrading from Spark SQL 3.1 to 3.2
 

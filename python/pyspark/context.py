@@ -679,10 +679,10 @@ class SparkContext:
         data: Iterable[T],
         serializer: Serializer,
         reader_func: Callable,
-        createRDDServer: Callable,
+        server_func: Callable,
     ) -> JavaObject:
         """
-        Using py4j to send a large dataset to the jvm is really slow, so we use either a file
+        Using Py4J to send a large dataset to the jvm is slow, so we use either a file
         or a socket if we have encryption enabled.
 
         Examples
@@ -693,13 +693,13 @@ class SparkContext:
         reader_func : function
             A function which takes a filename and reads in the data in the jvm and
             returns a JavaRDD. Only used when encryption is disabled.
-        createRDDServer : function
-            A function which creates a PythonRDDServer in the jvm to
+        server_func : function
+            A function which creates a SocketAuthServer in the JVM to
             accept the serialized data, for use when encryption is enabled.
         """
         if self._encryption_enabled:
             # with encryption, we open a server in java and send the data directly
-            server = createRDDServer()
+            server = server_func()
             (sock_file, _) = local_connect_and_auth(server.port(), server.secret())
             chunked_out = ChunkedStream(sock_file, 8192)
             serializer.dump_stream(data, chunked_out)

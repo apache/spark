@@ -28,7 +28,7 @@ import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer.{extraHintForAnsiTypeCoercionExpression, DATA_TYPE_MISMATCH_ERROR}
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer.DATA_TYPE_MISMATCH_ERROR_MESSAGE
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions.{Expression, FrameLessOffsetWindowFunction, _}
@@ -1070,7 +1070,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupRelation(u).map(resolveViews).getOrElse(u)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
-          if timestamp.forall(_.resolved) =>
+          if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
         lookupRelation(u, TimeTravelSpec.create(timestamp, version, conf)).getOrElse(r)
 
       case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
@@ -2494,6 +2494,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q)
+      case r: RelationTimeTravel =>
+        resolveSubQueries(r, r)
       case j: Join if j.childrenResolved && j.duplicateResolved =>
         resolveSubQueries(j, j)
       case s: SupportsSubquery if s.childrenResolved =>
@@ -2778,7 +2780,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
         val generators = projectList.filter(hasGenerator).map(trimAlias)
-        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "select")
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
       case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
@@ -3422,9 +3424,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         i.userSpecifiedCols, "in the column list", resolver)
 
       i.userSpecifiedCols.map { col =>
-          i.table.resolve(Seq(col), resolver)
-            .getOrElse(throw QueryCompilationErrors.cannotResolveUserSpecifiedColumnsError(
-              col, i.table))
+        i.table.resolve(Seq(col), resolver)
+          .getOrElse(i.failAnalysis(
+            errorClass = "MISSING_COLUMN",
+            messageParameters = Array(col, i.table.output.map(_.name).mkString(", "))))
       }
     }
 
@@ -4359,10 +4362,7 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
           case e: Expression if e.childrenResolved && e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case TypeCheckResult.TypeCheckFailure(message) =>
-                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
-                e.failAnalysis(
-                  s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
-                    extraHintForAnsiTypeCoercionExpression(plan))
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR_MESSAGE, message)
             }
           case _ =>
         })

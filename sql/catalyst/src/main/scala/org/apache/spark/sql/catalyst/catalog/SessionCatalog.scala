@@ -965,6 +965,10 @@ class SessionCatalog(
     isTempView(nameParts.asTableIdentifier)
   }
 
+  def isGlobalTempViewDB(dbName: String): Boolean = {
+    globalTempViewManager.database.equals(dbName)
+  }
+
   def lookupTempView(name: TableIdentifier): Option[View] = {
     val tableName = formatTableName(name.table)
     if (name.database.isEmpty) {

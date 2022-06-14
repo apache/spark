@@ -49,7 +49,7 @@ case class DescribeNamespaceExec(
         if (properties.isEmpty) {
           ""
         } else {
-          properties.toSeq.sortBy(_._1).mkString("(", ", ", ")")
+          conf.redactOptions(properties.toMap).toSeq.sortBy(_._1).mkString("(", ", ", ")")
         }
       rows += toCatalystRow("Properties", propertiesStr)
     }

@@ -58,15 +58,15 @@ TakeOrderedAndProject [cnt,ca_state,state]
                       BroadcastExchange #6
                         WholeStageCodegen (6)
                           Project [i_item_sk]
-                            Filter [i_current_price,avg(i_current_price)]
-                              BroadcastHashJoin [i_category,i_category]
-                                Filter [i_current_price,i_item_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.item [i_item_sk,i_current_price,i_category]
-                                InputAdapter
-                                  BroadcastExchange #7
-                                    WholeStageCodegen (5)
+                            BroadcastHashJoin [i_category,i_category,i_current_price,avg(i_current_price)]
+                              Filter [i_current_price,i_category,i_item_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.item [i_item_sk,i_current_price,i_category]
+                              InputAdapter
+                                BroadcastExchange #7
+                                  WholeStageCodegen (5)
+                                    Filter [avg(i_current_price)]
                                       HashAggregate [i_category,sum,count] [avg(UnscaledValue(i_current_price)),avg(i_current_price),sum,count]
                                         InputAdapter
                                           Exchange [i_category] #8
