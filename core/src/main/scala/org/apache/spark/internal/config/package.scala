@@ -2084,7 +2084,7 @@ package object config {
       .createWithDefault(true)
 
   private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER =
-    ConfigBuilder("spark.speculation.efficiency.process.multiplier")
+    ConfigBuilder("spark.speculation.efficiency.processMultiplier")
       .doc("A multiplier for evaluating the efficiency of task processing. A task is inefficient " +
         "when its data process rate is less than the average data process rate of all " +
         "successful tasks in the stage multiplied by the multiplier.")
@@ -2094,7 +2094,7 @@ package object config {
       .createWithDefault(0.75)
 
   private[spark] val SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR =
-    ConfigBuilder("spark.speculation.efficiency.duration.factor")
+    ConfigBuilder("spark.speculation.efficiency.durationFactor")
       .doc(s"When a task duration is large than the factor multiplied by the threshold which " +
         s"may be ${SPECULATION_MULTIPLIER.key} * successfulTaskDurations.median or " +
         s"${SPECULATION_TASK_DURATION_THRESHOLD.key}, and it should be considered for " +

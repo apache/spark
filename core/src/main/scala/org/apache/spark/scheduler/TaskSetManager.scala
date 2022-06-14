@@ -1087,7 +1087,6 @@ private[spark] class TaskSetManager(
   private def checkAndSubmitSpeculatableTasks(
       currentTimeMillis: Long,
       threshold: Double,
-      numSuccessfulTasks: Int,
       customizedThreshold: Boolean = false): Boolean = {
     var foundTasksResult = false
     for (tid <- runningTasksSet) {
@@ -1105,8 +1104,9 @@ private[spark] class TaskSetManager(
           }
         }
 
-        def shouldSpeculateForExecutorDecomissioning(): Boolean = {
-          executorDecommissionKillInterval.isDefined && !successfulTaskDurations.isEmpty() &&
+        def shouldSpeculateForExecutorDecommissioning(): Boolean = {
+          !customizedThreshold && executorDecommissionKillInterval.isDefined &&
+            !successfulTaskDurations.isEmpty() &&
             sched.getExecutorDecommissionState(info.executorId).exists { decomState =>
               // Check if this task might finish after this executor is decommissioned.
               // We estimate the task's finish time by using the median task duration.
@@ -1120,7 +1120,7 @@ private[spark] class TaskSetManager(
             }
         }
         val speculated = (runtimeMs > threshold) && checkMaySpeculate() ||
-          shouldSpeculateForExecutorDecomissioning()
+          shouldSpeculateForExecutorDecommissioning()
         if (speculated) {
           addPendingTask(index, speculatable = true)
           logInfo(
@@ -1162,12 +1162,11 @@ private[spark] class TaskSetManager(
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
-      foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold, numSuccessfulTasks)
+      foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold)
     } else if (isSpeculationThresholdSpecified && speculationTasksLessEqToSlots) {
       val threshold = speculationTaskDurationThresOpt.get
       logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")
-      foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold, numSuccessfulTasks,
-        customizedThreshold = true)
+      foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold, customizedThreshold = true)
     }
     // avoid more warning logs.
     if (foundTasks) {
@@ -1251,8 +1250,9 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * A class for checking inefficient tasks to be speculated, the inefficient tasks come from
-   * the tasks which may be speculated by the previous strategy.
+   * A class for checking inefficient tasks to be speculated, a task is inefficient when its data
+   * process rate is less than the average data process rate of all successful tasks in the stage
+   * multiplied by a multiplier.
    */
   private[TaskSetManager] class TaskProcessRateCalculator {
     private var totalRecordsRead = 0L
@@ -1307,7 +1307,7 @@ private[spark] class TaskSetManager(
         val isInefficientTask = currentTaskProcessRate < taskProcessThreshold
         if (isInefficientTask) {
           logInfo(s"Marking task ${taskInfo.index} in stage ${taskSet.id} " +
-            s"(on ${taskInfo.host}) as speculatable because it ran ${runtimeMs}ms and " +
+            s"(on ${taskInfo.host}) as inenfficient because it ran ${runtimeMs}ms and " +
             s"it's process rate ($currentTaskProcessRate) is less than ($taskProcessThreshold).")
         }
         isInefficientTask
