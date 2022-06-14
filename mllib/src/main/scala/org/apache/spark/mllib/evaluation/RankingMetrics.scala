@@ -164,7 +164,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
           val useBinary = rel.isEmpty
           val labSet = lab.toSet
           val relMap = (lab zip rel).toMap
-          if (lab.size != rel.size) {
+          if (useBinary && lab.size != rel.size) {
             logWarning(
               "# of ground truth set and # of relevance value set should be equal, " +
                 "check input data")
@@ -188,7 +188,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
                   maxDcg += gain
                 }
               } else {
-                if (i < pred.length && labSet.contains(pred(i))) {
+                if (i < pred.length) {
                   dcg += (math.pow(2.0, relMap.getOrElse(pred(i), 0.0)) - 1) / math.log(i + 2)
                 }
                 if (i < labSetSize) {
