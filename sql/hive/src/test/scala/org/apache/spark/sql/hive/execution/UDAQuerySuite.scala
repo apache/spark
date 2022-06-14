@@ -116,14 +116,14 @@ object ArrayDataAgg extends Aggregator[Array[Double], Array[Double], Array[Doubl
   def zero: Array[Double] = Array(0.0, 0.0, 0.0)
   def reduce(s: Array[Double], array: Array[Double]): Array[Double] = {
     require(s.length == array.length)
-    for ( j <- 0 until s.length ) {
+    for ( j <- s.indices) {
       s(j) += array(j)
     }
     s
   }
   def merge(s1: Array[Double], s2: Array[Double]): Array[Double] = {
     require(s1.length == s2.length)
-    for ( j <- 0 until s1.length ) {
+    for ( j <- s1.indices) {
       s1(j) += s2(j)
     }
     s1

@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvableNullability}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 
 case class TryEval(child: Expression) extends UnaryExpression with NullIntolerant {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -51,6 +54,87 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
+}
+
+/**
+ * A special version of [[Cast]] with ansi mode on. It performs the same operation (i.e. converts a
+ * value of one data type into another data type), but returns a NULL value instead of raising an
+ * error when the conversion can not be performed.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.
+      This expression is identical to CAST with configuration `spark.sql.ansi.enabled` as
+      true, except it returns NULL instead of raising an error. Note that the behavior of this
+      expression doesn't depend on configuration `spark.sql.ansi.enabled`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('10' as int);
+       10
+      > SELECT _FUNC_(1234567890123L as int);
+       null
+  """,
+  since = "3.2.0",
+  group = "conversion_funcs")
+case class TryCast(child: Expression, toType: DataType, timeZoneId: Option[String] = None)
+  extends UnaryExpression with RuntimeReplaceable with TimeZoneAwareExpression {
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+
+  // When this cast involves TimeZone, it's only resolved if the timeZoneId is set;
+  // Otherwise behave like Expression.resolved.
+  override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess &&
+    (!Cast.needsTimeZone(child.dataType, toType) || timeZoneId.isDefined)
+
+  override lazy val replacement = {
+    TryEval(Cast(child, toType, timeZoneId = timeZoneId, ansiEnabled = true))
+  }
+
+  // If the target data type is a complex type which can't have Null values, we should guarantee
+  // that the casting between the element types won't produce Null results.
+  private def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      canCast(fromType, toType) &&
+        resolvableNullability(fn || forceNullable(fromType, toType), tn)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      canCast(fromKey, toKey) &&
+        (!forceNullable(fromKey, toKey)) &&
+        canCast(fromValue, toValue) &&
+        resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (fromField, toField) =>
+            canCast(fromField.dataType, toField.dataType) &&
+              resolvableNullability(
+                fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
+                toField.nullable)
+        }
+
+    case _ =>
+      Cast.canAnsiCast(from, to)
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (canCast(child.dataType, dataType)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(Cast.typeCheckFailureMessage(child.dataType, toType, None))
+    }
+  }
+
+  override def toString: String = s"try_cast($child as ${dataType.simpleString})"
+
+  override def sql: String = s"TRY_CAST(${child.sql} AS ${dataType.sql})"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit

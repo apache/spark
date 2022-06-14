@@ -449,7 +449,7 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.driver.log.layout</code></td>
-  <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n</td>
+  <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n%ex</td>
   <td>
     The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
     it uses the layout for the first appender defined in log4j2.properties. If that is also not configured, driver logs
@@ -1436,6 +1436,14 @@ Apart from these, the following properties are also available, and may be useful
     This setting applies for the Spark History Server too.
   </td>
   <td>2.2.3</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timelineEnabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to display event timeline data on UI pages.
+  </td>
+  <td>3.4.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.timeline.executors.maximum</code></td>
@@ -2719,7 +2727,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.shuffleTracking.enabled</code></td>
   <td><code>false</code></td>
   <td>
-    Experimental. Enables shuffle file tracking for executors, which allows dynamic allocation
+    Enables shuffle file tracking for executors, which allows dynamic allocation
     without the need for an external shuffle service. This option will try to keep alive executors
     that are storing shuffle data for active jobs.
   </td>

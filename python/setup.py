@@ -266,6 +266,7 @@ try:
             'sql': [
                 'pandas>=%s' % _minimum_pandas_version,
                 'pyarrow>=%s' % _minimum_pyarrow_version,
+                'numpy>=1.15',
             ],
             'pandas_on_spark': [
                 'pandas>=%s' % _minimum_pandas_version,

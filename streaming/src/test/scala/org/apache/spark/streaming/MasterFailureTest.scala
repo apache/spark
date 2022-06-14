@@ -369,7 +369,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
     val maxTries = 3
     try {
       Thread.sleep(5000) // To make sure that all the streaming context has been set up
-      for (i <- 0 until input.size) {
+      for (i <- input.indices) {
         // Write the data to a local file and then move it to the target test directory
         val localFile = new File(localTestDir, (i + 1).toString)
         val hadoopFile = new Path(testDir, (i + 1).toString)

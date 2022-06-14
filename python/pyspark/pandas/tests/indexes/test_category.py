@@ -82,7 +82,11 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         pidx.categories = ["z", "y", "x"]
         psidx.categories = ["z", "y", "x"]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
+        # Pandas deprecated all the in-place category-setting behaviors, dtypes also not be
+        # refreshed in categories.setter since Pandas 1.4+, we should also consider to clean up
+        # this test when in-place category-setting removed:
+        # https://github.com/pandas-dev/pandas/issues/46820
+        if LooseVersion("1.4") >= LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             self.assert_eq(pidx, psidx)
             self.assert_eq(pdf, psdf)
         else:
