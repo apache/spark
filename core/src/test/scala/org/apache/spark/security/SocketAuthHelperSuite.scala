@@ -22,7 +22,7 @@ import java.net._
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -48,7 +48,7 @@ class SocketAuthHelperSuite extends SparkFunSuite {
     Utils.tryWithResource(new ServerThread()) { server =>
       Utils.tryWithResource(server.createClient()) { client =>
         val badHelper = new SocketAuthHelper(new SparkConf().set(AUTH_SECRET_BIT_LENGTH, 128))
-        val exception = intercept[SparkException] {
+        val exception = intercept[SparkIllegalArgumentException] {
           badHelper.authToServer(client)
         }
         assert(exception.getErrorClass === "AUTHENTICATION_FAILED")
@@ -71,7 +71,7 @@ class SocketAuthHelperSuite extends SparkFunSuite {
     when(mockedSocket.getInputStream()).thenReturn(in)
     when(mockedSocket.getOutputStream()).thenReturn(out)
     val helper = new SocketAuthHelper(new SparkConf().set(AUTH_SECRET_BIT_LENGTH, 128))
-    val exception = intercept[SparkException] {
+    val exception = intercept[SparkIllegalArgumentException] {
       helper.authClient(mockedSocket)
     }
     assert(exception.getErrorClass === "AUTHENTICATION_FAILED")

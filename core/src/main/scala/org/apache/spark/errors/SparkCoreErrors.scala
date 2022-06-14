@@ -22,7 +22,7 @@ import java.util.concurrent.TimeoutException
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, TaskNotSerializableException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskNotSerializableException}
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
@@ -327,8 +327,8 @@ private[spark] object SparkCoreErrors {
   }
 
   def authenticationFailedError(hostType: String): Throwable = {
-    new SparkException(errorClass = "AUTHENTICATION_FAILED",
-      messageParameters = Array(hostType), cause = null)
+    new SparkIllegalArgumentException(errorClass = "AUTHENTICATION_FAILED",
+      messageParameters = Array(hostType))
   }
 
   def streamClosed(streamType: String): Throwable = {
