@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
@@ -24,16 +25,24 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, PROJECT}
 
-object ConvertInnerJoinToSemiJoin extends Rule[LogicalPlan] with PredicateHelper {
+object ConvertInnerJoinToSemiJoin
+  extends Rule[LogicalPlan]
+  with PredicateHelper
+  with SQLConfHelper
+  with JoinSelectionHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAllPatterns(PROJECT, JOIN)) {
     case p @ Project(_, j @ ExtractEquiJoinKeys(_, _, _, nonEquiCond, _, _, agg: Aggregate, _))
-        if innerEqualJoin(j, nonEquiCond) & canTransform(agg, j, p) =>
+        if innerEqualJoin(j, nonEquiCond) &&
+          !canBroadcastBySize(agg, conf) &&
+          canTransform(agg, j, p) =>
       // eliminate the agg, replace it with a project with all its expressions
       p.copy(child = j.copy(
         joinType = LeftSemi, right = Project(agg.aggregateExpressions, agg.child)))
     case p @ Project(_, j @ ExtractEquiJoinKeys(_, _, _, nonEquiCond, _, agg: Aggregate, _, _))
-      if innerEqualJoin(j, nonEquiCond) & canTransform(agg, j, p) =>
+      if innerEqualJoin(j, nonEquiCond) &&
+        !canBroadcastBySize(agg, conf) &&
+        canTransform(agg, j, p) =>
       // eliminate the agg, replace it with a project with all its expressions
       // it will swap the join order from inner join(left, right) to semi join(right, left)
       p.copy(child = j.copy(
