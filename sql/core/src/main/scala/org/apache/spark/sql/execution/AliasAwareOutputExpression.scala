@@ -32,7 +32,7 @@ trait AliasAwareOutputExpression extends UnaryExecNode {
   protected def hasAlias: Boolean = aliasMap.nonEmpty
 
   protected def normalizeExpression(exp: Expression): Expression = {
-    exp.transform {
+    exp.transformDown {
       case e: Expression => aliasMap.getOrElse(e.canonicalized, e)
     }
   }
