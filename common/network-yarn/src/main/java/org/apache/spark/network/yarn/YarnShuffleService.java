@@ -245,6 +245,9 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
+      // Create new MergedShuffleFileManager if shuffleMergeManager is null.
+      // As in UT, a customized MergedShuffleFileManager will be created through
+      // setShuffleFileManager method.
       if (shuffleMergeManager == null) {
         shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
       }
@@ -299,6 +302,10 @@ public class YarnShuffleService extends AuxiliaryService {
     }
   }
 
+  /**
+   * Set the customized MergedShuffleFileManager for unit testing only
+   * @param mergeManager
+   */
   @VisibleForTesting
   void setShuffleMergeManager(MergedShuffleFileManager mergeManager) {
     this.shuffleMergeManager = mergeManager;

@@ -1161,8 +1161,10 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeleteOutdatedPartitions(Map<Integer, AppShufflePartitionInfo> partitions) {
-        super.closeAndDeleteOutdatedPartitions(partitions);
+      void closeAndDeleteOutdatedPartitions(
+          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+          Map<Integer, AppShufflePartitionInfo> partitions) {
+        super.closeAndDeleteOutdatedPartitions(appAttemptShuffleMergeId, partitions);
         closed.release();
       }
     };
