@@ -274,7 +274,7 @@ class QueryExecutionErrorsSuite extends QueryTest
         Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
       }
       assert(e1.getErrorClass === "UNSUPPORTED_SAVE_MODE")
-      assert(e1.getMessage === "The save mode NULL is not supported for: a not existent path.")
+      assert(e1.getMessage === "The save mode NULL is not supported for: a non-existent path.")
 
       Utils.createDirectory(path)
 
