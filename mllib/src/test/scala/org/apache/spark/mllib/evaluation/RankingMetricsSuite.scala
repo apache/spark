@@ -69,12 +69,9 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
         (
           Array(1, 6, 2, 7, 8, 3, 9, 10, 4, 5),
           Array(1, 2, 3, 4, 5),
-          Array((1, 3.0), (2, 2.0), (3, 1.0), (4, 1.0), (5, 1.0))),
-        (
-          Array(4, 1, 5, 6, 2, 7, 3, 8, 9, 10),
-          Array(1, 2, 3),
-          Array((1, 2.0), (2, 0.0), (3, 0.0))),
-        (Array(1, 2, 3, 4, 5), Array.empty[Int], Array((1, 2.0)))),
+          Array(3.0, 2.0, 1.0, 1.0, 1.0)),
+        (Array(4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Array(1, 2, 3), Array(2.0, 0.0, 0.0)),
+        (Array(1, 2, 3, 4, 5), Array.empty[Int], Array.empty[Double])),
       2)
     val eps = 1.0e-5
 

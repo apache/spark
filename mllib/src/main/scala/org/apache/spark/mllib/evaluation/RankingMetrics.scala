@@ -35,14 +35,13 @@ import org.apache.spark.rdd.RDD
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
 @Since("1.2.0")
-class RankingMetrics[T: ClassTag](
-    predictionAndLabels: RDD[(Array[T], Array[T], Array[(T, Double)])])
+class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], Array[Double])])
     extends Logging
     with Serializable {
 
   def this(predictionAndLabelsWithoutRelevance: => RDD[(Array[T], Array[T])]) = {
     this(predictionAndLabelsWithoutRelevance.map {
-      case (pred, lab) => (pred, lab, Array.empty[(T, Double)])
+      case (pred, lab) => (pred, lab, Array.empty[Double])
     })
   }
 
@@ -164,7 +163,12 @@ class RankingMetrics[T: ClassTag](
         case (pred, lab, rel) =>
           val useBinary = rel.isEmpty
           val labSet = lab.toSet
-          val relMap = rel.toMap
+          val relMap = (lab zip rel).toMap
+          if (lab.size != rel.size) {
+            logWarning(
+              "# of ground truth set and # of relevance value set should be equal, " +
+                "check input data")
+          }
 
           if (labSet.nonEmpty) {
             val labSetSize = labSet.size
