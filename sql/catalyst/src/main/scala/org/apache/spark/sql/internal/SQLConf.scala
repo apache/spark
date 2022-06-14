@@ -1115,6 +1115,13 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
+  val ORC_VECTORIZED_WRITER_BATCH_SIZE = buildConf("spark.sql.orc.columnarWriterBatchSize")
+    .doc("The number of rows to include in a orc vectorized writer batch. The number should " +
+      "be carefully chosen to minimize overhead and avoid OOMs in writing data.")
+    .version("3.4.0")
+    .intConf
+    .createWithDefault(1024)
+
   val ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED =
     buildConf("spark.sql.orc.enableNestedColumnVectorizedReader")
       .doc("Enables vectorized orc decoding for nested column.")
@@ -4070,6 +4077,8 @@ class SQLConf extends Serializable with Logging {
   def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
 
   def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+
+  def orcVectorizedWriterBatchSize: Int = getConf(ORC_VECTORIZED_WRITER_BATCH_SIZE)
 
   def orcVectorizedReaderNestedColumnEnabled: Boolean =
     getConf(ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED)
