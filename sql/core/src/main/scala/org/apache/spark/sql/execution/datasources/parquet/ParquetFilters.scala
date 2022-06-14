@@ -747,8 +747,10 @@ class ParquetFilters(
           values.distinct.flatMap { v =>
             makeEq.lift(fieldType).map(_(fieldNames, v))
           }.reduceLeftOption(FilterApi.or)
-        } else {
+        } else if (canPartialPushDownConjuncts) {
           makeInPredicate.lift(fieldType).map(_(fieldNames, values))
+        } else {
+          None
         }
 
       case sources.StringStartsWith(name, prefix)

@@ -1694,11 +1694,9 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         parquetFilters.createFilter(sources.Not(sources.In("a", Array(2, 3))))
       }
 
-      set = new HashSet[Integer]()
-      set.add(2)
-      set.add(3)
-      set.add(7)
-      assertResult(Some(FilterApi.not(FilterApi.in(intColumn("a"), set)))) {
+      assertResult(
+        None
+      ) {
         parquetFilters.createFilter(sources.Not(sources.In("a", Array(2, 3, 7))))
       }
     }
