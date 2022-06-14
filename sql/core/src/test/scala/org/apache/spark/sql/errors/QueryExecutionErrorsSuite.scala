@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite extends QueryTest
   with ParquetTest with OrcTest with SharedSparkSession {
@@ -264,5 +265,25 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e.getSqlState === "22008")
     assert(e.getMessage ===
       "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
+  }
+
+  test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
+    withTempPath { path =>
+      val e1 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      assert(e1.getErrorClass === "UNSUPPORTED_SAVE_MODE")
+      assert(e1.getMessage === "The save mode NULL is not supported for: a non-existent path.")
+
+      Utils.createDirectory(path)
+
+      val e2 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      assert(e2.getErrorClass === "UNSUPPORTED_SAVE_MODE")
+      assert(e2.getMessage === "The save mode NULL is not supported for: an existent path.")
+    }
   }
 }

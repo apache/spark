@@ -29,13 +29,29 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.spark.util.Utils
 
 /**
- * Information associated with an error class.
+ * Information associated with an error subclass.
  *
- * @param sqlState SQLSTATE associated with this class.
  * @param message C-style message format compatible with printf.
  *                The error message is constructed by concatenating the lines with newlines.
  */
-private[spark] case class ErrorInfo(message: Seq[String], sqlState: Option[String]) {
+private[spark] case class ErrorSubInfo(message: Seq[String]) {
+  // For compatibility with multi-line error messages
+  @JsonIgnore
+  val messageFormat: String = message.mkString("\n")
+}
+
+/**
+ * Information associated with an error class.
+ *
+ * @param sqlState SQLSTATE associated with this class.
+ * @param subClass SubClass associated with this class.
+ * @param message C-style message format compatible with printf.
+ *                The error message is constructed by concatenating the lines with newlines.
+ */
+private[spark] case class ErrorInfo(
+    message: Seq[String],
+    subClass: Option[Map[String, ErrorSubInfo]],
+    sqlState: Option[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
   val messageFormat: String = message.mkString("\n")
@@ -61,13 +77,25 @@ private[spark] object SparkThrowableHelper {
       queryContext: String = ""): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
+    val (displayMessageParameters, displayFormat) = if (errorInfo.subClass.isDefined) {
+      val subClass = errorInfo.subClass.get
+      val subErrorClass = messageParameters.head
+      val errorSubInfo = subClass.getOrElse(subErrorClass,
+        throw new IllegalArgumentException(s"Cannot find sub error class '$subErrorClass'"))
+      val subMessageParameters = messageParameters.tail
+      (subMessageParameters, errorInfo.messageFormat + errorSubInfo.messageFormat)
+    } else {
+      (messageParameters, errorInfo.messageFormat)
+    }
+    val displayMessage = String.format(
+      displayFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
+      displayMessageParameters : _*)
     val displayQueryContext = if (queryContext.isEmpty) {
       ""
     } else {
       s"\n$queryContext"
     }
-    String.format(errorInfo.messageFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-      messageParameters: _*) + displayQueryContext
+    s"$displayMessage$displayQueryContext"
   }
 
   def getSqlState(errorClass: String): String = {
