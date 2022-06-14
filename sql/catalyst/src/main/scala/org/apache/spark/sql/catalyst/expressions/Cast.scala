@@ -1621,7 +1621,7 @@ case class Cast(
           val u = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
           val tmpYm = ctx.freshVariable("tmpYm", classOf[Int])
           code"""
-            int $tmpYm = $u.dayTimeIntervalToInt($c, (byte)${x.startField}, (byte)${x.endField});
+            int $tmpYm = $u.yearMonthIntervalToInt($c, (byte)${x.startField}, (byte)${x.endField});
             Decimal $tmp = Decimal.apply($tmpYm);
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
