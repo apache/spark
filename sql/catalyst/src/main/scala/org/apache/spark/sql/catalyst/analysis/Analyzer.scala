@@ -2585,21 +2585,12 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case Sort(sortOrder, global, agg: Aggregate) if agg.resolved =>
         // We should resolve the references normally based on child (agg.output) first.
-        val aggAliasSet = agg.aggregateExpressions.collect {
-          case a: Alias => a.name
-        }.toSet
-        val maybeResolved: Seq[Expression] = sortOrder.map(_.child).map { expr =>
-          var existSameName = false
-          expr.foreach {
-            case UnresolvedAttribute(nameParts) =>
-              existSameName = aggAliasSet.contains(agg.resolve(nameParts, resolver)
-                .map(_.name).getOrElse(""))
-            case _ =>
-          }
-          if (existSameName) {
-            expr
+        val maybeResolved = sortOrder.map(_.child).map { expr =>
+          val resolved = resolveTemp(expr, agg)
+          if (resolved.exists(_.isInstanceOf[AggregateFunction])) {
+            unresolve(expr)
           } else {
-            resolveExpressionByPlanOutput(expr, agg)
+            resolved
           }
         }
         resolveOperatorWithAggregate(maybeResolved, agg, (newExprs, newChild) => {
@@ -2608,6 +2599,31 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
           Sort(newSortOrder, global, newChild)
         })
+    }
+
+    private def resolveTemp(expr: Expression, agg: Aggregate): Expression = {
+      expr.transform {
+        case u: UnresolvedAttribute =>
+          try {
+            agg.output.resolve(u.nameParts, resolver).map({
+              case a: Alias => TempResolvedColumn(a.child, u.nameParts)
+              case o => TempResolvedColumn(o, u.nameParts)
+            }).getOrElse(u)
+          } catch {
+            case ae: AnalysisException =>
+              logDebug(ae.getMessage)
+              u
+          }
+      }
+    }
+
+    private def unresolve(expr: Expression): Expression = {
+      expr.transform {
+        case t: TempResolvedColumn =>
+          CurrentOrigin.withOrigin(t.origin)(UnresolvedAttribute(t.nameParts))
+        case other =>
+          other
+      }
     }
 
     /**
