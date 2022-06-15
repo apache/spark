@@ -155,7 +155,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
     predictionAndLabels.map { case (pred, lab, rel) =>
           val useBinary = rel.isEmpty
           val labSet = lab.toSet
-          val relMap = (lab zip rel).toMap
+          val relMap = lab.zip(rel).toMap
           if (useBinary && lab.size != rel.size) {
             logWarning(
               "# of ground truth set and # of relevance value set should be equal, " +
