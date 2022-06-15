@@ -106,8 +106,7 @@ object ResolveDefaultColumns {
           if (!allowedTableProviders.contains(givenTableProvider)) {
             throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(givenTableProvider)
           }
-          val analyzed: Expression =
-            analyze(tableSchema.defaultColumnAnalyzer, field, statementType)
+          val analyzed: Expression = analyze(tableSchema, field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
             .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
           field.copy(metadata = newMetadata)
@@ -124,15 +123,13 @@ object ResolveDefaultColumns {
   /**
    * Parses and analyzes the DEFAULT column text in `field`, returning an error upon failure.
    *
+   * @param schema        the schema that contains `field` below.
    * @param field         represents the DEFAULT column value whose "default" metadata to parse
    *                      and analyze.
    * @param statementType which type of statement we are running, such as INSERT; useful for errors.
    * @return Result of the analysis and constant-folding operation.
    */
-  def analyze(
-      analyzer: Analyzer,
-      field: StructField,
-      statementType: String): Expression = {
+  def analyze(schema: StructType, field: StructField, statementType: String): Expression = {
     // Parse the expression.
     val colText: String = field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
     lazy val parser = new CatalystSqlParser()
@@ -147,6 +144,7 @@ object ResolveDefaultColumns {
     }
     // Analyze the parse result.
     val plan = try {
+      val analyzer: Analyzer = schema.defaultColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(parsed, field.name)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
       ConstantFolding(analyzed)

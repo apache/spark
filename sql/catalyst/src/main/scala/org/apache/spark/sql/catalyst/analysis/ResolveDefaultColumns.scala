@@ -154,7 +154,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     schemaForTargetTable.map { schema =>
       val defaultExpressions: Seq[Expression] = schema.fields.map {
         case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
-          analyze(schema.defaultColumnAnalyzer, f, "UPDATE")
+          analyze(schema, f, "UPDATE")
         case _ => Literal(null)
       }
       // Create a map from each column name in the target table to its DEFAULT expression.
@@ -185,7 +185,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     }
     val defaultExpressions: Seq[Expression] = schema.fields.map {
       case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
-        analyze(schema.defaultColumnAnalyzer, f, "MERGE")
+        analyze(schema, f, "MERGE")
       case _ => Literal(null)
     }
     val columnNamesToExpressions: Map[String, Expression] =
@@ -325,7 +325,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     val schema = insertTableSchemaWithoutPartitionColumns
     val defaultExpressions: Seq[Expression] = schema.fields.map {
       case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
-        analyze(schema.defaultColumnAnalyzer, f, "INSERT")
+        analyze(schema, f, "INSERT")
       case _ => Literal(null)
     }
     // Check the type of `input` and replace its expressions accordingly.
