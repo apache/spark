@@ -38,6 +38,7 @@ import org.apache.spark.internal.config.Worker.WORKER_DRIVER_TERMINATE_TIMEOUT
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.ui.UIUtils
+import org.apache.spark.util.logging.FileAppender
 import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
 
 /**
@@ -59,6 +60,9 @@ private[deploy] class DriverRunner(
 
   @volatile private var process: Option[Process] = None
   @volatile private var killed = false
+
+  @volatile private var stdoutAppender: FileAppender = null
+  @volatile private var stderrAppender: FileAppender = null
 
   // Populated once finished
   @volatile private[worker] var finalState: Option[DriverState] = None
@@ -123,11 +127,23 @@ private[deploy] class DriverRunner(
     }.start()
   }
 
+  private def closeOutStreams(): Unit = {
+    if (stdoutAppender != null) {
+      stdoutAppender.stop()
+      stdoutAppender = null
+    }
+    if (stderrAppender != null) {
+      stderrAppender.stop()
+      stderrAppender = null
+    }
+  }
+
   /** Terminate this driver (or prevent it from ever starting if not yet started) */
   private[worker] def kill(): Unit = {
     logInfo("Killing driver process!")
     killed = true
     synchronized {
+      closeOutStreams()
       process.foreach { p =>
         val exitCode = Utils.terminateProcess(p, driverTerminateTimeoutMs)
         if (exitCode.isEmpty) {
@@ -208,14 +224,14 @@ private[deploy] class DriverRunner(
     def initialize(process: Process): Unit = {
       // Redirect stdout and stderr to files
       val stdout = new File(baseDir, "stdout")
-      CommandUtils.redirectStream(process.getInputStream, stdout)
+      stdoutAppender = FileAppender(process.getInputStream, stdout, conf, true)
 
-      val stderr = new File(baseDir, "stderr")
       val redactedCommand = Utils.redactCommandLineArgs(conf, builder.command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
       val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=" * 40)
-      Files.append(header, stderr, StandardCharsets.UTF_8)
-      CommandUtils.redirectStream(process.getErrorStream, stderr)
+      val stderr = new File(baseDir, "stderr")
+      Files.write(header, stderr, StandardCharsets.UTF_8)
+      stderrAppender = FileAppender(process.getErrorStream, stderr, conf, true)
     }
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
   }
@@ -242,7 +258,9 @@ private[deploy] class DriverRunner(
 
       val processStart = clock.getTimeMillis()
       exitCode = process.get.waitFor()
-
+      synchronized {
+        closeOutStreams()
+      }
       // check if attempting another run
       keepTrying = supervise && exitCode != 0 && !killed
       if (keepTrying) {
