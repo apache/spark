@@ -16,3 +16,24 @@ SELECT
 struct<scalarsubquery():bigint,scalarsubquery():bigint,scalarsubquery():bigint>
 -- !query output
 0	45	10
+
+
+-- !query
+SET spark.sql.optimizer.excludedRules=org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.excludedRules	org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries
+
+
+-- !query
+WITH tmp AS (
+  SELECT id FROM range(2)
+  INTERSECT
+  SELECT id FROM range(4)
+)
+SELECT id FROM range(3) WHERE id > (SELECT max(id) FROM tmp)
+-- !query schema
+struct<id:bigint>
+-- !query output
+2
