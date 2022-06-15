@@ -42,6 +42,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    TYPE_CHECKING,
 )
 
 from py4j.protocol import register_input_converter
@@ -74,6 +75,10 @@ __all__ = [
     "StructField",
     "StructType",
 ]
+
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class DataType:
@@ -1211,6 +1216,29 @@ for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
 # removed in version 4.0. See: https://docs.python.org/3/library/array.html
 if sys.version_info[0] < 4:
     _array_type_mappings["u"] = StringType
+
+
+def _from_numpy_type(
+    nt: "np.dtype",
+) -> DataType:
+    """Convert NumPy type to Spark data type."""
+    import numpy as np
+
+    spark_type: DataType = None
+    if nt == np.dtype("int8"):
+        spark_type = ByteType()
+    elif nt == np.dtype("int16"):
+        spark_type = ShortType()
+    elif nt == np.dtype("int32"):
+        spark_type = IntegerType()
+    elif nt == np.dtype("int64"):
+        spark_type = LongType()
+    elif nt == np.dtype("float32"):
+        spark_type = FloatType()
+    elif nt == np.dtype("float64"):
+        spark_type = DecimalType(38, 18)
+
+    return spark_type
 
 
 def _infer_type(
