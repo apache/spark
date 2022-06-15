@@ -58,6 +58,19 @@ object ShuffleTestAccessor {
     }
   }
 
+  def getAppShuffleInfoAfterDBReload(
+      mergeManager: RemoteBlockPushResolver,
+      db: DB): ConcurrentMap[String, RemoteBlockPushResolver.AppShuffleInfo] = {
+    reloadAppShuffleInfo(mergeManager, db)
+    mergeManager.appsShuffleInfo
+  }
+
+  def getAppShuffleInfo(
+    mergeManager: RemoteBlockPushResolver
+  ): ConcurrentMap[String, RemoteBlockPushResolver.AppShuffleInfo] = {
+    mergeManager.appsShuffleInfo
+  }
+
   def registeredExecutorFile(resolver: ExternalShuffleBlockResolver): File = {
     resolver.registeredExecutorFile
   }
