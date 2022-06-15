@@ -35,10 +35,12 @@ import org.apache.spark.rdd.RDD
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
 @Since("1.2.0")
-class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], Array[Double])])
+class RankingMetrics[T: ClassTag] @Since("3.4.0") (
+    predictionAndLabels: RDD[(Array[T], Array[T], Array[Double])])
     extends Logging
     with Serializable {
 
+  @Since("1.2.0")
   def this(predictionAndLabelsWithoutRelevance: => RDD[(Array[T], Array[T])]) = {
     this(predictionAndLabelsWithoutRelevance.map {
       case (pred, lab) => (pred, lab, Array.empty[Double])
