@@ -184,9 +184,17 @@ class ArrowTests(ReusedSQLTestCase):
     @property
     def create_np_arrs(self):
         return [
+            np.array([1, 2]).astype("int8"),
+            np.array([1, 2]).astype("int16"),
+            np.array([1, 2]).astype("int32"),
             np.array([1, 2]),  # dtype('int64')
+            np.array([0.1, 0.2]).astype("float32"),
             np.array([0.1, 0.2]),  # dtype('float64')
+            np.array([[1, 2], [3, 4]]).astype("int8"),
+            np.array([[1, 2], [3, 4]]).astype("int16"),
+            np.array([[1, 2], [3, 4]]).astype("int32"),
             np.array([[1, 2], [3, 4]]),  # dtype('int64')
+            np.array([[0.1, 0.2], [0.3, 0.4]]).astype("float32"),
             np.array([[0.1, 0.2], [0.3, 0.4]]),  # dtype('float64')
         ]
 
