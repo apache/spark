@@ -209,7 +209,7 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
     }
   }
 
-  test("Should not unwrap cast from Long to Double/Float") {
+  test("SPARK-39476: Should not unwrap cast from Long to Double/Float") {
     withTable(t) {
       Seq((6470759586864300301L))
         .toDF("c1").write.saveAsTable(t)
@@ -227,7 +227,7 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
     }
   }
 
-  test("Should not unwrap cast from Integer to Float") {
+  test("SPARK-39476: Should not unwrap cast from Integer to Float") {
     withTable(t) {
       Seq((33554435))
         .toDF("c1").write.saveAsTable(t)
