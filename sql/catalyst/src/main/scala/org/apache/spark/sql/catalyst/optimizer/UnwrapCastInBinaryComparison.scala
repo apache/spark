@@ -363,6 +363,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
   private def canUnwrapCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (BooleanType, _) => true
+    // SPARK-39476: It's not safe to unwrap cast from Integer to Float or from Long to Float/Double,
+    // since the length of Integer/Long may exceed the significant digits of Float/Double.
     case (IntegerType, FloatType) => false
     case (LongType, FloatType) => false
     case (LongType, DoubleType) => false
