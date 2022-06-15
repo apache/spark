@@ -238,12 +238,28 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan
 
   test("SPARK-33136: output resolved on complex types for V2 write commands") {
-    def assertTypeCompatibility(name: String, fromType: DataType, toType: DataType): Unit = {
+    def assertTypeCompatibility(
+        name: String, fromType: DataType, toType: DataType, caseSensitive: Boolean = true): Unit = {
       val table = TestRelation(StructType(Seq(StructField("a", toType))).toAttributes)
       val query = TestRelation(StructType(Seq(StructField("a", fromType))).toAttributes)
-      val parsedPlan = byName(table, query)
-      assertResolved(parsedPlan)
-      checkAnalysis(parsedPlan, parsedPlan)
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val parsedPlan = byName(table, query)
+        assertResolved(parsedPlan)
+        checkAnalysis(parsedPlan, parsedPlan, caseSensitive)
+      }
+    }
+
+    def assertTypeCompatibilityErrors(name: String, fromType: DataType, toType: DataType,
+        expectedErrors: Seq[String], caseSensitive: Boolean = true): Unit = {
+      val table = TestRelation(StructType(Seq(StructField("a", toType))).toAttributes)
+      val query = TestRelation(StructType(Seq(StructField("a", fromType))).toAttributes)
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val parsedPlan = byName(table, query)
+        assertNotResolved(parsedPlan)
+        assertAnalysisError(parsedPlan, expectedErrors)
+      }
     }
 
     // The major difference between `from` and `to` is that `from` is a complex type
@@ -265,6 +281,28 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         StructField("s_nonnull", StringType))))))
 
     assertTypeCompatibility("struct", fromStructType, toStructType)
+
+    // nested struct type with different casing
+    val fromStructTypeUpper = StructType(Array(
+      StructField("s", StringType),
+      StructField("i_nonnull", IntegerType, nullable = false),
+      StructField("st", StructType(Array(
+        StructField("l", LongType),
+        StructField("s_nonnull", StringType, nullable = false))))))
+
+    val toStructTypeLower = StructType(Array(
+      StructField("s", StringType),
+      StructField("i_nonNull", IntegerType),
+      StructField("sT", StructType(Array(
+        StructField("L", LongType),
+        StructField("s_nonNull", StringType))))))
+
+    assertTypeCompatibility("struct-case-insensitive", fromStructTypeUpper, toStructTypeLower,
+      caseSensitive = false)
+
+    assertTypeCompatibilityErrors("struct-case-sensitive", fromStructType, toStructTypeLower,
+      Seq("Cannot write incompatible data to table", "'table-name'",
+          "Cannot find data for output column", "'a.i_nonNull'", "'a.sT'"))
 
     // array type
     assertTypeCompatibility("array", ArrayType(LongType, containsNull = false),
