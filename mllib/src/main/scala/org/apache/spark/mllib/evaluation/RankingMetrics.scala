@@ -66,9 +66,9 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab, _) =>
-          countRelevantItemRatio(pred, lab, k, k)
-      }
-      .mean()
+        countRelevantItemRatio(pred, lab, k, k)
+    }
+    .mean()
   }
 
   /**
@@ -79,11 +79,11 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab, _) =>
-          val labSet = lab.toSet
-          val k = math.max(pred.length, labSet.size)
-          averagePrecision(pred, labSet, k)
-      }
-      .mean()
+        val labSet = lab.toSet
+        val k = math.max(pred.length, labSet.size)
+        averagePrecision(pred, labSet, k)
+    }
+    .mean()
   }
 
   /**
@@ -97,9 +97,9 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab, _) =>
-          averagePrecision(pred, lab.toSet, k)
-      }
-      .mean()
+        averagePrecision(pred, lab.toSet, k)
+    }
+    .mean()
   }
 
   /**
@@ -153,54 +153,54 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab, rel) =>
-          val useBinary = rel.isEmpty
-          val labSet = lab.toSet
-          val relMap = lab.zip(rel).toMap
-          if (useBinary && lab.size != rel.size) {
-            logWarning(
-              "# of ground truth set and # of relevance value set should be equal, " +
-                "check input data")
-          }
+      val useBinary = rel.isEmpty
+      val labSet = lab.toSet
+      val relMap = lab.zip(rel).toMap
+      if (useBinary && lab.size != rel.size) {
+        logWarning(
+          "# of ground truth set and # of relevance value set should be equal, " +
+            "check input data")
+      }
 
-          if (labSet.nonEmpty) {
-            val labSetSize = labSet.size
-            val n = math.min(math.max(pred.length, labSetSize), k)
-            var maxDcg = 0.0
-            var dcg = 0.0
-            var i = 0
-            while (i < n) {
-              if (useBinary) {
-                // Base of the log doesn't matter for calculating NDCG,
-                // if the relevance value is binary.
-                val gain = 1.0 / math.log(i + 2)
-                if (i < pred.length && labSet.contains(pred(i))) {
-                  dcg += gain
-                }
-                if (i < labSetSize) {
-                  maxDcg += gain
-                }
-              } else {
-                if (i < pred.length) {
-                  dcg += (math.pow(2.0, relMap.getOrElse(pred(i), 0.0)) - 1) / math.log(i + 2)
-                }
-                if (i < labSetSize) {
-                  maxDcg += (math.pow(2.0, relMap.getOrElse(lab(i), 0.0)) - 1) / math.log(i + 2)
-                }
-              }
-              i += 1
+      if (labSet.nonEmpty) {
+        val labSetSize = labSet.size
+        val n = math.min(math.max(pred.length, labSetSize), k)
+        var maxDcg = 0.0
+        var dcg = 0.0
+        var i = 0
+        while (i < n) {
+          if (useBinary) {
+            // Base of the log doesn't matter for calculating NDCG,
+            // if the relevance value is binary.
+            val gain = 1.0 / math.log(i + 2)
+            if (i < pred.length && labSet.contains(pred(i))) {
+              dcg += gain
             }
-            if (maxDcg == 0.0) {
-              logWarning("Maximum of relevance of ground truth set is zero, check input data")
-              0.0
-            } else {
-              dcg / maxDcg
+            if (i < labSetSize) {
+              maxDcg += gain
             }
           } else {
-            logWarning("Empty ground truth set, check input data")
-            0.0
+            if (i < pred.length) {
+              dcg += (math.pow(2.0, relMap.getOrElse(pred(i), 0.0)) - 1) / math.log(i + 2)
+            }
+            if (i < labSetSize) {
+              maxDcg += (math.pow(2.0, relMap.getOrElse(lab(i), 0.0)) - 1) / math.log(i + 2)
+            }
           }
+          i += 1
+        }
+        if (maxDcg == 0.0) {
+          logWarning("Maximum of relevance of ground truth set is zero, check input data")
+          0.0
+        } else {
+          dcg / maxDcg
+        }
+      } else {
+        logWarning("Empty ground truth set, check input data")
+        0.0
       }
-      .mean()
+    }
+    .mean()
   }
 
   /**
@@ -224,9 +224,9 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   def recallAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab, _) =>
-          countRelevantItemRatio(pred, lab, k, lab.toSet.size)
-      }
-      .mean()
+        countRelevantItemRatio(pred, lab, k, lab.toSet.size)
+    }
+    .mean()
   }
 
   /**
@@ -274,7 +274,7 @@ object RankingMetrics {
   def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]
     val rdd = predictionAndLabels.rdd.map { case (predictions, labels) =>
-        (predictions.asScala.toArray, labels.asScala.toArray)
+      (predictions.asScala.toArray, labels.asScala.toArray)
     }
     new RankingMetrics(rdd)
   }
