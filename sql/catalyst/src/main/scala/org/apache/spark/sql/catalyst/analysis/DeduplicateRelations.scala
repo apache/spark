@@ -90,36 +90,31 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
    * @param existingRelations the known unique relations for a LogicalPlan
    * @param plan the LogicalPlan that requires the deduplication
    * @return (the new LogicalPlan which already deduplicate all duplicated relations (if any),
-   *         all relations of the new LogicalPlan, whether the plan is changed or not)
+   *          whether the plan is changed or not)
    */
   private def renewDuplicatedRelations(
       existingRelations: mutable.HashSet[ReferenceEqualPlanWrapper],
-      plan: LogicalPlan)
-    : (LogicalPlan, mutable.HashSet[ReferenceEqualPlanWrapper], Boolean) = plan match {
-    case p: LogicalPlan if p.isStreaming => (plan, mutable.HashSet.empty, false)
+      plan: LogicalPlan): (LogicalPlan, Boolean) = plan match {
+    case p: LogicalPlan if p.isStreaming => (plan, false)
 
     case m: MultiInstanceRelation =>
       val planWrapper = ReferenceEqualPlanWrapper(m)
       if (existingRelations.contains(planWrapper)) {
         val newNode = m.newInstance()
         newNode.copyTagsFrom(m)
-        (newNode, mutable.HashSet.empty, true)
+        (newNode, true)
       } else {
-        val mWrapper = new mutable.HashSet[ReferenceEqualPlanWrapper]()
-        mWrapper.add(planWrapper)
-        (m, mWrapper, false)
+        existingRelations.add(planWrapper)
+        (m, false)
       }
 
     case plan: LogicalPlan =>
-      val relations = new mutable.HashSet[ReferenceEqualPlanWrapper]()
       var planChanged = false
       val newPlan = if (plan.children.nonEmpty) {
         val newChildren = mutable.ArrayBuffer.empty[LogicalPlan]
         for (c <- plan.children) {
-          val (renewed, collected, changed) =
-            renewDuplicatedRelations(existingRelations ++ relations, c)
+          val (renewed, changed) = renewDuplicatedRelations(existingRelations, c)
           newChildren += renewed
-          relations ++= collected
           if (changed) {
             planChanged = true
           }
@@ -127,9 +122,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
 
         val planWithNewSubquery = plan.transformExpressions {
           case subquery: SubqueryExpression =>
-            val (renewed, collected, changed) = renewDuplicatedRelations(
-              existingRelations ++ relations, subquery.plan)
-            relations ++= collected
+            val (renewed, changed) = renewDuplicatedRelations(existingRelations, subquery.plan)
             if (changed) planChanged = true
             subquery.withNewPlan(renewed)
         }
@@ -157,7 +150,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       } else {
         plan
       }
-      (newPlan, relations, planChanged)
+      (newPlan, planChanged)
   }
 
   /**

@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
@@ -1230,6 +1230,7 @@ class JDBCSuite extends QueryTest
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
     assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
+    assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
   private def assertEmptyQuery(sqlString: String): Unit = {
@@ -1879,5 +1880,53 @@ class JDBCSuite extends QueryTest
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)
-   }
+  }
+
+  test("SPARK-39339: Handle TimestampNTZType null values") {
+    val tableName = "timestamp_ntz_null_table"
+
+    val df = Seq(null.asInstanceOf[LocalDateTime]).toDF("col1")
+
+    df.write.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName).save()
+
+    val res = spark.read.format("jdbc")
+      .option("inferTimestampNTZType", "true")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName)
+      .load()
+
+    checkAnswer(res, Seq(Row(null)))
+  }
+
+  test("SPARK-39339: TimestampNTZType with different local time zones") {
+    val tableName = "timestamp_ntz_diff_tz_support_table"
+
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+        Seq(
+          "1972-07-04 03:30:00",
+          "2019-01-20 12:00:00.502",
+          "2019-01-20T00:00:00.123456",
+          "1500-01-20T00:00:00.123456"
+        ).foreach { case datetime =>
+          val df = spark.sql(s"select timestamp_ntz '$datetime'")
+          df.write.format("jdbc")
+            .mode("overwrite")
+            .option("url", urlWithUserAndPass)
+            .option("dbtable", tableName)
+            .save()
+
+          val res = spark.read.format("jdbc")
+            .option("inferTimestampNTZType", "true")
+            .option("url", urlWithUserAndPass)
+            .option("dbtable", tableName)
+            .load()
+
+          checkAnswer(res, df)
+        }
+      }
+    }
+  }
 }
