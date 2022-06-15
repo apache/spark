@@ -117,7 +117,7 @@ case class AggregateExpression(
     // This is a bit of a hack.  Really we should not be constructing this container and reasoning
     // about datatypes / aggregation mode until after we have finished analysis and made it to
     // planning.
-    UnresolvedAttribute(aggregateFunction.toString)
+    UnresolvedAttribute.quoted(aggregateFunction.toString)
   }
 
   def filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
