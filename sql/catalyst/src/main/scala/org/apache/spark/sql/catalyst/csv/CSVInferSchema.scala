@@ -50,7 +50,6 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     options.dateFormatInRead,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    // TODO: Should isParsing be true or false?
     isParsing = true)
 
   private val decimalParser = if (options.locale == Locale.US) {
@@ -124,7 +123,6 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case LongType => tryParseLong(field)
         case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
-        // Temporary NOTE: DateTimeType is private to [sql] package
         case DateType | TimestampNTZType | TimestampType => tryParseDateTime(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType

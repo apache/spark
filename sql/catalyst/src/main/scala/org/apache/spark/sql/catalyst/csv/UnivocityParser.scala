@@ -218,7 +218,10 @@ class UnivocityParser(
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(convertToDate(datum))
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse {
+              // There may be date type entries in timestamp column due to schema inference
+              convertToDate(datum)
+            }
         }
       }
 
@@ -228,7 +231,8 @@ class UnivocityParser(
           timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         } catch {
           case NonFatal(e) =>
-            convertToDate(datum)
+          // There may be date type entries in timestampNTZ column due to schema inference
+          convertToDate(datum)
         }
       }
 

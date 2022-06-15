@@ -200,15 +200,15 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("inferring date type") {
+    // "yyyy/MM/dd" format
     var options = new CSVOptions(Map("dateFormat" -> "yyyy/MM/dd"), false, "UTC")
     var inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(NullType, "2018/12/02") == DateType)
-
+    // "MMM yyyy" format
     options = new CSVOptions(Map("dateFormat" -> "MMM yyyy"), false, "GMT")
     inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(NullType, "Dec 2018") == DateType)
-    // TODO: How does the DateFormatter recognize Dec as valid for MMM?
-
+    // Field should strictly match date format to infer as date
     options = new CSVOptions(
       Map("dateFormat" -> "yyyy-MM-dd", "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
       columnPruning = false,
@@ -224,14 +224,15 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
         "timestampNTZFormat" -> "yyyy/MM/dd"),
       columnPruning = false,
       defaultTimeZoneId = "UTC")
-    var inferSchema = new CSVInferSchema(options)
+    val inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(DateType, "2012_12_12") == DateType)
     assert(inferSchema.inferField(DateType, "2003|01|01") == TimestampType)
+    // SQL configuration must be set to default to TimestampNTZ
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
       assert(inferSchema.inferField(DateType, "2003/02/05") == TimestampNTZType)
     }
 
-    // inferField will upgrade the date field to timestamp if the typeSoFar is a timestamp
+    // inferField should upgrade a date field to timestamp if the typeSoFar is a timestamp
     assert(inferSchema.inferField(TimestampNTZType, "2012_12_12") == TimestampNTZType)
     assert(inferSchema.inferField(TimestampType, "2018_12_03") == TimestampType)
   }
