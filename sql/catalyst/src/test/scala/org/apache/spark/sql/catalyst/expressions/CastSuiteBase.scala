@@ -1296,12 +1296,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     dayTimeIntervalTypes.foreach { it =>
-      checkConsistencyBetweenInterpretedAndCodegen((child: Expression) =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
         Cast(child, DecimalType.USER_DEFAULT), it)
     }
 
     yearMonthIntervalTypes.foreach { it =>
-      checkConsistencyBetweenInterpretedAndCodegen((child: Expression) =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
         Cast(child, DecimalType.USER_DEFAULT), it)
     }
   }
