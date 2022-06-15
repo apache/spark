@@ -884,10 +884,13 @@ private[spark] object JsonProtocol {
   }
 
   /** Extract the executor metrics from JSON. */
-  def executorMetricsFromJson(json: JsonNode): ExecutorMetrics = {
+  def executorMetricsFromJson(maybeJson: JsonNode): ExecutorMetrics = {
+    // Executor metrics might be absent in JSON from very old Spark versions.
+    // In this case we return zero values for each metric.
     val metrics =
       ExecutorMetricType.metricToOffset.map { case (metric, _) =>
-        metric -> jsonOption(json.get(metric)).map(_.longValue).getOrElse(0L)
+        val metricValueJson = jsonOption(maybeJson).flatMap(json => jsonOption(json.get(metric)))
+        metric -> metricValueJson.map(_.longValue).getOrElse(0L)
       }
     new ExecutorMetrics(metrics.toMap)
   }
