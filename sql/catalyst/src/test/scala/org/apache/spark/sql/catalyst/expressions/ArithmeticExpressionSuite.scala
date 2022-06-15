@@ -22,7 +22,6 @@ import java.time.{Duration, Period}
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -462,13 +461,15 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), 1L)
     checkEvaluation(IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), null)
     // overflows long and so returns a wrong result
-    checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
-      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
+    checkEvaluation(IntegralDivide(
+      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
       687399551400672280L)
     // overflow during promote precision
-    checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
-      Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001)))),
-      null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001))),
+        null)
+    }
   }
 
   test("SPARK-24598: overflow on long returns wrong result") {

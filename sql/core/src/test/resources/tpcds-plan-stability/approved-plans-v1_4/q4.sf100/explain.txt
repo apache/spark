@@ -190,7 +190,7 @@ Input [14]: [ss_customer_sk#1, ss_ext_discount_amt#2, ss_ext_sales_price#3, ss_e
 (16) HashAggregate [codegen id : 6]
 Input [12]: [c_customer_id#12, c_first_name#13, c_last_name#14, c_preferred_cust_flag#15, c_birth_country#16, c_login#17, c_email_address#18, ss_ext_discount_amt#2, ss_ext_sales_price#3, ss_ext_wholesale_cost#4, ss_ext_list_price#5, d_year#9]
 Keys [8]: [c_customer_id#12, c_first_name#13, c_last_name#14, c_preferred_cust_flag#15, c_birth_country#16, c_login#17, c_email_address#18, d_year#9]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_ext_list_price#5 as decimal(8,2))) - promote_precision(cast(ss_ext_wholesale_cost#4 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ss_ext_discount_amt#2 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ss_ext_sales_price#3 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
+Functions [1]: [partial_sum(((((ss_ext_list_price#5 - ss_ext_wholesale_cost#4) - ss_ext_discount_amt#2) + ss_ext_sales_price#3) / 2))]
 Aggregate Attributes [2]: [sum#20, isEmpty#21]
 Results [10]: [c_customer_id#12, c_first_name#13, c_last_name#14, c_preferred_cust_flag#15, c_birth_country#16, c_login#17, c_email_address#18, d_year#9, sum#22, isEmpty#23]
 
@@ -201,9 +201,9 @@ Arguments: hashpartitioning(c_customer_id#12, c_first_name#13, c_last_name#14, c
 (18) HashAggregate [codegen id : 7]
 Input [10]: [c_customer_id#12, c_first_name#13, c_last_name#14, c_preferred_cust_flag#15, c_birth_country#16, c_login#17, c_email_address#18, d_year#9, sum#22, isEmpty#23]
 Keys [8]: [c_customer_id#12, c_first_name#13, c_last_name#14, c_preferred_cust_flag#15, c_birth_country#16, c_login#17, c_email_address#18, d_year#9]
-Functions [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_ext_list_price#5 as decimal(8,2))) - promote_precision(cast(ss_ext_wholesale_cost#4 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ss_ext_discount_amt#2 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ss_ext_sales_price#3 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_ext_list_price#5 as decimal(8,2))) - promote_precision(cast(ss_ext_wholesale_cost#4 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ss_ext_discount_amt#2 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ss_ext_sales_price#3 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#25]
-Results [2]: [c_customer_id#12 AS customer_id#26, sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_ext_list_price#5 as decimal(8,2))) - promote_precision(cast(ss_ext_wholesale_cost#4 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ss_ext_discount_amt#2 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ss_ext_sales_price#3 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#25 AS year_total#27]
+Functions [1]: [sum(((((ss_ext_list_price#5 - ss_ext_wholesale_cost#4) - ss_ext_discount_amt#2) + ss_ext_sales_price#3) / 2))]
+Aggregate Attributes [1]: [sum(((((ss_ext_list_price#5 - ss_ext_wholesale_cost#4) - ss_ext_discount_amt#2) + ss_ext_sales_price#3) / 2))#25]
+Results [2]: [c_customer_id#12 AS customer_id#26, sum(((((ss_ext_list_price#5 - ss_ext_wholesale_cost#4) - ss_ext_discount_amt#2) + ss_ext_sales_price#3) / 2))#25 AS year_total#27]
 
 (19) Filter [codegen id : 7]
 Input [2]: [customer_id#26, year_total#27]
@@ -271,7 +271,7 @@ Input [14]: [ss_customer_sk#29, ss_ext_discount_amt#30, ss_ext_sales_price#31, s
 (34) HashAggregate [codegen id : 14]
 Input [12]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, ss_ext_discount_amt#30, ss_ext_sales_price#31, ss_ext_wholesale_cost#32, ss_ext_list_price#33, d_year#37]
 Keys [8]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#37]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_ext_list_price#33 as decimal(8,2))) - promote_precision(cast(ss_ext_wholesale_cost#32 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ss_ext_discount_amt#30 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ss_ext_sales_price#31 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
+Functions [1]: [partial_sum(((((ss_ext_list_price#33 - ss_ext_wholesale_cost#32) - ss_ext_discount_amt#30) + ss_ext_sales_price#31) / 2))]
 Aggregate Attributes [2]: [sum#47, isEmpty#48]
 Results [10]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#37, sum#49, isEmpty#50]
 
@@ -282,9 +282,9 @@ Arguments: hashpartitioning(c_customer_id#40, c_first_name#41, c_last_name#42, c
 (36) HashAggregate [codegen id : 15]
 Input [10]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#37, sum#49, isEmpty#50]
 Keys [8]: [c_customer_id#40, c_first_name#41, c_last_name#42, c_preferred_cust_flag#43, c_birth_country#44, c_login#45, c_email_address#46, d_year#37]
-Functions [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_ext_list_price#33 as decimal(8,2))) - promote_precision(cast(ss_ext_wholesale_cost#32 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ss_ext_discount_amt#30 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ss_ext_sales_price#31 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_ext_list_price#33 as decimal(8,2))) - promote_precision(cast(ss_ext_wholesale_cost#32 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ss_ext_discount_amt#30 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ss_ext_sales_price#31 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#25]
-Results [8]: [c_customer_id#40 AS customer_id#52, c_first_name#41 AS customer_first_name#53, c_last_name#42 AS customer_last_name#54, c_preferred_cust_flag#43 AS customer_preferred_cust_flag#55, c_birth_country#44 AS customer_birth_country#56, c_login#45 AS customer_login#57, c_email_address#46 AS customer_email_address#58, sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_ext_list_price#33 as decimal(8,2))) - promote_precision(cast(ss_ext_wholesale_cost#32 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ss_ext_discount_amt#30 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ss_ext_sales_price#31 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#25 AS year_total#59]
+Functions [1]: [sum(((((ss_ext_list_price#33 - ss_ext_wholesale_cost#32) - ss_ext_discount_amt#30) + ss_ext_sales_price#31) / 2))]
+Aggregate Attributes [1]: [sum(((((ss_ext_list_price#33 - ss_ext_wholesale_cost#32) - ss_ext_discount_amt#30) + ss_ext_sales_price#31) / 2))#25]
+Results [8]: [c_customer_id#40 AS customer_id#52, c_first_name#41 AS customer_first_name#53, c_last_name#42 AS customer_last_name#54, c_preferred_cust_flag#43 AS customer_preferred_cust_flag#55, c_birth_country#44 AS customer_birth_country#56, c_login#45 AS customer_login#57, c_email_address#46 AS customer_email_address#58, sum(((((ss_ext_list_price#33 - ss_ext_wholesale_cost#32) - ss_ext_discount_amt#30) + ss_ext_sales_price#31) / 2))#25 AS year_total#59]
 
 (37) Exchange
 Input [8]: [customer_id#52, customer_first_name#53, customer_last_name#54, customer_preferred_cust_flag#55, customer_birth_country#56, customer_login#57, customer_email_address#58, year_total#59]
@@ -353,7 +353,7 @@ Input [14]: [cs_bill_customer_sk#61, cs_ext_discount_amt#62, cs_ext_sales_price#
 (52) HashAggregate [codegen id : 23]
 Input [12]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, cs_ext_discount_amt#62, cs_ext_sales_price#63, cs_ext_wholesale_cost#64, cs_ext_list_price#65, d_year#68]
 Keys [8]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#68]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price#65 as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost#64 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt#62 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price#63 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
+Functions [1]: [partial_sum(((((cs_ext_list_price#65 - cs_ext_wholesale_cost#64) - cs_ext_discount_amt#62) + cs_ext_sales_price#63) / 2))]
 Aggregate Attributes [2]: [sum#78, isEmpty#79]
 Results [10]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#68, sum#80, isEmpty#81]
 
@@ -364,9 +364,9 @@ Arguments: hashpartitioning(c_customer_id#71, c_first_name#72, c_last_name#73, c
 (54) HashAggregate [codegen id : 24]
 Input [10]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#68, sum#80, isEmpty#81]
 Keys [8]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#68]
-Functions [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price#65 as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost#64 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt#62 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price#63 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price#65 as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost#64 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt#62 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price#63 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#83]
-Results [2]: [c_customer_id#71 AS customer_id#84, sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price#65 as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost#64 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt#62 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price#63 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#83 AS year_total#85]
+Functions [1]: [sum(((((cs_ext_list_price#65 - cs_ext_wholesale_cost#64) - cs_ext_discount_amt#62) + cs_ext_sales_price#63) / 2))]
+Aggregate Attributes [1]: [sum(((((cs_ext_list_price#65 - cs_ext_wholesale_cost#64) - cs_ext_discount_amt#62) + cs_ext_sales_price#63) / 2))#83]
+Results [2]: [c_customer_id#71 AS customer_id#84, sum(((((cs_ext_list_price#65 - cs_ext_wholesale_cost#64) - cs_ext_discount_amt#62) + cs_ext_sales_price#63) / 2))#83 AS year_total#85]
 
 (55) Filter [codegen id : 24]
 Input [2]: [customer_id#84, year_total#85]
@@ -447,7 +447,7 @@ Input [14]: [cs_bill_customer_sk#89, cs_ext_discount_amt#90, cs_ext_sales_price#
 (73) HashAggregate [codegen id : 32]
 Input [12]: [c_customer_id#99, c_first_name#100, c_last_name#101, c_preferred_cust_flag#102, c_birth_country#103, c_login#104, c_email_address#105, cs_ext_discount_amt#90, cs_ext_sales_price#91, cs_ext_wholesale_cost#92, cs_ext_list_price#93, d_year#96]
 Keys [8]: [c_customer_id#99, c_first_name#100, c_last_name#101, c_preferred_cust_flag#102, c_birth_country#103, c_login#104, c_email_address#105, d_year#96]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price#93 as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost#92 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt#90 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price#91 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
+Functions [1]: [partial_sum(((((cs_ext_list_price#93 - cs_ext_wholesale_cost#92) - cs_ext_discount_amt#90) + cs_ext_sales_price#91) / 2))]
 Aggregate Attributes [2]: [sum#106, isEmpty#107]
 Results [10]: [c_customer_id#99, c_first_name#100, c_last_name#101, c_preferred_cust_flag#102, c_birth_country#103, c_login#104, c_email_address#105, d_year#96, sum#108, isEmpty#109]
 
@@ -458,9 +458,9 @@ Arguments: hashpartitioning(c_customer_id#99, c_first_name#100, c_last_name#101,
 (75) HashAggregate [codegen id : 33]
 Input [10]: [c_customer_id#99, c_first_name#100, c_last_name#101, c_preferred_cust_flag#102, c_birth_country#103, c_login#104, c_email_address#105, d_year#96, sum#108, isEmpty#109]
 Keys [8]: [c_customer_id#99, c_first_name#100, c_last_name#101, c_preferred_cust_flag#102, c_birth_country#103, c_login#104, c_email_address#105, d_year#96]
-Functions [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price#93 as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost#92 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt#90 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price#91 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price#93 as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost#92 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt#90 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price#91 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#83]
-Results [2]: [c_customer_id#99 AS customer_id#111, sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price#93 as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost#92 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt#90 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price#91 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#83 AS year_total#112]
+Functions [1]: [sum(((((cs_ext_list_price#93 - cs_ext_wholesale_cost#92) - cs_ext_discount_amt#90) + cs_ext_sales_price#91) / 2))]
+Aggregate Attributes [1]: [sum(((((cs_ext_list_price#93 - cs_ext_wholesale_cost#92) - cs_ext_discount_amt#90) + cs_ext_sales_price#91) / 2))#83]
+Results [2]: [c_customer_id#99 AS customer_id#111, sum(((((cs_ext_list_price#93 - cs_ext_wholesale_cost#92) - cs_ext_discount_amt#90) + cs_ext_sales_price#91) / 2))#83 AS year_total#112]
 
 (76) Exchange
 Input [2]: [customer_id#111, year_total#112]
@@ -473,7 +473,7 @@ Arguments: [customer_id#111 ASC NULLS FIRST], false, 0
 (78) SortMergeJoin [codegen id : 35]
 Left keys [1]: [customer_id#26]
 Right keys [1]: [customer_id#111]
-Join condition: (CASE WHEN (year_total#87 > 0.000000) THEN CheckOverflow((promote_precision(year_total#112) / promote_precision(year_total#87)), DecimalType(38,14), true) ELSE null END > CASE WHEN (year_total#27 > 0.000000) THEN CheckOverflow((promote_precision(year_total#59) / promote_precision(year_total#27)), DecimalType(38,14), true) ELSE null END)
+Join condition: (CASE WHEN (year_total#87 > 0.000000) THEN (year_total#112 / year_total#87) ELSE null END > CASE WHEN (year_total#27 > 0.000000) THEN (year_total#59 / year_total#27) ELSE null END)
 
 (79) Project [codegen id : 35]
 Output [10]: [customer_id#26, customer_id#52, customer_first_name#53, customer_last_name#54, customer_preferred_cust_flag#55, customer_birth_country#56, customer_login#57, customer_email_address#58, year_total#87, year_total#112]
@@ -533,7 +533,7 @@ Input [14]: [ws_bill_customer_sk#114, ws_ext_discount_amt#115, ws_ext_sales_pric
 (92) HashAggregate [codegen id : 41]
 Input [12]: [c_customer_id#124, c_first_name#125, c_last_name#126, c_preferred_cust_flag#127, c_birth_country#128, c_login#129, c_email_address#130, ws_ext_discount_amt#115, ws_ext_sales_price#116, ws_ext_wholesale_cost#117, ws_ext_list_price#118, d_year#121]
 Keys [8]: [c_customer_id#124, c_first_name#125, c_last_name#126, c_preferred_cust_flag#127, c_birth_country#128, c_login#129, c_email_address#130, d_year#121]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price#118 as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost#117 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt#115 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price#116 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
+Functions [1]: [partial_sum(((((ws_ext_list_price#118 - ws_ext_wholesale_cost#117) - ws_ext_discount_amt#115) + ws_ext_sales_price#116) / 2))]
 Aggregate Attributes [2]: [sum#131, isEmpty#132]
 Results [10]: [c_customer_id#124, c_first_name#125, c_last_name#126, c_preferred_cust_flag#127, c_birth_country#128, c_login#129, c_email_address#130, d_year#121, sum#133, isEmpty#134]
 
@@ -544,9 +544,9 @@ Arguments: hashpartitioning(c_customer_id#124, c_first_name#125, c_last_name#126
 (94) HashAggregate [codegen id : 42]
 Input [10]: [c_customer_id#124, c_first_name#125, c_last_name#126, c_preferred_cust_flag#127, c_birth_country#128, c_login#129, c_email_address#130, d_year#121, sum#133, isEmpty#134]
 Keys [8]: [c_customer_id#124, c_first_name#125, c_last_name#126, c_preferred_cust_flag#127, c_birth_country#128, c_login#129, c_email_address#130, d_year#121]
-Functions [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price#118 as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost#117 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt#115 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price#116 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price#118 as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost#117 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt#115 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price#116 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#136]
-Results [2]: [c_customer_id#124 AS customer_id#137, sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price#118 as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost#117 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt#115 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price#116 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#136 AS year_total#138]
+Functions [1]: [sum(((((ws_ext_list_price#118 - ws_ext_wholesale_cost#117) - ws_ext_discount_amt#115) + ws_ext_sales_price#116) / 2))]
+Aggregate Attributes [1]: [sum(((((ws_ext_list_price#118 - ws_ext_wholesale_cost#117) - ws_ext_discount_amt#115) + ws_ext_sales_price#116) / 2))#136]
+Results [2]: [c_customer_id#124 AS customer_id#137, sum(((((ws_ext_list_price#118 - ws_ext_wholesale_cost#117) - ws_ext_discount_amt#115) + ws_ext_sales_price#116) / 2))#136 AS year_total#138]
 
 (95) Filter [codegen id : 42]
 Input [2]: [customer_id#137, year_total#138]
@@ -627,7 +627,7 @@ Input [14]: [ws_bill_customer_sk#142, ws_ext_discount_amt#143, ws_ext_sales_pric
 (113) HashAggregate [codegen id : 50]
 Input [12]: [c_customer_id#152, c_first_name#153, c_last_name#154, c_preferred_cust_flag#155, c_birth_country#156, c_login#157, c_email_address#158, ws_ext_discount_amt#143, ws_ext_sales_price#144, ws_ext_wholesale_cost#145, ws_ext_list_price#146, d_year#149]
 Keys [8]: [c_customer_id#152, c_first_name#153, c_last_name#154, c_preferred_cust_flag#155, c_birth_country#156, c_login#157, c_email_address#158, d_year#149]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price#146 as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost#145 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt#143 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price#144 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
+Functions [1]: [partial_sum(((((ws_ext_list_price#146 - ws_ext_wholesale_cost#145) - ws_ext_discount_amt#143) + ws_ext_sales_price#144) / 2))]
 Aggregate Attributes [2]: [sum#159, isEmpty#160]
 Results [10]: [c_customer_id#152, c_first_name#153, c_last_name#154, c_preferred_cust_flag#155, c_birth_country#156, c_login#157, c_email_address#158, d_year#149, sum#161, isEmpty#162]
 
@@ -638,9 +638,9 @@ Arguments: hashpartitioning(c_customer_id#152, c_first_name#153, c_last_name#154
 (115) HashAggregate [codegen id : 51]
 Input [10]: [c_customer_id#152, c_first_name#153, c_last_name#154, c_preferred_cust_flag#155, c_birth_country#156, c_login#157, c_email_address#158, d_year#149, sum#161, isEmpty#162]
 Keys [8]: [c_customer_id#152, c_first_name#153, c_last_name#154, c_preferred_cust_flag#155, c_birth_country#156, c_login#157, c_email_address#158, d_year#149]
-Functions [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price#146 as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost#145 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt#143 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price#144 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price#146 as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost#145 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt#143 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price#144 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#136]
-Results [2]: [c_customer_id#152 AS customer_id#164, sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price#146 as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost#145 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt#143 as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price#144 as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true))#136 AS year_total#165]
+Functions [1]: [sum(((((ws_ext_list_price#146 - ws_ext_wholesale_cost#145) - ws_ext_discount_amt#143) + ws_ext_sales_price#144) / 2))]
+Aggregate Attributes [1]: [sum(((((ws_ext_list_price#146 - ws_ext_wholesale_cost#145) - ws_ext_discount_amt#143) + ws_ext_sales_price#144) / 2))#136]
+Results [2]: [c_customer_id#152 AS customer_id#164, sum(((((ws_ext_list_price#146 - ws_ext_wholesale_cost#145) - ws_ext_discount_amt#143) + ws_ext_sales_price#144) / 2))#136 AS year_total#165]
 
 (116) Exchange
 Input [2]: [customer_id#164, year_total#165]
@@ -653,7 +653,7 @@ Arguments: [customer_id#164 ASC NULLS FIRST], false, 0
 (118) SortMergeJoin [codegen id : 53]
 Left keys [1]: [customer_id#26]
 Right keys [1]: [customer_id#164]
-Join condition: (CASE WHEN (year_total#87 > 0.000000) THEN CheckOverflow((promote_precision(year_total#112) / promote_precision(year_total#87)), DecimalType(38,14), true) ELSE null END > CASE WHEN (year_total#140 > 0.000000) THEN CheckOverflow((promote_precision(year_total#165) / promote_precision(year_total#140)), DecimalType(38,14), true) ELSE null END)
+Join condition: (CASE WHEN (year_total#87 > 0.000000) THEN (year_total#112 / year_total#87) ELSE null END > CASE WHEN (year_total#140 > 0.000000) THEN (year_total#165 / year_total#140) ELSE null END)
 
 (119) Project [codegen id : 53]
 Output [7]: [customer_id#52, customer_first_name#53, customer_last_name#54, customer_preferred_cust_flag#55, customer_birth_country#56, customer_login#57, customer_email_address#58]
