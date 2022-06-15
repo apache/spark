@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -306,8 +306,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
       val plan = sparkSession.sessionState.executePlan(UnresolvedNamespace(ident)).analyzed
       plan match {
-        case ResolvedNamespace(catalog: InMemoryCatalog, _) => catalog.databaseExists(ident(1))
-        case _ => false
+        case ResolvedNamespace(catalog: SupportsNamespaces, _) =>
+          catalog.namespaceExists(ident.toArray)
+        case _ => true
       }
     } else {
       true
