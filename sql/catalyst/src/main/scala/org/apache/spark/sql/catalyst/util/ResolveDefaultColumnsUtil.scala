@@ -248,7 +248,6 @@ object ResolveDefaultColumns {
    */
   object DefaultColumnAnalyzer extends Analyzer(
     new CatalogManager(BuiltInFunctionCatalog, BuiltInFunctionCatalog.v1Catalog)) {
-    override def resolver: Resolver = caseSensitiveResolution
   }
 
   /**
