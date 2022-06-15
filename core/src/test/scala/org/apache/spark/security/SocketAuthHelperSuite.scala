@@ -26,7 +26,6 @@ import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
-
 class SocketAuthHelperSuite extends SparkFunSuite {
 
   private val conf = new SparkConf()
@@ -62,7 +61,7 @@ class SocketAuthHelperSuite extends SparkFunSuite {
     }
   }
 
-  test("failed to authenticate client") {
+  test("SPARK-38474: failed to authenticate client") {
     val mockedSocket = mock(classOf[Socket])
     val in = mock(classOf[InputStream])
     val out = mock(classOf[OutputStream])

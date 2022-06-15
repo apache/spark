@@ -189,8 +189,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
       errorHandler.read(out)
     }
     assert(e.getErrorClass === "STREAM_CLOSED")
-    assert(e.getMessage ===
-            "[STREAM_CLOSED] Cipher stream is closed.")
+    assert(e.getMessage === "[STREAM_CLOSED] Cipher stream is closed.")
     errorHandler.close()
 
     verify(decrypted, times(2)).read(any(classOf[ByteBuffer]))
