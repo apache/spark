@@ -156,19 +156,17 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(defaultValueColumnE == "41 + 1")
 
       // Analyze the default column values.
-      val analyzer = new Analyzer(new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
       val statementType = "CREATE TABLE"
-      val schema: StructType = db1tbl3.schema
-      assert(ResolveDefaultColumns.analyze(schema, columnA, statementType).sql == "42")
-      assert(ResolveDefaultColumns.analyze(schema, columnB, statementType).sql == "'abc'")
+      assert(ResolveDefaultColumns.analyze(columnA, statementType).sql == "42")
+      assert(ResolveDefaultColumns.analyze(columnB, statementType).sql == "'abc'")
       assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(schema, columnC, statementType)
+        ResolveDefaultColumns.analyze(columnC, statementType)
       }.getMessage.contains("fails to parse as a valid expression"))
       assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(schema, columnD, statementType)
+        ResolveDefaultColumns.analyze(columnD, statementType)
       }.getMessage.contains("fails to resolve as a valid expression"))
       assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(schema, columnE, statementType)
+        ResolveDefaultColumns.analyze(columnE, statementType)
       }.getMessage.contains("statement provided a value of incompatible type"))
 
       // Make sure that constant-folding default values does not take place when the feature is
