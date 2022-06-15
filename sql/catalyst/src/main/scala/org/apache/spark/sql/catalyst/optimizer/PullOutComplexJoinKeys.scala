@@ -29,9 +29,10 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
  * This rule pulls out the complex join keys expression if can not broadcast.
  * Example:
  *
- * +- Join Inner, ((c1 % 2) = c2))                +- Join Inner, (_complexjoinkey_0 = c2))
- *    :- Relation default.t1[c1] parquet    =>       :- Project [(c1 % 2) AS _complexjoinkey_0]
- *    +- Relation default.t2[c2] parquet             :  +- Relation default.t1[c1] parquet
+ * +- Join Inner, ((c1 % 2) = c2))              - Project [c1, c2]
+ *    :- Relation default.t1[c1] parquet          +- Join Inner, (_complexjoinkey_0 = c2))
+ *    +- Relation default.t2[c2] parquet    =>       :- Project [c1, (c1 % 2) AS _complexjoinkey_0]
+ *                                                   :  +- Relation default.t1[c1] parquet
  *                                                   +- Relation default.t2[c2] parquet
  *
  * For shuffle based join, we may evaluate the join keys for several times:
@@ -108,7 +109,9 @@ object PullOutComplexJoinKeys extends Rule[LogicalPlan] with JoinSelectionHelper
             case (l, r) => EqualTo(l, r)
           } ++ other
 
-          Join(newLeft, newRight, joinType, newConditions.reduceOption(And), joinHint)
+          Project(
+            j.output,
+            Join(newLeft, newRight, joinType, newConditions.reduceOption(And), joinHint))
         }
     }
   }

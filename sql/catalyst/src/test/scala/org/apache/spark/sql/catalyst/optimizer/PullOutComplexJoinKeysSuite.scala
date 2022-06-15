@@ -41,8 +41,9 @@ class PullOutComplexJoinKeysSuite extends PlanTest {
       //   a (complex join key)
       //   b
       val plan1 = testRelation1.join(testRelation2, condition = Some($"a" % 2 === $"x"))
-      val expected1 = testRelation1.select(($"a" % 2) as "_complexjoinkey_0").join(
+      val expected1 = testRelation1.select($"a", $"b", ($"a" % 2) as "_complexjoinkey_0").join(
         testRelation2, condition = Some($"_complexjoinkey_0" === $"x"))
+        .select($"a", $"b", $"x", $"y")
       comparePlans(Optimize.execute(plan1.analyze), expected1.analyze)
 
       // join
@@ -51,8 +52,9 @@ class PullOutComplexJoinKeysSuite extends PlanTest {
       //   b
       val plan2 = testRelation1.select($"a").join(
         testRelation2, condition = Some($"a" % 2 === $"x"))
-      val expected2 = testRelation1.select(($"a" % 2) as "_complexjoinkey_0")
+      val expected2 = testRelation1.select($"a", ($"a" % 2) as "_complexjoinkey_0")
         .join(testRelation2, condition = Some($"_complexjoinkey_0" === $"x"))
+        .select($"a", $"x", $"y")
       comparePlans(Optimize.execute(plan2.analyze), expected2.analyze)
 
       // join
@@ -60,26 +62,29 @@ class PullOutComplexJoinKeysSuite extends PlanTest {
       //   b
       val plan3 = testRelation1.join(testRelation2,
         condition = Some($"a" % 2 === $"x" && $"b" % 3 === $"y"))
-      val expected3 = testRelation1.select(($"a" % 2) as "_complexjoinkey_0",
+      val expected3 = testRelation1.select($"a", $"b", ($"a" % 2) as "_complexjoinkey_0",
         ($"b" % 3) as "_complexjoinkey_1").join(testRelation2,
         condition = Some($"_complexjoinkey_0" === $"x" && $"_complexjoinkey_1" === $"y"))
+        .select($"a", $"b", $"x", $"y")
       comparePlans(Optimize.execute(plan3.analyze), expected3.analyze)
 
       // join
       //   a
       //   b (complex join key)
       val plan4 = testRelation1.join(testRelation2, condition = Some($"a" === $"x" % 2))
-      val expected4 = testRelation1.join(testRelation2.select(($"x" % 2) as "_complexjoinkey_0"),
-        condition = Some($"a" === $"_complexjoinkey_0"))
+      val expected4 = testRelation1.join(testRelation2.select($"x", $"y",
+        ($"x" % 2) as "_complexjoinkey_0"), condition = Some($"a" === $"_complexjoinkey_0"))
+        .select($"a", $"b", $"x", $"y")
       comparePlans(Optimize.execute(plan4.analyze), expected4.analyze)
 
       // join
       //   a (complex join key)
       //   b (complex join key)
       val plan5 = testRelation1.join(testRelation2, condition = Some($"a" % 2 === $"x" % 3))
-      val expected5 = testRelation1.select(($"a" % 2) as "_complexjoinkey_0").join(
-        testRelation2.select(($"x" % 3) as "_complexjoinkey_1"),
+      val expected5 = testRelation1.select($"a", $"b", ($"a" % 2) as "_complexjoinkey_0").join(
+        testRelation2.select($"x", $"y", ($"x" % 3) as "_complexjoinkey_1"),
         condition = Some($"_complexjoinkey_0" === $"_complexjoinkey_1"))
+        .select($"a", $"b", $"x", $"y")
       comparePlans(Optimize.execute(plan5.analyze), expected5.analyze)
     }
   }

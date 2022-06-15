@@ -167,8 +167,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopUnion) ::
     Batch("OptimizeLimitZero", Once,
       OptimizeLimitZero) ::
-    Batch("Pull Out Complex Join Keys", Once,
-      PullOutComplexJoinKeys) ::
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
     // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
@@ -212,6 +210,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
+    Batch("Pull Out Complex Join Keys", Once,
+      PullOutComplexJoinKeys) :+
     Batch("Eliminate Sorts", Once,
       EliminateSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
