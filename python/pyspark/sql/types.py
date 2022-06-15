@@ -1236,7 +1236,7 @@ def _from_numpy_type(
     elif nt == np.dtype("float32"):
         spark_type = FloatType()
     elif nt == np.dtype("float64"):
-        spark_type = DecimalType(38, 18)
+        spark_type = DoubleType()
 
     return spark_type
 
