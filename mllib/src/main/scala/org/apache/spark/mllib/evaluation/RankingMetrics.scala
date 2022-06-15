@@ -32,7 +32,9 @@ import org.apache.spark.rdd.RDD
  *
  * Java users should use `RankingMetrics$.of` to create a [[RankingMetrics]] instance.
  *
- * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
+ * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pair
+ *                            or (predicted ranking, ground truth set, relevance value of ground truth set).
+ *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
  */
 @Since("1.2.0")
 class RankingMetrics[T: ClassTag] @Since("3.4.0") (
@@ -136,7 +138,7 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
    * The discounted cumulative gain at position k is computed as:
    *    sum,,i=1,,^k^ (2^{relevance of ''i''th item}^ - 1) / log(i + 1),
    * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
-   * implementation, the relevance value is binary.
+   * implementation, the relevance value is binary if the relevance value is empty.
 
    * If a query has an empty ground truth set, zero will be used as ndcg together with
    * a log warning.
