@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.Analyzer
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -240,5 +242,21 @@ object ResolveDefaultColumns {
         }
       }
     }
+  }
+
+  /**
+   * Returns a new Analyzer suitable for processing default column values.
+   */
+  object DefaultColumnAnalyzer extends Analyzer(
+    new CatalogManager(
+      FakeV2SessionCatalog,
+      new SessionCatalog(
+        new InMemoryCatalog,
+        new SimpleFunctionRegistry(),
+        new SimpleTableFunctionRegistry()) {
+        override def createDatabase(
+            dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
+      })) {
+    override def resolver: Resolver = caseSensitiveResolution
   }
 }
