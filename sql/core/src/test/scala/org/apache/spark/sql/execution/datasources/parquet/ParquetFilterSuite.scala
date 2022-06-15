@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
@@ -1313,6 +1314,34 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       // The inner column name, `_1` and outer column name `_1` are the same.
       // Obviously this should not push down filters because the outer column is struct.
       assert(df.filter("_1 IS NOT NULL").count() === 4)
+    }
+  }
+
+  test("SPARK-39393: Do not push down predicate filters for repeated primitive fields") {
+    import ParquetCompatibilityTest._
+    withTempDir { dir =>
+      val protobufParquetFilePath = new File(dir, "protobuf-parquet").getCanonicalPath
+
+      val protobufSchema =
+        """message protobuf_style {
+          |  repeated int32 f;
+          |}
+        """.stripMargin
+
+      writeDirect(protobufParquetFilePath, protobufSchema, { rc =>
+        rc.message {
+          rc.field("f", 0) {
+              rc.addInteger(1)
+              rc.addInteger(2)
+          }
+        }
+      })
+
+      // If the "isnotnull(f)" filter gets pushed down, this query will throw an exception
+      // since column "f" is repeated primitive column in the Parquet file.
+      checkAnswer(
+        spark.read.parquet(dir.getCanonicalPath).filter("isnotnull(f)"),
+        Seq(Row(Seq(1, 2))))
     }
   }
 

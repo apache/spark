@@ -771,7 +771,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(info1.submissionTime === info2.submissionTime)
     assert(info1.completionTime === info2.completionTime)
     assert(info1.rddInfos.size === info2.rddInfos.size)
-    (0 until info1.rddInfos.size).foreach { i =>
+    info1.rddInfos.indices.foreach { i =>
       assertEquals(info1.rddInfos(i), info2.rddInfos(i))
     }
     assert(info1.accumulables === info2.accumulables)

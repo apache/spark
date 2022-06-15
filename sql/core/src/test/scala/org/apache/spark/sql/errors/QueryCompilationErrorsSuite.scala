@@ -41,35 +41,36 @@ class QueryCompilationErrorsSuite
     val e1 = intercept[AnalysisException] {
       sql("select 'value1' as a, 1L as b").as[StringIntClass]
     }
-    checkErrorClass(
+    checkError(
       exception = e1,
       errorClass = "CANNOT_UP_CAST_DATATYPE",
-      msg =
+      parameters = Map("expression" -> "b", "sourceType" -> "\"BIGINT\"", "targetType" -> "\"INT\"",
+        "details" -> (
         s"""
-           |Cannot up cast b from "BIGINT" to "INT".
            |The type path of the target object is:
            |- field (class: "scala.Int", name: "b")
            |- root class: "org.apache.spark.sql.errors.StringIntClass"
            |You can either add an explicit cast to the input data or choose a higher precision type
-         """.stripMargin.trim + " of the field in the target object")
+         """.stripMargin.trim + " of the field in the target object")))
 
     val e2 = intercept[AnalysisException] {
       sql("select 1L as a," +
         " named_struct('a', 'value1', 'b', cast(1.0 as decimal(38,18))) as b")
         .as[ComplexClass]
     }
-    checkErrorClass(
+    checkError(
       exception = e2,
       errorClass = "CANNOT_UP_CAST_DATATYPE",
-      msg =
+      parameters = Map("expression" -> "b.`b`", "sourceType" -> "\"DECIMAL(38,18)\"",
+        "targetType" -> "\"BIGINT\"",
+        "details" -> (
         s"""
-           |Cannot up cast b.`b` from "DECIMAL(38,18)" to "BIGINT".
            |The type path of the target object is:
            |- field (class: "scala.Long", name: "b")
            |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
            |- root class: "org.apache.spark.sql.errors.ComplexClass"
            |You can either add an explicit cast to the input data or choose a higher precision type
-         """.stripMargin.trim + " of the field in the target object")
+         """.stripMargin.trim + " of the field in the target object")))
   }
 
   test("UNSUPPORTED_GROUPING_EXPRESSION: filter with grouping/grouping_Id expression") {
@@ -83,10 +84,10 @@ class QueryCompilationErrorsSuite
         df.groupBy("CustomerId").agg(Map("Quantity" -> "max"))
           .filter(s"$grouping(CustomerId)=17850")
       }
-      checkErrorClass(
+      checkError(
         exception = e,
         errorClass = "UNSUPPORTED_GROUPING_EXPRESSION",
-        msg = "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+        parameters = Map[String, String]())
     }
   }
 
@@ -101,10 +102,10 @@ class QueryCompilationErrorsSuite
         df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
           sort(grouping)
       }
-      checkErrorClass(
+      checkError(
         exception = e,
         errorClass = "UNSUPPORTED_GROUPING_EXPRESSION",
-        msg = "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+        parameters = Map[String, String]())
     }
   }
 
@@ -138,11 +139,10 @@ class QueryCompilationErrorsSuite
         .collect()
     }
 
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "INVALID_PANDAS_UDF_PLACEMENT",
-      msg = "The group aggregate pandas UDF `pandas_udf_1`, `pandas_udf_2` cannot be invoked " +
-        "together with as other, non-pandas aggregate functions.")
+      parameters = Map("functionList" -> "`pandas_udf_1`, `pandas_udf_2`"))
   }
 
   test("UNSUPPORTED_FEATURE: Using Python UDF with unsupported join condition") {
@@ -165,12 +165,11 @@ class QueryCompilationErrorsSuite
         df2, pythonTestUDF(df1("CustomerID") === df2("CustomerID")), "leftouter").collect()
     }
 
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = Some("PYTHON_UDF_IN_ON_CLAUSE"),
-      msg = "The feature is not supported: " +
-        "Python UDF in the ON clause of a LEFT OUTER JOIN.",
+      parameters = Map("joinType" -> "LEFT OUTER"),
       sqlState = Some("0A000"))
   }
 
@@ -189,13 +188,12 @@ class QueryCompilationErrorsSuite
       df.groupBy(df("CustomerID")).pivot(df("CustomerID")).agg(pandasTestUDF(df("Quantity")))
     }
 
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("PANDAS_UDAF_IN_PIVOT"),
-      msg = "The feature is not supported: " +
-        "Pandas user defined aggregate function in the PIVOT clause.",
-      sqlState = Some("0A000"))
+      errorSubClass = "PANDAS_UDAF_IN_PIVOT",
+      parameters = Map[String, String](),
+      sqlState = "0A000")
   }
 
   test("NO_HANDLER_FOR_UDAF: No handler for UDAF error") {
@@ -219,21 +217,10 @@ class QueryCompilationErrorsSuite
   }
 
   test("UNTYPED_SCALA_UDF: use untyped Scala UDF should fail by default") {
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException](udf((x: Int) => x, IntegerType)),
       errorClass = "UNTYPED_SCALA_UDF",
-      msg =
-        "You're using untyped Scala UDF, which does not have the input type " +
-        "information. Spark may blindly pass null to the Scala closure with primitive-type " +
-        "argument, and the closure will see the default value of the Java type for the null " +
-        "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-        "To get rid of this error, you could:\n" +
-        "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
-        "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
-        "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
-        "if input types are all non primitive\n" +
-        s"""3. set "${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key}" to "true" and """ +
-        s"use this API with caution")
+      parameters = Map[String, String]())
   }
 
   test("NO_UDF_INTERFACE_ERROR: java udf class does not implement any udf interface") {
@@ -244,10 +231,10 @@ class QueryCompilationErrorsSuite
         className,
         StringType)
     )
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "NO_UDF_INTERFACE_ERROR",
-      msg = s"UDF class $className doesn't implement any UDF interface")
+      parameters = Map("className" -> className))
   }
 
   test("MULTI_UDF_INTERFACE_ERROR: java udf implement multi UDF interface") {
@@ -258,10 +245,10 @@ class QueryCompilationErrorsSuite
         className,
         StringType)
     )
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "MULTI_UDF_INTERFACE_ERROR",
-      msg = s"Not allowed to implement multiple UDF interfaces, UDF class $className")
+      parameters = Map("className" -> className))
   }
 
   test("UNSUPPORTED_FEATURE: java udf with too many type arguments") {
@@ -272,38 +259,39 @@ class QueryCompilationErrorsSuite
         className,
         StringType)
     )
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS"),
-      msg = "The feature is not supported: UDF class with 24 type arguments.",
-      sqlState = Some("0A000"))
+      errorSubClass = "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
+      parameters = Map("num" -> "24"),
+      sqlState = "0A000")
   }
 
   test("GROUPING_COLUMN_MISMATCH: not found the grouping column") {
     val groupingColMismatchEx = intercept[AnalysisException] {
       courseSales.cube("course", "year").agg(grouping("earnings")).explain()
     }
-    checkErrorClass(
+    checkError(
       exception = groupingColMismatchEx,
       errorClass = "GROUPING_COLUMN_MISMATCH",
-      msg =
-        "Column of grouping \\(earnings.*\\) can't be found in grouping columns course.*,year.*",
+      errorSubClass = None,
+      parameters = Map("grouping" -> "earnings.*", "groupingColumns" -> "course.*,year.*"),
       sqlState = Some("42000"),
-      matchMsg = true)
+      matchPVals = true)
   }
 
   test("GROUPING_ID_COLUMN_MISMATCH: columns of grouping_id does not match") {
     val groupingIdColMismatchEx = intercept[AnalysisException] {
       courseSales.cube("course", "year").agg(grouping_id("earnings")).explain()
     }
-    checkErrorClass(
+    checkError(
       exception = groupingIdColMismatchEx,
       errorClass = "GROUPING_ID_COLUMN_MISMATCH",
-      msg = "Columns of grouping_id \\(earnings.*\\) does not match " +
-        "grouping columns \\(course.*,year.*\\)",
+      errorSubClass = None,
+      parameters = Map("groupingIdColumn" -> "earnings.*",
+      "groupByColumns" -> "course.*,year.*"),
       sqlState = Some("42000"),
-      matchMsg = true)
+      matchPVals = true)
   }
 
   test("GROUPING_SIZE_LIMIT_EXCEEDED: max size of grouping set") {
@@ -320,17 +308,17 @@ class QueryCompilationErrorsSuite
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
-        checkErrorClass(
+        checkError(
           exception = intercept[AnalysisException] { testGroupingIDs(33) },
           errorClass = "GROUPING_SIZE_LIMIT_EXCEEDED",
-          msg = "Grouping sets size cannot be greater than 32")
+          parameters = Map("maxSize" -> "32"))
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
-        checkErrorClass(
+        checkError(
           exception = intercept[AnalysisException] { testGroupingIDs(65) },
           errorClass = "GROUPING_SIZE_LIMIT_EXCEEDED",
-          msg = "Grouping sets size cannot be greater than 64")
+          parameters = Map("maxSize" -> "64"))
       }
     }
   }
@@ -350,13 +338,13 @@ class QueryCompilationErrorsSuite
       withTempView(tempViewName) {
         sql(s"CREATE TEMPORARY VIEW $tempViewName as SELECT * FROM $tableName")
 
-        checkErrorClass(
+        checkError(
           exception = intercept[AnalysisException] {
             sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation DESC PARTITION is not allowed """ +
-            s"on the temporary view: `$tempViewName`")
+          parameters = Map("statement" -> "DESC PARTITION",
+            "objectType" -> "TEMPORARY VIEW", "objectName" -> s"`$tempViewName`"))
       }
     }
   }
@@ -376,13 +364,13 @@ class QueryCompilationErrorsSuite
       withView(viewName) {
         sql(s"CREATE VIEW $viewName as SELECT * FROM $tableName")
 
-        checkErrorClass(
+        checkError(
           exception = intercept[AnalysisException] {
             sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation DESC PARTITION is not allowed """ +
-            s"on the view: `$viewName`")
+          parameters = Map("statement" -> "DESC PARTITION",
+          "objectType" -> "VIEW", "objectName" -> s"`$viewName`"))
       }
     }
   }
@@ -390,13 +378,13 @@ class QueryCompilationErrorsSuite
   test("SECOND_FUNCTION_ARGUMENT_NOT_INTEGER: " +
     "the second argument of 'date_add' function needs to be an integer") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      checkErrorClass(
+      checkError(
         exception = intercept[AnalysisException] {
           sql("select date_add('1982-08-15', 'x')").collect()
         },
         errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-        msg = "The second argument of 'date_add' function needs to be an integer.",
-        sqlState = Some("22023"))
+        parameters = Map("functionName" -> "date_add"),
+        sqlState = "22023")
     }
   }
 
@@ -404,13 +392,12 @@ class QueryCompilationErrorsSuite
     val schema = StructType(
       StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
 
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException] {
         spark.read.schema(schema).json(spark.emptyDataset[String])
       },
       errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
-      msg = """Input schema "STRUCT<map: MAP<INT, INT>>" """ +
-        "can only contain STRING as a key type for a MAP."
+      parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT>>\"")
     )
   }
 
@@ -502,7 +489,7 @@ class QueryCompilationErrorsSuite
       ("Java", 2013, 30000)
     ).toDF("course", "year", "earnings")
 
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException] {
         df.groupBy(df("course")).pivot(df("year"), Seq(
           struct(lit("dotnet"), lit("Experts")),
@@ -510,8 +497,9 @@ class QueryCompilationErrorsSuite
           agg(sum($"earnings")).collect()
       },
       errorClass = "PIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Invalid pivot value 'struct(col1, dotnet, col2, Experts)': value data type " +
-        "struct<col1:string,col2:string> does not match pivot column data type int")
+      parameters = Map("value" -> "struct(col1, dotnet, col2, Experts)",
+        "valueType" -> "struct<col1:string,col2:string>",
+        "pivotType" -> "int"))
   }
 
   test("INVALID_FIELD_NAME: add a nested field for not struct parent") {
@@ -537,25 +525,26 @@ class QueryCompilationErrorsSuite
       ("Java", 2013, 30000)
     ).toDF("course", "year", "earnings")
 
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException] {
         df.groupBy(df("course")).
           pivot(df("year"), Seq($"earnings")).
           agg(sum($"earnings")).collect()
       },
       errorClass = "NON_LITERAL_PIVOT_VALUES",
-      msg = """Literal expressions required for pivot values, found "earnings".""")
+      parameters = Map("expression" -> "\"earnings\""))
   }
 
   test("UNSUPPORTED_DESERIALIZER: data type mismatch") {
     val e = intercept[AnalysisException] {
       sql("select 1 as arr").as[ArrayClass]
     }
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("DATA_TYPE_MISMATCH"),
-      msg = """The deserializer is not supported: need an "ARRAY" field but got "INT".""")
+      parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""),
+      sqlState = None)
   }
 
   test("UNSUPPORTED_DESERIALIZER: " +
@@ -565,22 +554,24 @@ class QueryCompilationErrorsSuite
     val e1 = intercept[AnalysisException] {
       ds.as[(String, Int, Long)]
     }
-    checkErrorClass(
+    checkError(
       exception = e1,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
-      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
-        "to Tuple3, but failed as the number of fields does not line up.")
+      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+        "ordinal" -> "3"),
+      sqlState = None)
 
     val e2 = intercept[AnalysisException] {
       ds.as[Tuple1[String]]
     }
-    checkErrorClass(
+    checkError(
       exception = e2,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
-      msg = "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
-        "to Tuple1, but failed as the number of fields does not line up.")
+      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+        "ordinal" -> "1"),
+      sqlState = None)
   }
 
   test("UNSUPPORTED_GENERATOR: " +
@@ -589,12 +580,12 @@ class QueryCompilationErrorsSuite
       sql("""select explode(Array(1, 2, 3)) + 1""").collect()
     )
 
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("NESTED_IN_EXPRESSIONS"),
-      msg = """The generator is not supported: """ +
-        """nested in expressions "(explode(array(1, 2, 3)) + 1)"""")
+      parameters = Map("expression" -> "\"(explode(array(1, 2, 3)) + 1)\""),
+      sqlState = None)
   }
 
   test("UNSUPPORTED_GENERATOR: only one generator allowed") {
@@ -602,13 +593,13 @@ class QueryCompilationErrorsSuite
       sql("""select explode(Array(1, 2, 3)), explode(Array(1, 2, 3))""").collect()
     )
 
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("MULTI_GENERATOR"),
-      msg = "The generator is not supported: only one generator allowed per select clause " +
-        """but found 2: "explode(array(1, 2, 3))", "explode(array(1, 2, 3))""""
-    )
+      parameters = Map("clause" -> "SELECT", "num" -> "2",
+        "generators" -> "\"explode(array(1, 2, 3))\", \"explode(array(1, 2, 3))\""),
+      sqlState = None)
   }
 
   test("UNSUPPORTED_GENERATOR: generators are not supported outside the SELECT clause") {
@@ -616,13 +607,12 @@ class QueryCompilationErrorsSuite
       sql("""select 1 from t order by explode(Array(1, 2, 3))""").collect()
     )
 
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("OUTSIDE_SELECT"),
-      msg = "The generator is not supported: outside the SELECT clause, found: " +
-        "'Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true"
-    )
+      parameters = Map("plan" -> "'Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true"),
+      sqlState = None)
   }
 
   test("UNSUPPORTED_GENERATOR: not a generator") {

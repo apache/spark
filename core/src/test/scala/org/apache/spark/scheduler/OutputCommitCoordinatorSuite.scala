@@ -139,14 +139,14 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("Only one of two duplicate commit tasks should commit") {
     val rdd = sc.parallelize(Seq(1), 1)
     sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully _,
-      0 until rdd.partitions.size)
+      rdd.partitions.indices)
     assert(tempDir.list().size === 1)
   }
 
   test("If commit fails, if task is retried it should not be locked, and will succeed.") {
     val rdd = sc.parallelize(Seq(1), 1)
     sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
-      0 until rdd.partitions.size)
+      rdd.partitions.indices)
     assert(tempDir.list().size === 1)
   }
 

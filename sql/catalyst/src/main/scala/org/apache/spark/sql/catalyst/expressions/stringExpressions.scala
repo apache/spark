@@ -258,7 +258,8 @@ case class ConcatWs(children: Seq[Expression])
 // scalastyle:on line.size.limit
 case class Elt(
     children: Seq[Expression],
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends Expression {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends Expression
+  with SupportQueryContext {
 
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
@@ -297,7 +298,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidInputIndexError(index, inputExprs.length)
+          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length, queryContext)
         } else {
           null
         }
@@ -349,10 +350,11 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
+      val errorContext = ctx.addReferenceObj("errCtx", queryContext)
       // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
-         |  throw QueryExecutionErrors.invalidInputIndexError(${index.value}, ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length}, $errorContext);
          |}
        """.stripMargin
       // scalastyle:on line.size.limit
@@ -381,6 +383,12 @@ case class Elt(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
     copy(children = newChildren)
+
+  override def initQueryContext(): String = if (failOnError) {
+    origin.context
+  } else {
+    ""
+  }
 }
 
 

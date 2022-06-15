@@ -13,7 +13,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum(sales),su
                         Filter [sales]
                           Subquery #3
                             WholeStageCodegen (8)
-                              HashAggregate [sum,count] [avg(CheckOverflow((promote_precision(cast(quantity as decimal(12,2))) * promote_precision(cast(list_price as decimal(12,2)))), DecimalType(18,2))),average_sales,sum,count]
+                              HashAggregate [sum,count] [avg((cast(quantity as decimal(10,0)) * list_price)),average_sales,sum,count]
                                 InputAdapter
                                   Exchange #17
                                     WholeStageCodegen (7)
@@ -47,7 +47,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum(sales),su
                                                         ReusedSubquery [d_date_sk] #2
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk] #9
-                          HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(ss_quantity as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2))),count(1),sales,number_sales,sum,isEmpty,count]
+                          HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum((cast(ss_quantity as decimal(10,0)) * ss_list_price)),count(1),sales,number_sales,sum,isEmpty,count]
                             InputAdapter
                               Exchange [i_brand_id,i_class_id,i_category_id] #2
                                 WholeStageCodegen (43)
@@ -202,7 +202,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum(sales),su
                       Project [sales,number_sales,i_brand_id,i_class_id,i_category_id]
                         Filter [sales]
                           ReusedSubquery [average_sales] #3
-                          HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cs_quantity as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2))),count(1),sales,number_sales,sum,isEmpty,count]
+                          HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum((cast(cs_quantity as decimal(10,0)) * cs_list_price)),count(1),sales,number_sales,sum,isEmpty,count]
                             InputAdapter
                               Exchange [i_brand_id,i_class_id,i_category_id] #18
                                 WholeStageCodegen (87)
@@ -236,7 +236,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum(sales),su
                       Project [sales,number_sales,i_brand_id,i_class_id,i_category_id]
                         Filter [sales]
                           ReusedSubquery [average_sales] #3
-                          HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(ws_quantity as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2))),count(1),sales,number_sales,sum,isEmpty,count]
+                          HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum((cast(ws_quantity as decimal(10,0)) * ws_list_price)),count(1),sales,number_sales,sum,isEmpty,count]
                             InputAdapter
                               Exchange [i_brand_id,i_class_id,i_category_id] #20
                                 WholeStageCodegen (131)

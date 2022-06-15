@@ -9,7 +9,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                 InputAdapter
                   Union
                     WholeStageCodegen (10)
-                      HashAggregate [s_store_id,sum,sum,isEmpty,sum,isEmpty] [sum(UnscaledValue(ss_ext_sales_price)),sum(coalesce(cast(sr_return_amt as decimal(12,2)), 0.00)),sum(CheckOverflow((promote_precision(cast(ss_net_profit as decimal(13,2))) - promote_precision(cast(coalesce(cast(sr_net_loss as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2))),sales,returns,profit,channel,id,sum,sum,isEmpty,sum,isEmpty]
+                      HashAggregate [s_store_id,sum,sum,isEmpty,sum,isEmpty] [sum(UnscaledValue(ss_ext_sales_price)),sum(coalesce(cast(sr_return_amt as decimal(12,2)), 0.00)),sum((ss_net_profit - coalesce(cast(sr_net_loss as decimal(12,2)), 0.00))),sales,returns,profit,channel,id,sum,sum,isEmpty,sum,isEmpty]
                         InputAdapter
                           Exchange [s_store_id] #2
                             WholeStageCodegen (9)
@@ -99,7 +99,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                               InputAdapter
                                                 Scan parquet default.store [s_store_sk,s_store_id]
                     WholeStageCodegen (20)
-                      HashAggregate [cp_catalog_page_id,sum,sum,isEmpty,sum,isEmpty] [sum(UnscaledValue(cs_ext_sales_price)),sum(coalesce(cast(cr_return_amount as decimal(12,2)), 0.00)),sum(CheckOverflow((promote_precision(cast(cs_net_profit as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_net_loss as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2))),sales,returns,profit,channel,id,sum,sum,isEmpty,sum,isEmpty]
+                      HashAggregate [cp_catalog_page_id,sum,sum,isEmpty,sum,isEmpty] [sum(UnscaledValue(cs_ext_sales_price)),sum(coalesce(cast(cr_return_amount as decimal(12,2)), 0.00)),sum((cs_net_profit - coalesce(cast(cr_net_loss as decimal(12,2)), 0.00))),sales,returns,profit,channel,id,sum,sum,isEmpty,sum,isEmpty]
                         InputAdapter
                           Exchange [cp_catalog_page_id] #11
                             WholeStageCodegen (19)
@@ -152,7 +152,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                               InputAdapter
                                                 Scan parquet default.catalog_page [cp_catalog_page_sk,cp_catalog_page_id]
                     WholeStageCodegen (30)
-                      HashAggregate [web_site_id,sum,sum,isEmpty,sum,isEmpty] [sum(UnscaledValue(ws_ext_sales_price)),sum(coalesce(cast(wr_return_amt as decimal(12,2)), 0.00)),sum(CheckOverflow((promote_precision(cast(ws_net_profit as decimal(13,2))) - promote_precision(cast(coalesce(cast(wr_net_loss as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2))),sales,returns,profit,channel,id,sum,sum,isEmpty,sum,isEmpty]
+                      HashAggregate [web_site_id,sum,sum,isEmpty,sum,isEmpty] [sum(UnscaledValue(ws_ext_sales_price)),sum(coalesce(cast(wr_return_amt as decimal(12,2)), 0.00)),sum((ws_net_profit - coalesce(cast(wr_net_loss as decimal(12,2)), 0.00))),sales,returns,profit,channel,id,sum,sum,isEmpty,sum,isEmpty]
                         InputAdapter
                           Exchange [web_site_id] #15
                             WholeStageCodegen (29)

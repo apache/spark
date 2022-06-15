@@ -66,26 +66,26 @@ Results [2]: [i_manufact#5, count#10]
 
 (10) Exchange
 Input [2]: [i_manufact#5, count#10]
-Arguments: hashpartitioning(i_manufact#5, 5), ENSURE_REQUIREMENTS, [id=#11]
+Arguments: hashpartitioning(i_manufact#5, 5), ENSURE_REQUIREMENTS, [plan_id=1]
 
 (11) HashAggregate [codegen id : 2]
 Input [2]: [i_manufact#5, count#10]
 Keys [1]: [i_manufact#5]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#12]
-Results [2]: [count(1)#12 AS item_cnt#13, i_manufact#5]
+Aggregate Attributes [1]: [count(1)#11]
+Results [2]: [count(1)#11 AS item_cnt#12, i_manufact#5]
 
 (12) Filter [codegen id : 2]
-Input [2]: [item_cnt#13, i_manufact#5]
-Condition : (item_cnt#13 > 0)
+Input [2]: [item_cnt#12, i_manufact#5]
+Condition : (item_cnt#12 > 0)
 
 (13) Project [codegen id : 2]
 Output [1]: [i_manufact#5]
-Input [2]: [item_cnt#13, i_manufact#5]
+Input [2]: [item_cnt#12, i_manufact#5]
 
 (14) BroadcastExchange
 Input [1]: [i_manufact#5]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [plan_id=2]
 
 (15) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_manufact#2]
@@ -105,7 +105,7 @@ Results [1]: [i_product_name#3]
 
 (18) Exchange
 Input [1]: [i_product_name#3]
-Arguments: hashpartitioning(i_product_name#3, 5), ENSURE_REQUIREMENTS, [id=#15]
+Arguments: hashpartitioning(i_product_name#3, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (19) HashAggregate [codegen id : 4]
 Input [1]: [i_product_name#3]

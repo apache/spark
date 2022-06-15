@@ -582,9 +582,8 @@ class MicroBatchExecution(
             case FileSourceMetadataAttribute(_) => true
             case _ => false
           }
-          val finalDataPlan = dataPlan match {
+          val finalDataPlan = dataPlan transformUp {
             case l: LogicalRelation if hasFileMetadata => l.withMetadataColumns()
-            case _ => dataPlan
           }
           val maxFields = SQLConf.get.maxToStringFields
           assert(output.size == finalDataPlan.output.size,

@@ -2177,7 +2177,8 @@ case class ElementAt(
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
           if (failOnError) {
-            throw QueryExecutionErrors.invalidElementAtIndexError(index, array.numElements())
+            throw QueryExecutionErrors.invalidElementAtIndexError(
+              index, array.numElements(), queryContext)
           } else {
             defaultValueOutOfBound match {
               case Some(value) => value.eval()
@@ -2219,7 +2220,10 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements());"
+            val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+            // scalastyle:off line.size.limit
+            s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
+            // scalastyle:on line.size.limit
           } else {
             defaultValueOutOfBound match {
               case Some(value) =>
@@ -3619,7 +3623,7 @@ case class ArrayDistinct(child: Expression)
       val array = data.toArray[AnyRef](elementType)
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[AnyRef]
       var alreadyStoredNull = false
-      for (i <- 0 until array.length) {
+      for (i <- array.indices) {
         if (array(i) != null) {
           var found = false
           var j = 0
