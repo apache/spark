@@ -33,7 +33,8 @@ import org.apache.spark.rdd.RDD
  * Java users should use `RankingMetrics$.of` to create a [[RankingMetrics]] instance.
  *
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pair
- *                            or (predicted ranking, ground truth set, relevance value of ground truth set).
+ *                            or (predicted ranking, ground truth set,
+ * .                          relevance value of ground truth set).
  *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
  */
 @Since("1.2.0")
