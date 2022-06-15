@@ -66,9 +66,8 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab, _) =>
-        countRelevantItemRatio(pred, lab, k, k)
-    }
-    .mean()
+      countRelevantItemRatio(pred, lab, k, k)
+    }.mean()
   }
 
   /**
@@ -79,11 +78,10 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab, _) =>
-        val labSet = lab.toSet
-        val k = math.max(pred.length, labSet.size)
-        averagePrecision(pred, labSet, k)
-    }
-    .mean()
+      val labSet = lab.toSet
+      val k = math.max(pred.length, labSet.size)
+      averagePrecision(pred, labSet, k)
+    }.mean()
   }
 
   /**
@@ -97,9 +95,8 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab, _) =>
-        averagePrecision(pred, lab.toSet, k)
-    }
-    .mean()
+      averagePrecision(pred, lab.toSet, k)
+    }.mean()
   }
 
   /**
@@ -199,8 +196,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
         logWarning("Empty ground truth set, check input data")
         0.0
       }
-    }
-    .mean()
+    }.mean()
   }
 
   /**
@@ -224,9 +220,8 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   def recallAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab, _) =>
-        countRelevantItemRatio(pred, lab, k, lab.toSet.size)
-    }
-    .mean()
+      countRelevantItemRatio(pred, lab, k, lab.toSet.size)
+    }.mean()
   }
 
   /**
