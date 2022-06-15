@@ -1089,7 +1089,7 @@ private[spark] object Utils extends Logging {
     addBracketsIfNeeded(customHostname.getOrElse(InetAddresses.toUriString(localIpAddress)))
   }
 
-  private def addBracketsIfNeeded(addr: String): String = {
+  private[spark] def addBracketsIfNeeded(addr: String): String = {
     if (addr.contains(":") && !addr.contains("[")) {
       "[" + addr + "]"
     } else {
