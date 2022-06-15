@@ -150,6 +150,18 @@ class UnivocityParser(
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
+  private def convertToDate(datum: String): Int = {
+    try {
+      dateFormatter.parse(datum)
+    } catch {
+      case NonFatal(e) =>
+        // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+        // compatibility.
+        val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+        DateTimeUtils.stringToDate(str).getOrElse(throw e)
+    }
+  }
+
   /**
    * Create a converter which converts the string value to a value according to a desired type.
    * Currently, we do not support complex types (`ArrayType`, `MapType`, `StructType`).
@@ -206,27 +218,22 @@ class UnivocityParser(
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(convertToDate(datum))
         }
       }
 
     case _: TimestampNTZType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        timestampNTZFormatter.parseWithoutTimeZone(datum, false)
+        try {
+          timestampNTZFormatter.parseWithoutTimeZone(datum, false)
+        } catch {
+          case NonFatal(e) =>
+            convertToDate(datum)
+        }
       }
 
     case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        try {
-          dateFormatter.parse(datum)
-        } catch {
-          case NonFatal(e) =>
-            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
-            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToDate(str).getOrElse(throw e)
-        }
-      }
+      nullSafeDatum(d, name, nullable, options)(convertToDate)
 
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)

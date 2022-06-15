@@ -358,4 +358,19 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       Map("timestampFormat" -> "invalid", "dateFormat" -> "invalid"), false, "UTC")
     check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern))
   }
+
+  test("dates should be parsed correctly in a timestamp column") {
+    def checkDate(dataType: DataType): Unit = {
+      val timestampsOptions =
+        new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy HH:mm",
+          "timestampNTZFormat" -> "dd-MM-yyyy HH:mm", "dateFormat" -> "dd_MM_yyyy"),
+          false, "UTC")
+      val dateString = "08_09_2001"
+      val date = days(2001, 9, 8)
+      val parser = new UnivocityParser(new StructType(), timestampsOptions)
+      assert(parser.makeConverter("d", dataType).apply(dateString) == date)
+    }
+    checkDate(TimestampType)
+    checkDate(TimestampNTZType)
+  }
 }

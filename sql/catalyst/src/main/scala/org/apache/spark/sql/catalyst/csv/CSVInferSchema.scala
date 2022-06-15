@@ -125,7 +125,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
         // Temporary NOTE: DateTimeType is private to [sql] package
-        case DateType | TimestampNTZType | TimestampType => tryParseDate(field)
+        case DateType | TimestampNTZType | TimestampType => tryParseDateTime(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
@@ -177,11 +177,11 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
     } else {
-      tryParseDate(field)
+      tryParseDateTime(field)
     }
   }
 
-  private def tryParseDate(field: String): DataType = {
+  private def tryParseDateTime(field: String): DataType = {
     if ((allCatch opt dateFormatter.parse(field)).isDefined) {
       DateType
     } else {
