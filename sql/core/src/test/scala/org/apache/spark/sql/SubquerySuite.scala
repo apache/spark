@@ -2177,7 +2177,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-39355: Avoid UnresolvedAttribute.apply throwing ParseException") {
+  test("SPARK-39355: Single column uses quoted to construct UnresolvedAttribute") {
     checkAnswer(
       sql("""
             |SELECT *
