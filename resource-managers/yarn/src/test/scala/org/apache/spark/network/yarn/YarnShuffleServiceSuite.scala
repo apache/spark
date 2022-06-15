@@ -264,6 +264,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager2, partitionId3, 1)
     dataFileReload3.length() should be ((4 * 5 + 1) * DUMMY_BLOCK_DATA.length)
 
+    // Regenerate the merge partitions as it was not finalized before the restart
+    prepareAppShufflePartition(mergeManager2, partitionId3, 1, "3")
     // Finalize shuffle merge for partitionId3
     ShuffleTestAccessor.finalizeShuffleMerge(mergeManager2, partitionId3)
 
