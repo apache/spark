@@ -224,7 +224,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
         "timestampNTZFormat" -> "yyyy/MM/dd"),
       columnPruning = false,
       defaultTimeZoneId = "UTC")
-    val inferSchema = new CSVInferSchema(options)
+    var inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(DateType, "2012_12_12") == DateType)
     assert(inferSchema.inferField(DateType, "2003|01|01") == TimestampType)
     // SQL configuration must be set to default to TimestampNTZ
@@ -235,5 +235,13 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     // inferField should upgrade a date field to timestamp if the typeSoFar is a timestamp
     assert(inferSchema.inferField(TimestampNTZType, "2012_12_12") == TimestampNTZType)
     assert(inferSchema.inferField(TimestampType, "2018_12_03") == TimestampType)
+
+    // No errors when Date and Timestamp have the same format. Inference defaults to date
+    options = new CSVOptions(
+      Map("dateFormat" -> "yyyy_MM_dd", "timestampFormat" -> "yyyy_MM_dd"),
+      columnPruning = false,
+      defaultTimeZoneId = "UTC")
+    inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(DateType, "2012_12_12") == DateType)
   }
 }
