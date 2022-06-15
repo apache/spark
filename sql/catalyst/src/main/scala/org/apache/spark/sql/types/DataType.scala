@@ -322,13 +322,14 @@ object DataType {
    *   if and only if for all every pair of fields, `to.nullable` is true, or both
    *   of `fromField.nullable` and `toField.nullable` are false.
    */
-  private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
-    equalsIgnoreCompatibleNullability(from, to, ignoreName = false)
+  private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType,
+      resolver: Resolver = _ == _): Boolean = {
+    equalsIgnoreCompatibleNullabilityWithNameResolution(from, to, resolver)
   }
 
   /**
    * Compares two types, ignoring compatible nullability of ArrayType, MapType, StructType, and
-   * also the field name. It compares based on the position.
+   * also the field name with a case aware resolver. It compares based on the position.
    *
    * Compatible nullability is defined as follows:
    *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
@@ -344,28 +345,33 @@ object DataType {
   private[sql] def equalsIgnoreNameAndCompatibleNullability(
       from: DataType,
       to: DataType): Boolean = {
-    equalsIgnoreCompatibleNullability(from, to, ignoreName = true)
+    equalsIgnoreCompatibleNullabilityWithNameResolution(from, to, _ == _, ignoreName = true)
   }
 
-  private def equalsIgnoreCompatibleNullability(
+  private def equalsIgnoreCompatibleNullabilityWithNameResolution(
       from: DataType,
       to: DataType,
+      resolver: Resolver,
       ignoreName: Boolean = false): Boolean = {
     (from, to) match {
       case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
-        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement, ignoreName)
+        (tn || !fn) && equalsIgnoreCompatibleNullabilityWithNameResolution(
+          fromElement, toElement, resolver, ignoreName)
 
       case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
         (tn || !fn) &&
-          equalsIgnoreCompatibleNullability(fromKey, toKey, ignoreName) &&
-          equalsIgnoreCompatibleNullability(fromValue, toValue, ignoreName)
+          equalsIgnoreCompatibleNullabilityWithNameResolution(
+            fromKey, toKey, resolver, ignoreName) &&
+          equalsIgnoreCompatibleNullabilityWithNameResolution(
+            fromValue, toValue, resolver, ignoreName)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields).forall { case (fromField, toField) =>
-            (ignoreName || fromField.name == toField.name) &&
+            (ignoreName || resolver(fromField.name, toField.name)) &&
               (toField.nullable || !fromField.nullable) &&
-              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType, ignoreName)
+              equalsIgnoreCompatibleNullabilityWithNameResolution(
+                fromField.dataType, toField.dataType, resolver, ignoreName)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType

@@ -53,7 +53,7 @@ trait V2WriteCommand extends UnaryCommand {
           val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
           // names and types must match, nullability must be compatible
           inAttr.name == outAttr.name &&
-            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outType) &&
+            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outType, conf.resolver) &&
             (outAttr.nullable || !inAttr.nullable)
       })
   }
