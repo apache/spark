@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
@@ -252,9 +252,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def getTable(tableName: String): Table = {
     // calling `sqlParser.parseTableIdentifier` to parse tableName. If it contains only table name
-    // and optionally contains a database name(thus a TableIdentifier), then that is used to get
-    // the table. Otherwise we try `sqlParser.parseMultipartIdentifier` to have a sequence of string
-    // as the qualified identifier and resolve the table.
+    // and optionally contains a database name(thus a TableIdentifier), then we look up the table in
+    // sessionCatalog. Otherwise we try `sqlParser.parseMultipartIdentifier` to have a sequence of
+    // string as the qualified identifier and resolve the table through SQL analyzer.
     try {
       val ident = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
       getTable(ident.database.orNull, ident.table)
@@ -304,17 +304,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // catalog.
     if (!sessionCatalog.databaseExists(dbName)) {
       val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
-      if (ident.length == 2) {
-        val catalog =
-          sparkSession.sessionState.catalogManager.catalog(ident(0)).asTableCatalog
-        try {
-          catalog.listTables(Array(ident(1)))
-          true
-        } catch {
-          case e: NoSuchNamespaceException => false
-        }
-      } else {
-        false
+      val plan = sparkSession.sessionState.executePlan(UnresolvedNamespace(ident)).analyzed
+      plan match {
+        case ResolvedNamespace(catalog: InMemoryCatalog, _) => catalog.databaseExists(ident(1))
+        case _ => false
       }
     } else {
       true
