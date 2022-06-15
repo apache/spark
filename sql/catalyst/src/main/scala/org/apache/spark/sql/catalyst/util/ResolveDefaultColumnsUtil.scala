@@ -245,7 +245,7 @@ object ResolveDefaultColumns {
   }
 
   /**
-   * Returns a new Analyzer suitable for processing default column values using built-in functions.
+   * Returns a new Analyzer for processing default column values using built-in functions only.
    */
   val getDefaultColumnAnalyzer: Analyzer = {
     val v1Catalog = new SessionCatalog(
