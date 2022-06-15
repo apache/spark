@@ -1224,21 +1224,20 @@ def _from_numpy_type(
     """Convert NumPy type to Spark data type."""
     import numpy as np
 
-    spark_type: DataType = None
     if nt == np.dtype("int8"):
-        spark_type = ByteType()
+        return ByteType()
     elif nt == np.dtype("int16"):
-        spark_type = ShortType()
+        return ShortType()
     elif nt == np.dtype("int32"):
-        spark_type = IntegerType()
+        return IntegerType()
     elif nt == np.dtype("int64"):
-        spark_type = LongType()
+        return LongType()
     elif nt == np.dtype("float32"):
-        spark_type = FloatType()
+        return FloatType()
     elif nt == np.dtype("float64"):
-        spark_type = DoubleType()
+        return DoubleType()
 
-    return spark_type
+    return None
 
 
 def _infer_type(
