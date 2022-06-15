@@ -106,6 +106,30 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>GREATEST</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>GREATEST(expr, ...)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LEAST</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LEAST(expr, ...)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>IF</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>IF(expr1, expr2, expr3)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>RAND</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>RAND([seed])</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
  *  <li>Name: <code>LN</code>
  *   <ul>
  *    <li>SQL semantic: <code>LN(expr)</code></li>
@@ -146,30 +170,6 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <ul>
  *    <li>SQL semantic: <code>WIDTH_BUCKET(expr)</code></li>
  *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>GREATEST</code>
- *   <ul>
- *    <li>SQL semantic: <code>GREATEST(expr, ...)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>LEAST</code>
- *   <ul>
- *    <li>SQL semantic: <code>LEAST(expr, ...)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>IF</code>
- *   <ul>
- *    <li>SQL semantic: <code>IF(expr1, expr2, expr3)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>RAND</code>
- *   <ul>
- *    <li>SQL semantic: <code>RAND([seed])</code></li>
- *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
  *  <li>Name: <code>SUBSTRING</code>
