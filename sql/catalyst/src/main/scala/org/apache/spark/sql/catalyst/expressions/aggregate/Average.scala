@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
@@ -67,6 +67,11 @@ abstract class AverageBase
   lazy val sum = AttributeReference("sum", sumDataType)()
   lazy val count = AttributeReference("count", LongType)()
 
+  protected def add(left: Expression, right: Expression): Expression = left.dataType match {
+    case _: DecimalType => DecimalAddNoOverflowCheck(left, right, left.dataType)
+    case _ => Add(left, right, useAnsiAdd)
+  }
+
   override lazy val aggBufferAttributes = sum :: count :: Nil
 
   override lazy val initialValues = Seq(
@@ -75,7 +80,7 @@ abstract class AverageBase
   )
 
   protected def getMergeExpressions = Seq(
-    /* sum = */ Add(sum.left, sum.right, useAnsiAdd),
+    /* sum = */ add(sum.left, sum.right),
     /* count = */ count.left + count.right
   )
 
@@ -83,10 +88,9 @@ abstract class AverageBase
   // We can't directly use `/` as it throws an exception under ansi mode.
   protected def getEvaluateExpression(queryContext: String) = child.dataType match {
     case _: DecimalType =>
-      DecimalPrecision.decimalAndDecimal()(
-        Divide(
-          CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd, queryContext),
-          count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
+      Divide(
+        CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd),
+        count.cast(DecimalType.LongDecimal), failOnError = false).cast(resultType)
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
         Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
@@ -99,10 +103,9 @@ abstract class AverageBase
 
   protected def getUpdateExpressions: Seq[Expression] = Seq(
     /* sum = */
-    Add(
+    add(
       sum,
-      coalesce(child.cast(sumDataType), Literal.default(sumDataType)),
-      failOnError = useAnsiAdd),
+      coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
     /* count = */ If(child.isNull, count, count + 1L)
   )
 
@@ -134,7 +137,6 @@ case class Average(
   override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
 
   override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
-
   override def initQueryContext(): String = if (useAnsiAdd) {
     origin.context
   } else {
@@ -190,7 +192,7 @@ case class TryAverage(child: Expression) extends AverageBase {
           Literal.create(null, resultType),
           // If both the buffer and the input do not overflow, just add them, as they can't be
           // null.
-          TryEval(Add(KnownNotNull(sum.left), KnownNotNull(sum.right), useAnsiAdd))),
+          TryEval(add(KnownNotNull(sum.left), KnownNotNull(sum.right)))),
           expressions(1))
     } else {
       expressions

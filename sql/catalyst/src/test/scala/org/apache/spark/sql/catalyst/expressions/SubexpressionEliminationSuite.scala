@@ -20,7 +20,7 @@ import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, Decimal, IntegerType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
 
 class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Semantic equals and hash") {
@@ -281,7 +281,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       }
       val subExprsCode = ctx.evaluateSubExprEliminationState(subExprs.states.values)
 
-      val codeBody = s"""
+      val codeBody =
+        s"""
         public java.lang.Object generate(Object[] references) {
           return new TestCode(references);
         }
@@ -338,19 +339,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(commonExprs.head.useCount == 2)
     assert(commonExprs.head.expr eq add)
   }
-
-  test("SPARK-36073: Transparently canonicalized expressions are not necessary subexpressions") {
-    val add = Add(Literal(1), Literal(2))
-    val transparent = PromotePrecision(add)
-
-    val equivalence = new EquivalentExpressions
-    equivalence.addExprTree(transparent)
-
-    val commonExprs = equivalence.getAllExprStates()
-    assert(commonExprs.size == 2)
-    assert(commonExprs.map(_.useCount) === Seq(1, 1))
-    assert(commonExprs.map(_.expr) === Seq(add, transparent))
-  }
+  
 
   test("SPARK-35439: Children subexpr should come first than parent subexpr") {
     val add = Add(Literal(1), Literal(2))
@@ -434,19 +423,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       TaskContext.unset()
     }
   }
-
-  test("SPARK-35886: PromotePrecision should not overwrite genCode") {
-    val p = PromotePrecision(Literal(Decimal("10.1")))
-
-    val ctx = new CodegenContext()
-    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(Seq(p, p))
-    val code = ctx.withSubExprEliminationExprs(subExprs.states) {
-      Seq(p.genCode(ctx))
-    }.head
-    // Decimal `Literal` will add the value by `addReferenceObj`.
-    // So if `p` is replaced by subexpression, the literal will be reused.
-    assert(code.value.toString == "((Decimal) references[0] /* literal */)")
-  }
+  
 
   test("SPARK-39040: Respect NaNvl in EquivalentExpressions for expression elimination") {
     val add = Add(Literal(1), Literal(0))

@@ -23,7 +23,6 @@ import java.time.temporal.ChronoUnit
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -610,13 +609,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), "Division by zero")
     }
     // overflows long and so returns a wrong result
-    checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
-      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
+    checkEvaluation(IntegralDivide(
+      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
       687399551400672280L)
     // overflow during promote precision
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
-        Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001)))),
+      checkEvaluation(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001))),
         null)
     }
   }

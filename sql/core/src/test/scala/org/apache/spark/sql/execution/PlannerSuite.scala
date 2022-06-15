@@ -863,7 +863,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("Do not analyze subqueries twice") {
     // Analyzing the subquery twice will result in stacked
-    // CheckOverflow & PromotePrecision expressions.
+    // CheckOverflow expressions.
     val df = sql(
       """
         |SELECT id,
@@ -875,8 +875,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     subquery.foreach { node =>
       node.expressions.foreach { expression =>
         expression.foreach {
-          case PromotePrecision(_: PromotePrecision) =>
-            fail(s"$expression contains stacked PromotePrecision expressions.")
           case CheckOverflow(_: CheckOverflow, _, _) =>
             fail(s"$expression contains stacked CheckOverflow expressions.")
           case _ => // Ok
