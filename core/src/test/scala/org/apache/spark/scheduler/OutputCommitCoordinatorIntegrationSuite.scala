@@ -44,7 +44,7 @@ class OutputCommitCoordinatorIntegrationSuite
     sc = new SparkContext("local[2, 4]", "test", conf)
   }
 
-  test("SPARK-39195：exception thrown in OutputCommitter.commitTask()") {
+  test("SPARK-39195: exception thrown in OutputCommitter.commitTask()") {
     // Regression test for SPARK-10381
     val e = intercept[SparkException] {
       withTempDir { tempDir =>
