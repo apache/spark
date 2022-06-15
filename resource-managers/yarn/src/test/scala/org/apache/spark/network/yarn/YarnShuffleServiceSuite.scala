@@ -310,7 +310,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
     val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
     s1.setShuffleMergeManager(
-      ShuffleTestAccessor.createMergeShuffleFileManagerForTest(transportConf,
+      ShuffleTestAccessor.createMergeShuffleFileManagerForTestWithSynchronizedCleanup(transportConf,
         s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME)))
     s1.init(yarnConfig)
     val secretsFile = s1.secretsFile
@@ -597,8 +597,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val appPathsInfo3NoAttempt = new AppPathsInfo(localDirs3NoAttempt, 4)
 
     val blockHandler = s1.blockHandler
-    val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
-
     val mergeManager1 = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
     val mergeManager1DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager1)
     ShuffleTestAccessor.recoveryFile(mergeManager1) should be (mergeMgrFile)
@@ -618,7 +616,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     mergeManager1.registerExecutor(app2Attempt1Id.toString, mergedShuffleInfo2Attempt1)
     appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
-    appShuffleInfo equals 2
+    appShuffleInfo.size() equals 2
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfo.get(
       app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
@@ -631,7 +629,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     mergeManager1.registerExecutor(app3IdNoAttemptId.toString, mergedShuffleInfo3NoAttemptId)
     appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
-    appShuffleInfo equals 3
+    appShuffleInfo.size() equals 3
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfo.get(
       app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
@@ -648,7 +646,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     mergeManager1.registerExecutor(app2Attempt2Id.toString, mergedShuffleInfo2Attempt2)
     appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
-    appShuffleInfo equals 3
+    appShuffleInfo.size() equals 3
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfo.get(
       app2Attempt2Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt2)
@@ -665,7 +663,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     mergeManager1.applicationRemoved(app2Attempt2Id.toString, true)
     appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
-    appShuffleInfo equals 2
+    appShuffleInfo.size() equals 2
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     assert(!appShuffleInfo.containsKey(app2Attempt2Id.toString))
     appShuffleInfo.get(
@@ -677,6 +675,181 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     assert(!appShuffleInfoAfterReload.containsKey(app2Attempt2Id.toString))
     appShuffleInfoAfterReload.get(
       app3IdNoAttemptId.toString).getAppPathsInfo should be (appPathsInfo3NoAttempt)
+  }
+
+  test("Finalized merged shuffle are written into DB and cleaned up after application stopped") {
+    s1 = new YarnShuffleService
+    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
+    s1.init(yarnConfig)
+
+    val app1Id = ApplicationId.newInstance(0, 1)
+    val app1Data = makeAppInfo("user", app1Id)
+    s1.initializeApplication(app1Data)
+    val app2Attempt1Id = ApplicationId.newInstance(0, 2)
+    val app2Attempt1Data = makeAppInfo("user", app2Attempt1Id)
+    s1.initializeApplication(app2Attempt1Data)
+
+    val mergeMgrFile = s1.mergeManagerFile
+    mergeMgrFile should not be (null)
+    val mergedShuffleInfo1 =
+      new ExecutorShuffleInfo(
+        Array(new File(tempDir, "foo/foo").getAbsolutePath,
+          new File(tempDir, "bar/bar").getAbsolutePath), 3,
+        SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
+    val mergedShuffleInfo2Attempt1 =
+      new ExecutorShuffleInfo(Array(new File(tempDir, "bippy1/bippy1").getAbsolutePath),
+        5, SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
+
+    val localDirs1 = Array(new File(tempDir, "foo/merge_manager_1").getAbsolutePath,
+      new File(tempDir, "bar/merge_manager_1").getAbsolutePath)
+    val localDirs2Attempt1 = Array(new File(tempDir, "bippy1/merge_manager_1").getAbsolutePath)
+    val appPathsInfo1 = new AppPathsInfo(localDirs1, 3)
+    val appPathsInfo2Attempt1 = new AppPathsInfo(localDirs2Attempt1, 5)
+
+    val mergeManager1 = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
+    val mergeManager1DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager1)
+    ShuffleTestAccessor.recoveryFile(mergeManager1) should be (mergeMgrFile)
+
+    ShuffleTestAccessor.getAppShuffleInfo(mergeManager1).size() equals 0
+    ShuffleTestAccessor.getAppShuffleInfoAfterDBReload(
+      mergeManager1, mergeManager1DB).size() equals 0
+
+    mergeManager1.registerExecutor(app1Id.toString, mergedShuffleInfo1)
+    mergeManager1.registerExecutor(app2Attempt1Id.toString, mergedShuffleInfo2Attempt1)
+    val partitionId1 = new AppAttemptShuffleMergeId(app1Id.toString, 1, 1, 1)
+    val partitionId2 = new AppAttemptShuffleMergeId(app2Attempt1Id.toString, 1, 2, 1)
+    prepareAppShufflePartition(mergeManager1, partitionId1, 1, "3")
+    prepareAppShufflePartition(mergeManager1, partitionId2, 2, "4")
+
+    var appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
+    appShuffleInfo.size() equals 2
+    appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
+    appShuffleInfo.get(
+      app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
+    assert(!appShuffleInfo.get(app1Id.toString).getShuffles.get(1).isFinalized)
+    assert(!appShuffleInfo.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+    var appShuffleInfoAfterReload =
+      ShuffleTestAccessor.getAppShuffleInfoAfterDBReload(mergeManager1, mergeManager1DB)
+    appShuffleInfoAfterReload.size() equals 2
+    appShuffleInfoAfterReload.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
+    appShuffleInfoAfterReload.get(
+      app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
+    assert(appShuffleInfoAfterReload.get(app1Id.toString).getShuffles.isEmpty)
+    assert(appShuffleInfoAfterReload.get(app2Attempt1Id.toString).getShuffles.isEmpty)
+
+    ShuffleTestAccessor.finalizeShuffleMerge(mergeManager1, partitionId1)
+    ShuffleTestAccessor.finalizeShuffleMerge(mergeManager1, partitionId2)
+
+    appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
+    assert(appShuffleInfo.get(app1Id.toString).getShuffles.get(1).isFinalized)
+    assert(appShuffleInfo.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+    appShuffleInfoAfterReload =
+      ShuffleTestAccessor.getAppShuffleInfoAfterDBReload(mergeManager1, mergeManager1DB)
+    assert(appShuffleInfoAfterReload.get(app1Id.toString).getShuffles.get(1).isFinalized)
+    assert(appShuffleInfoAfterReload.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+
+    mergeManager1.applicationRemoved(app1Id.toString, true)
+    appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
+    appShuffleInfo.size() equals 1
+    assert(!appShuffleInfo.containsKey(app1Id.toString))
+    assert(appShuffleInfo.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+    appShuffleInfoAfterReload =
+      ShuffleTestAccessor.getAppShuffleInfoAfterDBReload(mergeManager1, mergeManager1DB)
+    appShuffleInfoAfterReload.size() equals 1
+    assert(!appShuffleInfoAfterReload.containsKey(app1Id.toString))
+    assert(appShuffleInfoAfterReload.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+  }
+
+  test("Dangling finalized ShuffleMergePartitionInfo will be removed during restart") {
+    s1 = new YarnShuffleService
+    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
+    s1._conf = yarnConfig
+    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
+    val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
+    s1.setShuffleMergeManager(
+      ShuffleTestAccessor.createMergeShuffleFileManagerForTestWithNoDBCleanup(transportConf,
+        s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME)))
+    s1.init(yarnConfig)
+
+    val app1Id = ApplicationId.newInstance(0, 1)
+    val app1Data = makeAppInfo("user", app1Id)
+    s1.initializeApplication(app1Data)
+    val app2Attempt1Id = ApplicationId.newInstance(0, 2)
+    val app2Attempt1Data = makeAppInfo("user", app2Attempt1Id)
+    s1.initializeApplication(app2Attempt1Data)
+
+    val mergeMgrFile = s1.mergeManagerFile
+    mergeMgrFile should not be (null)
+    val mergedShuffleInfo1 =
+      new ExecutorShuffleInfo(
+        Array(new File(tempDir, "foo/foo").getAbsolutePath,
+          new File(tempDir, "bar/bar").getAbsolutePath), 3,
+        SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
+    val mergedShuffleInfo2Attempt1 =
+      new ExecutorShuffleInfo(Array(new File(tempDir, "bippy1/bippy1").getAbsolutePath),
+        5, SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
+
+    val localDirs1 = Array(new File(tempDir, "foo/merge_manager_1").getAbsolutePath,
+      new File(tempDir, "bar/merge_manager_1").getAbsolutePath)
+    val localDirs2Attempt1 = Array(new File(tempDir, "bippy1/merge_manager_1").getAbsolutePath)
+    val appPathsInfo1 = new AppPathsInfo(localDirs1, 3)
+    val appPathsInfo2Attempt1 = new AppPathsInfo(localDirs2Attempt1, 5)
+
+    val mergeManager1 = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
+    val mergeManager1DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager1)
+    ShuffleTestAccessor.recoveryFile(mergeManager1) should be (mergeMgrFile)
+
+    mergeManager1.registerExecutor(app1Id.toString, mergedShuffleInfo1)
+    mergeManager1.registerExecutor(app2Attempt1Id.toString, mergedShuffleInfo2Attempt1)
+    val partitionId1 = new AppAttemptShuffleMergeId(app1Id.toString, 1, 1, 1)
+    val partitionId2 = new AppAttemptShuffleMergeId(app2Attempt1Id.toString, 1, 2, 1)
+    prepareAppShufflePartition(mergeManager1, partitionId1, 1, "3")
+    prepareAppShufflePartition(mergeManager1, partitionId2, 2, "4")
+
+    var appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
+    appShuffleInfo.size() equals 2
+    appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
+    appShuffleInfo.get(
+      app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
+    assert(!appShuffleInfo.get(app1Id.toString).getShuffles.get(1).isFinalized)
+    assert(!appShuffleInfo.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+
+    ShuffleTestAccessor.finalizeShuffleMerge(mergeManager1, partitionId1)
+    ShuffleTestAccessor.finalizeShuffleMerge(mergeManager1, partitionId2)
+
+    appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
+    assert(appShuffleInfo.get(app1Id.toString).getShuffles.get(1).isFinalized)
+    assert(appShuffleInfo.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+    var appShuffleInfoAfterReload =
+      ShuffleTestAccessor.getAppShuffleInfoAfterDBReload(mergeManager1, mergeManager1DB)
+    assert(appShuffleInfoAfterReload.get(app1Id.toString).getShuffles.get(1).isFinalized)
+    assert(appShuffleInfoAfterReload.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+
+    // The applicationRemove will not clean up the finalized merged shuffle partition in DB
+    // as of the customized mergedShuffleFileManager. The applicationRemove of
+    mergeManager1.applicationRemoved(app1Id.toString, true)
+
+    appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
+    appShuffleInfo.size() equals 1
+    assert(!appShuffleInfo.containsKey(app1Id.toString))
+    assert(appShuffleInfo.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+    appShuffleInfoAfterReload =
+      ShuffleTestAccessor.getAppShuffleInfoAfterDBReload(mergeManager1, mergeManager1DB)
+    appShuffleInfoAfterReload.size() equals 1
+    assert(!appShuffleInfoAfterReload.containsKey(app1Id.toString))
+    assert(appShuffleInfoAfterReload.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+
+    // Register application app1Id again and reload the DB again
+    mergeManager1.registerExecutor(app1Id.toString, mergedShuffleInfo1)
+    appShuffleInfo = ShuffleTestAccessor.getAppShuffleInfo(mergeManager1)
+    appShuffleInfo.size() equals 2
+    appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
+    assert(appShuffleInfo.get(app1Id.toString).getShuffles.isEmpty)
+    assert(appShuffleInfo.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
+    appShuffleInfoAfterReload =
+      ShuffleTestAccessor.getAppShuffleInfoAfterDBReload(mergeManager1, mergeManager1DB)
+    assert(appShuffleInfoAfterReload.get(app1Id.toString).getShuffles.isEmpty)
+    assert(appShuffleInfoAfterReload.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
   }
 
   private def makeAppInfo(user: String, appId: ApplicationId): ApplicationInitializationContext = {

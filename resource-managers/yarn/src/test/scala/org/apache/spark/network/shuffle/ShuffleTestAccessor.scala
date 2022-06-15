@@ -87,10 +87,26 @@ object ShuffleTestAccessor {
     mergeManager.db
   }
 
-  def createMergeShuffleFileManagerForTest(
+  def createMergeShuffleFileManagerForTestWithSynchronizedCleanup(
       transportConf: TransportConf,
       file: File): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
+      override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
+        task.run()
+      }
+    }
+  }
+
+  def createMergeShuffleFileManagerForTestWithNoDBCleanup(
+    transportConf: TransportConf,
+    file: File): MergedShuffleFileManager = {
+    new RemoteBlockPushResolver(transportConf, file) {
+      override private[shuffle] def closeAndDeletePartitions(
+          appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo,
+          cleanupLocalDirs: Boolean,
+          removeFromDb: Boolean): Unit = {
+        super.closeAndDeletePartitions(appShuffleInfo, cleanupLocalDirs, false)
+      }
       override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
         task.run()
       }
