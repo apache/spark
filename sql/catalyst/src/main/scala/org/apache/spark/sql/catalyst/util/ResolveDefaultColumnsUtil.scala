@@ -19,15 +19,20 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.Analyzer
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * This object contains fields to help process DEFAULT columns.
@@ -81,14 +86,12 @@ object ResolveDefaultColumns {
    * data source then takes responsibility to provide the constant-folded value in the
    * EXISTS_DEFAULT metadata for such columns where the value is not present in storage.
    *
-   * @param analyzer      used for analyzing the result of parsing the expression stored as text.
    * @param tableSchema   represents the names and types of the columns of the statement to process.
    * @param tableProvider provider of the target table to store default values for, if any.
    * @param statementType name of the statement being processed, such as INSERT; useful for errors.
    * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
    */
   def constantFoldCurrentDefaultsToExistDefaults(
-      analyzer: Analyzer,
       tableSchema: StructType,
       tableProvider: Option[String],
       statementType: String): StructType = {
@@ -103,7 +106,8 @@ object ResolveDefaultColumns {
           if (!allowedTableProviders.contains(givenTableProvider)) {
             throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(givenTableProvider)
           }
-          val analyzed: Expression = analyze(analyzer, field, statementType)
+          val analyzed: Expression =
+            analyze(tableSchema.defaultColumnAnalyzer, field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
             .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
           field.copy(metadata = newMetadata)
@@ -240,5 +244,34 @@ object ResolveDefaultColumns {
         }
       }
     }
+  }
+
+  /**
+   * Returns a new Analyzer suitable for processing default column values using built-in functions.
+   */
+  val getDefaultColumnAnalyzer: Analyzer = {
+    val v1Catalog = new SessionCatalog(
+      new InMemoryCatalog, FunctionRegistry.builtin, TableFunctionRegistry.builtin) {
+      override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
+    }
+    class FromV1SessionCatalog extends FunctionCatalog {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+      override def name(): String = CatalogManager.SESSION_CATALOG_NAME
+      override def listFunctions(namespace: Array[String]): Array[Identifier] = {
+        throw new UnsupportedOperationException()
+      }
+      override def loadFunction(ident: Identifier): UnboundFunction = {
+        V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+      }
+      override def functionExists(ident: Identifier): Boolean = {
+        v1Catalog.isPersistentFunction(ident.asFunctionIdentifier)
+      }
+    }
+    object DefaultColumnAnalyzer extends Analyzer(
+      new CatalogManager(new FromV1SessionCatalog, v1Catalog)) {
+      override def resolver: Resolver = caseSensitiveResolution
+    }
+    DefaultColumnAnalyzer
   }
 }
