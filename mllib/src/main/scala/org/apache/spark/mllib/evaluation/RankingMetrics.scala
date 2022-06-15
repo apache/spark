@@ -65,9 +65,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   @Since("1.2.0")
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels
-      .map {
-        case (pred, lab, _) =>
+    predictionAndLabels.map { case (pred, lab, _) =>
           countRelevantItemRatio(pred, lab, k, k)
       }
       .mean()
@@ -80,9 +78,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
    */
   @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
-    predictionAndLabels
-      .map {
-        case (pred, lab, _) =>
+    predictionAndLabels.map { case (pred, lab, _) =>
           val labSet = lab.toSet
           val k = math.max(pred.length, labSet.size)
           averagePrecision(pred, labSet, k)
@@ -100,9 +96,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   @Since("3.0.0")
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels
-      .map {
-        case (pred, lab, _) =>
+    predictionAndLabels.map { case (pred, lab, _) =>
           averagePrecision(pred, lab.toSet, k)
       }
       .mean()
@@ -158,9 +152,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   @Since("1.2.0")
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels
-      .map {
-        case (pred, lab, rel) =>
+    predictionAndLabels.map { case (pred, lab, rel) =>
           val useBinary = rel.isEmpty
           val labSet = lab.toSet
           val relMap = (lab zip rel).toMap
@@ -231,9 +223,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T], 
   @Since("3.0.0")
   def recallAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels
-      .map {
-        case (pred, lab, _) =>
+    predictionAndLabels.map { case (pred, lab, _) =>
           countRelevantItemRatio(pred, lab, k, lab.toSet.size)
       }
       .mean()
@@ -283,8 +273,7 @@ object RankingMetrics {
   @Since("1.4.0")
   def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]
-    val rdd = predictionAndLabels.rdd.map {
-      case (predictions, labels) =>
+    val rdd = predictionAndLabels.rdd.map { case (predictions, labels) =>
         (predictions.asScala.toArray, labels.asScala.toArray)
     }
     new RankingMetrics(rdd)
