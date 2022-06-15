@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLim
 import org.apache.spark.sql.connector.IntegralAverage
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{abs, avg, ceil, coalesce, count, count_distinct, exp, floor, lit, log => ln, not, pow, sqrt, sum, udf, when}
+import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -828,10 +828,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           checkAnswer(df2, Seq.empty)
         }
 
-        val df3 = sql("""
-                        |SELECT * FROM h2.test.employee
-                        |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
-                        |""".stripMargin)
+        val df3 = sql(
+          """
+            |SELECT * FROM h2.test.employee
+            |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
+            |""".stripMargin)
 
         checkFiltersRemoved(df3, ansiMode)
         val expectedPlanFragment3 = if (ansiMode) {
@@ -872,7 +873,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           Row(1, "cathy", 9000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
         val df6 = spark.table("h2.test.employee")
-          .filter(ln($"dept") > 1)
+          .filter(logarithm($"dept") > 1)
           .filter(exp($"salary") > 2000)
           .filter(pow($"dept", 2) > 4)
           .filter(sqrt($"salary") > 100)
@@ -889,10 +890,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkAnswer(df6, Seq(Row(6, "jen", 12000, 1200, true)))
 
         // H2 does not support width_bucket
-        val df7 = sql("""
-                        |SELECT * FROM h2.test.employee
-                        |WHERE width_bucket(dept, 1, 6, 3) > 1
-                        |""".stripMargin)
+        val df7 = sql(
+          """
+            |SELECT * FROM h2.test.employee
+            |WHERE width_bucket(dept, 1, 6, 3) > 1
+            |""".stripMargin)
         checkFiltersRemoved(df7, false)
         checkPushedInfo(df7, "PushedFilters: [DEPT IS NOT NULL]")
         checkAnswer(df7, Seq(Row(6, "jen", 12000, 1200, true)))
@@ -913,6 +915,60 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         }
         checkPushedInfo(df8, expectedPlanFragment8)
         checkAnswer(df8, Seq(Row(2, "david", 10000, 1300, true)))
+
+        val df9 = spark.table("h2.test.employee")
+          .filter(logarithm(2, $"dept") > 2)
+          .filter(log10($"dept") > 0.5)
+          .filter(round($"dept") > 1)
+          .filter(degrees($"dept") > 100)
+          .filter(radians($"dept") > 0.1)
+          .filter(signum($"dept") === 1)
+        checkFiltersRemoved(df9, ansiMode)
+        val expectedPlanFragment9 = if (ansiMode) {
+          "PushedFilters: [DEPT IS NOT NULL, (LOG(2.0, CAST(DEPT AS double))) > 2.0, " +
+            "LOG10(CAST(DEPT AS double)) > 0.5, (RO...,"
+        } else {
+          "PushedFilters: [DEPT IS NOT NULL, (ROUND(DEPT, 0)) > 1]"
+        }
+        checkPushedInfo(df9, expectedPlanFragment9)
+        checkAnswer(df9, Seq(Row(6, "jen", 12000, 1200, true)))
+
+        val df10 = spark.table("h2.test.employee")
+          .filter(sin($"dept") < -0.2)
+          .filter(sinh($"dept") > 200)
+          .filter(cos($"dept") > 0.9)
+          .filter(cosh($"dept") > 200)
+          .filter(tan($"dept") < -0.2)
+          .filter(tanh($"dept") > 0.9)
+          .filter(cot($"dept") < -3.4)
+          .filter(asin($"bonus" / $"salary") > 0.1)
+          .filter(acos($"bonus" / $"salary") > 1.4)
+          .filter(atan($"dept") > 1.4)
+          .filter(atan2($"dept", $"dept") > 0.7)
+        checkFiltersRemoved(df10, ansiMode)
+        val expectedPlanFragment10 = if (ansiMode) {
+          "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL, " +
+            "SIN(CAST(DEPT AS double)) < -0.2, SINH(...,"
+        } else {
+          "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL]"
+        }
+        checkPushedInfo(df10, expectedPlanFragment10)
+        checkAnswer(df10, Seq(Row(6, "jen", 12000, 1200, true)))
+
+        // H2 does not support log2, asinh, acosh, atanh, cbrt
+        val df11 = sql(
+          """
+            |SELECT * FROM h2.test.employee
+            |WHERE log2(dept) > 2.5
+            |AND asinh(bonus / salary) > 0.09
+            |AND acosh(dept) > 2.4
+            |AND atanh(bonus / salary) > 0.1
+            |AND cbrt(dept) > 1.8
+            |""".stripMargin)
+        checkFiltersRemoved(df11, false)
+        checkPushedInfo(df11,
+          "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL]")
+        checkAnswer(df11, Seq(Row(6, "jen", 12000, 1200, true)))
       }
     }
   }
