@@ -453,7 +453,7 @@ private[spark] object HiveUtils extends Logging {
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "path") {
       // Convert to files and expand any directories.
-      val jars =
+      var jars =
         HiveUtils.hiveMetastoreJarsPath(sqlConf)
           .flatMap {
             case path if path.contains("\\") && Utils.isWindows =>
@@ -467,6 +467,13 @@ private[spark] object HiveUtils extends Logging {
                 enableGlobbing = true
               ).map(_.toUri.toURL)
           }
+
+      val origLoader = Thread.currentThread().getContextClassLoader
+      val hive_configs = Array("hive-site.xml", "hivemetastore-site.xml", "hiveserver2-site.xml")
+      hive_configs.foreach(conf => {
+        val resourceURL = origLoader.getResource(conf)
+        if (resourceURL != null) jars = jars :+ resourceURL
+      })
 
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
