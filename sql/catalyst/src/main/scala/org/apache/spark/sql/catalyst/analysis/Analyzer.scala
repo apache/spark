@@ -4343,8 +4343,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
  * The rule `ResolveAggregationFunctions` in the main resolution batch creates
  * [[TempResolvedColumn]] in filter conditions and sort expressions to hold the temporarily resolved
  * column with `agg.child`. When filter conditions or sort expressions are resolved,
- * `ResolveAggregationFunctions` will turn [[TempResolvedColumn]] to [[AttributeReference]] if it's
- * inside aggregate functions or group expressions, or turn it to [[UnresolvedAttribute]] otherwise,
+ * `ResolveAggregationFunctions` will replace [[TempResolvedColumn]], to [[AttributeReference]] if
+ * it's inside aggregate functions or group expressions, or to [[UnresolvedAttribute]] otherwise,
  * hoping other rules can resolve it.
  *
  * This rule runs after the main resolution batch, and can still hit [[TempResolvedColumn]] if
