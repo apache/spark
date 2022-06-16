@@ -301,20 +301,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               failAnalysis("Input argument tolerance must be non-negative.")
             }
 
-          case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
-            def isAggregateExpression(expr: Expression): Boolean = {
-              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
-            }
-
+          case Aggregate(groupingExprs, aggregateExprs, _) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case expr: Expression if isAggregateExpression(expr) =>
+              case expr: Expression if AggregateExpression.isAggregate(expr) =>
                 val aggFunction = expr match {
                   case agg: AggregateExpression => agg.aggregateFunction
                   case udf: PythonUDF => udf
                 }
                 aggFunction.children.foreach { child =>
                   child.foreach {
-                    case expr: Expression if isAggregateExpression(expr) =>
+                    case expr: Expression if AggregateExpression.isAggregate(expr) =>
                       failAnalysis(
                         s"It is not allowed to use an aggregate function in the argument of " +
                           s"another aggregate function. Please use the inner aggregate function " +
