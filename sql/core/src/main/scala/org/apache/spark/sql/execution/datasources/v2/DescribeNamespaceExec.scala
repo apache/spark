@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Physical plan node for describing a namespace.
@@ -49,8 +48,6 @@ case class DescribeNamespaceExec(
       val propertiesStr =
         if (properties.isEmpty) {
           ""
-        } else if (SQLConf.get.getConf(SQLConf.LEGACY_DESC_NAMESPACE_REDACT_PROPERTIES)) {
-          properties.toSeq.sortBy(_._1).mkString("(", ", ", ")")
         } else {
           conf.redactOptions(properties.toMap).toSeq.sortBy(_._1).mkString("(", ", ", ")")
         }

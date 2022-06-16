@@ -1395,7 +1395,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     If true, driver pod becomes the owner of on-demand persistent volume claims instead of the executor pods
   </td>
@@ -1403,7 +1403,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.reusePersistentVolumeClaim</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     If true, driver pod tries to reuse driver-owned on-demand persistent volume claims
     of the deleted executor pods if exists. This can be useful to reduce executor pod

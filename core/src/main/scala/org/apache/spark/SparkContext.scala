@@ -2277,7 +2277,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * a result from one partition)
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.partitions.length)
+    runJob(rdd, func, rdd.partitions.indices)
   }
 
   /**
@@ -2289,7 +2289,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * a result from one partition)
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.partitions.length)
+    runJob(rdd, func, rdd.partitions.indices)
   }
 
   /**
@@ -2304,7 +2304,7 @@ class SparkContext(config: SparkConf) extends Logging {
     rdd: RDD[T],
     processPartition: (TaskContext, Iterator[T]) => U,
     resultHandler: (Int, U) => Unit): Unit = {
-    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.length, resultHandler)
+    runJob[T, U](rdd, processPartition, rdd.partitions.indices, resultHandler)
   }
 
   /**
@@ -2319,7 +2319,7 @@ class SparkContext(config: SparkConf) extends Logging {
       processPartition: Iterator[T] => U,
       resultHandler: (Int, U) => Unit): Unit = {
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
-    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.length, resultHandler)
+    runJob[T, U](rdd, processFunc, rdd.partitions.indices, resultHandler)
   }
 
   /**
