@@ -206,8 +206,6 @@ abstract class BaseSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         customCheckRules
-
-    v2SessionCatalog.defaultColumnAnalyzer = this
   }
 
   /**

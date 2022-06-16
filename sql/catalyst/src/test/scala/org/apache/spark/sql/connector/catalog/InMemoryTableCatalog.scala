@@ -22,15 +22,11 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, SimpleAnalyzer, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, SimpleAnalyzer, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
-object BasicInMemoryTableCatalog {
-  lazy val defaultColumnAnalyzer: Analyzer = SimpleAnalyzer
-}
 
 class BasicInMemoryTableCatalog extends TableCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -123,8 +119,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(table.schema, changes,
-      BasicInMemoryTableCatalog.defaultColumnAnalyzer, None, "ALTER TABLE")
+    val schema = CatalogV2Util.applySchemaChanges(table.schema, changes, None, "ALTER TABLE")
 
     // fail if the last column in the schema was dropped
     if (schema.fields.isEmpty) {
