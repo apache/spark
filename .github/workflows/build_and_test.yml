@@ -241,9 +241,16 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Check changes
+      id: changes
+      run: |
+        changed=$(./dev/is-changed.py -m "$MODULES_TO_TEST")
+        echo "Changes exist: $changed"
+        echo "::set-output name=exist::$changed"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
+      if: steps.changes.outputs.exist != 'false'
       with:
         path: |
           build/apache-maven-*
@@ -255,6 +262,7 @@ jobs:
           build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
+      if: steps.changes.outputs.exist != 'false'
       with:
         path: ~/.cache/coursier
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -262,6 +270,7 @@ jobs:
           ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v1
+      if: steps.changes.outputs.exist != 'false'
       with:
         java-version: ${{ matrix.java }}
     - name: Install Python 3.8
@@ -269,17 +278,20 @@ jobs:
       # We should install one Python that is higher then 3+ for SQL and Yarn because:
       # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # - Yarn has a Python specific test too, for example, YarnClusterSuite.
-      if: contains(matrix.modules, 'yarn') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
+      if: >
+        steps.changes.outputs.exist != 'false' &&
+        (contains(matrix.modules, 'yarn') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')))
       with:
         python-version: 3.8
         architecture: x64
     - name: Install Python packages (Python 3.8)
-      if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
+      if: steps.changes.outputs.exist != 'false' && (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
         python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy xmlrunner
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
+      if: steps.changes.outputs.exist != 'false'
       env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
       run: |
         # Hive "other tests" test needs larger metaspace size based on experiment.
@@ -287,13 +299,13 @@ jobs:
         export SERIAL_SBT_TESTS=1
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
-      if: always()
+      if: always() && steps.changes.outputs.exist != 'false'
       uses: actions/upload-artifact@v2
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
-      if: failure()
+      if: failure() && steps.changes.outputs.exist != 'false'
       uses: actions/upload-artifact@v2
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
@@ -351,9 +363,16 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Check changes
+      id: changes
+      run: |
+        changed=$(./dev/is-changed.py -m "$MODULES_TO_TEST")
+        echo "Changes exist: $changed"
+        echo "::set-output name=exist::$changed"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
+      if: steps.changes.outputs.exist != 'false'
       with:
         path: |
           build/apache-maven-*
@@ -365,6 +384,7 @@ jobs:
           build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
+      if: steps.changes.outputs.exist != 'false'
       with:
         path: ~/.cache/coursier
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -372,6 +392,7 @@ jobs:
           pyspark-coursier-
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v1
+      if: steps.changes.outputs.exist != 'false'
       with:
         java-version: ${{ matrix.java }}
     - name: List Python packages (Python 3.9, PyPy3)
@@ -379,30 +400,32 @@ jobs:
         python3.9 -m pip list
         pypy3 -m pip list
     - name: Install Conda for pip packaging test
+      if: steps.changes.outputs.exist != 'false'
       run: |
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
         bash miniconda.sh -b -p $HOME/miniconda
     # Run the tests.
     - name: Run tests
+      if: steps.changes.outputs.exist != 'false'
       env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
       run: |
         export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
-      if: needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled'
+      if: steps.changes.outputs.exist != 'false' && needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled'
       uses: codecov/codecov-action@v2
       with:
         files: ./python/coverage.xml
         flags: unittests
         name: PySpark
     - name: Upload test results to report
-      if: always()
+      if: always() && steps.changes.outputs.exist != 'false'
       uses: actions/upload-artifact@v2
       with:
         name: test-results-${{ matrix.modules }}--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
-      if: failure()
+      if: failure() && steps.changes.outputs.exist != 'false'
       uses: actions/upload-artifact@v2
       with:
         name: unit-tests-log-${{ matrix.modules }}--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3

@@ -53,7 +53,7 @@ def parse_opts():
 def main():
     opts = parse_opts()
 
-    test_modules = opts.modules.split(",")
+    test_modules = [m.strip() for m in opts.modules.split(",")]
     changed_files = []
     if os.environ.get("APACHE_SPARK_REF"):
         changed_files = identify_changed_files_from_git_commits(
