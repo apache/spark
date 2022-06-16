@@ -160,11 +160,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan =>
-        // Check argument data types of higher-order functions downwards first.
-        // If the arguments of the higher-order functions are resolved but the type check fails,
-        // the argument functions will not get resolved, but we should report the argument type
-        // check failure instead of claiming the argument functions are unresolved.
         operator transformExpressionsDown {
+          // Check argument data types of higher-order functions downwards first.
+          // If the arguments of the higher-order functions are resolved but the type check fails,
+          // the argument functions will not get resolved, but we should report the argument type
+          // check failure instead of claiming the argument functions are unresolved.
           case hof: HigherOrderFunction
               if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
             hof.checkArgumentDataTypes() match {
@@ -172,6 +172,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 hof.failAnalysis(
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
             }
+
+          case g @ GetMapValue(_, key: Attribute, _)
+            if g.keyType == StringType && !key.resolved =>
+            val unresolvedKey = key.sql
+            val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+            val orderedCandidates = StringUtils.orderStringsBySimilarity(unresolvedKey, candidates)
+            g.failAnalysis(
+              errorClass = "UNRESOLVED_MAP_KEY",
+              messageParameters = Array(unresolvedKey, orderedCandidates.mkString(", ")))
         }
 
         getAllExpressions(operator).foreach(_.foreachUp {
