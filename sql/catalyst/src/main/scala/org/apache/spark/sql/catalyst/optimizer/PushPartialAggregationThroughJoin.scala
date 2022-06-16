@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, ResolveTimeZone}
+import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, JOIN}
 import org.apache.spark.sql.types.{DecimalType, NumericType}
+import org.apache.spark.sql.types.DecimalType.LongDecimal
 
 /**
  * Push down the partial aggregation through join. It supports the following cases:
@@ -152,15 +153,11 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     // redefines the same ExprId.
     expr.mapChildren(_.transformUp {
       case e @ Sum(_, useAnsiAdd, dt) if aliasMap.contains(e.canonicalized) =>
-        val value = aliasMap(e.canonicalized).toAttribute
-        val multiply = value.cast(e.dataType) * cnt.toAttribute.cast(e.dataType)
-        e.dataType match {
-          case decType: DecimalType =>
-            // Do not use DecimalPrecision because it may be change the precision and scale
-            Sum(CheckOverflow(multiply, decType, !useAnsiAdd), useAnsiAdd, Some(decType))
-          case _ =>
-            Sum(multiply, useAnsiAdd, Some(dt.getOrElse(e.dataType)))
-        }
+        val pushedSum = aliasMap(e.canonicalized).toAttribute
+        val resultType = e.dataType
+        val countType = if (resultType.isInstanceOf[DecimalType]) LongDecimal else resultType
+        Sum(Multiply(pushedSum.cast(resultType), cnt.toAttribute.cast(countType), useAnsiAdd),
+          useAnsiAdd, Some(dt.getOrElse(resultType)))
       case e: Count if aliasMap.contains(e.canonicalized) =>
         Sum(Multiply(aliasMap(e.canonicalized).toAttribute, cnt.toAttribute),
           conf.ansiEnabled, Some(e.dataType))
@@ -176,7 +173,8 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
   }
 
   private def pushableAggExp(ae: AggregateExpression): Boolean = ae match {
-    case AggregateExpression(_: Sum, Complete, false, None, _) => true
+    case AggregateExpression(Sum(e, _, _), Complete, false, None, _) =>
+      e.dataType.isInstanceOf[NumericType]
     case AggregateExpression(_: Min, Complete, false, None, _) => true
     case AggregateExpression(_: Max, Complete, false, None, _) => true
     case AggregateExpression(_: First, Complete, false, None, _) => true
@@ -213,11 +211,10 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
               val count = Count(Seq(Literal(1))).toAggregateExpression()
               e.dataType match {
                 case _: DecimalType =>
-                  DecimalPrecision.decimalAndDecimal()(
-                    Divide(
-                      CheckOverflowInSum(sum, avg.sumDataType.asInstanceOf[DecimalType],
-                        !useAnsiAdd), count.cast(DecimalType.LongDecimal),
-                      failOnError = false)).cast(avg.dataType)
+                  Divide(
+                    CheckOverflowInSum(sum, avg.sumDataType.asInstanceOf[DecimalType],
+                      !useAnsiAdd, avg.queryContext),
+                    count.cast(DecimalType.LongDecimal), failOnError = false).cast(avg.dataType)
                 case _ =>
                   Divide(sum.cast(avg.dataType), count.cast(avg.dataType), failOnError = false)
               }

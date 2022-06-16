@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflow, CheckOverflowInSum, Divide, Expression, If, Literal, PromotePrecision}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflow, CheckOverflowInSum, Divide, Expression, If, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Sum}
 import org.apache.spark.sql.catalyst.optimizer.customAnalyze._
 import org.apache.spark.sql.catalyst.plans._
@@ -392,9 +392,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
           correctLeft.join(correctRight,
             joinType = Inner, condition = Some('a === 'x))
             .select('_pushed_sum_c, 'b, 'cnt)
-            .groupBy('b)(sumWithDataType(
-              CheckOverflow('_pushed_sum_c * 'cnt.cast(DecimalType(27, 2)), DecimalType(27, 2),
-                !conf.ansiEnabled),
+            .groupBy('b)(sumWithDataType('_pushed_sum_c * 'cnt.cast(DecimalType.LongDecimal),
               ansiEnabled,
               Some(DecimalType(27, 2))).as("sum_c"))
             .analyzePlan
@@ -449,14 +447,13 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
           correctLeft.join(correctRight,
             joinType = Inner, condition = Some('a === 'x))
             .select('_pushed_sum_c, 'b, $"l.cnt", $"r.cnt")
-            .groupBy('b)(Cast(CheckOverflow(Divide(PromotePrecision(CheckOverflowInSum(
-              sumWithDataType(CheckOverflow($"_pushed_sum_c" * Cast($"r.cnt", DecimalType(27, 2)),
-                DecimalType(27, 2), !ansiEnabled), ansiEnabled, Some(DecimalType(27, 2))),
-              DecimalType(27, 2), !ansiEnabled)),
-              PromotePrecision(Cast(sumWithDataType($"l.cnt" * $"r.cnt", ansiEnabled,
-                Some(LongType)), DecimalType(27, 2))), failOnError = false),
-              DecimalType(38, 13),
-              !ansiEnabled), DecimalType(21, 6)).as("avg_c"))
+            .groupBy('b)(Cast(Divide(CheckOverflowInSum(
+              sumWithDataType($"_pushed_sum_c" * Cast($"r.cnt", DecimalType.LongDecimal),
+                ansiEnabled, Some(DecimalType(27, 2))),
+              DecimalType(27, 2), !ansiEnabled),
+              Cast(sumWithDataType($"l.cnt" * $"r.cnt", ansiEnabled,
+                Some(LongType)), DecimalType(20, 0)), failOnError = false),
+              DecimalType(21, 6)).as("avg_c"))
             .analyzePlan
 
         comparePlans(Optimize.execute(originalQuery), correctAnswer)
