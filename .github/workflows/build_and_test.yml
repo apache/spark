@@ -280,7 +280,6 @@ jobs:
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test-reports/*.xml"
-        if-no-files-found: error
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
@@ -390,7 +389,6 @@ jobs:
       with:
         name: test-results-${{ matrix.modules }}--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
-        if-no-files-found: error
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
@@ -467,7 +465,6 @@ jobs:
       with:
         name: test-results-sparkr--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
-        if-no-files-found: error
 
   # Static analysis, and documentation build
   lint:
@@ -776,7 +773,6 @@ jobs:
       with:
         name: test-results-tpcds--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
-        if-no-files-found: error
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
@@ -842,7 +838,6 @@ jobs:
       with:
         name: test-results-docker-integration--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
-        if-no-files-found: error
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
