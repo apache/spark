@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsReportOrdering}
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -49,6 +49,10 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   /** Optional partitioning expressions provided by the V2 data sources, through
    * `SupportsReportPartitioning` */
   def keyGroupedPartitioning: Option[Seq[Expression]]
+
+  /** Optional ordering expressions provided by the V2 data sources, through
+   * `SupportsReportOrdering` */
+  def ordering: Option[Seq[SortOrder]]
 
   protected def inputPartitions: Seq[InputPartition]
 
@@ -138,12 +142,10 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
     }
   }
 
-  override def outputOrdering: Seq[SortOrder] = scan match {
-    case s: SupportsReportOrdering if this.logicalLink.isDefined &&
-      // when multiple partitions are grouped together, the ordering inside partitions gets lost
-      groupedPartitions.forall(_.forall(_._2.length <= 1)) =>
-      V2ExpressionUtils.toCatalystOrdering(s.outputOrdering(), this.logicalLink.get)
-    case _ => super.outputOrdering
+  override def outputOrdering: Seq[SortOrder] = {
+    // when multiple partitions are grouped together, ordering inside partitions is not preserved
+    val partitioningPreservesOrdering = groupedPartitions.forall(_.forall(_._2.length <= 1))
+    ordering.filter(_ => partitioningPreservesOrdering).getOrElse(super.outputOrdering)
   }
 
   override def supportsColumnar: Boolean = {
