@@ -364,6 +364,31 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       df.select(Stream(explode(array(min($"v"), max($"v"))), sum($"v")): _*),
       Row(1, 6) :: Row(3, 6) :: Nil)
   }
+
+  test("SPARK-39061: inline should handle null struct") {
+    val df = sql(
+      """select * from values
+        |(
+        |  1,
+        |  array(
+        |    named_struct('c1', 0, 'c2', 1),
+        |    null,
+        |    named_struct('c1', 2, 'c2', 3),
+        |    null
+        |  )
+        |)
+        |as tbl(a, b)
+         """.stripMargin)
+    df.createOrReplaceTempView("t1")
+
+    checkAnswer(
+      sql("select inline(b) from t1"),
+      Row(0, 1) :: Row(null, null) :: Row(2, 3) :: Row(null, null) :: Nil)
+
+    checkAnswer(
+      sql("select a, inline(b) from t1"),
+      Row(1, 0, 1) :: Row(1, null, null) :: Row(1, 2, 3) :: Row(1, null, null) :: Nil)
+  }
 }
 
 case class EmptyGenerator() extends Generator with LeafLike[Expression] {

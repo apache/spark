@@ -444,7 +444,8 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
   }
 
   override def elementSchema: StructType = child.dataType match {
-    case ArrayType(st: StructType, _) => st
+    case ArrayType(st: StructType, false) => st
+    case ArrayType(st: StructType, true) => st.asNullable
   }
 
   override def collectionType: DataType = child.dataType
