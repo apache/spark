@@ -204,7 +204,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
 
   // Rewrite Average to Sum / Count(*). Please see AverageBase.getEvaluateExpression
   private def rewriteAverage(agg: Aggregate): Aggregate = {
-    if (agg.aggregateExprs.exists(_.aggregateFunction.isInstanceOf[Average])) {
+    if (agg.collectAggregateExprs.exists(_.aggregateFunction.isInstanceOf[Average])) {
       val newAggAggregateExpressions = agg.aggregateExpressions.map { expr =>
         expr.mapChildren(_.transformUp {
           case ae @ AggregateExpression(af, _, _, _, _) => af match {
@@ -278,7 +278,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
       rightKeys: Seq[Expression],
       join: Join): LogicalPlan = {
     val rewrittenAgg = rewriteAverage(agg)
-    val aggregateExpressions = rewrittenAgg.aggregateExprs
+    val aggregateExpressions = rewrittenAgg.collectAggregateExprs
 
     val (leftProjectList, rightProjectList, remainingProjectList) =
       split(projectList ++ join.condition.map(_.references.toSeq).getOrElse(Nil),
@@ -399,29 +399,29 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
             if j.children.exists(_.isInstanceOf[AggregateBase]) =>
           agg
 
-        case agg @ Aggregate(_, aggregateExps,
+        case agg @ Aggregate(_, aggExps,
           j @ Join(_, _, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _))
-            if agg.groupOnly && aggregateExps.forall(_.deterministic) =>
+            if aggExps.forall(_.deterministic) && agg.collectAggregateExprs.forall(_.isDistinct) =>
           agg.copy(child = pushDistinctThroughJoin(j))
 
-        case agg @ Aggregate(_, aggregateExps, p @ Project(_,
+        case agg @ Aggregate(_, aggExps, p @ Project(_,
           j @ Join(_, _, Inner | LeftOuter | RightOuter | FullOuter | Cross, _, _)))
-            if agg.groupOnly && aggregateExps.forall(_.deterministic) =>
+            if aggExps.forall(_.deterministic) && agg.collectAggregateExprs.forall(_.isDistinct) =>
           agg.copy(child = p.copy(child = pushDistinctThroughJoin(j)))
 
-        case agg @ Aggregate(groupExps, aggregateExps,
-          j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _))
+        case agg @ Aggregate(groupExps, aggExps,
+          j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, _, _, _))
             if groupExps.forall(_.isInstanceOf[Attribute]) && leftKeys.nonEmpty &&
-              aggregateExps.forall(e => e.deterministic && isSimpleExpression(e)) &&
-              agg.aggregateExprs.forall(e => pushableAggExp(e) || pushableCountExp(e)) =>
+              aggExps.forall(e => e.deterministic && isSimpleExpression(e)) &&
+              agg.collectAggregateExprs.forall(e => pushableAggExp(e) || pushableCountExp(e)) =>
           pushAggThroughJoin(agg, j.output, leftKeys, rightKeys, j)
 
-        case agg @ Aggregate(groupExps, aggregateExps, Project(projectList,
-          j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _)))
+        case agg @ Aggregate(groupExps, aggExps, Project(projectList,
+          j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, _, _, _)))
             if groupExps.forall(_.isInstanceOf[Attribute]) && leftKeys.nonEmpty &&
-              aggregateExps.forall(e => e.deterministic && isSimpleExpression(e)) &&
+              aggExps.forall(e => e.deterministic && isSimpleExpression(e)) &&
               projectList.forall(_.deterministic) &&
-              agg.aggregateExprs.forall(e => pushableAggExp(e) || pushableCountExp(e)) =>
+              agg.collectAggregateExprs.forall(e => pushableAggExp(e) || pushableCountExp(e)) =>
           pushAggThroughJoin(agg, projectList, leftKeys, rightKeys, j)
       }
     }

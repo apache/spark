@@ -1140,7 +1140,7 @@ abstract class AggregateBase(
     }.forall(a => a.foldable || groupingExpressions.exists(g => a.semanticEquals(g)))
   }
 
-  private[sql] def aggregateExprs: Seq[AggregateExpression] = {
+  private[sql] def collectAggregateExprs: Seq[AggregateExpression] = {
     // Collect all aggregate expressions.
     aggregateExpressions.flatMap { _.collect {
       case ae: AggregateExpression => ae
