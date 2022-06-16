@@ -146,6 +146,30 @@
       <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-netty-shaded</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-protobuf</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-stub</artifactId>
+    </dependency>
+    <dependency> <!-- necessary for Java 9+ -->
+      <groupId>org.apache.tomcat</groupId>
+      <artifactId>annotations-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <!-- TODO(grundprinzip) fix the scala pb version -->
+    <dependency>
+      <groupId>com.thesamet.scalapb</groupId>
+      <artifactId>scalapb-runtime-grpc_2.12</artifactId>
+      <version>0.11.11</version>
+    </dependency>
+    <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
@@ -203,6 +227,14 @@
     </dependency>
   </dependencies>
   <build>
+    <!-- Protobuf compilation for Spark Connect -->
+    <extensions>
+      <extension>
+        <groupId>kr.motd.maven</groupId>
+        <artifactId>os-maven-plugin</artifactId>
+        <version>1.6.2</version>
+      </extension>
+    </extensions>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
@@ -264,6 +296,36 @@
             </configuration>
           </execution>
         </executions>
+      </plugin>
+      <!-- Add protobuf-maven-plugin and provide ScalaPB as a code generation plugin -->
+      <plugin>
+        <groupId>com.github.os72</groupId>
+        <artifactId>protoc-jar-maven-plugin</artifactId>
+        <version>3.11.4</version>
+        <executions>
+          <execution>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <includeMavenTypes>transitive</includeMavenTypes>
+          <inputDirectories>
+            <include>src/main/protobuf</include>
+          </inputDirectories>
+          <includeDirectories>
+            <include>src/main/protobuf</include>
+          </includeDirectories>
+          <outputTargets>
+            <outputTarget>
+              <type>scalapb</type>
+              <outputOptions>grpc,flat_package</outputOptions> <!-- more scalapb options can be added here -->
+              <pluginArtifact>com.thesamet.scalapb:protoc-gen-scala:0.11.11:sh:unix</pluginArtifact>
+            </outputTarget>
+          </outputTargets>
+        </configuration>
       </plugin>
     </plugins>
   </build>

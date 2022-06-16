@@ -116,7 +116,7 @@
     <log4j.version>2.17.2</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.3</hadoop.version>
-    <protobuf.version>2.5.0</protobuf.version>
+    <protobuf.version>3.21.1</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.2</zookeeper.version>
     <curator.version>2.13.0</curator.version>
@@ -219,6 +219,9 @@
     <kubernetes-client.version>5.12.2</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
+
+    <io.grpc.version>1.47.0</io.grpc.version>
+    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <!-- Some UI tests require Chrome and Chrome driver installed so those tests are disabled by default. -->
     <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
@@ -824,6 +827,31 @@
         <artifactId>RoaringBitmap</artifactId>
         <version>0.9.30</version>
       </dependency>
+
+      <!-- Spark Connect Begin -->
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-netty-shaded</artifactId>
+        <version>${io.grpc.version}</version>
+        <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-protobuf</artifactId>
+        <version>${io.grpc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-stub</artifactId>
+        <version>${io.grpc.version}</version>
+      </dependency>
+      <dependency> <!-- necessary for Java 9+ -->
+        <groupId>org.apache.tomcat</groupId>
+        <artifactId>annotations-api</artifactId>
+        <version>${tomcat.annotations.api.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <!-- Spark Connect End -->
 
       <!-- Netty Begin -->
       <dependency>
