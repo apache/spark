@@ -379,6 +379,29 @@ class SparkExtensionsTest(unittest.TestCase):
         )
 
 
+class CreateDataFrameTest(ReusedSQLTestCase):
+    def test_from_list_of_scalars(self):
+        self.assertEqual(
+            self.spark.createDataFrame([1, 2, 3]).collect(),
+            self.spark.createDataFrame([(1,), (2,), (3,)]).collect(),
+        )
+
+        self.assertEqual(
+            self.spark.createDataFrame(["x", "y"]).collect(),
+            self.spark.createDataFrame([("x",), ("y",)]).collect(),
+        )
+
+        expected_err_msg_regex = ".*Can not merge type.*"
+        with self.assertRaisesRegex(TypeError, expected_err_msg_regex):
+            self.spark.createDataFrame([(1,), ((2,),), ([3],)])
+        with self.assertRaisesRegex(TypeError, expected_err_msg_regex):
+            self.spark.createDataFrame([1, (2,), [3]])  # Same error message as its above case
+        with self.assertRaisesRegex(TypeError, expected_err_msg_regex):
+            self.spark.createDataFrame([(1,), ("x",)])
+        with self.assertRaisesRegex(TypeError, expected_err_msg_regex):
+            self.spark.createDataFrame([1, "x"])  # Same error message as its above case
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.test_session import *  # noqa: F401
 

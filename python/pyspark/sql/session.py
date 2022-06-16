@@ -1024,7 +1024,18 @@ class SparkSession(SparkConversionMixin):
         if isinstance(data, RDD):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
-            rdd, struct = self._createFromLocal(map(prepare, data), schema)
+            if isinstance(data, list):
+                # Wrap each element with a tuple if there is any scalar in the list
+                has_scalar = False
+                for x in data:
+                    if isinstance(x, str) or not hasattr(x, "__len__"):  # Scalar
+                        has_scalar = True
+                        break
+                converted_data = [(x,) for x in data] if has_scalar else data
+
+                rdd, struct = self._createFromLocal(map(prepare, converted_data), schema)
+            else:
+                rdd, struct = self._createFromLocal(map(prepare, data), schema)
         assert self._jvm is not None
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), struct.json())
