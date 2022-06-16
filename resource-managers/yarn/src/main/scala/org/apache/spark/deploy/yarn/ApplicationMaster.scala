@@ -374,11 +374,11 @@ private[spark] class ApplicationMaster(
    */
   final def unregister(status: FinalApplicationStatus, diagnostics: String = null): Unit = {
     synchronized {
-      if (registered && !unregistered) {
+      if (!unregistered) {
         logInfo(s"Unregistering ApplicationMaster with $status" +
           Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
         unregistered = true
-        client.unregister(status, Option(diagnostics).getOrElse(""))
+        client.unregister(status, yarnConf, Option(diagnostics).getOrElse(""))
       }
     }
   }
