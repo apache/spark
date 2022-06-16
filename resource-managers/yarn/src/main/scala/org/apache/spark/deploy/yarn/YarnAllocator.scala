@@ -1018,7 +1018,7 @@ private object YarnAllocator {
 
 /**
  * State of the node.
- * Add the node state depending upon the cluster manager, For Yarn
+ * Add the node state depending upon the cluster manager for Yarn
  */
 private[spark] object NodeState extends Enumeration {
   val RUNNING, DECOMMISSIONED, DECOMMISSIONING, LOST, OTHER = Value
@@ -1029,9 +1029,9 @@ private[spark] object NodeState extends Enumeration {
     // In hadoop-2.7 there is no support for node state DECOMMISSIONING
     // In Hadoop-2.8, hadoop3.1 and later version of spark there is a support
     // to node state DECOMMISSIONING.
-    // Inorder to build the spark using hadoop2 and hadoop3, not
-    // using string comparison for the node state DECOMMISSIONING here and
-    // and for other state we are matching the YarnNodeState and assigning
+    // Inorder to build the spark using hadoop2 and hadoop3,
+    // using string comparison for the YARN node state DECOMMISSIONING here and
+    // for other states we are matching the YarnNodeState and assigning
     // the node state at spark end
     if (state.toString.equals(NodeState.DECOMMISSIONING.toString)) {
       NodeState.DECOMMISSIONING
