@@ -59,7 +59,6 @@ private[spark] trait EventFilter {
 }
 
 private[spark] object EventFilter extends Logging {
-
   case class FilterStatistics(
       totalJobs: Long,
       liveJobs: Long,
