@@ -30,6 +30,15 @@ struct<count(k):bigint>
 
 
 -- !query
+SELECT count(k) FROM hav GROUP BY v HAVING v = array(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+cannot resolve '(hav.v = array(1))' due to data type mismatch: differing types in '(hav.v = array(1))' (int and array<int>).; line 1 pos 43
+
+
+-- !query
 SELECT MIN(t.v) FROM (SELECT * FROM hav WHERE v > 0) t HAVING(COUNT(1) > 0)
 -- !query schema
 struct<min(v):int>
