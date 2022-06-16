@@ -133,34 +133,34 @@ class ResolveSubquerySuite extends AnalysisTest {
     // TODO: support accessing columns from outer outer query.
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
-      "MISSING_COLUMN",
-      Array("a", ""))
+      "UNRESOLVED_COLUMN",
+      Array("`a`", ""))
   }
 
   test("lateral subquery with unresolvable attributes") {
     // SELECT * FROM t1, LATERAL (SELECT a, c)
     assertAnalysisErrorClass(
       lateralJoin(t1, t0.select($"a", $"c")),
-      "MISSING_COLUMN",
-      Array("c", "")
+      "UNRESOLVED_COLUMN",
+      Array("`c`", "")
     )
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
     assertAnalysisErrorClass(
       lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
-      "MISSING_COLUMN",
-      Array("d", "b, c")
+      "UNRESOLVED_COLUMN",
+      Array("`d`", "`b`, `c`")
     )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
-      "MISSING_COLUMN",
-      Array("t1.a", "")
+      "UNRESOLVED_COLUMN",
+      Array("`t1`.`a`", "")
     )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
-      "MISSING_COLUMN",
-      Array("a", "")
+      "UNRESOLVED_COLUMN",
+      Array("`a`", "")
     )
   }
 

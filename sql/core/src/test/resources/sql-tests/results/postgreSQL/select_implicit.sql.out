@@ -119,7 +119,7 @@ SELECT count(*) FROM test_missing_target GROUP BY a ORDER BY b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'b' does not exist. Did you mean one of the following? [count(1)]; line 1 pos 61
+[UNRESOLVED_COLUMN] A column or function parameter with name `b` cannot be resolved. Did you mean one of the following? [`count(1)`]; line 1 pos 61
 
 
 -- !query
@@ -324,7 +324,7 @@ SELECT count(a) FROM test_missing_target GROUP BY a ORDER BY b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'b' does not exist. Did you mean one of the following? [count(a)]; line 1 pos 61
+[UNRESOLVED_COLUMN] A column or function parameter with name `b` cannot be resolved. Did you mean one of the following? [`count(a)`]; line 1 pos 61
 
 
 -- !query

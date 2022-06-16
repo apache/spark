@@ -39,7 +39,11 @@ class SparkIndexOpsMethodsTest(PandasOnSparkTestCase, SQLTestUtils):
         ):
             self.psser.spark.transform(lambda scol: 1)
 
-        with self.assertRaisesRegex(AnalysisException, "Column.*non-existent.*does not exist"):
+        with self.assertRaisesRegex(
+                AnalysisException,
+                "[UNRESOLVED_COLUMN] A column or function parameter with name `non-existent` " +
+                "cannot be resolved. Did you mean one of the following? [`__index_level_0__`, " +
+                "`x`, `__natural_order__`]"):
             self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
     def test_multiindex_transform_negative(self):

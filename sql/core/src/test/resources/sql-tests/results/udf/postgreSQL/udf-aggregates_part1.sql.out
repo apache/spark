@@ -486,4 +486,4 @@ from tenk1 o
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'o.unique1' does not exist. Did you mean one of the following? [i.unique1, i.unique2, i.hundred, i.even, i.four, i.stringu1, i.ten, i.odd, i.string4, i.stringu2, i.tenthous, i.twenty, i.two, i.thousand, i.fivethous, i.twothousand]; line 2 pos 67
+[UNRESOLVED_COLUMN] A column or function parameter with name `o`.`unique1` cannot be resolved. Did you mean one of the following? [`i`.`unique1`, `i`.`unique2`, `i`.`hundred`, `i`.`even`, `i`.`four`, `i`.`stringu1`, `i`.`ten`, `i`.`odd`, `i`.`string4`, `i`.`stringu2`, `i`.`tenthous`, `i`.`twenty`, `i`.`two`, `i`.`thousand`, `i`.`fivethous`, `i`.`twothousand`]; line 2 pos 67

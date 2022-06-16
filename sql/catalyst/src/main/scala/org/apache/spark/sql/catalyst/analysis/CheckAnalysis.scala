@@ -179,9 +179,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             val missingCol = a.sql
             val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
             val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
-            a.failAnalysis(
-              errorClass = "MISSING_COLUMN",
-              messageParameters = Array(missingCol, orderedCandidates.mkString(", ")))
+            throw QueryCompilationErrors.unresolvedColumnError(
+              missingCol, orderedCandidates, a.origin)
 
           case s: Star =>
             withPosition(s) {

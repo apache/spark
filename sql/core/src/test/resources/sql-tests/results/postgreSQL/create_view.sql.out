@@ -63,7 +63,7 @@ CREATE VIEW key_dependent_view_no_cols AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'FROM' does not exist. Did you mean one of the following? []; line 2 pos 10
+[UNRESOLVED_COLUMN] A column or function parameter with name `FROM` cannot be resolved. Did you mean one of the following? []; line 2 pos 10
 
 
 -- !query
