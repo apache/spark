@@ -56,4 +56,5 @@ class InputMetrics private[spark] () extends Serializable {
   private[spark] def incBytesRead(v: Long): Unit = _bytesRead.add(v)
   private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
   private[spark] def setBytesRead(v: Long): Unit = _bytesRead.setValue(v)
+  private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
 }

@@ -2252,16 +2252,16 @@ class TaskSetManagerSuite
 
   private def createTaskMetrics(
        taskSet: TaskSet,
-       inefficientTaskIds: Seq[Int],
+       inefficientTaskIds: Set[Int],
        inefficientMultiplier: Double = 0.6): Array[TaskMetrics] = {
     taskSet.tasks.zipWithIndex.map { case (task, index) =>
       val metrics = task.metrics
       if (inefficientTaskIds.contains(index)) {
-        metrics.inputMetrics.incRecordsRead((inefficientMultiplier * RECORDS_NUM).toLong)
-        metrics.shuffleReadMetrics.incRecordsRead((inefficientMultiplier * RECORDS_NUM).toLong)
+        metrics.inputMetrics.setRecordsRead((inefficientMultiplier * RECORDS_NUM).toLong)
+        metrics.shuffleReadMetrics.setRecordsRead((inefficientMultiplier * RECORDS_NUM).toLong)
       } else {
-        metrics.inputMetrics.incRecordsRead(RECORDS_NUM)
-        metrics.shuffleReadMetrics.incRecordsRead(RECORDS_NUM)
+        metrics.inputMetrics.setRecordsRead(RECORDS_NUM)
+        metrics.shuffleReadMetrics.setRecordsRead(RECORDS_NUM)
       }
       metrics.setExecutorRunTime(RUNTIME)
       metrics
@@ -2269,11 +2269,8 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-32170: test speculation for TaskSet with single task") {
-    // set the speculation multiplier to be 0, so speculative tasks are launched immediately
     val conf = new SparkConf()
-      .set(config.SPECULATION_MULTIPLIER.key, "0.0")
       .set(config.SPECULATION_ENABLED, true)
-      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER.key, "0.5")
     sc = new SparkContext("local", "test", conf)
     Seq(0, 15).foreach { duration =>
       sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, duration.toString)
@@ -2301,20 +2298,21 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-32170: test SPECULATION_MIN_THRESHOLD for speculating inefficient tasks") {
-    // set the speculation multiplier to be 0, so speculative tasks are launched immediately
+    // set the speculation multiplier to be 0, so speculative tasks are launched based on
+    // minTimeToSpeculation parameter to checkSpeculatableTasks
     val conf = new SparkConf()
-      .set(config.SPECULATION_MULTIPLIER.key, "0.0")
+      .set(config.SPECULATION_MULTIPLIER, 0.0)
       .set(config.SPECULATION_ENABLED, true)
-      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER.key, "0.5")
-      .set(config.SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
-    Seq(0, 10000, 50000).foreach { minDuration =>
+    val speculativeDurations = Set(0, 10000)
+    val nonSpeculativeDurations = Set(50000)
+    (speculativeDurations ++ nonSpeculativeDurations).foreach { minDuration =>
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
       val taskSet = FakeTask.createTaskSet(4)
       val clock = new ManualClock()
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-      val taskMetricsByTask = createTaskMetrics(taskSet, Seq(3), 0.4)
+      val taskMetricsByTask = createTaskMetrics(taskSet, Set(3), inefficientMultiplier = 0.4)
       val blockManagerId = BlockManagerId("exec1", "localhost", 12345)
       // offer resources for 4 tasks to start
       for ((k, v) <- List(
@@ -2346,7 +2344,7 @@ class TaskSetManagerSuite
       // above (10s) and evaluated an inefficient task to speculate.
       // 3) when SPECULATION_MIN_THRESHOLD is equal 50s, the task 4 runtime(20s) is
       // less than (50s) and no needs to speculate.
-      if (Seq(0, 10000).contains(minDuration)) {
+      if (speculativeDurations.contains(minDuration)) {
         assert(manager.checkSpeculatableTasks(minDuration))
         assert(sched.speculativeTasks.toSet === Set(3))
       } else {
@@ -2356,23 +2354,22 @@ class TaskSetManagerSuite
     }
   }
 
-  test("SPARK-32170: test SPECULATION_TASK_PROGRESS_MULTIPLIER for speculating " +
-    "inefficient tasks") {
-    // set the speculation multiplier to be 0, so speculative tasks are launched immediately
+  test("SPARK-32170: test SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER for " +
+    "speculating inefficient tasks") {
+    // set the speculation multiplier to be 0, so speculative tasks are launched based on
+    // minTimeToSpeculation parameter to checkSpeculatableTasks
     val conf = new SparkConf()
-      .set(config.SPECULATION_MULTIPLIER.key, "0.0")
+      .set(config.SPECULATION_MULTIPLIER, 0.0)
       .set(config.SPECULATION_ENABLED, true)
-      .set(config.SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
-    Seq(0.5, 0.8).foreach { processMultiplier => {
-      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER.key,
-        processMultiplier.toString)
+    Seq(0.5, 0.8).foreach(processMultiplier => {
+      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER, processMultiplier)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
       val taskSet = FakeTask.createTaskSet(4)
       val clock = new ManualClock()
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-      val taskMetricsByTask = createTaskMetrics(taskSet, Seq(3))
+      val taskMetricsByTask = createTaskMetrics(taskSet, Set(3), inefficientMultiplier = 0.6)
       val blockManagerId = BlockManagerId("exec1", "localhost", 12345)
       // offer resources for 4 tasks to start
       for ((k, v) <- List(
@@ -2400,32 +2397,32 @@ class TaskSetManagerSuite
       }
       // 0.5 < 0.6 < 0.8
       if (processMultiplier == 0.8) {
-        assert(manager.checkSpeculatableTasks(100))
+        assert(manager.checkSpeculatableTasks(15000))
         assert(sched.speculativeTasks.toSet === Set(3))
       } else {
-        assert(!manager.checkSpeculatableTasks(100))
+        assert(!manager.checkSpeculatableTasks(15000))
         assert(sched.speculativeTasks.toSet === Set.empty)
       }
-    }
-    }
+    })
   }
 
-  test("SPARK-32170: test SPECULATION_TASK_DURATION_FACTOR for speculating" +
-    " tasks") {
-    // set the speculation multiplier to be 0, so speculative tasks are launched immediately
+  test("SPARK-32170: test SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR for " +
+    "speculating tasks") {
+    // set the speculation multiplier to be 0, so speculative tasks are launched based on
+    // minTimeToSpeculation parameter to checkSpeculatableTasks
     val conf = new SparkConf()
-      .set(config.SPECULATION_MULTIPLIER.key, "0.0")
+      .set(config.SPECULATION_MULTIPLIER, 0.0)
       .set(config.SPECULATION_ENABLED, true)
-      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER.key, "0.5")
+      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER, 0.5)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
-    Seq(1, 2).foreach { factor => {
-      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR.key, factor.toString)
+    Seq(1.0, 2.0).foreach(factor => {
+      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR, factor)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
       val taskSet = FakeTask.createTaskSet(4)
       val clock = new ManualClock()
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-      val taskMetricsByTask = createTaskMetrics(taskSet, Seq(3))
+      val taskMetricsByTask = createTaskMetrics(taskSet, Set(3), inefficientMultiplier = 0.6)
       val blockManagerId = BlockManagerId("exec1", "localhost", 12345)
       // offer resources for 4 tasks to start
       for ((k, v) <- List(
@@ -2452,7 +2449,7 @@ class TaskSetManagerSuite
         }
       }
       // runtimeMs(20s) > 15s(1 * 15s)
-      if (factor == 1) {
+      if (factor == 1.0) {
         assert(manager.checkSpeculatableTasks(15000))
         assert(sched.speculativeTasks.toSet === Set(3))
       } else {
@@ -2460,8 +2457,7 @@ class TaskSetManagerSuite
         assert(!manager.checkSpeculatableTasks(15000))
         assert(sched.speculativeTasks.toSet === Set.empty)
       }
-    }
-    }
+    })
   }
 
   test("SPARK-37580: Reset numFailures when one of task attempts succeeds") {
