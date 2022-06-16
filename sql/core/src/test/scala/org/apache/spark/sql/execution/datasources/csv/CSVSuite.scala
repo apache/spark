@@ -74,6 +74,7 @@ abstract class CSVSuite
   private val simpleSparseFile = "test-data/simple_sparse.csv"
   private val numbersFile = "test-data/numbers.csv"
   private val datesFile = "test-data/dates.csv"
+  private val dateInferSchemaFile = "test-data/date-infer-schema.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
@@ -2787,6 +2788,37 @@ abstract class CSVSuite
         checkAnswer(df3, df.collect().toSeq)
       }
     }
+  }
+
+  test("SPARK-39469: Infer schema for Date type") {
+    val options = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "timestampFormat" -> "dd/MM/yyyy HH:mm",
+      "dateFormat" -> "MM_dd_yyyy")
+    val results = spark.read
+      .format("csv")
+      .options(options)
+      .load(testFile(dateInferSchemaFile))
+
+    val expectedSchema = StructType(List(StructField("date", DateType),
+      StructField("timestamp-date", TimestampType), StructField("date-timestamp", TimestampType)))
+    assert(results.schema == expectedSchema)
+
+    val expected =
+      Seq(
+        Seq(Date.valueOf("2001-9-8"), Timestamp.valueOf("2014-10-27 18:30:0.0")),
+        Seq(Date.valueOf("2020-1-12")),
+        Seq(Date.valueOf("2020-1-12"))
+      )
+
+    //    val col1 = result
+    //      .select("date")
+    //      .collect()
+    //    val expectedCol1 = List()
+    //    Row(Timestamp.valueOf("2020-1-12 3:23:34.12"), Date.valueOf("2020-1-12"))
+
+    assert(results.collect().toSeq.map(_.toSeq) === expected)
   }
 }
 
