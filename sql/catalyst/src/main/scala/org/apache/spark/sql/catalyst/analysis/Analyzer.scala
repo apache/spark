@@ -4351,7 +4351,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
  * filter conditions or sort expressions are not resolved. When this happens, there is no point to
  * turn [[TempResolvedColumn]] to [[UnresolvedAttribute]], as we can't resolve the column
  * differently, and query will fail. This rule strips all [[TempResolvedColumn]]s in Filter/Sort and
- * turns them to `AttributeReference` so that the error message can tell users why the filter
+ * turns them to [[AttributeReference]] so that the error message can tell users why the filter
  * conditions or sort expressions were not resolved.
  */
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
