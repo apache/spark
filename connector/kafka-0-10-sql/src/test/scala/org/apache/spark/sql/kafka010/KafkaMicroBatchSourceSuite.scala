@@ -2281,7 +2281,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       val headers = row.getList[Row](row.fieldIndex("headers")).asScala
       assert(headers.length === expected.length)
 
-      (0 until expected.length).foreach { idx =>
+      expected.indices.foreach { idx =>
         val key = headers(idx).getAs[String]("key")
         val value = headers(idx).getAs[Array[Byte]]("value")
         assert(key === expected(idx)._1)

@@ -295,7 +295,7 @@ Input [2]: [c_customer_sk#18, sum#31]
 Keys [1]: [c_customer_sk#18]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#21))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#21))#32]
-Results [1]: [cast(CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#21))#32,17,2)) / 50.00), DecimalType(21,6)) as int) AS segment#33]
+Results [1]: [cast((MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#21))#32,17,2) / 50) as int) AS segment#33]
 
 (53) HashAggregate [codegen id : 12]
 Input [1]: [segment#33]

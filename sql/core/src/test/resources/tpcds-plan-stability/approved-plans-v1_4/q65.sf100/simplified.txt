@@ -37,25 +37,26 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                             InputAdapter
                               BroadcastExchange #4
                                 WholeStageCodegen (6)
-                                  HashAggregate [ss_store_sk,sum,count] [avg(revenue),ave,sum,count]
-                                    InputAdapter
-                                      Exchange [ss_store_sk] #5
-                                        WholeStageCodegen (5)
-                                          HashAggregate [ss_store_sk,revenue] [sum,count,sum,count]
-                                            HashAggregate [ss_store_sk,ss_item_sk,sum] [sum(UnscaledValue(ss_sales_price)),revenue,sum]
-                                              InputAdapter
-                                                Exchange [ss_store_sk,ss_item_sk] #6
-                                                  WholeStageCodegen (4)
-                                                    HashAggregate [ss_store_sk,ss_item_sk,ss_sales_price] [sum,sum]
-                                                      Project [ss_item_sk,ss_store_sk,ss_sales_price]
-                                                        BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                          Filter [ss_store_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
-                                                                  ReusedSubquery [d_date_sk] #1
-                                                          InputAdapter
-                                                            ReusedExchange [d_date_sk] #3
+                                  Filter [ave]
+                                    HashAggregate [ss_store_sk,sum,count] [avg(revenue),ave,sum,count]
+                                      InputAdapter
+                                        Exchange [ss_store_sk] #5
+                                          WholeStageCodegen (5)
+                                            HashAggregate [ss_store_sk,revenue] [sum,count,sum,count]
+                                              HashAggregate [ss_store_sk,ss_item_sk,sum] [sum(UnscaledValue(ss_sales_price)),revenue,sum]
+                                                InputAdapter
+                                                  Exchange [ss_store_sk,ss_item_sk] #6
+                                                    WholeStageCodegen (4)
+                                                      HashAggregate [ss_store_sk,ss_item_sk,ss_sales_price] [sum,sum]
+                                                        Project [ss_item_sk,ss_store_sk,ss_sales_price]
+                                                          BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                            Filter [ss_store_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                                                                    ReusedSubquery [d_date_sk] #1
+                                                            InputAdapter
+                                                              ReusedExchange [d_date_sk] #3
                         InputAdapter
                           BroadcastExchange #7
                             WholeStageCodegen (7)

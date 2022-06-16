@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 
 /**
@@ -25,15 +25,15 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 trait AliasAwareOutputExpression extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
-  private lazy val aliasMap = AttributeMap(outputExpressions.collect {
-    case a @ Alias(child: AttributeReference, _) => (child, a.toAttribute)
-  })
+  private lazy val aliasMap = outputExpressions.collect {
+    case a @ Alias(child, _) => child.canonicalized -> a.toAttribute
+  }.toMap
 
   protected def hasAlias: Boolean = aliasMap.nonEmpty
 
   protected def normalizeExpression(exp: Expression): Expression = {
-    exp.transform {
-      case attr: AttributeReference => aliasMap.getOrElse(attr, attr)
+    exp.transformDown {
+      case e: Expression => aliasMap.getOrElse(e.canonicalized, e)
     }
   }
 }

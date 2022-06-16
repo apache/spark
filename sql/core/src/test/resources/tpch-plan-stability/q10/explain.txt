@@ -134,7 +134,7 @@ Input [11]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acc
 (24) HashAggregate [codegen id : 4]
 Input [9]: [c_custkey#1, c_name#2, c_address#3, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#12, l_discount#13, n_name#16]
 Keys [7]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#12 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#13 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
+Functions [1]: [partial_sum((l_extendedprice#12 * (1 - l_discount#13)))]
 Aggregate Attributes [2]: [sum#17, isEmpty#18]
 Results [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7, sum#19, isEmpty#20]
 
@@ -145,9 +145,9 @@ Arguments: hashpartitioning(c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_nam
 (26) HashAggregate [codegen id : 5]
 Input [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7, sum#19, isEmpty#20]
 Keys [7]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7]
-Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#12 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#13 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#12 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#13 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#21]
-Results [8]: [c_custkey#1, c_name#2, sum(CheckOverflow((promote_precision(cast(l_extendedprice#12 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#13 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#21 AS revenue#22, c_acctbal#6, n_name#16, c_address#3, c_phone#5, c_comment#7]
+Functions [1]: [sum((l_extendedprice#12 * (1 - l_discount#13)))]
+Aggregate Attributes [1]: [sum((l_extendedprice#12 * (1 - l_discount#13)))#21]
+Results [8]: [c_custkey#1, c_name#2, sum((l_extendedprice#12 * (1 - l_discount#13)))#21 AS revenue#22, c_acctbal#6, n_name#16, c_address#3, c_phone#5, c_comment#7]
 
 (27) TakeOrderedAndProject
 Input [8]: [c_custkey#1, c_name#2, revenue#22, c_acctbal#6, n_name#16, c_address#3, c_phone#5, c_comment#7]

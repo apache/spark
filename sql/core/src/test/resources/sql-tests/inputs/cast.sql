@@ -104,3 +104,25 @@ select cast('a' as timestamp_ntz);
 
 select cast(cast('inf' as double) as timestamp);
 select cast(cast('inf' as float) as timestamp);
+
+-- cast ANSI intervals to numerics
+select cast(interval '1' year as tinyint);
+select cast(interval '-10-2' year to month as smallint);
+select cast(interval '1000' month as int);
+select cast(interval -'10.123456' second as tinyint);
+select cast(interval '23:59:59' hour to second as smallint);
+select cast(interval -'1 02:03:04.123' day to second as int);
+select cast(interval '10' day as bigint);
+
+select cast(interval '-1000' month as tinyint);
+select cast(interval '1000000' second as smallint);
+
+-- cast ANSI intervals to decimals
+select cast(interval '-1' year as decimal(10, 0));
+select cast(interval '1.000001' second as decimal(10, 6));
+select cast(interval '08:11:10.001' hour to second as decimal(10, 4));
+select cast(interval '1 01:02:03.1' day to second as decimal(8, 1));
+select cast(interval '10.123' second as decimal(4, 2));
+select cast(interval '10.005' second as decimal(4, 2));
+select cast(interval '10.123' second as decimal(5, 2));
+select cast(interval '10.123' second as decimal(1, 0));

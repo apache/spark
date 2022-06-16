@@ -143,7 +143,7 @@ Input [4]: [i_category#12, i_class#11, sum#15, sum#16]
 Keys [2]: [i_category#12, i_class#11]
 Functions [2]: [sum(UnscaledValue(ss_net_profit#4)), sum(UnscaledValue(ss_ext_sales_price#3))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ss_net_profit#4))#17, sum(UnscaledValue(ss_ext_sales_price#3))#18]
-Results [6]: [cast(CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_net_profit#4))#17,17,2)) / promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#3))#18,17,2))), DecimalType(37,20)) as decimal(38,20)) AS gross_margin#19, i_category#12, i_class#11, 0 AS t_category#20, 0 AS t_class#21, 0 AS lochierarchy#22]
+Results [6]: [cast((MakeDecimal(sum(UnscaledValue(ss_net_profit#4))#17,17,2) / MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#3))#18,17,2)) as decimal(38,20)) AS gross_margin#19, i_category#12, i_class#11, 0 AS t_category#20, 0 AS t_class#21, 0 AS lochierarchy#22]
 
 (23) ReusedExchange [Reuses operator id: 21]
 Output [4]: [i_category#12, i_class#11, sum#23, sum#24]
@@ -171,7 +171,7 @@ Input [5]: [i_category#12, sum#33, isEmpty#34, sum#35, isEmpty#36]
 Keys [1]: [i_category#12]
 Functions [2]: [sum(ss_net_profit#27), sum(ss_ext_sales_price#28)]
 Aggregate Attributes [2]: [sum(ss_net_profit#27)#37, sum(ss_ext_sales_price#28)#38]
-Results [6]: [cast(CheckOverflow((promote_precision(sum(ss_net_profit#27)#37) / promote_precision(sum(ss_ext_sales_price#28)#38)), DecimalType(38,11)) as decimal(38,20)) AS gross_margin#39, i_category#12, null AS i_class#40, 0 AS t_category#41, 1 AS t_class#42, 1 AS lochierarchy#43]
+Results [6]: [cast((sum(ss_net_profit#27)#37 / sum(ss_ext_sales_price#28)#38) as decimal(38,20)) AS gross_margin#39, i_category#12, null AS i_class#40, 0 AS t_category#41, 1 AS t_class#42, 1 AS lochierarchy#43]
 
 (28) ReusedExchange [Reuses operator id: 21]
 Output [4]: [i_category#12, i_class#11, sum#44, sum#45]
@@ -199,7 +199,7 @@ Input [4]: [sum#50, isEmpty#51, sum#52, isEmpty#53]
 Keys: []
 Functions [2]: [sum(ss_net_profit#27), sum(ss_ext_sales_price#28)]
 Aggregate Attributes [2]: [sum(ss_net_profit#27)#54, sum(ss_ext_sales_price#28)#55]
-Results [6]: [cast(CheckOverflow((promote_precision(sum(ss_net_profit#27)#54) / promote_precision(sum(ss_ext_sales_price#28)#55)), DecimalType(38,11)) as decimal(38,20)) AS gross_margin#56, null AS i_category#57, null AS i_class#58, 1 AS t_category#59, 1 AS t_class#60, 2 AS lochierarchy#61]
+Results [6]: [cast((sum(ss_net_profit#27)#54 / sum(ss_ext_sales_price#28)#55) as decimal(38,20)) AS gross_margin#56, null AS i_category#57, null AS i_class#58, 1 AS t_category#59, 1 AS t_class#60, 2 AS lochierarchy#61]
 
 (33) Union
 

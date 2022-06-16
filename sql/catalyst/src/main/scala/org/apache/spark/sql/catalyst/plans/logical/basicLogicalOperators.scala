@@ -251,6 +251,8 @@ case class Except(
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
 
+  override def maxRows: Option[Long] = left.maxRows
+
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Except = copy(left = newLeft, right = newRight)
 }
@@ -758,6 +760,9 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = {
+    if (global) maxRows else child.maxRowsPerPartition
+  }
   override def outputOrdering: Seq[SortOrder] = order
   final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
@@ -1163,6 +1168,19 @@ case class Expand(
   override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
+  override def maxRows: Option[Long] = child.maxRows match {
+    case Some(m) =>
+      val n = BigInt(m) * projections.length
+      if (n.isValidLong) Some(n.toLong) else None
+    case _ => None
+  }
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition match {
+    case Some(m) =>
+      val n = BigInt(m) * projections.length
+      if (n.isValidLong) Some(n.toLong) else None
+    case _ => maxRows
+  }
+
   override def metadataOutput: Seq[Attribute] = Nil
 
   override def producedAttributes: AttributeSet = AttributeSet(output diff child.output)
@@ -1432,11 +1450,15 @@ case class Sample(
       s"Sampling fraction ($fraction) must be on interval [0, 1] without replacement")
   }
 
+  // when withReplacement is true, PoissonSampler is applied in SampleExec,
+  // which may output more rows than child.
   override def maxRows: Option[Long] = {
-    // when withReplacement is true, PoissonSampler is applied in SampleExec,
-    // which may output more rows than child.maxRows.
     if (withReplacement) None else child.maxRows
   }
+  override def maxRowsPerPartition: Option[Long] = {
+    if (withReplacement) None else child.maxRowsPerPartition
+  }
+
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Sample =
@@ -1626,6 +1648,8 @@ case class CollectMetrics(
     name.nonEmpty && metrics.nonEmpty && metrics.forall(_.resolved) && childrenResolved
   }
 
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =

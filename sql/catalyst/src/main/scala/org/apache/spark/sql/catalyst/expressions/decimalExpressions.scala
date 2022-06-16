@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -101,23 +102,6 @@ object MakeDecimal {
   def apply(child: Expression, precision: Int, scale: Int): MakeDecimal = {
     new MakeDecimal(child, precision, scale)
   }
-}
-
-/**
- * An expression used to wrap the children when promote the precision of DecimalType to avoid
- * promote multiple times.
- */
-case class PromotePrecision(child: Expression) extends UnaryExpression {
-  override def dataType: DataType = child.dataType
-  override def eval(input: InternalRow): Any = child.eval(input)
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    child.genCode(ctx)
-  override def prettyName: String = "promote_precision"
-  override def sql: String = child.sql
-  override lazy val preCanonicalized: Expression = child.preCanonicalized
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
 }
 
 /**
@@ -231,4 +215,35 @@ case class CheckOverflowInSum(
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflowInSum =
     copy(child = newChild)
+}
+
+/**
+ * An add expression for decimal values which is only used internally by Sum/Avg.
+ *
+ * Nota that, this expression does not check overflow which is different with `Add`. When
+ * aggregating values, Spark writes the aggregation buffer values to `UnsafeRow` via
+ * `UnsafeRowWriter`, which already checks decimal overflow, so we don't need to do it again in the
+ * add expression used by Sum/Avg.
+ */
+case class DecimalAddNoOverflowCheck(
+    left: Expression,
+    right: Expression,
+    override val dataType: DataType) extends BinaryOperator {
+  require(dataType.isInstanceOf[DecimalType])
+
+  override def inputType: AbstractDataType = DecimalType
+  override def symbol: String = "+"
+  private def decimalMethod: String = "$plus"
+
+  private lazy val numeric = TypeUtils.getNumeric(dataType)
+
+  override protected def nullSafeEval(input1: Any, input2: Any): Any =
+    numeric.plus(input1, input2)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DecimalAddNoOverflowCheck =
+    copy(left = newLeft, right = newRight)
 }

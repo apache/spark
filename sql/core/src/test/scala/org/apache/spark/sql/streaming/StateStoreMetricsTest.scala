@@ -131,7 +131,7 @@ trait StateStoreMetricsTest extends StreamTest {
   def assertNumStateRows(total: Seq[Long], updated: Seq[Long]): AssertOnQuery = {
     assert(total.length === updated.length)
     assertNumStateRows(
-      total, updated, droppedByWatermark = (0 until total.length).map(_ => 0L), None)
+      total, updated, droppedByWatermark = total.indices.map(_ => 0L), None)
   }
 
   def assertNumStateRows(
