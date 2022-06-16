@@ -122,5 +122,7 @@ select cast(interval '-1' year as decimal(10, 0));
 select cast(interval '1.000001' second as decimal(10, 6));
 select cast(interval '08:11:10.001' hour to second as decimal(10, 4));
 select cast(interval '1 01:02:03.1' day to second as decimal(8, 1));
-
+select cast(interval '10.123' second as decimal(4, 2));
+select cast(interval '10.005' second as decimal(4, 2));
+select cast(interval '10.123' second as decimal(5, 2));
 select cast(interval '10.123' second as decimal(1, 0));

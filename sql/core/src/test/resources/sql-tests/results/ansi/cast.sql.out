@@ -873,6 +873,30 @@ struct<CAST(INTERVAL '1 01:02:03.1' DAY TO SECOND AS DECIMAL(8,1)):decimal(8,1)>
 
 
 -- !query
+select cast(interval '10.123' second as decimal(4, 2))
+-- !query schema
+struct<CAST(INTERVAL '10.123' SECOND AS DECIMAL(4,2)):decimal(4,2)>
+-- !query output
+10.12
+
+
+-- !query
+select cast(interval '10.005' second as decimal(4, 2))
+-- !query schema
+struct<CAST(INTERVAL '10.005' SECOND AS DECIMAL(4,2)):decimal(4,2)>
+-- !query output
+10.01
+
+
+-- !query
+select cast(interval '10.123' second as decimal(5, 2))
+-- !query schema
+struct<CAST(INTERVAL '10.123' SECOND AS DECIMAL(5,2)):decimal(5,2)>
+-- !query output
+10.12
+
+
+-- !query
 select cast(interval '10.123' second as decimal(1, 0))
 -- !query schema
 struct<>
