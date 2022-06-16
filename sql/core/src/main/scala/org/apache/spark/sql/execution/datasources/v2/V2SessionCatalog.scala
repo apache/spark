@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
@@ -42,8 +42,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class V2SessionCatalog(catalog: SessionCatalog)
   extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
-
-  var defaultColumnAnalyzer: Analyzer = null
 
   override val defaultNamespace: Array[String] = Array("default")
 
@@ -152,7 +150,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
-      catalogTable.schema, changes, defaultColumnAnalyzer, catalogTable.provider, "ALTER TABLE")
+      catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
     val comment = properties.get(TableCatalog.PROP_COMMENT)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
     val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)

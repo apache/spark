@@ -22,7 +22,7 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
@@ -134,7 +134,6 @@ private[sql] object CatalogV2Util {
   def applySchemaChanges(
       schema: StructType,
       changes: Seq[TableChange],
-      analyzer: Analyzer,
       tableProvider: Option[String],
       statementType: String): StructType = {
     changes.foldLeft(schema) { (schema, change) =>
@@ -147,8 +146,7 @@ private[sql] object CatalogV2Util {
                 Option(add.defaultValue).map(field.withCurrentDefaultValue).getOrElse(field)
               val fieldWithComment: StructField =
                 Option(add.comment).map(fieldWithDefault.withComment).getOrElse(fieldWithDefault)
-              addField(schema, fieldWithComment, add.position(), analyzer, tableProvider,
-                statementType)
+              addField(schema, fieldWithComment, add.position(), tableProvider, statementType)
             case names =>
               replace(schema, names.init, parent => parent.dataType match {
                 case parentType: StructType =>
@@ -159,7 +157,7 @@ private[sql] object CatalogV2Util {
                     Option(add.comment).map(fieldWithDefault.withComment)
                       .getOrElse(fieldWithDefault)
                   Some(parent.copy(dataType =
-                    addField(parentType, fieldWithComment, add.position(), analyzer, tableProvider,
+                    addField(parentType, fieldWithComment, add.position(), tableProvider,
                       statementType)))
                 case _ =>
                   throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
@@ -190,8 +188,7 @@ private[sql] object CatalogV2Util {
               throw new IllegalArgumentException("Field not found: " + name)
             }
             val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
-            addField(withFieldRemoved, oldField, update.position(), analyzer, tableProvider,
-              statementType)
+            addField(withFieldRemoved, oldField, update.position(), tableProvider, statementType)
           }
 
           update.fieldNames() match {
@@ -220,7 +217,6 @@ private[sql] object CatalogV2Util {
       schema: StructType,
       field: StructField,
       position: ColumnPosition,
-      analyzer: Analyzer,
       tableProvider: Option[String],
       statementType: String): StructType = {
     val newSchema: StructType = if (position == null) {
@@ -236,7 +232,7 @@ private[sql] object CatalogV2Util {
       val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
     }
-    constantFoldCurrentDefaultsToExistDefaults(analyzer, newSchema, tableProvider, statementType)
+    constantFoldCurrentDefaultsToExistDefaults(newSchema, tableProvider, statementType)
   }
 
   private def replace(
