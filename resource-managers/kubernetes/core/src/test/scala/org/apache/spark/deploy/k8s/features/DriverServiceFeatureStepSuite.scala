@@ -195,7 +195,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     assert(driverService.getSpec.getIpFamilies.get(0) == "IPv6")
   }
 
-  test("Support ipFamilies spec with DualStack and ") {
+  test("Support DualStack") {
     Seq("PreferDualStack", "RequireDualStack").foreach { stack =>
       val configAndAnswers = Seq(
         ("IPv4,IPv6", Seq("IPv4", "IPv6")),
