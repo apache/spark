@@ -1218,9 +1218,7 @@ if sys.version_info[0] < 4:
     _array_type_mappings["u"] = StringType
 
 
-def _from_numpy_type(
-    nt: "np.dtype",
-) -> DataType:
+def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
     """Convert NumPy type to Spark data type."""
     import numpy as np
 
