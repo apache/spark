@@ -80,7 +80,7 @@ Input [2]: [s_store_sk#8, s_county#9]
 
 (11) BroadcastExchange
 Input [1]: [s_store_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
 (12) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#3]
@@ -92,92 +92,92 @@ Output [3]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4]
 Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, s_store_sk#8]
 
 (14) Scan parquet default.household_demographics
-Output [4]: [hd_demo_sk#11, hd_buy_potential#12, hd_dep_count#13, hd_vehicle_count#14]
+Output [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_vehicle_count), IsNotNull(hd_dep_count), Or(EqualTo(hd_buy_potential,>10000         ),EqualTo(hd_buy_potential,unknown        )), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string,hd_dep_count:int,hd_vehicle_count:int>
 
 (15) ColumnarToRow [codegen id : 3]
-Input [4]: [hd_demo_sk#11, hd_buy_potential#12, hd_dep_count#13, hd_vehicle_count#14]
+Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
 
 (16) Filter [codegen id : 3]
-Input [4]: [hd_demo_sk#11, hd_buy_potential#12, hd_dep_count#13, hd_vehicle_count#14]
-Condition : (((((isnotnull(hd_vehicle_count#14) AND isnotnull(hd_dep_count#13)) AND ((hd_buy_potential#12 = >10000         ) OR (hd_buy_potential#12 = unknown        ))) AND (hd_vehicle_count#14 > 0)) AND ((cast(hd_dep_count#13 as double) / cast(hd_vehicle_count#14 as double)) > 1.0)) AND isnotnull(hd_demo_sk#11))
+Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
+Condition : (((((isnotnull(hd_vehicle_count#13) AND isnotnull(hd_dep_count#12)) AND ((hd_buy_potential#11 = >10000         ) OR (hd_buy_potential#11 = unknown        ))) AND (hd_vehicle_count#13 > 0)) AND ((cast(hd_dep_count#12 as double) / cast(hd_vehicle_count#13 as double)) > 1.0)) AND isnotnull(hd_demo_sk#10))
 
 (17) Project [codegen id : 3]
-Output [1]: [hd_demo_sk#11]
-Input [4]: [hd_demo_sk#11, hd_buy_potential#12, hd_dep_count#13, hd_vehicle_count#14]
+Output [1]: [hd_demo_sk#10]
+Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
 
 (18) BroadcastExchange
-Input [1]: [hd_demo_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+Input [1]: [hd_demo_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
 (19) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_hdemo_sk#2]
-Right keys [1]: [hd_demo_sk#11]
+Right keys [1]: [hd_demo_sk#10]
 Join condition: None
 
 (20) Project [codegen id : 4]
 Output [2]: [ss_customer_sk#1, ss_ticket_number#4]
-Input [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4, hd_demo_sk#11]
+Input [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4, hd_demo_sk#10]
 
 (21) HashAggregate [codegen id : 4]
 Input [2]: [ss_customer_sk#1, ss_ticket_number#4]
 Keys [2]: [ss_ticket_number#4, ss_customer_sk#1]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#16]
-Results [3]: [ss_ticket_number#4, ss_customer_sk#1, count#17]
+Aggregate Attributes [1]: [count#14]
+Results [3]: [ss_ticket_number#4, ss_customer_sk#1, count#15]
 
 (22) Exchange
-Input [3]: [ss_ticket_number#4, ss_customer_sk#1, count#17]
-Arguments: hashpartitioning(ss_ticket_number#4, ss_customer_sk#1, 5), ENSURE_REQUIREMENTS, [id=#18]
+Input [3]: [ss_ticket_number#4, ss_customer_sk#1, count#15]
+Arguments: hashpartitioning(ss_ticket_number#4, ss_customer_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (23) HashAggregate [codegen id : 6]
-Input [3]: [ss_ticket_number#4, ss_customer_sk#1, count#17]
+Input [3]: [ss_ticket_number#4, ss_customer_sk#1, count#15]
 Keys [2]: [ss_ticket_number#4, ss_customer_sk#1]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#19]
-Results [3]: [ss_ticket_number#4, ss_customer_sk#1, count(1)#19 AS cnt#20]
+Aggregate Attributes [1]: [count(1)#16]
+Results [3]: [ss_ticket_number#4, ss_customer_sk#1, count(1)#16 AS cnt#17]
 
 (24) Filter [codegen id : 6]
-Input [3]: [ss_ticket_number#4, ss_customer_sk#1, cnt#20]
-Condition : ((cnt#20 >= 1) AND (cnt#20 <= 5))
+Input [3]: [ss_ticket_number#4, ss_customer_sk#1, cnt#17]
+Condition : ((cnt#17 >= 1) AND (cnt#17 <= 5))
 
 (25) Scan parquet default.customer
-Output [5]: [c_customer_sk#21, c_salutation#22, c_first_name#23, c_last_name#24, c_preferred_cust_flag#25]
+Output [5]: [c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_customer_sk)]
 ReadSchema: struct<c_customer_sk:int,c_salutation:string,c_first_name:string,c_last_name:string,c_preferred_cust_flag:string>
 
 (26) ColumnarToRow [codegen id : 5]
-Input [5]: [c_customer_sk#21, c_salutation#22, c_first_name#23, c_last_name#24, c_preferred_cust_flag#25]
+Input [5]: [c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
 
 (27) Filter [codegen id : 5]
-Input [5]: [c_customer_sk#21, c_salutation#22, c_first_name#23, c_last_name#24, c_preferred_cust_flag#25]
-Condition : isnotnull(c_customer_sk#21)
+Input [5]: [c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
+Condition : isnotnull(c_customer_sk#18)
 
 (28) BroadcastExchange
-Input [5]: [c_customer_sk#21, c_salutation#22, c_first_name#23, c_last_name#24, c_preferred_cust_flag#25]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#26]
+Input [5]: [c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=4]
 
 (29) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_customer_sk#1]
-Right keys [1]: [c_customer_sk#21]
+Right keys [1]: [c_customer_sk#18]
 Join condition: None
 
 (30) Project [codegen id : 6]
-Output [6]: [c_last_name#24, c_first_name#23, c_salutation#22, c_preferred_cust_flag#25, ss_ticket_number#4, cnt#20]
-Input [8]: [ss_ticket_number#4, ss_customer_sk#1, cnt#20, c_customer_sk#21, c_salutation#22, c_first_name#23, c_last_name#24, c_preferred_cust_flag#25]
+Output [6]: [c_last_name#21, c_first_name#20, c_salutation#19, c_preferred_cust_flag#22, ss_ticket_number#4, cnt#17]
+Input [8]: [ss_ticket_number#4, ss_customer_sk#1, cnt#17, c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
 
 (31) Exchange
-Input [6]: [c_last_name#24, c_first_name#23, c_salutation#22, c_preferred_cust_flag#25, ss_ticket_number#4, cnt#20]
-Arguments: rangepartitioning(cnt#20 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [id=#27]
+Input [6]: [c_last_name#21, c_first_name#20, c_salutation#19, c_preferred_cust_flag#22, ss_ticket_number#4, cnt#17]
+Arguments: rangepartitioning(cnt#17 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (32) Sort [codegen id : 7]
-Input [6]: [c_last_name#24, c_first_name#23, c_salutation#22, c_preferred_cust_flag#25, ss_ticket_number#4, cnt#20]
-Arguments: [cnt#20 DESC NULLS LAST], true, 0
+Input [6]: [c_last_name#21, c_first_name#20, c_salutation#19, c_preferred_cust_flag#22, ss_ticket_number#4, cnt#17]
+Arguments: [cnt#17 DESC NULLS LAST], true, 0
 
 ===== Subqueries =====
 
@@ -190,25 +190,25 @@ BroadcastExchange (37)
 
 
 (33) Scan parquet default.date_dim
-Output [3]: [d_date_sk#7, d_year#28, d_dom#29]
+Output [3]: [d_date_sk#7, d_year#23, d_dom#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_dom), GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
 
 (34) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#7, d_year#28, d_dom#29]
+Input [3]: [d_date_sk#7, d_year#23, d_dom#24]
 
 (35) Filter [codegen id : 1]
-Input [3]: [d_date_sk#7, d_year#28, d_dom#29]
-Condition : ((((isnotnull(d_dom#29) AND (d_dom#29 >= 1)) AND (d_dom#29 <= 2)) AND d_year#28 IN (1999,2000,2001)) AND isnotnull(d_date_sk#7))
+Input [3]: [d_date_sk#7, d_year#23, d_dom#24]
+Condition : ((((isnotnull(d_dom#24) AND (d_dom#24 >= 1)) AND (d_dom#24 <= 2)) AND d_year#23 IN (1999,2000,2001)) AND isnotnull(d_date_sk#7))
 
 (36) Project [codegen id : 1]
 Output [1]: [d_date_sk#7]
-Input [3]: [d_date_sk#7, d_year#28, d_dom#29]
+Input [3]: [d_date_sk#7, d_year#23, d_dom#24]
 
 (37) BroadcastExchange
 Input [1]: [d_date_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#30]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=6]
 
 

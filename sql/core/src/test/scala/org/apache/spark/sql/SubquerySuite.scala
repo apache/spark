@@ -2176,4 +2176,32 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-39355: Single column uses quoted to construct UnresolvedAttribute") {
+    checkAnswer(
+      sql("""
+            |SELECT *
+            |FROM (
+            |    SELECT '2022-06-01' AS c1
+            |) a
+            |WHERE c1 IN (
+            |     SELECT date_add('2022-06-01', 0)
+            |)
+            |""".stripMargin),
+      Row("2022-06-01"))
+    checkAnswer(
+      sql("""
+            |SELECT *
+            |FROM (
+            |    SELECT '2022-06-01' AS c1
+            |) a
+            |WHERE c1 IN (
+            |    SELECT date_add(a.c1.k1, 0)
+            |    FROM (
+            |        SELECT named_struct('k1', '2022-06-01') AS c1
+            |    ) a
+            |)
+            |""".stripMargin),
+      Row("2022-06-01"))
+  }
 }

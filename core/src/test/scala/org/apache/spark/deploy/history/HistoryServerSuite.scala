@@ -74,6 +74,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
+  private val localhost: String = Utils.localCanonicalHostName()
   private var port: Int = -1
 
   protected def diskBackend: HybridStoreDiskBackend.Value
@@ -428,12 +429,12 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
     // build a URL for an app or app/attempt plus a page underneath
     def buildURL(appId: String, suffix: String): URL = {
-      new URL(s"http://localhost:$port/history/$appId$suffix")
+      new URL(s"http://$localhost:$port/history/$appId$suffix")
     }
 
     // build a rest URL for the application and suffix.
     def applications(appId: String, suffix: String): URL = {
-      new URL(s"http://localhost:$port/api/v1/applications/$appId$suffix")
+      new URL(s"http://$localhost:$port/api/v1/applications/$appId$suffix")
     }
 
     // start initial job
@@ -586,11 +587,11 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
     val port = server.boundPort
     val testUrls = Seq(
-      s"http://localhost:$port/api/v1/applications/$appId/1/jobs",
-      s"http://localhost:$port/history/$appId/1/jobs/",
-      s"http://localhost:$port/api/v1/applications/$appId/logs",
-      s"http://localhost:$port/api/v1/applications/$appId/1/logs",
-      s"http://localhost:$port/api/v1/applications/$appId/2/logs")
+      s"http://$localhost:$port/api/v1/applications/$appId/1/jobs",
+      s"http://$localhost:$port/history/$appId/1/jobs/",
+      s"http://$localhost:$port/api/v1/applications/$appId/logs",
+      s"http://$localhost:$port/api/v1/applications/$appId/1/logs",
+      s"http://$localhost:$port/api/v1/applications/$appId/2/logs")
 
     tests.foreach { case (user, expectedCode) =>
       testUrls.foreach { url =>
@@ -609,9 +610,9 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
     val port = server.boundPort
     val testUrls = Seq(
-      s"http://localhost:$port/api/v1/applications/$appId/logs",
-      s"http://localhost:$port/api/v1/applications/$appId/1/logs",
-      s"http://localhost:$port/api/v1/applications/$appId/2/logs")
+      s"http://$localhost:$port/api/v1/applications/$appId/logs",
+      s"http://$localhost:$port/api/v1/applications/$appId/1/logs",
+      s"http://$localhost:$port/api/v1/applications/$appId/2/logs")
 
     testUrls.foreach { url =>
       TestUtils.httpResponseCode(new URL(url))
@@ -636,9 +637,9 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     def buildPageAttemptUrl(appId: String, attemptId: Option[Int]): URL = {
       attemptId match {
         case Some(id) =>
-          new URL(s"http://localhost:$port/history/$appId/$id")
+          new URL(s"http://$localhost:$port/history/$appId/$id")
         case None =>
-          new URL(s"http://localhost:$port/history/$appId")
+          new URL(s"http://$localhost:$port/history/$appId")
       }
     }
 
@@ -663,7 +664,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
-    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/api/v1/$path"))
+    HistoryServerSuite.getContentAndCode(new URL(s"http://$localhost:$port/api/v1/$path"))
   }
 
   def getUrl(path: String): String = {
@@ -671,7 +672,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   }
 
   def generateURL(path: String): URL = {
-    new URL(s"http://localhost:$port/api/v1/$path")
+    new URL(s"http://$localhost:$port/api/v1/$path")
   }
 
   def generateExpectation(name: String, path: String): Unit = {
@@ -686,7 +687,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   test("SPARK-31697: HistoryServer should set Content-Type") {
     val port = server.boundPort
     val nonExistenceAppId = "local-non-existence"
-    val url = new URL(s"http://localhost:$port/history/$nonExistenceAppId")
+    val url = new URL(s"http://$localhost:$port/history/$nonExistenceAppId")
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod("GET")
     conn.connect()
@@ -697,7 +698,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   test("Redirect to the root page when accessed to /history/") {
     val port = server.boundPort
-    val url = new URL(s"http://localhost:$port/history/")
+    val url = new URL(s"http://$localhost:$port/history/")
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod("GET")
     conn.setUseCaches(false)
@@ -705,7 +706,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     conn.setInstanceFollowRedirects(false)
     conn.connect()
     assert(conn.getResponseCode === 302)
-    assert(conn.getHeaderField("Location") === s"http://localhost:$port/")
+    assert(conn.getHeaderField("Location") === s"http://$localhost:$port/")
   }
 }
 

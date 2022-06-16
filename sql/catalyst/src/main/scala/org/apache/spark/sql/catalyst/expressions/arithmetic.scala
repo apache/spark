@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.math.{max, min}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -208,12 +210,46 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
   override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
-    with SupportQueryContext {
+abstract class BinaryArithmetic extends BinaryOperator
+  with NullIntolerant with SupportQueryContext {
 
   protected val failOnError: Boolean
 
-  override def dataType: DataType = left.dataType
+  override def checkInputDataTypes(): TypeCheckResult = (left.dataType, right.dataType) match {
+    case (l: DecimalType, r: DecimalType) if inputType.acceptsType(l) && inputType.acceptsType(r) =>
+      // We allow decimal type inputs with different precision and scale, and use special formulas
+      // to calculate the result precision and scale.
+      TypeCheckResult.TypeCheckSuccess
+    case _ => super.checkInputDataTypes()
+  }
+
+  override def dataType: DataType = (left.dataType, right.dataType) match {
+    case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+      resultDecimalType(p1, s1, p2, s2)
+    case _ => left.dataType
+  }
+
+  // When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
+  // needed are out of the range of available values, the scale is reduced up to 6, in order to
+  // prevent the truncation of the integer part of the decimals.
+  protected def allowPrecisionLoss: Boolean = SQLConf.get.decimalOperationsAllowPrecisionLoss
+
+  protected def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    throw new IllegalStateException(
+      s"${getClass.getSimpleName} must override `resultDecimalType`.")
+  }
+
+  override def nullable: Boolean = super.nullable || {
+    if (left.dataType.isInstanceOf[DecimalType]) {
+      // For decimal arithmetic, we may return null even if both inputs are not null, if overflow
+      // happens and this `failOnError` flag is false.
+      !failOnError
+    } else {
+      // For non-decimal arithmetic, the calculation always return non-null result when inputs are
+      // not null. If overflow happens, we return either the overflowed value or fail.
+      false
+    }
+  }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
 
@@ -225,6 +261,10 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
     } else {
       ""
     }
+  }
+
+  protected def checkDecimalOverflow(value: Decimal, precision: Int, scale: Int): Decimal = {
+    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError, queryContext)
   }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
@@ -243,9 +283,24 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant
   def exactMathMethod: Option[String] = None
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
-    case _: DecimalType =>
-      // Overflow is handled in the CheckOverflow operator
-      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
+    case DecimalType.Fixed(precision, scale) =>
+      val errorContextCode = if (failOnError) {
+        ctx.addReferenceObj("errCtx", queryContext)
+      } else {
+        "\"\""
+      }
+      val updateIsNull = if (failOnError) {
+        ""
+      } else {
+        s"${ev.isNull} = ${ev.value} == null;"
+      }
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+           |${ev.value} = $eval1.$decimalMethod($eval2).toPrecision(
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
+           |$updateIsNull
+       """.stripMargin
+      })
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
@@ -323,11 +378,30 @@ case class Add(
 
   override def decimalMethod: String = "$plus"
 
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: max(s1, s2) + max(p1-s1, p2-s2) + 1
+  // Result Scale:     max(s1, s2)
+  // scalastyle:on
+  override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val resultScale = max(s1, s2)
+    val resultPrecision = max(p1 - s1, p2 - s2) + resultScale + 1
+    if (allowPrecisionLoss) {
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
+    } else {
+      DecimalType.bounded(resultPrecision, resultScale)
+    }
+  }
+
   override def calendarIntervalMethod: String = if (failOnError) "addExact" else "add"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      checkDecimalOverflow(numeric.plus(input1, input2).asInstanceOf[Decimal], precision, scale)
     case CalendarIntervalType if failOnError =>
       IntervalUtils.addExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
@@ -373,11 +447,30 @@ case class Subtract(
 
   override def decimalMethod: String = "$minus"
 
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: max(s1, s2) + max(p1-s1, p2-s2) + 1
+  // Result Scale:     max(s1, s2)
+  // scalastyle:on
+  override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val resultScale = max(s1, s2)
+    val resultPrecision = max(p1 - s1, p2 - s2) + resultScale + 1
+    if (allowPrecisionLoss) {
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
+    } else {
+      DecimalType.bounded(resultPrecision, resultScale)
+    }
+  }
+
   override def calendarIntervalMethod: String = if (failOnError) "subtractExact" else "subtract"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      checkDecimalOverflow(numeric.minus(input1, input2).asInstanceOf[Decimal], precision, scale)
     case CalendarIntervalType if failOnError =>
       IntervalUtils.subtractExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
@@ -422,9 +515,28 @@ case class Multiply(
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
 
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: p1 + p2 + 1
+  // Result Scale:     s1 + s2
+  // scalastyle:on
+  override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val resultScale = s1 + s2
+    val resultPrecision = p1 + p2 + 1
+    if (allowPrecisionLoss) {
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
+    } else {
+      DecimalType.bounded(resultPrecision, resultScale)
+    }
+  }
+
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      checkDecimalOverflow(numeric.times(input1, input2).asInstanceOf[Decimal], precision, scale)
     case _: IntegerType if failOnError =>
       MathUtils.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
     case _: LongType if failOnError =>
@@ -490,12 +602,25 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    val operation = if (operandsDataType.isInstanceOf[DecimalType]) {
-      decimalToDataTypeCodeGen(s"${eval1.value}.$decimalMethod(${eval2.value})")
+    val errorContext = if (failOnError) {
+      ctx.addReferenceObj("errCtx", queryContext)
     } else {
-      s"($javaType)(${eval1.value} $symbol ${eval2.value})"
+      "\"\""
     }
-    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+    val operation = super.dataType match {
+      case DecimalType.Fixed(precision, scale) =>
+        val decimalValue = ctx.freshName("decimalValue")
+        s"""
+           |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
+           |if ($decimalValue != null) {
+           |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+           |} else {
+           |  ${ev.isNull} = true;
+           |}
+           |""".stripMargin
+      case _ => s"${ev.value} = ($javaType)(${eval1.value} $symbol ${eval2.value});"
+    }
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
       s"""
         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
@@ -521,7 +646,7 @@ trait DivModLike extends BinaryArithmetic {
         } else {
           ${eval1.code}
           $checkIntegralDivideOverflow
-          ${ev.value} = $operation;
+          $operation
         }""")
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
@@ -543,7 +668,7 @@ trait DivModLike extends BinaryArithmetic {
           } else {
             $failOnErrorBranch
             $checkIntegralDivideOverflow
-            ${ev.value} = $operation;
+            $operation
           }
         }""")
     }
@@ -575,7 +700,36 @@ case class Divide(
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
 
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
+  // Result Scale:     max(6, s1 + p2 + 1)
+  // scalastyle:on
+  override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    if (allowPrecisionLoss) {
+      val intDig = p1 - s1 + s2
+      val scale = max(DecimalType.MINIMUM_ADJUSTED_SCALE, s1 + p2 + 1)
+      val prec = intDig + scale
+      DecimalType.adjustPrecisionScale(prec, scale)
+    } else {
+      var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
+      var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
+      val diff = (intDig + decDig) - DecimalType.MAX_SCALE
+      if (diff > 0) {
+        decDig -= diff / 2 + 1
+        intDig = DecimalType.MAX_SCALE - decDig
+      }
+      DecimalType.bounded(intDig + decDig, decDig)
+    }
+  }
+
   private lazy val div: (Any, Any) => Any = dataType match {
+    case d @ DecimalType.Fixed(precision, scale) => (l, r) => {
+      val value = d.fractional.asInstanceOf[Fractional[Any]].div(l, r)
+      checkDecimalOverflow(value.asInstanceOf[Decimal], precision, scale)
+    }
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
   }
 
@@ -618,6 +772,14 @@ case class IntegralDivide(
   override def symbol: String = "/"
   override def decimalMethod: String = "quot"
   override def decimalToDataTypeCodeGen(decimalResult: String): String = s"$decimalResult.toLong()"
+
+  override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    // This follows division rule
+    val intDig = p1 - s1 + s2
+    // No precision loss can happen as the result scale is 0.
+    DecimalType.bounded(intDig, 0)
+  }
+
   override def sqlOperator: String = "div"
 
   private lazy val div: (Any, Any) => Any = {
@@ -632,7 +794,11 @@ case class IntegralDivide(
         LongType.integral.asInstanceOf[Integral[Any]]
     }
     (x, y) => {
-      val res = integral.quot(x, y)
+      val res = super.dataType match {
+        case DecimalType.Fixed(precision, scale) =>
+          checkDecimalOverflow(integral.quot(x, y).asInstanceOf[Decimal], precision, scale)
+        case _ => integral.quot(x, y)
+      }
       if (res == null) {
         null
       } else {
@@ -670,6 +836,24 @@ case class Remainder(
 
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
+
+  // scalastyle:off
+  // The formula follows Hive which is based on the SQL standard and MS SQL:
+  // https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+  // https://msdn.microsoft.com/en-us/library/ms190476.aspx
+  // Result Precision: min(p1-s1, p2-s2) + max(s1, s2)
+  // Result Scale:     max(s1, s2)
+  // scalastyle:on
+  override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val resultScale = max(s1, s2)
+    val resultPrecision = min(p1 - s1, p2 - s2) + resultScale
+    if (allowPrecisionLoss) {
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
+    } else {
+      DecimalType.bounded(resultPrecision, resultScale)
+    }
+  }
+
   override def toString: String = {
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(sqlOperator) match {
       case operator if operator == sqlOperator => s"($left $sqlOperator $right)"
@@ -694,9 +878,11 @@ case class Remainder(
     case i: IntegralType =>
       val integral = i.integral.asInstanceOf[Integral[Any]]
       (left, right) => integral.rem(left, right)
-    case i: FractionalType => // should only be DecimalType for now
-      val integral = i.asIntegral.asInstanceOf[Integral[Any]]
-      (left, right) => integral.rem(left, right)
+
+    case d @ DecimalType.Fixed(precision, scale) =>
+      val integral = d.asIntegral.asInstanceOf[Integral[Any]]
+      (left, right) =>
+        checkDecimalOverflow(integral.rem(left, right).asInstanceOf[Decimal], precision, scale)
   }
 
   override def evalOperation(left: Any, right: Any): Any = mod(left, right)
@@ -734,9 +920,33 @@ case class Pmod(
 
   override def nullable: Boolean = true
 
+  override def decimalMethod: String = "remainder"
+
+  // This follows Remainder rule
+  override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val resultScale = max(s1, s2)
+    val resultPrecision = min(p1 - s1, p2 - s2) + resultScale
+    if (allowPrecisionLoss) {
+      DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
+    } else {
+      DecimalType.bounded(resultPrecision, resultScale)
+    }
+  }
+
   private lazy val isZero: Any => Boolean = right.dataType match {
     case _: DecimalType => x => x.asInstanceOf[Decimal].isZero
     case _ => x => x == 0
+  }
+
+  private lazy val pmodFunc: (Any, Any) => Any = dataType match {
+    case _: IntegerType => (l, r) => pmod(l.asInstanceOf[Int], r.asInstanceOf[Int])
+    case _: LongType => (l, r) => pmod(l.asInstanceOf[Long], r.asInstanceOf[Long])
+    case _: ShortType => (l, r) => pmod(l.asInstanceOf[Short], r.asInstanceOf[Short])
+    case _: ByteType => (l, r) => pmod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
+    case _: FloatType => (l, r) => pmod(l.asInstanceOf[Float], r.asInstanceOf[Float])
+    case _: DoubleType => (l, r) => pmod(l.asInstanceOf[Double], r.asInstanceOf[Double])
+    case DecimalType.Fixed(precision, scale) => (l, r) => checkDecimalOverflow(
+      pmod(l.asInstanceOf[Decimal], r.asInstanceOf[Decimal]), precision, scale)
   }
 
   final override def eval(input: InternalRow): Any = {
@@ -753,15 +963,7 @@ case class Pmod(
           // when we reach here, failOnError must bet true.
           throw QueryExecutionErrors.divideByZeroError(queryContext)
         }
-        input1 match {
-          case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
-          case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
-          case s: Short => pmod(s, input2.asInstanceOf[java.lang.Short])
-          case b: Byte => pmod(b, input2.asInstanceOf[java.lang.Byte])
-          case f: Float => pmod(f, input2.asInstanceOf[java.lang.Float])
-          case d: Double => pmod(d, input2.asInstanceOf[java.lang.Double])
-          case d: Decimal => pmod(d, input2.asInstanceOf[Decimal])
-        }
+        pmodFunc(input1, input2)
       }
     }
   }
@@ -776,18 +978,26 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+    val errorContext = if (failOnError) {
+      ctx.addReferenceObj("errCtx", queryContext)
+    } else {
+      "\"\""
+    }
     val result = dataType match {
-      case DecimalType.Fixed(_, _) =>
+      case DecimalType.Fixed(precision, scale) =>
         val decimalAdd = "$plus"
         s"""
-          $javaType $remainder = ${eval1.value}.remainder(${eval2.value});
-          if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
-            ${ev.value}=($remainder.$decimalAdd(${eval2.value})).remainder(${eval2.value});
-          } else {
-            ${ev.value}=$remainder;
-          }
-        """
+           |$javaType $remainder = ${eval1.value}.$decimalMethod(${eval2.value});
+           |if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
+           |  ${ev.value}=($remainder.$decimalAdd(${eval2.value})).$decimalMethod(${eval2.value});
+           |} else {
+           |  ${ev.value}=$remainder;
+           |}
+           |${ev.value} = ${ev.value}.toPrecision(
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
+           |${ev.isNull} = ${ev.value} == null;
+           |""".stripMargin
+
       // byte and short are casted into int when add, minus, times or divide
       case ByteType | ShortType =>
         s"""

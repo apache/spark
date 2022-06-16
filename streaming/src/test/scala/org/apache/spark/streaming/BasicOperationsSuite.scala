@@ -742,7 +742,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         }
 
         Thread.sleep(200)
-        for (i <- 0 until input.size) {
+        for (i <- input.indices) {
           testServer.send(input(i).toString + "\n")
           Thread.sleep(200)
           val numCompletedBatches = batchCounter.getNumCompletedBatches
