@@ -91,6 +91,27 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
   }
 
+  private def isMapWithStringKey(e: Expression): Boolean = if (e.resolved) {
+    e.dataType match {
+      case m: MapType => m.keyType.isInstanceOf[StringType]
+      case _ => false
+    }
+  } else {
+    false
+  }
+
+  private def failUnresolvedAttribute(
+      operator: LogicalPlan,
+      a: Attribute,
+      errorClass: String): Nothing = {
+    val unresolvedAttribute = a.sql
+    val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+    val orderedCandidates = StringUtils.orderStringsBySimilarity(unresolvedAttribute, candidates)
+    a.failAnalysis(
+      errorClass = errorClass,
+      messageParameters = Array(unresolvedAttribute, orderedCandidates.mkString(", ")))
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures. Inline all CTEs in the plan to help check
@@ -173,24 +194,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
             }
 
-          case g @ GetMapValue(_, key: Attribute, _)
-            if g.keyType == StringType && !key.resolved =>
-            val unresolvedKey = key.sql
-            val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
-            val orderedCandidates = StringUtils.orderStringsBySimilarity(unresolvedKey, candidates)
-            g.failAnalysis(
-              errorClass = "UNRESOLVED_MAP_KEY",
-              messageParameters = Array(unresolvedKey, orderedCandidates.mkString(", ")))
+          // If an attribute can't be resolved as a map key of string type, either the key should be
+          // surrounded with single quotes, or there is a typo in the attribute name.
+          case GetMapValue(map, key: Attribute, _) if isMapWithStringKey(map) && !key.resolved =>
+            failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
-            val missingCol = a.sql
-            val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
-            val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
-            a.failAnalysis(
-              errorClass = "MISSING_COLUMN",
-              messageParameters = Array(missingCol, orderedCandidates.mkString(", ")))
+            failUnresolvedAttribute(operator, a, "MISSING_COLUMN")
 
           case s: Star =>
             withPosition(s) {

@@ -411,7 +411,7 @@ class QueryCompilationErrorsSuite
       msg = "Cannot resolve column 'a' as a map key. If the key is a string literal, please add " +
         "single quotes around it. Otherwise, did you mean one of the following column(s)? " +
         "[__auto_generated_subquery_name.m, __auto_generated_subquery_name.aa]" +
-        """; line 1 pos 7;
+        """; line 1 pos 9;
           |'Project [unresolvedalias(m#7['a], None)]
           |+- SubqueryAlias __auto_generated_subquery_name
           |   +- Project [map(a, b) AS m#7, aa AS aa#8]
