@@ -1024,7 +1024,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
-      val COLUMN_DEFAULT_NOT_FOUND = "Column 'default' does not exist"
+      val COLUMN_DEFAULT_NOT_FOUND = "`default` cannot be resolved."
       val BAD_SUBQUERY = "cannot evaluate expression scalarsubquery() in inline table definition"
     }
     // The default value fails to analyze.

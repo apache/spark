@@ -36,9 +36,7 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             self.spark.sql("select `中文字段`")
         except AnalysisException as e:
-            self.assertRegex(str(e),
-                             "[UNRESOLVED_COLUMN] A column or function parameter with name " +
-                             "`中文字段` cannot be resolved. Did you mean one of the following? []")
+            self.assertRegex(str(e), ".*UNRESOLVED_COLUMN.*`中文字段`.*")
 
     def test_spark_upgrade_exception(self):
         # SPARK-32161 : Test case to Handle SparkUpgradeException in pythonic way

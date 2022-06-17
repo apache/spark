@@ -2950,13 +2950,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("forall(a, x -> x)")
     }
     assert(ex4.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    assert(ex4.messageParameters.head == "`a`")
 
     val ex4a = intercept[AnalysisException] {
       df.select(forall(col("a"), x => x))
     }
     assert(ex4a.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(ex4a.messageParameters.head == "a")
+    assert(ex4a.messageParameters.head == "`a`")
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -3134,7 +3134,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
     }
     assert(ex5.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(ex5.messageParameters.head == "a")
+    assert(ex5.messageParameters.head == "`a`")
   }
 
   test("map_zip_with function - map of primitive types") {
@@ -3688,7 +3688,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
     }
     assert(ex4.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    assert(ex4.messageParameters.head == "`a`")
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
