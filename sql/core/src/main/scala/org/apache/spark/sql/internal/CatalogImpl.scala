@@ -257,12 +257,20 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // string as the qualified identifier and resolve the table through SQL analyzer.
     try {
       val ident = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-      getTable(ident.database.orNull, ident.table)
+      if (tableExists(ident.database.orNull, ident.table)) {
+        makeTable(ident)
+      } else {
+        getTable3LNamespace(tableName)
+      }
     } catch {
       case e: org.apache.spark.sql.catalyst.parser.ParseException =>
-        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-        makeTable(ident)
+        getTable3LNamespace(tableName)
     }
+  }
+
+  private def getTable3LNamespace(tableName: String): Table = {
+    val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    makeTable(ident)
   }
 
   /**
@@ -307,7 +315,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val plan = sparkSession.sessionState.executePlan(UnresolvedNamespace(ident)).analyzed
       plan match {
         case ResolvedNamespace(catalog: SupportsNamespaces, _) =>
-          catalog.namespaceExists(ident.toArray)
+          catalog.namespaceExists(ident.slice(1, ident.size).toArray)
         case _ => true
       }
     } else {
