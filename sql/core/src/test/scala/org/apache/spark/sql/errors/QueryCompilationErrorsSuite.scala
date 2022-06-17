@@ -403,20 +403,13 @@ class QueryCompilationErrorsSuite
 
   test("UNRESOLVED_MAP_KEY: string type literal should be quoted") {
     checkAnswer(sql("select m['a'] from (select map('a', 'b') as m, 'aa' as aa)"), Row("b"))
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException] {
         sql("select m[a] from (select map('a', 'b') as m, 'aa' as aa)")
       },
       errorClass = "UNRESOLVED_MAP_KEY",
-      msg = "Cannot resolve column 'a' as a map key. If the key is a string literal, please add " +
-        """single quotes around it. Otherwise, did you mean one of the following column\(s\)\? """ +
-        """\[__auto_generated_subquery_name.m, __auto_generated_subquery_name.aa\]; line 1 pos 9;
-          |'Project \[unresolvedalias\(m#\w\['a\], None\)\]
-          |\+\- SubqueryAlias __auto_generated_subquery_name
-          |   \+\- Project \[map\(a, b\) AS m#\w, aa AS aa#\w\]
-          |      \+\- OneRowRelation
-          |""".stripMargin,
-      matchMsg = true)
+      parameters = Map("columnName" -> "a",
+        "proposal" -> "__auto_generated_subquery_name.m, __auto_generated_subquery_name.aa"))
   }
 
   test("MISSING_COLUMN: SELECT distinct does not work correctly " +
