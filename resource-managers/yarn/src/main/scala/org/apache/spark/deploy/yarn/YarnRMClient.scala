@@ -96,7 +96,7 @@ private[spark] class YarnRMClient extends Logging {
   def unregister(status: FinalApplicationStatus,
                  conf: YarnConfiguration,
                  diagnostics: String = ""): Unit = synchronized {
-    if (registered) {
+    if (!registered) {
       amClient = AMRMClient.createAMRMClient()
       amClient.init(conf)
       amClient.start()
