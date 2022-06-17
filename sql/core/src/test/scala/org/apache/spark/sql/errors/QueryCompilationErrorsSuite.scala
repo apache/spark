@@ -408,8 +408,9 @@ class QueryCompilationErrorsSuite
         sql("select m[a] from (select map('a', 'b') as m, 'aa' as aa)")
       },
       errorClass = "UNRESOLVED_MAP_KEY",
-      parameters = Map("columnName" -> "a",
-        "proposal" -> "__auto_generated_subquery_name.m, __auto_generated_subquery_name.aa"))
+      parameters = Map("columnName" -> "`a`",
+        "proposal" ->
+          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"))
   }
 
   test("MISSING_COLUMN: SELECT distinct does not work correctly " +

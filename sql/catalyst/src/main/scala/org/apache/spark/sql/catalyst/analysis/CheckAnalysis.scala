@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryParsingErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -104,8 +105,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       operator: LogicalPlan,
       a: Attribute,
       errorClass: String): Nothing = {
-    val unresolvedAttribute = a.sql
-    val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+    val unresolvedAttribute = toSQLId(a.sql)
+    val candidates = operator.inputSet.toSeq.map(s => toSQLId(s.qualifiedName))
     val orderedCandidates = StringUtils.orderStringsBySimilarity(unresolvedAttribute, candidates)
     a.failAnalysis(
       errorClass = errorClass,

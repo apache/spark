@@ -253,7 +253,7 @@
   },
   "MISSING_COLUMN" : {
     "message" : [
-      "Column '<columnName>' does not exist. Did you mean one of the following? [<proposal>]"
+      "Column <columnName> does not exist. Did you mean one of the following? [<proposal>]"
     ],
     "sqlState" : "42000"
   },
@@ -354,7 +354,7 @@
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column '<columnName>' as a map key. If the key is a string literal, please add single quotes around it. Otherwise, did you mean one of the following column(s)? [<proposal>]"
+      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it. Otherwise, did you mean one of the following column(s)? [<proposal>]"
     ],
     "sqlState" : "42000"
   },
