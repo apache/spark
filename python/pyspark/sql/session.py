@@ -1026,11 +1026,7 @@ class SparkSession(SparkConversionMixin):
         else:
             if isinstance(data, list):
                 # Wrap each element with a tuple if there is any scalar in the list
-                has_scalar = False
-                for x in data:
-                    if isinstance(x, str) or not hasattr(x, "__len__"):  # Scalar
-                        has_scalar = True
-                        break
+                has_scalar = any(isinstance(x, str) or not hasattr(x, "__len__") for x in data)
                 converted_data = [(x,) for x in data] if has_scalar else data
 
                 rdd, struct = self._createFromLocal(map(prepare, converted_data), schema)
