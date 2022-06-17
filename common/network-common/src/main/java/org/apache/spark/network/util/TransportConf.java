@@ -18,6 +18,7 @@
 package org.apache.spark.network.util;
 
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -51,8 +52,8 @@ public class TransportConf {
   private final String module;
 
   public TransportConf(String module, ConfigProvider conf) {
-    this.module = module;
-    this.conf = conf;
+    this.module = Objects.requireNonNull(module);
+    this.conf = Objects.requireNonNull(conf);
     SPARK_NETWORK_IO_MODE_KEY = getConfKey("io.mode");
     SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY = getConfKey("io.preferDirectBufs");
     SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY = getConfKey("io.connectionTimeout");
@@ -306,7 +307,7 @@ public class TransportConf {
    * ceiling of the nearest integer.
    */
   public int chunkFetchHandlerThreads() {
-    if (!"shuffle".equalsIgnoreCase(this.getModuleName())) {
+    if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
     }
     int chunkFetchHandlerThreadsPercent =
