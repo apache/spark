@@ -182,7 +182,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }
     assert(e.errorClass === Some("UNSUPPORTED_DESERIALIZER"))
     assert(e.message ===
-      """The deserializer is not supported: need an "ARRAY" field but got "INT".""")
+      """The deserializer is not supported: need a(n) "ARRAY" field but got "INT".""")
   }
 
   test("UNSUPPORTED_DESERIALIZER:" +
@@ -201,7 +201,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       ds.as[Tuple1[String]]
     }
     assert(e2.errorClass === Some("UNSUPPORTED_DESERIALIZER"))
-    assert(e1.message ===
+    assert(e2.message ===
       "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
       "to Tuple1, but failed as the number of fields does not line up.")
   }
