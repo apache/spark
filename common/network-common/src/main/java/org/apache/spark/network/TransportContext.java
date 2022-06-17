@@ -123,8 +123,7 @@ public class TransportContext implements Closeable {
     this.rpcHandler = rpcHandler;
     this.closeIdleConnections = closeIdleConnections;
 
-    if (conf.getModuleName() != null &&
-        "shuffle".equalsIgnoreCase(conf.getModuleName()) &&
+    if ("shuffle".equalsIgnoreCase(conf.getModuleName()) &&
         !isClientOnly && conf.separateChunkFetchRequest()) {
       chunkFetchWorkers = NettyUtils.createEventLoop(
           IOMode.valueOf(conf.ioMode()),
