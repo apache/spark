@@ -312,7 +312,7 @@ trait AlterTableTests extends SharedSparkSession {
   }
 
   test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ALTER COLUMN") {
-    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"inmemory,$v2Format") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Format) {
       val t = s"${catalogAndNamespace}table_name"
       withTable("t") {
         sql(s"create table $t (a int) using $v2Format")

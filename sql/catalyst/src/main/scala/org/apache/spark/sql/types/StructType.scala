@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, Resolver}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -519,7 +519,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] lazy val existenceDefaultValues: Array[Any] = getExistenceDefaultValues(this)
   private[sql] lazy val existenceDefaultsBitmask: Array[Boolean] = getExistenceDefaultsBitmask(this)
   private[sql] lazy val hasExistenceDefaultValues = existenceDefaultValues.exists(_ != null)
-  private[sql] lazy val defaultColumnAnalyzer: Analyzer = DefaultColumnAnalyzer
 }
 
 /**
