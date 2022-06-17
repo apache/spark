@@ -463,7 +463,12 @@ private[yarn] class YarnAllocator(
 
   private def getHostAddress(nodeReport: NodeReport): String = nodeReport.getNodeId.getHost
 
-  private def isDecommissioningNode(node: NodeReport): Boolean = {
+  /**
+   * Checks if node is in DECOMMISSIONING STATE
+   *
+   * Visible for testing.
+   */
+  def isDecommissioningNode(node: NodeReport): Boolean = {
     // In hadoop-2.7 there is no support for node state DECOMMISSIONING
     // In Hadoop-2.8, hadoop3.1 and later version of spark there is a support
     // to node state DECOMMISSIONING.

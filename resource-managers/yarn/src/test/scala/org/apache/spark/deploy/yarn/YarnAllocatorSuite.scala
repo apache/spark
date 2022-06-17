@@ -26,7 +26,6 @@ import scala.collection.mutable
 import org.apache.hadoop.net.{Node, NodeBase}
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.api.records.{NodeState => YarnNodeState}
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -791,17 +790,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     when(allocateResponse.getAllocatedContainers).thenReturn(new util.ArrayList[Container]())
     val nodeReport = mock(classOf[NodeReport])
     val nodeId = mock(classOf[NodeId])
-    // Using DECOMMISSIONED as a mock node state for backward compatibility with hadoop 2.7
-    val nodeState = YarnNodeState.DECOMMISSIONED
     val nodeReportList = new util.ArrayList[NodeReport](Seq(nodeReport).asJava)
 
     // host1 is now in DECOMMISSIONING state
     val httpAddress1 = "host1:420"
-    when(nodeReport.getNodeState).thenReturn(nodeState)
-    when(nodeState.toString).thenReturn(NodeState.DECOMMISSIONING.toString)
     when(nodeReport.getNodeId).thenReturn(nodeId)
     when(nodeId.getHost).thenReturn("host1")
     when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)
+    when(handler.isDecommissioningNode(nodeReport)).thenReturn(true)
 
     handler.allocateResources()
     verify(rpcEndPoint, times(1)).
