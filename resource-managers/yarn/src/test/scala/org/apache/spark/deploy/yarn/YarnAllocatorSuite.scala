@@ -142,7 +142,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       Map(),
       new MockResolver(),
       clock)
-    (allocator, sparkConfClone)
+    (spy(allocator), sparkConfClone)
   }
 
   def createContainer(
@@ -797,7 +797,16 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     when(nodeReport.getNodeId).thenReturn(nodeId)
     when(nodeId.getHost).thenReturn("host1")
     when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)
-    when(handler.isDecommissioningNode(org.mockito.ArgumentMatchers.any())).thenReturn(true)
+
+    val isDecommissioningAnswer: Answer[Boolean] = new Answer[Boolean]() {
+      @throws[Throwable]
+      override def answer(invocationOnMock: InvocationOnMock): Boolean = {
+        true
+      }
+    }
+
+    doAnswer(isDecommissioningAnswer).when(handler)
+      .isDecommissioningNode(org.mockito.ArgumentMatchers.any())
 
     handler.allocateResources()
     verify(rpcEndPoint, times(1)).
