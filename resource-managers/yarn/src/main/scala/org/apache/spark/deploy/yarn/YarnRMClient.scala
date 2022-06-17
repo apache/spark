@@ -40,7 +40,6 @@ private[spark] class YarnRMClient extends Logging {
   private var amClient: AMRMClient[ContainerRequest] = _
   private var uiHistoryAddress: String = _
   private var registered: Boolean = false
-  private var amClientInited: Boolean = false
 
   /**
    * Registers the application master with the RM.
@@ -62,7 +61,6 @@ private[spark] class YarnRMClient extends Logging {
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
     amClient.start()
-    amClientInited = true
     this.uiHistoryAddress = uiHistoryAddress
 
     val trackingUrl = uiAddress.getOrElse {
@@ -98,11 +96,11 @@ private[spark] class YarnRMClient extends Logging {
   def unregister(status: FinalApplicationStatus,
                  conf: YarnConfiguration,
                  diagnostics: String = ""): Unit = synchronized {
-    if (!amClientInited) {
+    if (registered) {
       amClient = AMRMClient.createAMRMClient()
       amClient.init(conf)
       amClient.start()
-      amClientInited = true
+      registered = true
     }
     amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
     if (amClient != null) {
