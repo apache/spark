@@ -1277,9 +1277,7 @@ private[spark] class TaskSetManager(
       }
       totalRecordsRead += recordsRead
       totalExecutorRunTime += executorRunTime
-      if (totalRecordsRead > 0 && totalExecutorRunTime > 0) {
-        avgTaskProcessRate = totalRecordsRead / (totalExecutorRunTime / 1000.0)
-      }
+      avgTaskProcessRate = sched.getTaskProcessRate(totalRecordsRead, totalExecutorRunTime)
       runingTasksProcessRate.remove(taskId)
     }
 

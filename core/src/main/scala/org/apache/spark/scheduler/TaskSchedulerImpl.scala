@@ -873,7 +873,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
  private def getTaskAccumulableInfosAndProcessRate(
-      updates: Seq[AccumulatorV2[_, _]]): (Seq[AccumulableInfo], Double) = {
+     updates: Seq[AccumulatorV2[_, _]]): (Seq[AccumulableInfo], Double) = {
    var recordsRead = 0L
    var executorRunTime = 0L
    val accInfos = updates.map { acc =>
@@ -887,14 +887,23 @@ private[spark] class TaskSchedulerImpl(
      }
      acc.toInfo(Some(acc.value), None)
    }
-   val taskProcessRate = if (efficientTaskCalcualtionEnabled &&
-     executorRunTime > 0 && recordsRead > 0) {
-     recordsRead / (executorRunTime / 1000.0)
+   val taskProcessRate = if (efficientTaskCalcualtionEnabled) {
+     getTaskProcessRate(recordsRead, executorRunTime)
    } else {
      0.0D
    }
    (accInfos, taskProcessRate)
  }
+
+  private[scheduler] def getTaskProcessRate(
+      recordsRead: Long,
+      executorRunTime: Long): Double = {
+    if (executorRunTime > 0 && recordsRead > 0) {
+      recordsRead / (executorRunTime / 1000.0)
+    } else {
+      0.0D
+    }
+  }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {
     taskSetManager.handleTaskGettingResult(tid)

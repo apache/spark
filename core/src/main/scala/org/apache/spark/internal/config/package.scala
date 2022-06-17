@@ -2097,7 +2097,7 @@ package object config {
     ConfigBuilder("spark.speculation.efficiency.durationFactor")
       .doc(s"When a task duration is large than the factor multiplied by the threshold which " +
         s"may be ${SPECULATION_MULTIPLIER.key} * successfulTaskDurations.median or " +
-        s"${SPECULATION_TASK_DURATION_THRESHOLD.key}, and it should be considered for " +
+        s"${SPECULATION_MIN_THRESHOLD.key}, and it should be considered for " +
         s"speculation to avoid that it is too late to launch a necessary speculation.")
       .version("3.4.0")
       .doubleConf
