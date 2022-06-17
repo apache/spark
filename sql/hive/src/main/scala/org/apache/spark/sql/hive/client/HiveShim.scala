@@ -898,7 +898,13 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
               tryDirectSql =>
-            throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
+            logWarning("Caught Hive MetaException attempting to get partition metadata by " +
+              "filter from Hive. Falling back to fetching all partition metadata, which will " +
+              "degrade performance. Your Hive metastore version has not " +
+              "supported this getPartitionsByFilterMethod completely.", ex)
+            // HiveShim clients are expected to handle a superset of the requested partitions
+            getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+          // throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
         }
       }
 
