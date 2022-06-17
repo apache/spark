@@ -409,14 +409,14 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "UNRESOLVED_MAP_KEY",
       msg = "Cannot resolve column 'a' as a map key. If the key is a string literal, please add " +
-        "single quotes around it. Otherwise, did you mean one of the following column(s)? " +
-        "[__auto_generated_subquery_name.m, __auto_generated_subquery_name.aa]" +
-        """; line 1 pos 9;
-          |'Project [unresolvedalias(m#7['a], None)]
-          |+- SubqueryAlias __auto_generated_subquery_name
-          |   +- Project [map(a, b) AS m#7, aa AS aa#8]
-          |      +- OneRowRelation
-          |""".stripMargin)
+        """single quotes around it. Otherwise, did you mean one of the following column\(s\)\? """ +
+        """\[__auto_generated_subquery_name.m, __auto_generated_subquery_name.aa\]; line 1 pos 9;
+          |'Project \[unresolvedalias\(m#\w\['a\], None\)\]
+          |\+\- SubqueryAlias __auto_generated_subquery_name
+          |   \+\- Project \[map\(a, b\) AS m#\w, aa AS aa#\w\]
+          |      \+\- OneRowRelation
+          |""".stripMargin,
+      matchMsg = true)
   }
 
   test("MISSING_COLUMN: SELECT distinct does not work correctly " +
