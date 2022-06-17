@@ -306,7 +306,7 @@ public class TransportConf {
    * ceiling of the nearest integer.
    */
   public int chunkFetchHandlerThreads() {
-    if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
+    if (!"shuffle".equalsIgnoreCase(this.getModuleName())) {
       return 0;
     }
     int chunkFetchHandlerThreadsPercent =

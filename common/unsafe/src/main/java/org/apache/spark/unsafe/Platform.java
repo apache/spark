@@ -319,7 +319,7 @@ public final class Platform {
   static {
     boolean _unaligned;
     String arch = System.getProperty("os.arch", "");
-    if (arch.equals("ppc64le") || arch.equals("ppc64") || arch.equals("s390x")) {
+    if ("ppc64le".equals(arch) || "ppc64".equals(arch) || "s390x".equals(arch)) {
       // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but
       // ppc64 and ppc64le support it
       _unaligned = true;

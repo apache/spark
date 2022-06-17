@@ -553,7 +553,7 @@ public class ThriftHttpServlet extends TServlet {
     Map<String, String[]> params = javax.servlet.http.HttpUtils.parseQueryString( queryString );
     Set<String> keySet = params.keySet();
     for (String key: keySet) {
-      if (key.equalsIgnoreCase("doAs")) {
+      if ("doAs".equalsIgnoreCase(key)) {
         return params.get(key)[0];
       }
     }

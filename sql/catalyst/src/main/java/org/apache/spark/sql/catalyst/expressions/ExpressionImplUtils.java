@@ -62,13 +62,13 @@ public class ExpressionImplUtils {
       }
 
     try {
-      if (mode.equalsIgnoreCase("ECB") &&
-          (padding.equalsIgnoreCase("PKCS") || padding.equalsIgnoreCase("DEFAULT"))) {
+      if ("ECB".equalsIgnoreCase(mode) &&
+          ("PKCS".equalsIgnoreCase(padding) || "DEFAULT".equalsIgnoreCase(padding))) {
         Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
         cipher.init(opmode, secretKey);
         return cipher.doFinal(input, 0, input.length);
-      } else if (mode.equalsIgnoreCase("GCM") &&
-          (padding.equalsIgnoreCase("NONE") || padding.equalsIgnoreCase("DEFAULT"))) {
+      } else if ("GCM".equalsIgnoreCase(mode) &&
+          ("NONE".equalsIgnoreCase(padding) || "DEFAULT".equalsIgnoreCase(padding))) {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         if (opmode == Cipher.ENCRYPT_MODE) {
           byte[] iv = new byte[GCM_IV_LEN];

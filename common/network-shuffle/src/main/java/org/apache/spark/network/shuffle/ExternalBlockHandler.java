@@ -394,7 +394,7 @@ public class ExternalBlockHandler extends RpcHandler
         size = reduceIdAndChunkIds.length;
         blockDataForIndexFn = index -> mergeManager.getMergedBlockData(msg.appId, shuffleId,
           shuffleMergeId, reduceIdAndChunkIds[index], reduceIdAndChunkIds[index + 1]);
-      } else if (blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
+      } else if (blockId0Parts.length == 3 && "rdd".equals(blockId0Parts[0])) {
         final int[] rddAndSplitIds = rddAndSplitIds(blockIds);
         size = rddAndSplitIds.length;
         blockDataForIndexFn = index -> blockManager.getRddBlockData(appId, execId,
