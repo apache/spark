@@ -224,7 +224,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
 
     // Commit the 1st attempt, fail the 2nd attempt, make sure 3rd attempt cannot commit,
-    // then fail the 1st attempt and make sure the 4th one can commit again.
+    // then fail the 1st attempt and since stage failed because of potential data duplication,
+    // make sure fail the 4th attempt.
     stage += 1
     outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
     assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
