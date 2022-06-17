@@ -1058,7 +1058,7 @@ private[spark] object JsonProtocol {
         val executorMetrics = executorMetricsFromJson(json.get("Executor Metrics"))
         ((stageId, stageAttemptId) -> executorMetrics)
       }.toMap
-    }.getOrElse(Map.empty)
+    }.getOrElse(Map.empty[(Int, Int), ExecutorMetrics])
     SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates, executorUpdates)
   }
 
