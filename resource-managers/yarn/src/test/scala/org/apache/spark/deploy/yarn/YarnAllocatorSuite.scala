@@ -797,7 +797,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     when(nodeReport.getNodeId).thenReturn(nodeId)
     when(nodeId.getHost).thenReturn("host1")
     when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)
-    when(handler.isDecommissioningNode(nodeReport)).thenReturn(true)
+    when(handler.isDecommissioningNode(org.mockito.ArgumentMatchers.any())).thenReturn(true)
 
     handler.allocateResources()
     verify(rpcEndPoint, times(1)).
