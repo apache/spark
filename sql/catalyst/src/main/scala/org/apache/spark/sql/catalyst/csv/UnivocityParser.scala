@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
+import java.time.ZoneOffset
 
 import scala.util.control.NonFatal
 
@@ -28,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -220,7 +222,7 @@ class UnivocityParser(
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse {
               // There may be date type entries in timestamp column due to schema inference
-              convertToDate(datum)
+              daysToMicros(convertToDate(datum), options.zoneId)
             }
         }
       }
@@ -232,7 +234,7 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
           // There may be date type entries in timestampNTZ column due to schema inference
-          convertToDate(datum)
+          daysToMicros(convertToDate(datum), ZoneOffset.UTC)
         }
       }
 
