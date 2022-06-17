@@ -75,6 +75,7 @@ private[spark] object JsonProtocol {
     val generator = mapper.createGenerator(baos, JsonEncoding.UTF8)
     block(generator)
     generator.close()
+    baos.close()
     new String(baos.toByteArray, StandardCharsets.UTF_8)
   }
 
