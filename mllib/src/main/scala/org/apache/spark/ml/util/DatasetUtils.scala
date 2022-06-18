@@ -190,11 +190,8 @@ private[spark] object DatasetUtils extends Logging {
    * If no metadata is available, extract it from the dataset.
    */
   private[ml] def getNumFeatures(dataset: Dataset[_], vectorCol: String): Int = {
-    MetadataUtils.getNumFeatures(dataset.schema(vectorCol)) match {
-      case Some(n) => n
-      case None =>
-        dataset.select(columnToVector(dataset, vectorCol))
-          .head.getAs[Vector](0).size
+    MetadataUtils.getNumFeatures(dataset.schema(vectorCol)).getOrElse {
+      dataset.select(columnToVector(dataset, vectorCol)).head.getAs[Vector](0).size
     }
   }
 }
