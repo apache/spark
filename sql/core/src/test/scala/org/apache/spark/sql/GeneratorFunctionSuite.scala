@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Generator}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -362,6 +363,31 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(Stream(explode(array(min($"v"), max($"v"))), sum($"v")): _*),
       Row(1, 6) :: Row(3, 6) :: Nil)
+  }
+
+  test("SPARK-39496: inline eval path should handle null struct") {
+    val df = sql(
+      """select * from values
+        |(
+        |  1,
+        |  array(
+        |    named_struct('c1', 0, 'c2', 1),
+        |    null,
+        |    named_struct('c1', 2, 'c2', 3),
+        |    null
+        |  )
+        |)
+        |as tbl(a, b)
+         """.stripMargin)
+    df.createOrReplaceTempView("t1")
+
+    checkAnswer(
+      sql("select inline(b) from t1"),
+      Row(0, 1) :: Row(null, null) :: Row(2, 3) :: Row(null, null) :: Nil)
+
+    checkAnswer(
+      sql("select a, inline(b) from t1"),
+      Row(1, 0, 1) :: Row(1, null, null) :: Row(1, 2, 3) :: Row(1, null, null) :: Nil)
   }
 }
 
