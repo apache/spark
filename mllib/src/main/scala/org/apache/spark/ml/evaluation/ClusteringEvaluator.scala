@@ -128,13 +128,12 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
       SchemaUtils.checkNumericType(schema, $(weightCol))
     }
 
-    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
-
-    val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
     val df = dataset.select(
       col($(predictionCol)),
-      vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata),
+      DatasetUtils.columnToVector(dataset, $(featuresCol))
+        .as($(featuresCol), dataset.schema($(featuresCol)).metadata),
       DatasetUtils.checkNonNegativeWeights(get(weightCol))
+        .as(if (!isDefined(weightCol)) "weightCol" else $(weightCol))
     )
 
     val metrics = new ClusteringMetrics(df)
