@@ -32,9 +32,7 @@ import org.apache.spark.util.collection.Utils.sequenceToOption
  */
 object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    val scanRules = Seq[LogicalPlan => LogicalPlan] (
-      partitioning,
-      ordering)
+    val scanRules = Seq[LogicalPlan => LogicalPlan] (partitioning, ordering)
 
     scanRules.foldLeft(plan) { (newPlan, scanRule) =>
       scanRule(newPlan)
