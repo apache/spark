@@ -87,7 +87,8 @@ case class SortOrder(
   def satisfies(required: SortOrder): Boolean = {
     children.exists(required.child.semanticEquals) &&
       direction == required.direction &&
-      (!required.child.nullable || nullOrdering == required.nullOrdering)
+      (required.child.resolved && !required.child.nullable ||
+        nullOrdering == required.nullOrdering)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): SortOrder =
