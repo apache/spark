@@ -3419,10 +3419,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         i.userSpecifiedCols, "in the column list", resolver)
 
       i.userSpecifiedCols.map { col =>
-        i.table.resolve(Seq(col), resolver)
-          .getOrElse(i.failAnalysis(
-            errorClass = "MISSING_COLUMN",
-            messageParameters = Array(col, i.table.output.map(_.name).mkString(", "))))
+        i.table.resolve(Seq(col), resolver).getOrElse(
+          throw QueryCompilationErrors.unresolvedColumnError(
+            col, i.table.output.map(_.name), i.origin))
       }
     }
 
