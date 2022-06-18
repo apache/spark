@@ -194,8 +194,11 @@ class PruneFiltersSuite extends PlanTest {
         .where('a === 'b + Rand(10).cast(IntegerType) && 'b === 10).analyze),
       testRelation.where('a === Literal(10) + Rand(10).cast(IntegerType) && 'b === 10).analyze)
 
-    val containsUnaryExpQuery = testRelation.where('b.isNotNull && 'b === 10).analyze
-    comparePlans(Optimize.execute(containsUnaryExpQuery), containsUnaryExpQuery)
+    val semanticEqualsQuery = testRelation.where('b === 1 && Literal(1) === 'b).analyze
+    comparePlans(Optimize.execute(semanticEqualsQuery), semanticEqualsQuery)
+
+    val containsIsNotNullQuery = testRelation.where('b.isNotNull && 'b === 10).analyze
+    comparePlans(Optimize.execute(containsIsNotNullQuery), containsIsNotNullQuery)
 
     val equalWithUdfQuery = testRelation.where('a > 'b + 1 && 'b + 1 === 10).analyze
     comparePlans(Optimize.execute(equalWithUdfQuery), equalWithUdfQuery)

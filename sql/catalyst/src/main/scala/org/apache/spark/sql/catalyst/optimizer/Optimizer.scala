@@ -1637,13 +1637,20 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
         case eq @ EqualTo(l: Literal, a: Attribute) => eq -> (a -> l)
       }
       if (equalToWithLiterals.nonEmpty) {
+        val defaultEqualKeyValues = AttributeMap(equalToWithLiterals.map(_._2))
         val newCondition = predicates.map {
-          case ue: UnaryExpression => ue // Do not replace UnaryExpressions. For example: IsNotNull
+          // Don't push to IsNotNull because InferFiltersFromConstraints may infer another IsNotNull
+          case isNotNull: IsNotNull => isNotNull
+          // Exclude the current EqualTo, and push. e.g.: a = 1 and a = 2 ==> 2 = 1 and 1 = 2
+          case equalTo: EqualTo =>
+            val excludeCurrentEqualKeyValues =
+              AttributeMap(equalToWithLiterals.filterNot(_._1.semanticEquals(equalTo)).map(_._2))
+            equalTo.transformUp {
+              case a: Attribute => excludeCurrentEqualKeyValues.getOrElse(a, a)
+            }
           case other =>
-            val exceptCurrentEqualKeyValues =
-              AttributeMap(equalToWithLiterals.filterNot(_._1.semanticEquals(other)).map(_._2))
             other.transformUp {
-              case a: Attribute => exceptCurrentEqualKeyValues.getOrElse(a, a)
+              case a: Attribute => defaultEqualKeyValues.getOrElse(a, a)
             }
         }.reduceLeft(And)
         f.copy(condition = newCondition)
