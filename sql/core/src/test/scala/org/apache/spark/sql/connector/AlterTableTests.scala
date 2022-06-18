@@ -311,8 +311,28 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ADD COLUMN") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = s"${catalogAndNamespace}table_name"
+      withTable("t") {
+        sql(s"create table $t (a string) using $v2Format")
+        sql(s"alter table $t add column (b int default 2 + 3)")
+
+        val tableName = fullTableName(t)
+        val table = getTableMetadata(tableName)
+
+        assert(table.name === tableName)
+        assert(table.schema === new StructType()
+          .add("a", StringType)
+          .add(StructField("b", IntegerType)
+            .withCurrentDefaultValue("2 + 3")
+            .withExistenceDefaultValue("5")))
+      }
+    }
+  }
+
   test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ALTER COLUMN") {
-    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Format) {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
       val t = s"${catalogAndNamespace}table_name"
       withTable("t") {
         sql(s"create table $t (a int) using $v2Format")

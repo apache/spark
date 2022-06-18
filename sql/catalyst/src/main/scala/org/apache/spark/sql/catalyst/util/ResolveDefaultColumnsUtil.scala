@@ -98,10 +98,7 @@ object ResolveDefaultColumns {
     if (SQLConf.get.enableDefaultColumns) {
       val allowedTableProviders: Array[String] =
         SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
-          .toLowerCase().split(",").map(_.trim) ++
-          // We include the empty string here to allow the 'tableProvider' argument to be empty.
-          // This is only empty in tests, for example when using the InMemoryTableCatalog.
-          Seq("")
+          .toLowerCase().split(",").map(_.trim)
       val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
