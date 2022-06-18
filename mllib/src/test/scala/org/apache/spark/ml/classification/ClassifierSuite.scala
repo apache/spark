@@ -87,7 +87,7 @@ object ClassifierSuite {
       throw new UnsupportedOperationException()
 
     def getNumClasses(dataset: Dataset[_]): Int =
-      DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+      DatasetUtils.getNumClasses(dataset, $(labelCol))
   }
 
   class MockClassificationModel(override val uid: String)
