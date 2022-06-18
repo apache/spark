@@ -79,7 +79,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
     benchmark.addCase("ConstantColumnVector") { _: Int =>
       for (_ <- 0 until valuesPerIteration) {
-        ColumnVectorUtils.fill(constantColumnVector, row, 0)
+        ColumnVectorUtils.populate(constantColumnVector, row, 0)
       }
     }
 
@@ -117,7 +117,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
     ColumnVectorUtils.populate(onHeapColumnVector, row, 0)
     offHeapColumnVector.reset()
     ColumnVectorUtils.populate(offHeapColumnVector, row, 0)
-    ColumnVectorUtils.fill(constantColumnVector, row, 0)
+    ColumnVectorUtils.populate(constantColumnVector, row, 0)
 
     val other = if (dataType == StringType) {
       s", row length = ${row.getUTF8String(0).toString.length}"
@@ -176,7 +176,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
       output = output)
 
     benchmark.addCase("ConstantColumnVector") { _: Int =>
-      ColumnVectorUtils.fill(constantColumnVector, row, 0)
+      ColumnVectorUtils.populate(constantColumnVector, row, 0)
       for (_ <- 0 until valuesPerIteration) {
         readValues(dataType, batchSize, constantColumnVector)
       }

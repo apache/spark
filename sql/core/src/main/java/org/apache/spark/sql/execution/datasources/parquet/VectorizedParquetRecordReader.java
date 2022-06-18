@@ -269,7 +269,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     if (partitionColumns != null) {
       int partitionIdx = sparkSchema.fields().length;
       for (int i = 0; i < partitionColumns.fields().length; i++) {
-        ColumnVectorUtils.fill(
+        ColumnVectorUtils.populate(
           (ConstantColumnVector) vectors[i + partitionIdx], partitionValues, i);
       }
     }

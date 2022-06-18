@@ -107,9 +107,9 @@ public class ColumnVectorUtils {
   }
 
   /**
-   * Fill value of `row[fieldIdx]` into `ConstantColumnVector`.
+   * Populates the value of `row[fieldIdx]` into `ConstantColumnVector`.
    */
-  public static void fill(ConstantColumnVector col, InternalRow row, int fieldIdx) {
+  public static void populate(ConstantColumnVector col, InternalRow row, int fieldIdx) {
     DataType t = col.dataType();
 
     if (row.isNullAt(fieldIdx)) {
@@ -135,7 +135,7 @@ public class ColumnVectorUtils {
         UTF8String v = row.getUTF8String(fieldIdx);
         col.setUtf8String(v);
       } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType)t;
+        DecimalType dt = (DecimalType) t;
         Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           col.setInt((int)d.toUnscaledLong());
@@ -147,20 +147,8 @@ public class ColumnVectorUtils {
           col.setBinary(bytes);
         }
       } else if (t instanceof CalendarIntervalType) {
-        CalendarInterval c = (CalendarInterval)row.get(fieldIdx, t);
         // The value of `numRows` is irrelevant.
-        ConstantColumnVector monthsVector =
-          new ConstantColumnVector(1, IntegerType$.MODULE$);
-        ConstantColumnVector daysVector =
-          new ConstantColumnVector(1, IntegerType$.MODULE$);
-        ConstantColumnVector microsecondsVector =
-          new ConstantColumnVector(1, LongType$.MODULE$);
-        monthsVector.setInt(c.months);
-        daysVector.setInt(c.days);
-        microsecondsVector.setLong(c.microseconds);
-        col.setChild(0, monthsVector);
-        col.setChild(1, daysVector);
-        col.setChild(2, microsecondsVector);
+        col.setCalendarInterval((CalendarInterval)row.get(fieldIdx, t));
       } else if (t instanceof DateType || t instanceof YearMonthIntervalType) {
         col.setInt(row.getInt(fieldIdx));
       } else if (t instanceof TimestampType || t instanceof TimestampNTZType ||

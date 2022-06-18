@@ -36,7 +36,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
 
   testConstantColumnVector("fill null", 10, IntegerType) { vector =>
 
-    ColumnVectorUtils.fill(vector, InternalRow(null), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(null), 0)
 
     assert(vector.hasNull)
     assert(vector.numNulls() == 10)
@@ -53,49 +53,49 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
   }
 
   testConstantColumnVector("fill boolean", 10, BooleanType) { vector =>
-    ColumnVectorUtils.fill(vector, InternalRow(true), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(true), 0)
     (0 until 10).foreach { i =>
       assert(vector.getBoolean(i))
     }
   }
 
   testConstantColumnVector("fill byte", 10, ByteType) { vector =>
-    ColumnVectorUtils.fill(vector, InternalRow(3.toByte), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(3.toByte), 0)
     (0 until 10).foreach { i =>
       assert(vector.getByte(i) == 3.toByte)
     }
   }
 
   testConstantColumnVector("fill short", 10, ShortType) { vector =>
-    ColumnVectorUtils.fill(vector, InternalRow(3.toShort), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(3.toShort), 0)
     (0 until 10).foreach { i =>
       assert(vector.getShort(i) == 3.toShort)
     }
   }
 
   testConstantColumnVector("fill int", 10, IntegerType) { vector =>
-    ColumnVectorUtils.fill(vector, InternalRow(3), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(3), 0)
     (0 until 10).foreach { i =>
       assert(vector.getInt(i) == 3)
     }
   }
 
   testConstantColumnVector("fill long", 10, LongType) { vector =>
-    ColumnVectorUtils.fill(vector, InternalRow(3L), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(3L), 0)
     (0 until 10).foreach { i =>
       assert(vector.getLong(i) == 3L)
     }
   }
 
   testConstantColumnVector("fill float", 10, FloatType) { vector =>
-    ColumnVectorUtils.fill(vector, InternalRow(3.toFloat), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(3.toFloat), 0)
     (0 until 10).foreach { i =>
       assert(vector.getFloat(i) == 3.toFloat)
     }
   }
 
   testConstantColumnVector("fill double", 10, DoubleType) { vector =>
-    ColumnVectorUtils.fill(vector, InternalRow(3.toDouble), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(3.toDouble), 0)
     (0 until 10).foreach { i =>
       assert(vector.getDouble(i) == 3.toDouble)
     }
@@ -103,7 +103,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
 
   testConstantColumnVector("fill decimal", 10, DecimalType(10, 0)) { vector =>
     val decimal = Decimal(100L)
-    ColumnVectorUtils.fill(vector, InternalRow(decimal), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(decimal), 0)
     (0 until 10).foreach { i =>
       assert(vector.getDecimal(i, 10, 0) == decimal)
     }
@@ -111,7 +111,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
 
   testConstantColumnVector("fill utf8string", 10, StringType) { vector =>
     val string = UTF8String.fromString("hello")
-    ColumnVectorUtils.fill(vector, InternalRow(string), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(string), 0)
     (0 until 10).foreach { i =>
       assert(vector.getUTF8String(i) == string)
     }
@@ -119,7 +119,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
 
   testConstantColumnVector("fill binary", 10, BinaryType) { vector =>
     val binary = "hello".getBytes("utf8")
-    ColumnVectorUtils.fill(vector, InternalRow(binary), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(binary), 0)
     (0 until 10).foreach { i =>
       assert(vector.getBinary(i) === binary)
     }
@@ -128,7 +128,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
   testConstantColumnVector("fill calendar interval", 10,
     CalendarIntervalType) { vector =>
     val interval = new CalendarInterval(3, 5, 1000000)
-    ColumnVectorUtils.fill(vector, InternalRow(interval), 0)
+    ColumnVectorUtils.populate(vector, InternalRow(interval), 0)
     (0 until 10).foreach { i =>
       assert(vector.getInterval(i) === interval)
     }
@@ -137,7 +137,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
   testConstantColumnVector("not supported: fill map", 10,
     MapType(IntegerType, BooleanType)) { vector =>
     val message = intercept[RuntimeException] {
-      ColumnVectorUtils.fill(vector, InternalRow("fakeMap"), 0)
+      ColumnVectorUtils.populate(vector, InternalRow("fakeMap"), 0)
     }.getMessage
     assert(message == "DataType MAP<INT, BOOLEAN> is not supported in column vectorized reader.")
   }
@@ -147,7 +147,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
       .add(StructField("name", StringType))
       .add(StructField("age", IntegerType))) { vector =>
     val message = intercept[RuntimeException] {
-      ColumnVectorUtils.fill(vector, InternalRow("fakeStruct"), 0)
+      ColumnVectorUtils.populate(vector, InternalRow("fakeStruct"), 0)
     }.getMessage
     assert(message ==
       "DataType STRUCT<name: STRING, age: INT> is not supported in column vectorized reader.")
@@ -156,7 +156,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
   testConstantColumnVector("not supported: fill array", 10,
     ArrayType(IntegerType)) { vector =>
     val message = intercept[RuntimeException] {
-      ColumnVectorUtils.fill(vector, InternalRow("fakeArray"), 0)
+      ColumnVectorUtils.populate(vector, InternalRow("fakeArray"), 0)
     }.getMessage
     assert(message == "DataType ARRAY<INT> is not supported in column vectorized reader.")
   }
