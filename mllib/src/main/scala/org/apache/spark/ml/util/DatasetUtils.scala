@@ -19,7 +19,11 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.classification.ClassifierParams
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -96,6 +100,26 @@ private[spark] object DatasetUtils extends Logging {
       case sv: SparseVector =>
         sv.values.forall(v => !v.isNaN && !v.isInfinity)
     }
+  }
+
+  private[ml] def extractInstances(
+      p: PredictorParams,
+      df: Dataset[_],
+      numClasses: Option[Int] = None): RDD[Instance] = {
+    val labelCol = p match {
+      case c: ClassifierParams =>
+        checkClassificationLabels(c.getLabelCol, numClasses)
+      case _ => // TODO: there is no RegressorParams, maybe add it in the future?
+        checkRegressionLabels(p.getLabelCol)
+    }
+
+    val weightCol = p match {
+      case w: HasWeightCol => checkNonNegativeWeights(w.get(w.weightCol))
+      case _ => lit(1.0)
+    }
+
+    df.select(labelCol, weightCol, checkNonNanVectors(p.getFeaturesCol))
+      .rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v) }
   }
 
   /**
