@@ -48,6 +48,8 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("SparkListenerEvent") {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
+    val stageSubmittedWithNullProperties =
+      SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties = null)
     val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 201, 301, 401L, 501L))
     val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 333, 444L, false))
     val taskGettingResult =
@@ -75,6 +77,9 @@ class JsonProtocolSuite extends SparkFunSuite {
       val stageInfos = stageIds.map(x =>
         makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
       SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
+    }
+    val jobStartWithNullProperties = {
+      SparkListenerJobStart(10, jobSubmissionTime, stageInfos = Seq.empty, properties = null)
     }
     val jobEnd = SparkListenerJobEnd(20, jobCompletionTime, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
@@ -148,6 +153,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     resourceProfile.setResourceProfileId(21)
     val resourceProfileAdded = SparkListenerResourceProfileAdded(resourceProfile)
     testEvent(stageSubmitted, stageSubmittedJsonString)
+    testEvent(stageSubmittedWithNullProperties, stageSubmittedWithNullPropertiesJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
     testEvent(taskStart, taskStartJsonString)
     testEvent(taskGettingResult, taskGettingResultJsonString)
@@ -155,6 +161,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(taskEndWithHadoopInput, taskEndWithHadoopInputJsonString)
     testEvent(taskEndWithOutput, taskEndWithOutputJsonString)
     testEvent(jobStart, jobStartJsonString)
+    testEvent(jobStartWithNullProperties, jobStartWithNullPropertiesJsonString)
     testEvent(jobEnd, jobEndJsonString)
     testEvent(environmentUpdate, environmentUpdateJsonString)
     testEvent(blockManagerAdded, blockManagerAddedJsonString)
@@ -1213,6 +1220,41 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |}
     """.stripMargin
 
+  private val stageSubmittedWithNullPropertiesJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerStageSubmitted",
+      |  "Stage Info": {
+      |    "Stage ID": 100,
+      |    "Stage Attempt ID": 0,
+      |    "Stage Name": "greetings",
+      |    "Number of Tasks": 200,
+      |    "RDD Info": [],
+      |    "Parent IDs" : [100, 200, 300],
+      |    "Details": "details",
+      |    "Accumulables": [
+      |      {
+      |        "ID": 1,
+      |        "Name": "Accumulable1",
+      |        "Update": "delta1",
+      |        "Value": "val1",
+      |        "Internal": false,
+      |        "Count Failed Values": false
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2",
+      |        "Internal": false,
+      |        "Count Failed Values": false
+      |      }
+      |    ],
+      |    "Resource Profile Id" : 0
+      |  }
+      |}
+    """.stripMargin
+
   private val stageCompletedJsonString =
     """
       |{
@@ -2059,6 +2101,17 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Russia": "Moscow",
       |    "Ukraine": "Kiev"
       |  }
+      |}
+    """.stripMargin
+
+  private val jobStartWithNullPropertiesJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerJobStart",
+      |  "Job ID": 10,
+      |  "Submission Time": 1421191042750,
+      |  "Stage Infos": [],
+      |  "Stage IDs": []
       |}
     """.stripMargin
 

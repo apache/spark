@@ -131,8 +131,10 @@ private[spark] object JsonProtocol {
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageSubmitted)
     g.writeFieldName("Stage Info")
     stageInfoToJson(stageSubmitted.stageInfo, g)
-    g.writeFieldName("Properties")
-    propertiesToJson(stageSubmitted.properties, g)
+    Option(stageSubmitted.properties).foreach { properties =>
+      g.writeFieldName("Properties")
+      propertiesToJson(properties, g)
+    }
     g.writeEndObject()
   }
 
@@ -195,8 +197,11 @@ private[spark] object JsonProtocol {
     g.writeArrayFieldStart("Stage IDs")
     jobStart.stageIds.foreach(g.writeNumber)
     g.writeEndArray()
-    g.writeFieldName("Properties")
-    propertiesToJson(jobStart.properties, g)
+    Option(jobStart.properties).foreach { properties =>
+      g.writeFieldName("Properties")
+      propertiesToJson(properties, g)
+    }
+
     g.writeEndObject()
   }
 
@@ -761,14 +766,9 @@ private[spark] object JsonProtocol {
   }
 
   def propertiesToJson(properties: Properties, g: JsonGenerator): Unit = {
-    Option(properties) match {
-      case Some(p) =>
-        g.writeStartObject()
-        p.asScala.foreach { case (k, v) => g.writeStringField(k, v) }
-        g.writeEndObject()
-      case None =>
-        g.writeNull()
-    }
+    g.writeStartObject()
+    properties.asScala.foreach { case (k, v) => g.writeStringField(k, v) }
+    g.writeEndObject()
   }
 
   def UUIDToJson(id: UUID, g: JsonGenerator): Unit = {
