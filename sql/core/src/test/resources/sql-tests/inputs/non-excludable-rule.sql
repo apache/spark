@@ -13,3 +13,7 @@ WITH tmp AS (
   SELECT id FROM range(4)
 )
 SELECT id FROM range(3) WHERE id > (SELECT max(id) FROM tmp);
+
+-- SPARK-36979
+SET spark.sql.optimizer.excludedRules=org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery;
+SELECT * FROM testData, LATERAL (SELECT * FROM testData) LIMIT 1;
