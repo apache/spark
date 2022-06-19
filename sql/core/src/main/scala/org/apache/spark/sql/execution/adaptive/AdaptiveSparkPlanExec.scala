@@ -650,20 +650,23 @@ case class AdaptiveSparkPlanExec(
       preprocessingRules ++ queryStagePreparationRules,
       Some((planChangeLogger, "AQE Replanning")))
 
-    // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
-    // add the `BroadcastExchangeExec` node manually in the DPP subquery,
-    // not through `EnsureRequirements` rule. Therefore, when the DPP subquery is complicated
-    // and need to be re-optimized, AQE also need to manually insert the `BroadcastExchangeExec`
-    // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
-    // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan
-    // is already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
-    val finalPlan = currentPhysicalPlan match {
-      case b: BroadcastExchangeLike
-        if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
-      case _ => newPlan
+    currentPhysicalPlan match {
+      // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
+      // add the `BroadcastExchangeExec` node manually in the DPP subquery,
+      // not through `EnsureRequirements` rule. Therefore, when the DPP subquery is complicated
+      // and need to be re-optimized, AQE also need to manually insert the `BroadcastExchangeExec`
+      // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
+      // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan
+      // is already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy`.
+      case b: BroadcastExchangeLike if !newPlan.isInstanceOf[BroadcastExchangeLike] =>
+        (b.withNewChildren(Seq(newPlan)), optimized)
+      // Fall back if currentPhysicalPlan is BroadcastQueryStageExec and newPlan is not
+      // BroadcastQueryStageExec. This is to avoid doExecuteBroadcast failing.
+      case _: BroadcastQueryStageExec if !newPlan.isInstanceOf[BroadcastQueryStageExec] =>
+        (currentPhysicalPlan, logicalPlan)
+      case _ =>
+        (newPlan, optimized)
     }
-
-    (finalPlan, optimized)
   }
 
   /**
