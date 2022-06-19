@@ -23,6 +23,7 @@ import java.net.URI
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
@@ -856,12 +857,11 @@ class AdaptiveQueryExecSuite
         df1.write.parquet(tableDir.getAbsolutePath)
 
         val aggregated = spark.table("bucketed_table").groupBy("i").count()
-        val error = intercept[IllegalStateException] {
+        val error = intercept[SparkException] {
           aggregated.count()
         }
-        // TODO(SPARK-39163): Throw an exception w/ error class for an invalid bucket file
-        assert(error.toString contains "Invalid bucket file")
-        assert(error.getSuppressed.size === 0)
+        assert(error.getErrorClass === "INVALID_BUCKET_FILE")
+        assert(error.getMessage contains "Invalid bucket file")
       }
     }
   }

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.errors
 
+import java.io.File
+import java.net.URI
+
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
@@ -284,6 +287,28 @@ class QueryExecutionErrorsSuite extends QueryTest
       }
       assert(e2.getErrorClass === "UNSUPPORTED_SAVE_MODE")
       assert(e2.getMessage === "The save mode NULL is not supported for: an existent path.")
+    }
+  }
+
+  test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
+    val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).
+      toDF("i", "j", "k").as("df1")
+
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i").
+        saveAsTable("bucketed_table")
+      val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+      val tableDir = new File(warehouseFilePath, "bucketed_table")
+      Utils.deleteRecursively(tableDir)
+      df1.write.parquet(tableDir.getAbsolutePath)
+
+      val aggregated = spark.table("bucketed_table").groupBy("i").count()
+
+      val e = intercept[SparkException] {
+        aggregated.count()
+      }
+      assert(e.getErrorClass === "INVALID_BUCKET_FILE")
+      assert(e.getMessage.matches("Invalid bucket file: .+"))
     }
   }
 }

@@ -2075,4 +2075,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(errorClass = "NULL_COMPARISON_RESULT",
       messageParameters = Array(), cause = null)
   }
+
+  def invalidBucketFile(path: String): Throwable = {
+    new SparkException(errorClass = "INVALID_BUCKET_FILE", messageParameters = Array(path),
+      cause = null)
+  }
 }
