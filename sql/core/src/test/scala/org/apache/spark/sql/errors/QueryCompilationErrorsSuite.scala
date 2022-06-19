@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
+import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest}
 import org.apache.spark.sql.functions.{grouping, grouping_id, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -27,6 +27,8 @@ case class StringLongClass(a: String, b: Long)
 case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
+
+case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -172,5 +174,35 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.message ===
       "The feature is not supported: " +
       "Pandas UDF aggregate expressions don't support pivot.")
+  }
+
+  test("UNSUPPORTED_DESERIALIZER: data type mismatch") {
+    val e = intercept[AnalysisException] {
+      sql("select 1 as arr").as[ArrayClass]
+    }
+    assert(e.errorClass === Some("UNSUPPORTED_DESERIALIZER"))
+    assert(e.message ===
+      """The deserializer is not supported: need a(n) "ARRAY" field but got "INT".""")
+  }
+
+  test("UNSUPPORTED_DESERIALIZER:" +
+    "the real number of fields doesn't match encoder schema") {
+    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
+
+    val e1 = intercept[AnalysisException] {
+      ds.as[(String, Int, Long)]
+    }
+    assert(e1.errorClass === Some("UNSUPPORTED_DESERIALIZER"))
+    assert(e1.message ===
+      "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+      "to Tuple3, but failed as the number of fields does not line up.")
+
+    val e2 = intercept[AnalysisException] {
+      ds.as[Tuple1[String]]
+    }
+    assert(e2.errorClass === Some("UNSUPPORTED_DESERIALIZER"))
+    assert(e2.message ===
+      "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
+      "to Tuple1, but failed as the number of fields does not line up.")
   }
 }

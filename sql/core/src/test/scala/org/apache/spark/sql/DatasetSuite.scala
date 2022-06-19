@@ -1002,24 +1002,6 @@ class DatasetSuite extends QueryTest
     checkDataset(cogrouped, "a13", "b24")
   }
 
-  test("give nice error message when the real number of fields doesn't match encoder schema") {
-    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
-
-    val message = intercept[AnalysisException] {
-      ds.as[(String, Int, Long)]
-    }.message
-    assert(message ==
-      "Try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.")
-
-    val message2 = intercept[AnalysisException] {
-      ds.as[Tuple1[String]]
-    }.message
-    assert(message2 ==
-      "Try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.")
-  }
-
   test("SPARK-13440: Resolving option fields") {
     val df = Seq(1, 2, 3).toDS()
     val ds = df.as[Option[Int]]
