@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -1324,7 +1325,17 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           val plan = sql(getAggQuery(selectExpr, joinType)).queryExecution.executedPlan
           assert(collect(plan) { case _: BroadcastNestedLoopJoinExec => true }.size === 1)
           // No extra shuffle before aggregation
-          assert(collect(plan) { case _: ShuffleExchangeExec => true }.size === 0)
+          if (joinType.equals("LEFT SEMI") || joinType.equals("LEFT ANTI")) {
+            assert(collect(plan) {
+              case s: ShuffleExchangeExec if s.outputPartitioning != SinglePartition => true
+            }.size === 0)
+            // Shuffle Exchange between LocalLimit and GlobalLimit
+            assert(collect(plan) {
+              case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => true
+            }.size === 1)
+          } else {
+            assert(collect(plan) { case _: ShuffleExchangeExec => true }.size === 0)
+          }
       }
 
       // Test output partitioning is not preserved
@@ -1338,7 +1349,17 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           val plan = sql(getAggQuery(selectExpr, joinType)).queryExecution.executedPlan
           assert(collect(plan) { case _: BroadcastNestedLoopJoinExec => true }.size === 1)
           // Have shuffle before aggregation
-          assert(collect(plan) { case _: ShuffleExchangeExec => true }.size === 1)
+          if (joinType.equals("LEFT SEMI") || joinType.equals("LEFT ANTI")) {
+            assert(collect(plan) {
+              case s: ShuffleExchangeExec if s.outputPartitioning != SinglePartition => true
+            }.size === 1)
+            // Shuffle Exchange between LocalLimit and GlobalLimit
+            assert(collect(plan) {
+              case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => true
+            }.size === 1)
+          } else {
+            assert(collect(plan) { case _: ShuffleExchangeExec => true }.size === 1)
+          }
       }
 
       def getJoinQuery(selectExpr: String, joinType: String): String = {
