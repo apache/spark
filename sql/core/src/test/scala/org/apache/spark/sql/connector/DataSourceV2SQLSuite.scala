@@ -123,7 +123,7 @@ class DataSourceV2SQLSuite
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
       " USING foo" +
       " PARTITIONED BY (id)" +
-      " TBLPROPERTIES ('bar'='baz')" +
+      " TBLPROPERTIES ('bar'='baz', 'password' = 'password')" +
       " COMMENT 'this is a test table'" +
       " LOCATION 'file:/tmp/testcat/table_name'")
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
@@ -151,7 +151,7 @@ class DataSourceV2SQLSuite
       Array("Location", "file:/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
       Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
-      Array("Table Properties", "[bar=baz]", "")))
+      Array("Table Properties", "[bar=baz,password=*********(redacted)]", "")))
   }
 
   test("Describe column for v2 catalog") {
@@ -175,8 +175,8 @@ class DataSourceV2SQLSuite
 
       assertAnalysisErrorClass(
         s"DESCRIBE $t invalid_col",
-        "MISSING_COLUMN",
-        Array("invalid_col", "testcat.tbl.id, testcat.tbl.data"))
+        "UNRESOLVED_COLUMN",
+        Array("`invalid_col`", "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
     }
   }
 
@@ -614,21 +614,23 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
-    spark.sql("REPLACE TABLE testcat.table_name (id bigint NOT NULL DEFAULT 41 + 1) USING foo")
-    val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo") {
+      spark.sql("REPLACE TABLE testcat.table_name (id bigint NOT NULL DEFAULT 41 + 1) USING foo")
+      val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
+      assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
         "Replaced table should have no rows after committing.")
-    assert(replaced.schema().fields.length === 1,
+      assert(replaced.schema().fields.length === 1,
         "Replaced table should have new schema.")
-    val actual = replaced.schema().fields(0)
-    val expected = StructField("id", LongType, nullable = false,
-      new MetadataBuilder().putString(
-        ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1")
-        .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
-        .build())
-    assert(actual === expected,
-      "Replaced table should have new schema with DEFAULT column metadata.")
+      val actual = replaced.schema().fields(0)
+      val expected = StructField("id", LongType, nullable = false,
+        new MetadataBuilder().putString(
+          ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1")
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
+          .build())
+      assert(actual === expected,
+        "Replaced table should have new schema with DEFAULT column metadata.")
+    }
   }
 
   test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {
@@ -1048,8 +1050,8 @@ class DataSourceV2SQLSuite
       val ex = intercept[AnalysisException] {
         sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
       }
-      assert(ex.getErrorClass == "MISSING_COLUMN")
-      assert(ex.messageParameters.head == "ns1.ns2.ns3.tbl.id")
+      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(ex.messageParameters.head == "`ns1`.`ns2`.`ns3`.`tbl`.`id`")
     }
   }
 
@@ -1708,18 +1710,18 @@ class DataSourceV2SQLSuite
       // UPDATE non-existing column
       assertAnalysisErrorClass(
         s"UPDATE $t SET dummy='abc'",
-        "MISSING_COLUMN",
+        "UNRESOLVED_COLUMN",
         Array(
-          "dummy",
-          "testcat.ns1.ns2.tbl.p, testcat.ns1.ns2.tbl.id, " +
-            "testcat.ns1.ns2.tbl.age, testcat.ns1.ns2.tbl.name"))
+          "`dummy`",
+          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
       assertAnalysisErrorClass(
         s"UPDATE $t SET name='abc' WHERE dummy=1",
-        "MISSING_COLUMN",
+        "UNRESOLVED_COLUMN",
         Array(
-          "dummy",
-          "testcat.ns1.ns2.tbl.p, testcat.ns1.ns2.tbl.id, " +
-            "testcat.ns1.ns2.tbl.age, testcat.ns1.ns2.tbl.name"))
+          "`dummy`",
+          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
 
       // UPDATE is not implemented yet.
       val e = intercept[UnsupportedOperationException] {
@@ -2717,6 +2719,12 @@ class DataSourceV2SQLSuite
         === Array(Row(7), Row(8)))
       assert(sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect
         === Array(Row(7), Row(8)))
+      // Scalar subquery is also supported.
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF (SELECT make_date(2021, 1, 29))").collect
+        === Array(Row(7), Row(8)))
+      // Nested subquery also works
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))").collect
+        === Array(Row(7), Row(8)))
 
       val e1 = intercept[AnalysisException](
         sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
@@ -2752,6 +2760,22 @@ class DataSourceV2SQLSuite
         sql("WITH x AS (SELECT 1) SELECT * FROM x VERSION AS OF 1")
       )
       assert(e7.message.contains("Cannot time travel subqueries from WITH clause"))
+
+      def checkSubqueryError(subquery: String, errMsg: String): Unit = {
+        val e1 = intercept[Exception](
+          sql(s"SELECT * FROM t TIMESTAMP AS OF ($subquery)").collect()
+        )
+        assert(e1.getMessage.contains(errMsg))
+        // Nested subquery should also report error correctly.
+        val e2 = intercept[Exception](
+          sql(s"SELECT * FROM t TIMESTAMP AS OF (SELECT ($subquery))").collect()
+        )
+        assert(e2.getMessage.contains(errMsg))
+      }
+      checkSubqueryError("SELECT 1 FROM non_exist", "Table or view not found: non_exist")
+      checkSubqueryError("SELECT col", "UNRESOLVED_COLUMN")
+      checkSubqueryError("SELECT 1, 2", "Scalar subquery must return only one column")
+      checkSubqueryError("SELECT * FROM VALUES (1), (2)", "MULTI_VALUE_SUBQUERY_ERROR")
     }
   }
 

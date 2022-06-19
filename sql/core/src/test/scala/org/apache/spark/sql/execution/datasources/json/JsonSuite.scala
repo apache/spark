@@ -3044,8 +3044,8 @@ abstract class JsonSuite
             val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
             }
-            assert(ex.getErrorClass == "MISSING_COLUMN")
-            assert(ex.messageParameters.head == "AAA")
+            assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
+            assert(ex.messageParameters.head == "`AAA`")
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(

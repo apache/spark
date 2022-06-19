@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -40,7 +41,7 @@ import org.apache.spark.util.Utils
  * Optimizers can override this.
  */
 abstract class Optimizer(catalogManager: CatalogManager)
-  extends RuleExecutor[LogicalPlan] {
+  extends RuleExecutor[LogicalPlan] with SQLConfHelper {
 
   // Check for structural integrity of the plan in test mode.
   // Currently we check after the execution of each rule if a plan:
@@ -65,7 +66,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
 
   protected def fixedPoint =
     FixedPoint(
-      SQLConf.get.optimizerMaxIterations,
+      conf.optimizerMaxIterations,
       maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
 
   /**
@@ -95,8 +96,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeWindowFunctions,
         CollapseWindow,
         CombineFilters,
+        EliminateOffsets,
         EliminateLimits,
-        RewriteOffsets,
         CombineUnions,
         // Constant folding and strength reduction
         OptimizeRepartition,
@@ -142,8 +143,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
         operatorOptimizationRuleSet: _*) ::
-      // Set strategy to Once to avoid pushing filter every time because we do not change the
-      // join condition.
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
         PushDownPredicates) :: Nil
@@ -271,7 +270,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
-      RewriteLateralSubquery.ruleName :: Nil
+      RewriteLateralSubquery.ruleName ::
+      OptimizeSubqueries.ruleName :: Nil
 
   /**
    * Apply finish-analysis rules for the entire plan including all subqueries.
@@ -389,7 +389,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
    */
   final override def batches: Seq[Batch] = {
     val excludedRulesConf =
-      SQLConf.get.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
+      conf.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
     val excludedRules = excludedRulesConf.filter { ruleName =>
       val nonExcludable = nonExcludableRules.contains(ruleName)
       if (nonExcludable) {
@@ -673,7 +673,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL and joins.
+ * Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET and joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -750,6 +750,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
       Limit(le, Project(a.aggregateExpressions, LocalLimit(le, a.child)))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
       Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
+    // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
+    case LocalLimit(le, Offset(oe, grandChild)) =>
+      Offset(oe, LocalLimit(Add(le, oe), grandChild))
   }
 }
 
@@ -1005,18 +1008,22 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           val producer = producerMap.getOrElse(reference, reference)
           producer.deterministic && (count == 1 || alwaysInline || {
             val relatedConsumers = consumers.filter(_.references.contains(reference))
-            val extractOnly = relatedConsumers.forall(isExtractOnly(_, reference))
+            // It's still exactly-only if there is only one reference in non-extract expressions,
+            // as we won't duplicate the expensive CreateStruct-like expressions.
+            val extractOnly = relatedConsumers.map(refCountInNonExtract(_, reference)).sum <= 1
             shouldInline(producer, extractOnly)
           })
       }
   }
 
-  @scala.annotation.tailrec
-  private def isExtractOnly(expr: Expression, ref: Attribute): Boolean = expr match {
-    case a: Alias => isExtractOnly(a.child, ref)
-    case e: ExtractValue => isExtractOnly(e.children.head, ref)
-    case a: Attribute => a.semanticEquals(ref)
-    case _ => false
+  private def refCountInNonExtract(expr: Expression, ref: Attribute): Int = {
+    def refCount(e: Expression): Int = e match {
+      case a: Attribute if a.semanticEquals(ref) => 1
+      // The first child of `ExtractValue` is the complex type to be extracted.
+      case e: ExtractValue if e.children.head.semanticEquals(ref) => 0
+      case _ => e.children.map(refCount).sum
+    }
+    refCount(expr)
   }
 
   /**
@@ -1350,7 +1357,9 @@ object CombineUnions extends Rule[LogicalPlan] {
     while (stack.nonEmpty) {
       stack.pop() match {
         case p1 @ Project(_, p2: Project)
-            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) =>
+            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) &&
+              !p1.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) &&
+              !p2.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) =>
           val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
           stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
         case Distinct(Union(children, byName, allowMissingCol))
@@ -1871,21 +1880,22 @@ object EliminateLimits extends Rule[LogicalPlan] {
 }
 
 /**
- * Rewrite [[Offset]] as [[GlobalLimitAndOffset]] or [[LocalLimit]],
- * merging the expressions into one single expression. See [[Limit]] for more information
- * about the difference between [[LocalLimit]] and [[GlobalLimit]].
+ * This rule optimizes Offset operators by:
+ * 1. Eliminate [[Offset]] operators if offset == 0.
+ * 2. Replace [[Offset]] operators to empty [[LocalRelation]]
+ *    if [[Offset]]'s child max row <= offset.
+ * 3. Combines two adjacent [[Offset]] operators into one, merging the
+ *    expressions into one single expression.
  */
-object RewriteOffsets extends Rule[LogicalPlan] {
+object EliminateOffsets extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case GlobalLimit(le, Offset(oe, grandChild)) =>
-      GlobalLimitAndOffset(le, oe, grandChild)
-    case localLimit @ LocalLimit(le, Offset(oe, grandChild)) =>
-      val offset = oe.eval().asInstanceOf[Int]
-      if (offset == 0) {
-        localLimit.withNewChildren(Seq(grandChild))
-      } else {
-        Offset(oe, LocalLimit(Add(le, oe), grandChild))
-      }
+    case Offset(oe, child) if oe.foldable && oe.eval().asInstanceOf[Int] == 0 =>
+      child
+    case Offset(oe, child)
+      if oe.foldable && child.maxRows.exists(_ <= oe.eval().asInstanceOf[Int]) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
+    case Offset(oe1, Offset(oe2, child)) =>
+      Offset(Add(oe1, oe2), child)
   }
 }
 

@@ -30,9 +30,9 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
 
   private lazy val a = $"a".int
   private lazy val r = LocalRelation(a)
-  private lazy val uuid1 = Uuid().as(Symbol("_uuid1"))
-  private lazy val uuid2 = Uuid().as(Symbol("_uuid2"))
-  private lazy val uuid3 = Uuid().as(Symbol("_uuid3"))
+  private lazy val uuid1 = Uuid().as("_uuid1")
+  private lazy val uuid2 = Uuid().as("_uuid2")
+  private lazy val uuid3 = Uuid().as("_uuid3")
   private lazy val uuid1Ref = uuid1.toAttribute
 
   private val tracker = new QueryPlanningTracker

@@ -63,13 +63,29 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY =
+    ConfigBuilder("spark.kubernetes.driver.service.ipFamilyPolicy")
+      .doc("K8s IP Family Policy for Driver Service")
+      .version("3.4.0")
+      .stringConf
+      .checkValues(Set("SingleStack", "PreferDualStack", "RequireDualStack"))
+      .createWithDefault("SingleStack")
+
+  val KUBERNETES_DRIVER_SERVICE_IP_FAMILIES =
+    ConfigBuilder("spark.kubernetes.driver.service.ipFamilies")
+      .doc("A list of IP families for K8s Driver Service")
+      .version("3.4.0")
+      .stringConf
+      .checkValues(Set("IPv4", "IPv6", "IPv4,IPv6", "IPv6,IPv4"))
+      .createWithDefault("IPv4")
+
   val KUBERNETES_DRIVER_OWN_PVC =
     ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
       .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +
         "instead of the executor pods")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_DRIVER_REUSE_PVC =
     ConfigBuilder("spark.kubernetes.driver.reusePersistentVolumeClaim")
@@ -83,7 +99,7 @@ private[spark] object Config extends Logging {
         s"sometimes. This config requires ${KUBERNETES_DRIVER_OWN_PVC.key}=true.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")

@@ -4225,13 +4225,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("""SELECT from_json(R'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
   }
 
-  test("SPARK-36979: Add RewriteLateralSubquery rule into nonExcludableRules") {
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-      "org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery") {
-      sql("SELECT * FROM testData, LATERAL (SELECT * FROM testData)").collect()
-    }
-  }
-
   test("TABLE SAMPLE") {
     withTable("test") {
       sql("CREATE TABLE test(c int) USING PARQUET")
@@ -4312,6 +4305,90 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-39166: Query context of binary arithmetic should be serialized to executors" +
+    " when WSCG is off") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("create table t(i int, j int) using parquet")
+        sql("insert into t values(2147483647, 10)")
+        Seq(
+          "select i + j from t",
+          "select -i - j from t",
+          "select i * j from t",
+          "select i / (j - 10) from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
+      }
+    }
+  }
+
+  test("SPARK-39175: Query context of Cast should be serialized to executors" +
+    " when WSCG is off") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("create table t(s string) using parquet")
+        sql("insert into t values('a')")
+        Seq(
+          "select cast(s as int) from t",
+          "select cast(s as long) from t",
+          "select cast(s as double) from t",
+          "select cast(s as decimal(10, 2)) from t",
+          "select cast(s as date) from t",
+          "select cast(s as timestamp) from t",
+          "select cast(s as boolean) from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
+      }
+    }
+  }
+
+  test("SPARK-39177: Query context of getting map value should be serialized to executors" +
+    " when WSCG is off") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("create table t(m map<string, string>) using parquet")
+        sql("insert into t values map('a', 'b')")
+        Seq(
+          "select m['foo'] from t",
+          "select element_at(m, 'foo') from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
+      }
+    }
+  }
+
+  test("SPARK-39190,SPARK-39208,SPARK-39210: Query context of decimal overflow error should " +
+    "be serialized to executors when WSCG is off") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("create table t(d decimal(38, 0)) using parquet")
+        sql("insert into t values (6e37BD),(6e37BD)")
+        Seq(
+          "select d / 0.1 from t",
+          "select sum(d) from t",
+          "select avg(d) from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
+      }
+    }
+  }
+
   test("SPARK-38589: try_avg should return null if overflow happens before merging") {
     val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
       .map(Period.ofMonths)
@@ -4346,6 +4423,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           Row(2, true, mutable.WrappedArray.make(binary2))
         ))
     }
+  }
+
+  test("SPARK-39216: Don't collapse projects in CombineUnions if it hasCorrelatedSubquery") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT (SELECT IF(x, 1, 0)) AS a
+          |FROM (SELECT true) t(x)
+          |UNION
+          |SELECT 1 AS a
+        """.stripMargin),
+      Seq(Row(1)))
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT x + 1
+          |FROM   (SELECT id
+          |               + (SELECT Max(id)
+          |                  FROM   range(2)) AS x
+          |        FROM   range(1)) t
+          |UNION
+          |SELECT 1 AS a
+        """.stripMargin),
+      Seq(Row(2), Row(1)))
   }
 }
 

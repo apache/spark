@@ -2103,6 +2103,16 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset by skipping the first `m` rows.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def offset(n: Int): Dataset[T] = withTypedPlan {
+    Offset(Literal(n), logicalPlan)
+  }
+
+  /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
    *
    * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
@@ -3906,12 +3916,15 @@ class Dataset[T] private[sql](
 
   /**
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
-   * user-registered callback functions.
+   * user-registered callback functions, and also to convert asserts/NPE to
+   * the internal error exception.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(qe, Some(name)) {
-      qe.executedPlan.resetMetrics()
-      action(qe.executedPlan)
+      QueryExecution.withInternalError(s"""The "$name" action failed.""") {
+        qe.executedPlan.resetMetrics()
+        action(qe.executedPlan)
+      }
     }
   }
 

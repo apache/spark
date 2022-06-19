@@ -187,7 +187,7 @@ private[spark] class ApplicationMaster(
     val visibilities = distCacheConf.get(CACHED_FILES_VISIBILITIES)
     val resTypes = distCacheConf.get(CACHED_FILES_TYPES)
 
-    for (i <- 0 to distFiles.size - 1) {
+    for (i <- distFiles.indices) {
       val resType = LocalResourceType.valueOf(resTypes(i))
       setupDistributedCache(distFiles(i), resType, timeStamps(i).toString, fileSizes(i).toString,
       visibilities(i))

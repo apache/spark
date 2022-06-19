@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StringType
  * Object for grouping all error messages of the query parsing.
  * Currently it includes all ParseException.
  */
-object QueryParsingErrors extends QueryErrorsBase {
+private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def invalidInsertIntoError(ctx: InsertIntoContext): Throwable = {
     new ParseException("Invalid InsertIntoContext", ctx)
@@ -96,14 +96,16 @@ object QueryParsingErrors extends QueryErrorsBase {
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("TRANSFORM_DISTINCT_ALL"),
+      errorSubClass = "TRANSFORM_DISTINCT_ALL",
+        messageParameters = Array[String](),
       ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("TRANSFORM_NON_HIVE"),
+      errorSubClass = "TRANSFORM_NON_HIVE",
+        messageParameters = Array[String](),
       ctx)
   }
 
@@ -114,21 +116,24 @@ object QueryParsingErrors extends QueryErrorsBase {
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("LATERAL_NATURAL_JOIN"),
+      errorSubClass = "LATERAL_NATURAL_JOIN",
+        messageParameters = Array[String](),
       ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("LATERAL_JOIN_USING"),
+      errorSubClass = "LATERAL_JOIN_USING",
+        messageParameters = Array[String](),
       ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("LATERAL_JOIN_OF_TYPE", s"${toSQLStmt(joinType)}"),
+      errorSubClass = "LATERAL_JOIN_OF_TYPE",
+      messageParameters = Array(s"${toSQLStmt(joinType)}"),
       ctx)
   }
 
@@ -155,7 +160,10 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL_CROSS_JOIN"), ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "NATURAL_CROSS_JOIN",
+        messageParameters = Array[String](),
+      ctx = ctx)
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
@@ -267,16 +275,29 @@ object QueryParsingErrors extends QueryErrorsBase {
 
   def cannotCleanReservedNamespacePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
-    new ParseException(s"$property is a reserved namespace property, $msg.", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "SET_NAMESPACE_PROPERTY",
+      messageParameters = Array(property, msg),
+      ctx)
   }
 
   def propertiesAndDbPropertiesBothSpecifiedError(ctx: CreateNamespaceContext): Throwable = {
-    new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "SET_PROPERTIES_AND_DBPROPERTIES",
+        messageParameters = Array[String](),
+      ctx
+    )
   }
 
   def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
-    new ParseException(s"$property is a reserved table property, $msg.", ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "SET_TABLE_PROPERTY",
+      messageParameters = Array(property, msg),
+      ctx)
   }
 
   def duplicatedTablePathsFoundError(
@@ -308,7 +329,8 @@ object QueryParsingErrors extends QueryErrorsBase {
   def descColumnForPartitionUnsupportedError(ctx: DescribeRelationContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("DESC_TABLE_COLUMN_PARTITION"),
+      errorSubClass = "DESC_TABLE_COLUMN_PARTITION",
+      messageParameters = Array[String](),
       ctx)
   }
 
@@ -369,33 +391,33 @@ object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(toSQLId(key)), ctx)
   }
 
-  def unexpectedFomatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
+  def unexpectedFormatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      s"""
-         |Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include
-         |special characters in key, or include semicolon in value, please use quotes,
-         |e.g., SET `ke y`=`v;alue`.
-       """.stripMargin.replaceAll("\n", " "), ctx)
+      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include " +
+      "special characters in key, or include semicolon in value, please use quotes, " +
+      "e.g., SET `key`=`value`.", ctx)
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
       keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"'$keyCandidate' is an invalid property key, please " +
-      s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
+    new ParseException(errorClass = "INVALID_PROPERTY_KEY",
+      messageParameters = Array(toSQLConf(keyCandidate),
+        toSQLConf(keyCandidate), toSQLConf(valueStr)),
+      ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
       valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"'$valueCandidate' is an invalid property value, please " +
-      s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
+    new ParseException(errorClass = "INVALID_PROPERTY_VALUE",
+      messageParameters = Array(toSQLConf(valueCandidate),
+        toSQLConf(keyStr), toSQLConf(valueCandidate)),
+      ctx)
   }
 
   def unexpectedFormatForResetConfigurationError(ctx: ResetConfigurationContext): Throwable = {
     new ParseException(
-      s"""
-         |Expected format is 'RESET' or 'RESET key'. If you want to include special characters
-         |in key, please use quotes, e.g., RESET `ke y`.
-       """.stripMargin.replaceAll("\n", " "), ctx)
+      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters " +
+      "in key, please use quotes, e.g., RESET `key`.", ctx)
   }
 
   def intervalValueOutOfRangeError(ctx: IntervalContext): Throwable = {

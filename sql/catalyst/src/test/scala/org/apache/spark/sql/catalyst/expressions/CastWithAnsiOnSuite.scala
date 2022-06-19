@@ -20,26 +20,22 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 import java.time.DateTimeException
 
-import org.apache.spark.SparkArithmeticException
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
-import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLValue
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Test suite base for
- *   1. [[Cast]] with ANSI mode enabled
- *   2. [[AnsiCast]]
- *   3. [[TryCast]]
- * Note: for new test cases that work for [[Cast]], [[AnsiCast]] and [[TryCast]], please add them
- *       in `CastSuiteBase` instead of this file to ensure the test coverage.
+ * Test suite for data type casting expression [[Cast]] with ANSI mode enabled.
  */
-abstract class AnsiCastSuiteBase extends CastSuiteBase {
+class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
+
+  override def ansiEnabled: Boolean = true
 
   private def testIntMaxAndMin(dt: DataType): Unit = {
     assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
@@ -172,33 +168,44 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     assert(cast(booleanLiteral, DateType).checkInputDataTypes().isFailure)
   }
 
+  private def castErrMsg(v: Any, to: DataType, from: DataType = StringType): String = {
+    s"The value ${toSQLValue(v, from)} of the type ${toSQLType(from)} " +
+    s"cannot be cast to ${toSQLType(to)} because it is malformed."
+  }
+
+  private def castErrMsg(l: Literal, to: DataType, from: DataType): String = {
+    s"The value ${toSQLValue(l.eval(), from)} of the type ${toSQLType(from)} " +
+    s"cannot be cast to ${toSQLType(to)} because it is malformed."
+  }
+
+  private def castErrMsg(l: Literal, to: DataType): String = {
+    castErrMsg(l, to, l.dataType)
+  }
+
   test("cast from invalid string to numeric should throw NumberFormatException") {
+    def check(value: String, dataType: DataType): Unit = {
+      checkExceptionInExpression[NumberFormatException](cast(value, dataType),
+        castErrMsg(value, dataType))
+    }
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
-      checkExceptionInExpression[NumberFormatException](cast("string", dataType),
-        s"""Invalid input syntax for type "${dataType.sql}": 'string'""")
-      checkExceptionInExpression[NumberFormatException](cast("123-string", dataType),
-        s"""Invalid input syntax for type "${dataType.sql}": '123-string'""")
-      checkExceptionInExpression[NumberFormatException](cast("2020-07-19", dataType),
-        s"""Invalid input syntax for type "${dataType.sql}": '2020-07-19'""")
-      checkExceptionInExpression[NumberFormatException](cast("1.23", dataType),
-        s"""Invalid input syntax for type "${dataType.sql}": '1.23'""")
+      check("string", dataType)
+      check("123-string", dataType)
+      check("2020-07-19", dataType)
+      check("1.23", dataType)
     }
 
     Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
-      checkExceptionInExpression[NumberFormatException](cast("string", dataType),
-        s"""Invalid input syntax for type "${dataType.sql}": 'string'""")
-      checkExceptionInExpression[NumberFormatException](cast("123.000.00", dataType),
-        s"""Invalid input syntax for type "${dataType.sql}": '123.000.00'""")
-      checkExceptionInExpression[NumberFormatException](cast("abc.com", dataType),
-        s"""Invalid input syntax for type "${dataType.sql}": 'abc.com'""")
+      check("string", dataType)
+      check("123.000.00", dataType)
+      check("abc.com", dataType)
     }
   }
 
   protected def checkCastToNumericError(l: Literal, to: DataType,
       expectedDataTypeInErrorMsg: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[NumberFormatException](
-      cast(l, to), s"""Invalid input syntax for type "${expectedDataTypeInErrorMsg.sql}": 'true'""")
+      cast(l, to), castErrMsg("true", expectedDataTypeInErrorMsg))
   }
 
   test("cast from invalid string array to numeric array should throw NumberFormatException") {
@@ -245,12 +252,12 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     checkExceptionInExpression[NumberFormatException](
       cast("abcd", DecimalType(38, 1)),
-      s"""Invalid input syntax for type "${DecimalType(38, 1).sql}": 'abcd'""")
+      castErrMsg("abcd", DecimalType(38, 1)))
   }
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
-    checkExceptionInExpression[UnsupportedOperationException](
-      cast(l, to), s"invalid input syntax for type boolean")
+    checkExceptionInExpression[SparkRuntimeException](
+      cast(l, to), """cannot be cast to "BOOLEAN"""")
   }
 
   test("ANSI mode: cast string to boolean with parse error") {
@@ -258,13 +265,12 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     checkCastToBooleanError(Literal(""), BooleanType, null)
   }
 
-  protected def checkCastToTimestampError(l: Literal, to: DataType): Unit = {
-    checkExceptionInExpression[DateTimeException](
-      cast(l, to),
-      s"""Invalid input syntax for type "TIMESTAMP": ${toSQLValue(l.eval(), l.dataType)}""")
-  }
-
   test("cast from timestamp II") {
+    def checkCastToTimestampError(l: Literal, to: DataType): Unit = {
+      checkExceptionInExpression[DateTimeException](
+        cast(l, to),
+        """cannot be cast to "TIMESTAMP" because it is malformed""")
+    }
     checkCastToTimestampError(Literal(Double.NaN), TimestampType)
     checkCastToTimestampError(Literal(1.0 / 0.0), TimestampType)
     checkCastToTimestampError(Literal(Float.NaN), TimestampType)
@@ -276,13 +282,19 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     }
   }
 
+  private def castOverflowErrMsg(v: Any, from: DataType, to: DataType): String = {
+    s"The value ${toSQLValue(v, from)} of the type ${toSQLType(from)} cannot be " +
+    s"cast to ${toSQLType(to)} due to an overflow."
+  }
+
   test("cast a timestamp before the epoch 1970-01-01 00:00:00Z II") {
     withDefaultTimeZone(UTC) {
       val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
       assert(negativeTs.getTime < 0)
       Seq(ByteType, ShortType, IntegerType).foreach { dt =>
         checkExceptionInExpression[SparkArithmeticException](
-          cast(negativeTs, dt), s"""to "${dt.sql}" causes overflow""")
+          cast(negativeTs, dt),
+          castOverflowErrMsg(negativeTs, TimestampType, dt))
       }
     }
   }
@@ -293,7 +305,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(negativeTs.getTime < 0)
       Seq(ByteType, ShortType, IntegerType).foreach { dt =>
         checkExceptionInExpression[SparkArithmeticException](
-          cast(negativeTs, dt), s"""to "${dt.sql}" causes overflow""")
+          cast(negativeTs, dt),
+          castOverflowErrMsg(negativeTs, TimestampType, dt))
       }
       val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
@@ -322,25 +335,21 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
-      assert(ret.resolved == !isTryCast)
-      if (!isTryCast) {
-        checkExceptionInExpression[UnsupportedOperationException](
-          ret, "invalid input syntax for type boolean")
-      }
+      assert(ret.resolved)
+      checkExceptionInExpression[SparkRuntimeException](
+        ret, """cannot be cast to "BOOLEAN"""")
     }
   }
 
   test("cast from array III") {
-    if (!isTryCast) {
-      val from: DataType = ArrayType(DoubleType, containsNull = false)
-      val array = Literal.create(Seq(1.0, 2.0), from)
-      val to: DataType = ArrayType(IntegerType, containsNull = false)
-      val answer = Literal.create(Seq(1, 2), to).value
-      checkEvaluation(cast(array, to), answer)
+    val from: DataType = ArrayType(DoubleType, containsNull = false)
+    val array = Literal.create(Seq(1.0, 2.0), from)
+    val to: DataType = ArrayType(IntegerType, containsNull = false)
+    val answer = Literal.create(Seq(1, 2), to).value
+    checkEvaluation(cast(array, to), answer)
 
-      val overflowArray = Literal.create(Seq(Int.MaxValue + 1.0D), from)
-      checkExceptionInExpression[ArithmeticException](cast(overflowArray, to), "overflow")
-    }
+    val overflowArray = Literal.create(Seq(Int.MaxValue + 1.0D), from)
+    checkExceptionInExpression[ArithmeticException](cast(overflowArray, to), "overflow")
   }
 
   test("cast from map II") {
@@ -369,45 +378,40 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     {
       val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved == !isTryCast)
-      if (!isTryCast) {
-        checkExceptionInExpression[NumberFormatException](
-          ret, s"""Invalid input syntax for type "${IntegerType.sql}"""")
-      }
+      assert(ret.resolved)
+      checkExceptionInExpression[NumberFormatException](
+        ret,
+        castErrMsg("a", IntegerType))
     }
 
     {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved == !isTryCast)
-      if (!isTryCast) {
-        checkExceptionInExpression[UnsupportedOperationException](
-          ret, "invalid input syntax for type boolean")
-      }
+      assert(ret.resolved)
+      checkExceptionInExpression[SparkRuntimeException](
+        ret,
+        castErrMsg("123", BooleanType))
     }
 
     {
       val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved == !isTryCast)
-      if (!isTryCast) {
-        checkExceptionInExpression[NumberFormatException](
-          ret, s"""Invalid input syntax for type "${IntegerType.sql}"""")
-      }
+      assert(ret.resolved)
+      checkExceptionInExpression[NumberFormatException](
+        ret,
+        castErrMsg("a", IntegerType))
     }
   }
 
   test("cast from map III") {
-    if (!isTryCast) {
-      val from: DataType = MapType(DoubleType, DoubleType, valueContainsNull = false)
-      val map = Literal.create(Map(1.0 -> 2.0), from)
-      val to: DataType = MapType(IntegerType, IntegerType, valueContainsNull = false)
-      val answer = Literal.create(Map(1 -> 2), to).value
-      checkEvaluation(cast(map, to), answer)
+    val from: DataType = MapType(DoubleType, DoubleType, valueContainsNull = false)
+    val map = Literal.create(Map(1.0 -> 2.0), from)
+    val to: DataType = MapType(IntegerType, IntegerType, valueContainsNull = false)
+    val answer = Literal.create(Map(1 -> 2), to).value
+    checkEvaluation(cast(map, to), answer)
 
-      Seq(
-        Literal.create(Map((Int.MaxValue + 1.0) -> 2.0), from),
-        Literal.create(Map(1.0 -> (Int.MinValue - 1.0)), from)).foreach { overflowMap =>
-        checkExceptionInExpression[ArithmeticException](cast(overflowMap, to), "overflow")
-      }
+    Seq(
+      Literal.create(Map((Int.MaxValue + 1.0) -> 2.0), from),
+      Literal.create(Map(1.0 -> (Int.MinValue - 1.0)), from)).foreach { overflowMap =>
+      checkExceptionInExpression[ArithmeticException](cast(overflowMap, to), "overflow")
     }
   }
 
@@ -467,25 +471,22 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = false))))
-      assert(ret.resolved == !isTryCast)
-      if (!isTryCast) {
-        checkExceptionInExpression[UnsupportedOperationException](
-          ret, "invalid input syntax for type boolean")
-      }
+      assert(ret.resolved)
+      checkExceptionInExpression[SparkRuntimeException](
+        ret,
+        castErrMsg("123", BooleanType))
     }
   }
 
   test("cast from struct III") {
-    if (!isTryCast) {
-      val from: DataType = StructType(Seq(StructField("a", DoubleType, nullable = false)))
-      val struct = Literal.create(InternalRow(1.0), from)
-      val to: DataType = StructType(Seq(StructField("a", IntegerType, nullable = false)))
-      val answer = Literal.create(InternalRow(1), to).value
-      checkEvaluation(cast(struct, to), answer)
+    val from: DataType = StructType(Seq(StructField("a", DoubleType, nullable = false)))
+    val struct = Literal.create(InternalRow(1.0), from)
+    val to: DataType = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+    val answer = Literal.create(InternalRow(1), to).value
+    checkEvaluation(cast(struct, to), answer)
 
-      val overflowStruct = Literal.create(InternalRow(Int.MaxValue + 1.0), from)
-      checkExceptionInExpression[ArithmeticException](cast(overflowStruct, to), "overflow")
-    }
+    val overflowStruct = Literal.create(InternalRow(Int.MaxValue + 1.0), from)
+    checkExceptionInExpression[ArithmeticException](cast(overflowStruct, to), "overflow")
   }
 
   test("complex casting") {
@@ -512,11 +513,10 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         StructType(Seq(
           StructField("l", LongType, nullable = true)))))))
 
-    assert(ret.resolved === !isTryCast)
-    if (!isTryCast) {
-      checkExceptionInExpression[NumberFormatException](
-        ret, s"""Invalid input syntax for type "${IntegerType.sql}"""")
-    }
+    assert(ret.resolved)
+    checkExceptionInExpression[NumberFormatException](
+      ret,
+      castErrMsg("true", IntegerType))
   }
 
   test("ANSI mode: cast string to timestamp with parse error") {
@@ -524,7 +524,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), TimestampType, Option(zid.getId)),
-          s"""Invalid input syntax for type "TIMESTAMP": '$str'""")
+          castErrMsg(str, TimestampType))
       }
 
       checkCastWithParseError("123")
@@ -545,7 +545,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), DateType, Option(zid.getId)),
-          s"""Invalid input syntax for type "DATE": '$str'""")
+          castErrMsg(str, DateType))
       }
 
       checkCastWithParseError("2015-13-18")
@@ -573,84 +573,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](
         cast(invalidInput, TimestampNTZType),
-        s"""Invalid input syntax for type "TIMESTAMP_NTZ": '$invalidInput'""")
+        castErrMsg(invalidInput, TimestampNTZType))
     }
   }
-}
-
-/**
- * Test suite for data type casting expression [[Cast]] with ANSI mode disabled.
- */
-class CastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, true)
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
-  }
-
-  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
-    v match {
-      case lit: Expression => Cast(lit, targetType, timeZoneId)
-      case _ => Cast(Literal(v), targetType, timeZoneId)
-    }
-  }
-
-  override def setConfigurationHint: String =
-    s"set ${SQLConf.ANSI_ENABLED.key} as false"
-}
-
-/**
- * Test suite for data type casting expression [[AnsiCast]] with ANSI mode enabled.
- */
-class AnsiCastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, true)
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
-  }
-
-  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
-    v match {
-      case lit: Expression => AnsiCast(lit, targetType, timeZoneId)
-      case _ => AnsiCast(Literal(v), targetType, timeZoneId)
-    }
-  }
-
-  override def setConfigurationHint: String =
-    s"set ${SQLConf.STORE_ASSIGNMENT_POLICY.key} as" +
-      s" ${SQLConf.StoreAssignmentPolicy.LEGACY.toString}"
-}
-
-/**
- * Test suite for data type casting expression [[AnsiCast]] with ANSI mode disabled.
- */
-class AnsiCastSuiteWithAnsiModeOff extends AnsiCastSuiteBase {
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, false)
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
-  }
-
-  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
-    v match {
-      case lit: Expression => AnsiCast(lit, targetType, timeZoneId)
-      case _ => AnsiCast(Literal(v), targetType, timeZoneId)
-    }
-  }
-
-  override def setConfigurationHint: String =
-    s"set ${SQLConf.STORE_ASSIGNMENT_POLICY.key} as" +
-      s" ${SQLConf.StoreAssignmentPolicy.LEGACY.toString}"
 }

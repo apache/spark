@@ -45,8 +45,8 @@ class LimitPushdownSuite extends PlanTest {
   private val testRelation2 = LocalRelation.fromExternalRows(
     Seq("d".attr.int, "e".attr.int, "f".attr.int),
     1.to(6).map(_ => Row(1, 2, 3)))
-  private val x = testRelation.subquery(Symbol("x"))
-  private val y = testRelation.subquery(Symbol("y"))
+  private val x = testRelation.subquery("x")
+  private val y = testRelation.subquery("y")
 
   // Union ---------------------------------------------------------------------------------------
 
@@ -153,7 +153,7 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("full outer join where neither side is limited and left side has larger statistics") {
-    val xBig = testRelation.copy(data = Seq.fill(10)(null)).subquery(Symbol("x"))
+    val xBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("x")
     assert(xBig.stats.sizeInBytes > y.stats.sizeInBytes)
     val originalQuery = xBig.join(y, FullOuter).limit(1).analyze
     val optimized = Optimize.execute(originalQuery)
@@ -162,7 +162,7 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("full outer join where neither side is limited and right side has larger statistics") {
-    val yBig = testRelation.copy(data = Seq.fill(10)(null)).subquery(Symbol("y"))
+    val yBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("y")
     assert(x.stats.sizeInBytes < yBig.stats.sizeInBytes)
     val originalQuery = x.join(yBig, FullOuter).limit(1).analyze
     val optimized = Optimize.execute(originalQuery)
@@ -269,5 +269,11 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze),
       x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze)
+  }
+
+  test("Push down limit 1 through Offset") {
+    comparePlans(
+      Optimize.execute(testRelation.offset(2).limit(1).analyze),
+      GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
   }
 }

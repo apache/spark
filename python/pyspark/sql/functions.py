@@ -141,6 +141,7 @@ def lit(col: Any) -> Column:
 def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+
     Examples
     --------
     >>> col('x')
@@ -1240,6 +1241,17 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     -----
     The function is non-deterministic because its results depends on the order of the
     rows which may be non-deterministic after a shuffle.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.groupby("name").agg(first("age")).orderBy("name").show()
+    +-----+----------+
+    | name|first(age)|
+    +-----+----------+
+    |Alice|         2|
+    |  Bob|         5|
+    +-----+----------+
     """
     return _invoke_function("first", _to_java_column(col), ignorenulls)
 
@@ -5316,6 +5328,16 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
         else _to_java_column(numBuckets)
     )
     return _invoke_function("bucket", numBuckets, _to_java_column(col))
+
+
+def unwrap_udt(col: "ColumnOrName") -> Column:
+    """
+    Unwrap UDT data type column into its underlying type.
+
+        .. versionadded:: 3.4.0
+
+    """
+    return _invoke_function("unwrap_udt", _to_java_column(col))
 
 
 # ---------------------------- User Defined Function ----------------------------------

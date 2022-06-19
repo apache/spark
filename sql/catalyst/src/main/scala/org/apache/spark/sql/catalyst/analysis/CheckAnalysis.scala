@@ -21,14 +21,14 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -179,9 +179,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             val missingCol = a.sql
             val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
             val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
-            a.failAnalysis(
-              errorClass = "MISSING_COLUMN",
-              messageParameters = Array(missingCol, orderedCandidates.mkString(", ")))
+            throw QueryCompilationErrors.unresolvedColumnError(
+              missingCol, orderedCandidates, a.origin)
 
           case s: Star =>
             withPosition(s) {
@@ -228,7 +227,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             w.windowFunction match {
-              case agg @ AggregateExpression(_: PercentileCont | _: PercentileDisc, _, _, _, _)
+              case agg @ AggregateExpression(
+                _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
                 if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
                     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
                 failAnalysis(
@@ -285,20 +285,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               failAnalysis("Input argument tolerance must be non-negative.")
             }
 
-          case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
-            def isAggregateExpression(expr: Expression): Boolean = {
-              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
-            }
-
+          case Aggregate(groupingExprs, aggregateExprs, _) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case expr: Expression if isAggregateExpression(expr) =>
+              case expr: Expression if AggregateExpression.isAggregate(expr) =>
                 val aggFunction = expr match {
                   case agg: AggregateExpression => agg.aggregateFunction
                   case udf: PythonUDF => udf
                 }
                 aggFunction.children.foreach { child =>
                   child.foreach {
-                    case expr: Expression if isAggregateExpression(expr) =>
+                    case expr: Expression if AggregateExpression.isAggregate(expr) =>
                       failAnalysis(
                         s"It is not allowed to use an aggregate function in the argument of " +
                           s"another aggregate function. Please use the inner aggregate function " +
@@ -582,8 +578,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}
                """.stripMargin)
 
-          case _: UnresolvedHint =>
-            throw QueryExecutionErrors.logicalHintOperatorNotRemovedDuringAnalysisError
+          case _: UnresolvedHint => throw new IllegalStateException(
+            "Logical hint operator should be removed during analysis.")
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
@@ -608,7 +604,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         }
     }
     checkCollectedMetrics(plan)
-    checkOffsetOperator(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -702,7 +697,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
-  private def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+  def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
         query: LogicalPlan, agg: Aggregate): Unit = {
@@ -746,8 +741,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       expressions.exists(_.exists(_.semanticEquals(expr)))
     }
 
+    def checkOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = p match {
+      case f: Filter =>
+        if (hasOuterReferences(expr.plan)) {
+          expr.plan.expressions.foreach(_.foreachUp {
+            case o: OuterReference =>
+              p.children.foreach(e =>
+                if (!e.output.exists(_.exprId == o.exprId)) {
+                  failAnalysis("outer attribute not found")
+                })
+            case _ =>
+          })
+        }
+      case _ =>
+    }
+
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
+
+    // Check if there is outer attribute that cannot be found from the plan.
+    checkOuterReference(plan, expr)
 
     expr match {
       case ScalarSubquery(query, outerAttrs, _, _) =>
@@ -849,30 +862,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       })
     }
     check(plan)
-  }
-
-  /**
-   * Validate whether the [[Offset]] is valid.
-   */
-  private def checkOffsetOperator(plan: LogicalPlan): Unit = {
-    plan.foreachUp {
-      case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
-        && o.children.exists(_.isInstanceOf[Offset]) =>
-        failAnalysis(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
-      case _ =>
-    }
-    plan match {
-      case Offset(offsetExpr, _) =>
-        checkLimitLikeClause("offset", offsetExpr)
-        failAnalysis(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause is found to be the outermost node.""".stripMargin.replace("\n", " "))
-      case _ =>
-    }
   }
 
   /**

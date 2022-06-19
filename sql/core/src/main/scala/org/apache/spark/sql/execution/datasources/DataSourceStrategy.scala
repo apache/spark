@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
+import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
@@ -61,7 +61,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-object DataSourceAnalysis extends Rule[LogicalPlan] {
+case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
 
   def resolver: Resolver = conf.resolver
 
@@ -112,8 +112,10 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
           // the reason that the parser has erased the type info of static partition values
           // and converted them to string.
           case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
-            Some(Alias(AnsiCast(Literal(partValue), field.dataType,
-              Option(conf.sessionLocalTimeZone)), field.name)())
+            val cast = Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone),
+              ansiEnabled = true)
+            cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+            Some(Alias(cast, field.name)())
           case _ =>
             val castExpression =
               Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone),
@@ -145,7 +147,11 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
-      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+      val newSchema: StructType =
+        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
+          tableDesc.schema, tableDesc.provider, "CREATE TABLE")
+      val newTableDesc = tableDesc.copy(schema = newSchema)
+      CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>

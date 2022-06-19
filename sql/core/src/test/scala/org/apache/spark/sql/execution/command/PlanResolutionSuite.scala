@@ -26,12 +26,12 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -73,6 +73,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   private val tableWithAcceptAnySchemaCapability: Table = {
     val t = mock(classOf[Table])
+    when(t.name()).thenReturn("v2TableWithAcceptAnySchemaCapability")
     when(t.schema()).thenReturn(new StructType().add("i", "int"))
     when(t.capabilities()).thenReturn(Collections.singleton(TableCapability.ACCEPT_ANY_SCHEMA))
     t
@@ -97,6 +98,29 @@ class PlanResolutionSuite extends AnalysisTest {
           new MetadataBuilder()
             .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42")
             .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "42").build()))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
+  private val defaultValues2: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(
+      new StructType()
+        .add("i", StringType)
+        .add("e", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'abc'").build()))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
+  private val tableWithColumnNamedDefault: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(
+      new StructType()
+        .add("s", StringType)
+        .add("default", StringType))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
@@ -137,6 +161,8 @@ class PlanResolutionSuite extends AnalysisTest {
         case "tab2" => table2
         case "charvarchar" => charVarcharTable
         case "defaultvalues" => defaultValues
+        case "defaultvalues2" => defaultValues2
+        case "tablewithcolumnnameddefault" => tableWithColumnNamedDefault
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -998,6 +1024,10 @@ class PlanResolutionSuite extends AnalysisTest {
       val sql6 = s"UPDATE $tblName SET i=DEFAULT, s=DEFAULT"
       val sql7 = s"UPDATE defaultvalues SET i=DEFAULT, s=DEFAULT"
       val sql8 = s"UPDATE $tblName SET name='Robert', age=32 WHERE p=DEFAULT"
+      val sql9 = s"UPDATE defaultvalues2 SET i=DEFAULT"
+      // Note: 'i' is the correct column name, but since the table has ACCEPT_ANY_SCHEMA capability,
+      // DEFAULT column resolution should skip this table.
+      val sql10 = s"UPDATE v2TableWithAcceptAnySchemaCapability SET i=DEFAULT"
 
       val parsed1 = parseAndResolve(sql1)
       val parsed2 = parseAndResolve(sql2)
@@ -1006,6 +1036,8 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed5 = parseAndResolve(sql5)
       val parsed6 = parseAndResolve(sql6)
       val parsed7 = parseAndResolve(sql7, true)
+      val parsed9 = parseAndResolve(sql9, true)
+      val parsed10 = parseAndResolve(sql10)
 
       parsed1 match {
         case UpdateTable(
@@ -1083,9 +1115,10 @@ class PlanResolutionSuite extends AnalysisTest {
             // Note that when resolving DEFAULT column references, the analyzer will insert literal
             // NULL values if the corresponding table does not define an explicit default value for
             // that column. This is intended.
-            Assignment(i: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
-            Assignment(s: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
-          None) =>
+            Assignment(i: AttributeReference, cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
+            Assignment(s: AttributeReference, cast2 @ Cast(Literal(null, _), StringType, _, true))),
+          None) if cast1.getTagValue(Cast.BY_TABLE_INSERTION).isDefined &&
+          cast2.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
           assert(i.name == "i")
           assert(s.name == "s")
 
@@ -1109,6 +1142,33 @@ class PlanResolutionSuite extends AnalysisTest {
         parseAndResolve(sql8)
       }.getMessage.contains(
         QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause().getMessage))
+
+      parsed9 match {
+        case UpdateTable(
+        _,
+        Seq(Assignment(i: AttributeReference, cast @ Cast(Literal(null, _), StringType, _, true))),
+        None) if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
+          assert(i.name == "i")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
+      }
+
+      parsed10 match {
+        case u: UpdateTable =>
+          assert(u.assignments.size == 1)
+          u.assignments(0).key match {
+            case i: AttributeReference =>
+              assert(i.name == "i")
+          }
+          u.assignments(0).value match {
+            case d: UnresolvedAttribute =>
+              assert(d.name == "DEFAULT")
+          }
+
+        case _ =>
+          fail("Expect UpdateTable, but got:\n" + parsed10.treeString)
+      }
+
     }
 
     val sql1 = "UPDATE non_existing SET id=1"
@@ -1133,11 +1193,38 @@ class PlanResolutionSuite extends AnalysisTest {
         u.assignments(1).value match {
           case s: StaticInvoke =>
             assert(s.arguments.length == 2)
-            assert(s.arguments.head.isInstanceOf[AnsiCast])
+            assert(s.arguments.head.isInstanceOf[Cast])
+            val cast = s.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
             assert(s.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect StaticInvoke, but got: " + other)
         }
       case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
+    }
+  }
+
+  test("SPARK-38869 INSERT INTO table with ACCEPT_ANY_SCHEMA capability") {
+    // Note: 'i' is the correct column name, but since the table has ACCEPT_ANY_SCHEMA capability,
+    // DEFAULT column resolution should skip this table.
+    val sql1 = s"INSERT INTO v2TableWithAcceptAnySchemaCapability VALUES(DEFAULT)"
+    val sql2 = s"INSERT INTO v2TableWithAcceptAnySchemaCapability SELECT DEFAULT"
+    val parsed1 = parseAndResolve(sql1)
+    val parsed2 = parseAndResolve(sql2)
+    parsed1 match {
+      case InsertIntoStatement(
+        _, _, _,
+        UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
+        _, _) =>
+
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+    }
+    parsed2 match {
+      case InsertIntoStatement(
+        _, _, _,
+        Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
+        _, _) =>
+
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
   }
 
@@ -1309,7 +1396,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("MERGE INTO TABLE") {
+  test("MERGE INTO TABLE - primary") {
     def checkResolution(
         target: LogicalPlan,
         source: LogicalPlan,
@@ -1510,6 +1597,192 @@ class PlanResolutionSuite extends AnalysisTest {
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
+
+        // DEFAULT columns (implicit):
+        // All cases of the $target table lack any explicitly-defined DEFAULT columns. Therefore any
+        // DEFAULT column references in the below MERGE INTO command should resolve to literal NULL.
+        // This test case covers that behavior.
+        val sql6 =
+          s"""
+             |MERGE INTO $target AS target
+             |USING $source AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
+             |WHEN MATCHED AND (target.s='update')
+             |THEN UPDATE SET target.s = DEFAULT, target.i = target.i
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+           """.stripMargin
+        parseAndResolve(sql6) match {
+          case m: MergeIntoTable =>
+            val source = m.sourceTable
+            val target = m.targetTable
+            val ti = target.output.find(_.name == "i").get.asInstanceOf[AttributeReference]
+            val si = source.output.find(_.name == "i").get.asInstanceOf[AttributeReference]
+            m.mergeCondition match {
+              case EqualTo(l: AttributeReference, r: AttributeReference) =>
+                assert(l.sameRef(ti) && r.sameRef(si))
+              case Literal(_, BooleanType) => // this is acceptable as a merge condition
+              case other => fail("unexpected merge condition " + other)
+            }
+            assert(m.matchedActions.length == 2)
+            val first = m.matchedActions(0)
+            first match {
+              case DeleteAction(Some(EqualTo(_: AttributeReference, StringLiteral("delete")))) =>
+              case other => fail("unexpected first matched action " + other)
+            }
+            val second = m.matchedActions(1)
+            second match {
+              case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
+                Seq(
+                  Assignment(_: AttributeReference,
+                    cast @ Cast(Literal(null, _), StringType, _, true)),
+                  Assignment(_: AttributeReference, _: AttributeReference)))
+                if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
+              case other => fail("unexpected second matched action " + other)
+            }
+            assert(m.notMatchedActions.length == 1)
+            val negative = m.notMatchedActions(0)
+            negative match {
+              case InsertAction(Some(EqualTo(_: AttributeReference, StringLiteral("insert"))),
+              Seq(Assignment(i: AttributeReference,
+                cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
+              Assignment(s: AttributeReference,
+                cast2 @ Cast(Literal(null, _), StringType, _, true))))
+                if cast1.getTagValue(Cast.BY_TABLE_INSERTION).isDefined &&
+                  cast2.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
+                assert(i.name == "i")
+                assert(s.name == "s")
+              case other => fail("unexpected not matched action " + other)
+            }
+
+          case other =>
+            fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+
+        // DEFAULT column reference in the merge condition:
+        // This MERGE INTO command includes an ON clause with a DEFAULT column reference. This is
+        // invalid and returns an error message.
+        val mergeWithDefaultReferenceInMergeCondition =
+          s"""
+             |MERGE INTO testcat.tab AS target
+             |USING testcat.tab1 AS source
+             |ON target.i = DEFAULT
+             |WHEN MATCHED AND (target.s = 31) THEN DELETE
+             |WHEN MATCHED AND (target.s = 31)
+             |  THEN UPDATE SET target.s = DEFAULT
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+             """.stripMargin
+        assert(intercept[AnalysisException] {
+          parseAndResolve(mergeWithDefaultReferenceInMergeCondition)
+        }.getMessage.contains(
+          QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition().getMessage))
+
+        // DEFAULT column reference within a complex expression:
+        // This MERGE INTO command includes a WHEN MATCHED clause with a DEFAULT column reference as
+        // of a complex expression (DEFAULT + 1). This is invalid and returns an error message.
+        val mergeWithDefaultReferenceAsPartOfComplexExpression =
+          s"""
+             |MERGE INTO testcat.tab AS target
+             |USING testcat.tab1 AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s = 31) THEN DELETE
+             |WHEN MATCHED AND (target.s = 31)
+             |  THEN UPDATE SET target.s = DEFAULT + 1
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+             """.stripMargin
+        assert(intercept[AnalysisException] {
+          parseAndResolve(mergeWithDefaultReferenceAsPartOfComplexExpression)
+        }.getMessage.contains(
+          QueryCompilationErrors
+            .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates().getMessage))
+
+        // Ambiguous DEFAULT column reference when the table itself contains a column named
+        // "DEFAULT".
+        val mergeIntoTableWithColumnNamedDefault =
+        s"""
+           |MERGE INTO testcat.tablewithcolumnnameddefault AS target
+           |USING testcat.tab1 AS source
+           |ON default = source.i
+           |WHEN MATCHED AND (target.s = 32) THEN DELETE
+           |WHEN MATCHED AND (target.s = 32)
+           |  THEN UPDATE SET target.s = DEFAULT
+           |WHEN NOT MATCHED AND (source.s='insert')
+           |  THEN INSERT (target.s) values (DEFAULT)
+             """.stripMargin
+        parseAndResolve(mergeIntoTableWithColumnNamedDefault, withDefault = true) match {
+          case m: MergeIntoTable =>
+            val target = m.targetTable
+            val d = target.output.find(_.name == "default").get.asInstanceOf[AttributeReference]
+            m.mergeCondition match {
+              case EqualTo(Cast(l: AttributeReference, _, _, _), _) =>
+                assert(l.sameRef(d))
+              case Literal(_, BooleanType) => // this is acceptable as a merge condition
+              case other =>
+                fail("unexpected merge condition " + other)
+            }
+            assert(m.matchedActions.length == 2)
+            assert(m.notMatchedActions.length == 1)
+
+          case other =>
+            fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+    }
+
+    // DEFAULT columns (explicit):
+    // The defaultvalues table includes explicitly-defined DEFAULT columns in its schema. Therefore,
+    // DEFAULT column references in the below MERGE INTO command should resolve to the corresponding
+    // values. This test case covers that behavior.
+    val mergeDefaultWithExplicitDefaultColumns =
+      s"""
+         |MERGE INTO defaultvalues AS target
+         |USING testcat.tab1 AS source
+         |ON target.i = source.i
+         |WHEN MATCHED AND (target.s = 31) THEN DELETE
+         |WHEN MATCHED AND (target.s = 31)
+         |  THEN UPDATE SET target.s = DEFAULT
+         |WHEN NOT MATCHED AND (source.s='insert')
+         |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+           """.stripMargin
+    parseAndResolve(mergeDefaultWithExplicitDefaultColumns, true) match {
+      case m: MergeIntoTable =>
+        val cond = m.mergeCondition
+        cond match {
+          case EqualTo(Cast(l: AttributeReference, IntegerType, _, _), r: AttributeReference) =>
+            assert(l.name == "i")
+            assert(r.name == "i")
+          case EqualTo(l: AttributeReference, r: AttributeReference) =>
+            // ANSI mode on.
+            assert(l.name == "i")
+            assert(r.name == "i")
+          case Literal(_, BooleanType) => // this is acceptable as a merge condition
+          case other => fail("unexpected merge condition " + other)
+        }
+        assert(m.matchedActions.length == 2)
+        val first = m.matchedActions(0)
+        first match {
+          case DeleteAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType)))) =>
+          case other => fail("unexpected first matched action " + other)
+        }
+        val second = m.matchedActions(1)
+        second match {
+          case UpdateAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType))),
+          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
+          case other => fail("unexpected second matched action " + other)
+        }
+        assert(m.notMatchedActions.length == 1)
+        val negative = m.notMatchedActions(0)
+        negative match {
+          case InsertAction(Some(EqualTo(_: AttributeReference, StringLiteral("insert"))),
+          Seq(Assignment(_: AttributeReference, Literal(true, BooleanType)),
+          Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
+          case other => fail("unexpected not matched action " + other)
+        }
+
+      case other =>
+        fail("Expect MergeIntoTable, but got:\n" + other.treeString)
     }
 
     // no aliases
@@ -1664,7 +1937,9 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s1.arguments.length == 2)
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
-            assert(s2.arguments.head.isInstanceOf[AnsiCast])
+            assert(s2.arguments.head.isInstanceOf[Cast])
+            val cast = s2.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
             assert(s2.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect UpdateAction, but got: " + other)
         }
@@ -1675,7 +1950,9 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s1.arguments.length == 2)
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
-            assert(s2.arguments.head.isInstanceOf[AnsiCast])
+            assert(s2.arguments.head.isInstanceOf[Cast])
+            val cast = s2.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
             assert(s2.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect UpdateAction, but got: " + other)
         }
@@ -1689,9 +1966,9 @@ class PlanResolutionSuite extends AnalysisTest {
          |MERGE INTO v2TableWithAcceptAnySchemaCapability AS target
          |USING v2Table AS source
          |ON target.i = source.i
-         |WHEN MATCHED AND (target.s='delete') THEN DELETE
+         |WHEN MATCHED AND (target.s='delete')THEN DELETE
          |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
-         |WHEN NOT MATCHED AND (target.s='insert')
+         |WHEN NOT MATCHED AND (target.s=DEFAULT)
          |  THEN INSERT (target.i, target.s) values (source.i, source.s)
        """.stripMargin
 
@@ -1707,7 +1984,7 @@ class PlanResolutionSuite extends AnalysisTest {
               updateAssigns)),
           Seq(
             InsertAction(
-              Some(EqualTo(il: UnresolvedAttribute, StringLiteral("insert"))),
+              Some(EqualTo(il: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
               insertAssigns))) =>
         assert(l.name == "target.i" && r.name == "source.i")
         assert(dl.name == "target.s")

@@ -35,14 +35,14 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -1289,10 +1289,6 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       throw QueryParsingErrors.invalidTimeTravelSpec(
         "timestamp expression cannot refer to any columns", ctx.timestamp)
     }
-    if (timestamp.exists(e => SubqueryExpression.hasSubquery(e))) {
-      throw QueryParsingErrors.invalidTimeTravelSpec(
-        "timestamp expression cannot contain subqueries", ctx.timestamp)
-    }
     RelationTimeTravel(plan, timestamp, version)
   }
 
@@ -1776,7 +1772,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           CurrentDate()
         case SqlBaseParser.CURRENT_TIMESTAMP =>
           CurrentTimestamp()
-        case SqlBaseParser.CURRENT_USER =>
+        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER =>
           CurrentUser()
       }
     } else {
@@ -1792,15 +1788,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
-    val cast = ctx.name.getType match {
+    ctx.name.getType match {
       case SqlBaseParser.CAST =>
-        Cast(expression(ctx.expression), dataType)
+        val cast = Cast(expression(ctx.expression), dataType)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast
 
       case SqlBaseParser.TRY_CAST =>
+        // `TryCast` can only be user-specified and we don't need to set the USER_SPECIFIED_CAST
+        // tag, which is only used by `Cast`
         TryCast(expression(ctx.expression), dataType)
     }
-    cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
-    cast
   }
 
   /**
@@ -1816,6 +1814,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitFirst(ctx: FirstContext): Expression = withOrigin(ctx) {
     val ignoreNullsExpr = ctx.IGNORE != null
     First(expression(ctx.expression), ignoreNullsExpr).toAggregateExpression()
+  }
+
+  /**
+   * Create an [[AnyValue]] expression.
+   */
+  override def visitAny_value(ctx: Any_valueContext): Expression = withOrigin(ctx) {
+    val ignoreNullsExpr = ctx.IGNORE != null
+    AnyValue(expression(ctx.expression), ignoreNullsExpr).toAggregateExpression()
   }
 
   /**
@@ -3288,7 +3294,15 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
           PROP_EXTERNAL, ctx, "please use CREATE EXTERNAL TABLE")
       case (PROP_EXTERNAL, _) => false
-      case _ => true
+      // It's safe to set whatever table comment, so we don't make it a reserved table property.
+      case (PROP_COMMENT, _) => true
+      case (k, _) =>
+        val isReserved = CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k)
+        if (!legacyOn && isReserved) {
+          throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+            k, ctx, "please remove it from the TBLPROPERTIES list.")
+        }
+        !isReserved
     }
   }
 

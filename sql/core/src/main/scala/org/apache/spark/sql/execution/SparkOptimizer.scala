@@ -52,8 +52,7 @@ class SparkOptimizer(
     Batch("PartitionPruning", Once,
       PartitionPruning) :+
     Batch("InjectRuntimeFilter", FixedPoint(1),
-      InjectRuntimeFilter,
-      RewritePredicateSubquery) :+
+      InjectRuntimeFilter) :+
     Batch("MergeScalarSubqueries", Once,
       MergeScalarSubqueries) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
@@ -88,7 +87,8 @@ class SparkOptimizer(
     GroupBasedRowLevelOperationScanPlanning.ruleName :+
     V2ScanRelationPushDown.ruleName :+
     V2ScanPartitioning.ruleName :+
-    V2Writes.ruleName
+    V2Writes.ruleName :+
+    ReplaceCTERefWithRepartition.ruleName
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before

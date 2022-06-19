@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
@@ -250,6 +250,8 @@ case class Except(
   final override val nodePatterns : Seq[TreePattern] = Seq(EXCEPT)
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
+
+  override def maxRows: Option[Long] = left.maxRows
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Except = copy(left = newLeft, right = newRight)
@@ -590,7 +592,7 @@ case class View(
   // See more details in `SessionCatalog.fromCatalogTable`.
   private def canRemoveProject(p: Project): Boolean = {
     p.output.length == p.child.output.length && p.projectList.zip(p.child.output).forall {
-      case (Alias(cast: CastBase, name), childAttr) =>
+      case (Alias(cast: Cast, name), childAttr) =>
         cast.child match {
           case a: AttributeReference =>
             a.dataType == cast.dataType && a.name == name && childAttr.semanticEquals(a)
@@ -758,6 +760,9 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = {
+    if (global) maxRows else child.maxRowsPerPartition
+  }
   override def outputOrdering: Seq[SortOrder] = order
   final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
@@ -1163,6 +1168,19 @@ case class Expand(
   override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
+  override def maxRows: Option[Long] = child.maxRows match {
+    case Some(m) =>
+      val n = BigInt(m) * projections.length
+      if (n.isValidLong) Some(n.toLong) else None
+    case _ => None
+  }
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition match {
+    case Some(m) =>
+      val n = BigInt(m) * projections.length
+      if (n.isValidLong) Some(n.toLong) else None
+    case _ => maxRows
+  }
+
   override def metadataOutput: Seq[Attribute] = Nil
 
   override def producedAttributes: AttributeSet = AttributeSet(output diff child.output)
@@ -1303,35 +1321,28 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
-object LimitAndOffset {
-  def unapply(p: GlobalLimitAndOffset): Option[(Expression, Expression, LogicalPlan)] = {
+object OffsetAndLimit {
+  def unapply(p: GlobalLimit): Option[(Int, Int, LogicalPlan)] = {
     p match {
-      case GlobalLimitAndOffset(le1, le2, LocalLimit(le3, child)) if le1.eval().asInstanceOf[Int]
-        + le2.eval().asInstanceOf[Int] == le3.eval().asInstanceOf[Int] =>
-        Some((le1, le2, child))
+      // Optimizer pushes local limit through offset, so we need to match the plan this way.
+      case GlobalLimit(IntegerLiteral(globalLimit),
+             Offset(IntegerLiteral(offset),
+               LocalLimit(IntegerLiteral(localLimit), child)))
+          if globalLimit + offset == localLimit =>
+        Some((offset, globalLimit, child))
       case _ => None
     }
   }
 }
 
-/**
- * A global (coordinated) limit with offset. This operator can skip at most `offsetExpr` number and
- * emit at most `limitExpr` number in total. For example, if we have LIMIT 10 OFFSET 5, we impose a
- * total limit of 10 + 5 = 15 rows and then discard the first 5, leaving 10 rows remaining.
- */
-case class GlobalLimitAndOffset(
-    limitExpr: Expression,
-    offsetExpr: Expression,
-    child: LogicalPlan) extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = {
-    limitExpr match {
-      case IntegerLiteral(limit) => Some(limit)
+object LimitAndOffset {
+  def unapply(p: Offset): Option[(Int, Int, LogicalPlan)] = {
+    p match {
+      case Offset(IntegerLiteral(offset), Limit(IntegerLiteral(limit), child)) =>
+        Some((limit, offset, child))
       case _ => None
     }
   }
-  override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimitAndOffset =
-    copy(child = newChild)
 }
 
 /**
@@ -1376,7 +1387,8 @@ case class SubqueryAlias(
 
   override def metadataOutput: Seq[Attribute] = {
     val qualifierList = identifier.qualifier :+ alias
-    child.metadataOutput.map(_.withQualifier(qualifierList))
+    val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.supportsQualifiedStar)
+    nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
   }
 
   override def maxRows: Option[Long] = child.maxRows
@@ -1438,11 +1450,15 @@ case class Sample(
       s"Sampling fraction ($fraction) must be on interval [0, 1] without replacement")
   }
 
+  // when withReplacement is true, PoissonSampler is applied in SampleExec,
+  // which may output more rows than child.
   override def maxRows: Option[Long] = {
-    // when withReplacement is true, PoissonSampler is applied in SampleExec,
-    // which may output more rows than child.maxRows.
     if (withReplacement) None else child.maxRows
   }
+  override def maxRowsPerPartition: Option[Long] = {
+    if (withReplacement) None else child.maxRowsPerPartition
+  }
+
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Sample =
@@ -1493,6 +1509,35 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
     copy(child = newChild)
 }
 
+trait HasPartitionExpressions extends SQLConfHelper {
+
+  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+
+  def partitionExpressions: Seq[Expression]
+
+  def optNumPartitions: Option[Int]
+
+  protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
+    RoundRobinPartitioning(numPartitions)
+  } else {
+    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+        s"""
+           |SortOrder: $sortOrder
+           |NonSortOrder: $nonSortOrder
+       """.stripMargin)
+    if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+    } else {
+      HashPartitioning(partitionExpressions, numPartitions)
+    }
+  }
+}
+
 /**
  * This method repartitions data using [[Expression]]s into `optNumPartitions`, and receives
  * information about the number of partitions during execution. Used when a specific ordering or
@@ -1503,31 +1548,13 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int]) extends RepartitionOperation {
-
-  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
-  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+    optNumPartitions: Option[Int]) extends RepartitionOperation with HasPartitionExpressions {
 
   override val partitioning: Partitioning = {
-    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
-
-    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
-        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
-        "means `HashPartitioning`. In this case we have:" +
-      s"""
-         |SortOrder: $sortOrder
-         |NonSortOrder: $nonSortOrder
-       """.stripMargin)
-
     if (numPartitions == 1) {
       SinglePartition
-    } else if (sortOrder.nonEmpty) {
-      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
-    } else if (nonSortOrder.nonEmpty) {
-      HashPartitioning(nonSortOrder, numPartitions)
     } else {
-      RoundRobinPartitioning(numPartitions)
+      super.partitioning
     }
   }
 
@@ -1558,19 +1585,12 @@ object RepartitionByExpression {
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    initialNumPartitionOpt: Option[Int] = None) extends UnaryNode {
+    optNumPartitions: Option[Int] = None) extends UnaryNode with HasPartitionExpressions {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
 
-  def partitioning: Partitioning = {
-    val initialNumPartitions = initialNumPartitionOpt.getOrElse(conf.numShufflePartitions)
-    if (partitionExpressions.isEmpty) {
-      RoundRobinPartitioning(initialNumPartitions)
-    } else {
-      HashPartitioning(partitionExpressions, initialNumPartitions)
-    }
-  }
+  override val partitioning: Partitioning = super.partitioning
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
     copy(child = newChild)
@@ -1628,6 +1648,8 @@ case class CollectMetrics(
     name.nonEmpty && metrics.nonEmpty && metrics.forall(_.resolved) && childrenResolved
   }
 
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =

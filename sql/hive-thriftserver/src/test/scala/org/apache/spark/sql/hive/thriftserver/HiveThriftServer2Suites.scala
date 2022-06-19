@@ -35,9 +35,10 @@ import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType, RowSet}
+import org.apache.hive.service.cli.{CLIService, FetchOrientation, FetchType, GetInfoType, RowSetFactory}
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.hive.service.rpc.thrift.TCLIService.Client
+import org.apache.hive.service.rpc.thrift.TRowSet
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
@@ -123,7 +124,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
             1000,
             FetchType.QUERY_OUTPUT)
 
-          rows_next.numRows()
+          RowSetFactory.create(rows_next, sessionHandle.getProtocolVersion).numRows()
         }
 
         // Fetch result second time from first row
@@ -135,7 +136,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
             1000,
             FetchType.QUERY_OUTPUT)
 
-          rows_first.numRows()
+          RowSetFactory.create(rows_first, sessionHandle.getProtocolVersion).numRows()
         }
       }
     }
@@ -749,10 +750,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
   }
 
   test("ThriftCLIService FetchResults FETCH_FIRST, FETCH_NEXT, FETCH_PRIOR") {
-    def checkResult(rows: RowSet, start: Long, end: Long): Unit = {
-      assert(rows.getStartOffset() == start)
-      assert(rows.numRows() == end - start)
-      rows.iterator.asScala.zip((start until end).iterator).foreach { case (row, v) =>
+    def checkResult(rows: TRowSet, start: Long, end: Long): Unit = {
+      val rowSet = RowSetFactory.create(rows, CLIService.SERVER_VERSION)
+      assert(rowSet.getStartOffset == start)
+      assert(rowSet.numRows() == end - start)
+      rowSet.iterator.asScala.zip((start until end).iterator).foreach { case (row, v) =>
         assert(row(0).asInstanceOf[Long] === v)
       }
     }
@@ -766,7 +768,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
         sessionHandle,
         "SELECT * FROM range(10)",
         confOverlay) // 10 rows result with sequence 0, 1, 2, ..., 9
-      var rows: RowSet = null
+      var rows: TRowSet = null
 
       // Fetch 5 rows with FETCH_NEXT
       rows = client.fetchResults(
@@ -868,7 +870,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
             FetchOrientation.FETCH_NEXT,
             1000,
             FetchType.QUERY_OUTPUT)
-          rows_next.numRows()
+          RowSetFactory.create(rows_next, sessionHandle.getProtocolVersion).numRows()
         }
       }
     }
@@ -1226,7 +1228,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
           |appender.console.name = console
           |appender.console.target = SYSTEM_ERR
           |appender.console.layout.type = PatternLayout
-          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
         """.stripMargin,
         new File(s"$tempLog4jConf/log4j2.properties"),
         StandardCharsets.UTF_8)
