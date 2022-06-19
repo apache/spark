@@ -166,13 +166,13 @@ class PruneFiltersSuite extends PlanTest {
     val x = testRelation.where(!$"a".attr.in(1, 3, 5)).subquery("x")
 
     comparePlans(
-      Optimize.execute(x.where($"a".attr === 7 && Rand(10) > 0.1).analyze),
-      testRelation.where(!$"a".attr.in(1, 3, 5) && $"a".attr === 7).where(Rand(10) > 0.1).analyze)
+      Optimize.execute(x.where($"b".attr === 7 && Rand(10) > 0.1).analyze),
+      testRelation.where(!$"a".attr.in(1, 3, 5) && $"b".attr === 7).where(Rand(10) > 0.1).analyze)
 
     comparePlans(
       Optimize.execute(
-        x.where($"a".attr === 7 && Rand(10) > 0.1 && $"b".attr === 1 && Rand(10) < 1.1).analyze),
-      testRelation.where(!$"a".attr.in(1, 3, 5) && $"a".attr === 7 && $"b".attr === 1)
+        x.where($"b".attr === 7 && Rand(10) > 0.1 && $"c".attr === 1 && Rand(10) < 1.1).analyze),
+      testRelation.where(!$"a".attr.in(1, 3, 5) && $"b".attr === 7 && $"c".attr === 1)
         .where(Rand(10) > 0.1 && Rand(10) < 1.1).analyze)
   }
 
