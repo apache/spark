@@ -218,7 +218,7 @@ class LimitPushdownSuite extends PlanTest {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       val originalQuery = x.join(y, joinType).limit(5)
       val optimized = Optimize.execute(originalQuery.analyze)
-      val correctAnswer = Limit(5, LocalLimit(5, x).join(LocalLimit(1, y), joinType)).analyze
+      val correctAnswer = Limit(5, LocalLimit(5, x).join(y.limit(1), joinType)).analyze
       comparePlans(optimized, correctAnswer)
     }
 
@@ -275,5 +275,24 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(
       Optimize.execute(testRelation.offset(2).limit(1).analyze),
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
+  }
+
+  test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      comparePlans(
+        Optimize.execute(x.join(y, joinType).analyze),
+        x.join(y.limit(1), joinType).analyze)
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      comparePlans(
+        Optimize.execute(x.join(y.limit(2), joinType).analyze),
+        x.join(y.limit(1), joinType).analyze)
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.join(y.limit(1), joinType).analyze
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
   }
 }
