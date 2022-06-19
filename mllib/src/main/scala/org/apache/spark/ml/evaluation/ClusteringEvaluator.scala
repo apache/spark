@@ -18,13 +18,11 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
 
 /**
  * Evaluator for clustering results.
@@ -130,18 +128,13 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
       SchemaUtils.checkNumericType(schema, $(weightCol))
     }
 
-    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
-
-    val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
-    val df = if (!isDefined(weightCol) || $(weightCol).isEmpty) {
-      dataset.select(col($(predictionCol)),
-        vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata),
-        lit(1.0).as(weightColName))
-    } else {
-      dataset.select(col($(predictionCol)),
-        vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata),
-        checkNonNegativeWeight(col(weightColName).cast(DoubleType)))
-    }
+    val df = dataset.select(
+      col($(predictionCol)),
+      DatasetUtils.columnToVector(dataset, $(featuresCol))
+        .as($(featuresCol), dataset.schema($(featuresCol)).metadata),
+      DatasetUtils.checkNonNegativeWeights(get(weightCol))
+        .as(if (!isDefined(weightCol)) "weightCol" else $(weightCol))
+    )
 
     val metrics = new ClusteringMetrics(df)
     metrics.setDistanceMeasure($(distanceMeasure))
