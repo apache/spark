@@ -1631,8 +1631,6 @@ abstract class DynamicPartitionPruningSuiteBase
         |       JOIN empty_result
         |         ON t2.store_id = empty_result.store_id
       """.stripMargin)
-
-    checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
     checkAnswer(df, Nil)
   }
 }
