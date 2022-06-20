@@ -89,41 +89,6 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  test("DescribeTable extended using v2 catalog") {
-    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
-      " USING foo" +
-      " PARTITIONED BY (id)" +
-      " TBLPROPERTIES ('bar'='baz', 'password' = 'password')" +
-      " COMMENT 'this is a test table'" +
-      " LOCATION 'file:/tmp/testcat/table_name'")
-    val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
-    assert(descriptionDf.schema.map(field => (field.name, field.dataType))
-      === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
-    assert(descriptionDf.collect()
-      .map(_.toSeq)
-      .map(_.toArray.map(_.toString.trim)) === Array(
-      Array("id", "bigint", ""),
-      Array("data", "string", ""),
-      Array("", "", ""),
-      Array("# Partitioning", "", ""),
-      Array("Part 0", "id", ""),
-      Array("", "", ""),
-      Array("# Metadata Columns", "", ""),
-      Array("index", "int", "Metadata column used to conflict with a data column"),
-      Array("_partition", "string", "Partition key used to store the row"),
-      Array("", "", ""),
-      Array("# Detailed Table Information", "", ""),
-      Array("Name", "testcat.table_name", ""),
-      Array("Comment", "this is a test table", ""),
-      Array("Location", "file:/tmp/testcat/table_name", ""),
-      Array("Provider", "foo", ""),
-      Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
-      Array("Table Properties", "[bar=baz,password=*********(redacted)]", "")))
-  }
-
   test("Describe column for v2 catalog") {
     val t = "testcat.tbl"
     withTable(t) {
