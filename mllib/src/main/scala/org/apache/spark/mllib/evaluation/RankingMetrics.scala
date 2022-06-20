@@ -38,17 +38,9 @@ import org.apache.spark.rdd.RDD
  *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
  */
 @Since("1.2.0")
-class RankingMetrics[T: ClassTag] @Since("3.4.0") (
-    predictionAndLabels: RDD[(Array[T], Array[T], Array[Double])])
-    extends Logging
-    with Serializable {
+class RankingMetrics[T: ClassTag] @Since("1.2.0") (
+    predictionAndLabels: RDD[_ <: Product]) extends Logging with Serializable {
 
-  @Since("1.2.0")
-  def this(predictionAndLabelsWithoutRelevance: => RDD[(Array[T], Array[T])]) = {
-    this(predictionAndLabelsWithoutRelevance.map {
-      case (pred, lab) => (pred, lab, Array.empty[Double])
-    })
-  }
 
   /**
    * Compute the average precision of all the queries, truncated at ranking position k.
@@ -70,8 +62,11 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
   @Since("1.2.0")
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab, _) =>
-      countRelevantItemRatio(pred, lab, k, k)
+    predictionAndLabels.map {
+      case (pred: Array[T], lab: Array[T]) =>
+        countRelevantItemRatio(pred, lab, k, k)
+      case (pred: Array[T], lab: Array[T], _) =>
+        countRelevantItemRatio(pred, lab, k, k)
     }.mean()
   }
 
@@ -82,10 +77,15 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
    */
   @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
-    predictionAndLabels.map { case (pred, lab, _) =>
-      val labSet = lab.toSet
-      val k = math.max(pred.length, labSet.size)
-      averagePrecision(pred, labSet, k)
+    predictionAndLabels.map {
+      case (pred: Array[T], lab: Array[T]) =>
+        val labSet = lab.toSet
+        val k = math.max(pred.length, labSet.size)
+        averagePrecision(pred, labSet, k)
+      case (pred: Array[T], lab: Array[T], _) =>
+        val labSet = lab.toSet
+        val k = math.max(pred.length, labSet.size)
+        averagePrecision(pred, labSet, k)
     }.mean()
   }
 
@@ -99,8 +99,11 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
   @Since("3.0.0")
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab, _) =>
-      averagePrecision(pred, lab.toSet, k)
+    predictionAndLabels.map {
+      case (pred: Array[T], lab: Array[T]) =>
+        averagePrecision(pred, lab.toSet, k)
+      case (pred: Array[T], lab: Array[T], _) =>
+        averagePrecision(pred, lab.toSet, k)
     }.mean()
   }
 
@@ -154,24 +157,16 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
   @Since("1.2.0")
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab, rel) =>
-      val useBinary = rel.isEmpty
-      val labSet = lab.toSet
-      val relMap = lab.zip(rel).toMap
-      if (useBinary && lab.size != rel.size) {
-        logWarning(
-          "# of ground truth set and # of relevance value set should be equal, " +
-            "check input data")
-      }
-
-      if (labSet.nonEmpty) {
-        val labSetSize = labSet.size
-        val n = math.min(math.max(pred.length, labSetSize), k)
-        var maxDcg = 0.0
-        var dcg = 0.0
-        var i = 0
-        while (i < n) {
-          if (useBinary) {
+    predictionAndLabels.map {
+      case (pred: Array[T], lab: Array[T]) =>
+        val labSet = lab.toSet
+        if (labSet.nonEmpty) {
+          val labSetSize = labSet.size
+          val n = math.min(math.max(pred.length, labSetSize), k)
+          var maxDcg = 0.0
+          var dcg = 0.0
+          var i = 0
+          while (i < n) {
             // Base of the log doesn't matter for calculating NDCG,
             // if the relevance value is binary.
             val gain = 1.0 / math.log(i + 2)
@@ -181,26 +176,46 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
             if (i < labSetSize) {
               maxDcg += gain
             }
-          } else {
+            i += 1
+          }
+          dcg / maxDcg
+        } else {
+          logWarning("Empty ground truth set, check input data")
+          0.0
+        }
+      case (pred: Array[T], lab: Array[T], rel: Array[Double]) =>
+        val labSet = lab.toSet
+        val relMap = lab.zip(rel).toMap
+        if (lab.size != rel.size) {
+          logWarning(
+            "# of ground truth set and # of relevance value set should be equal, " +
+              "check input data")
+        }
+        if (labSet.nonEmpty) {
+          val labSetSize = labSet.size
+          val n = math.min(math.max(pred.length, labSetSize), k)
+          var maxDcg = 0.0
+          var dcg = 0.0
+          var i = 0
+          while (i < n) {
             if (i < pred.length) {
               dcg += (math.pow(2.0, relMap.getOrElse(pred(i), 0.0)) - 1) / math.log(i + 2)
             }
             if (i < labSetSize) {
               maxDcg += (math.pow(2.0, relMap.getOrElse(lab(i), 0.0)) - 1) / math.log(i + 2)
             }
+            i += 1
           }
-          i += 1
-        }
-        if (maxDcg == 0.0) {
-          logWarning("Maximum of relevance of ground truth set is zero, check input data")
-          0.0
+          if (maxDcg == 0.0) {
+            logWarning("Maximum of relevance of ground truth set is zero, check input data")
+            0.0
+          } else {
+            dcg / maxDcg
+          }
         } else {
-          dcg / maxDcg
+          logWarning("Empty ground truth set, check input data")
+          0.0
         }
-      } else {
-        logWarning("Empty ground truth set, check input data")
-        0.0
-      }
     }.mean()
   }
 
@@ -224,8 +239,11 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
   @Since("3.0.0")
   def recallAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab, _) =>
-      countRelevantItemRatio(pred, lab, k, lab.toSet.size)
+    predictionAndLabels.map {
+      case (pred: Array[T], lab: Array[T]) =>
+        countRelevantItemRatio(pred, lab, k, lab.toSet.size)
+      case (pred: Array[T], lab: Array[T], _) =>
+        countRelevantItemRatio(pred, lab, k, lab.toSet.size)
     }.mean()
   }
 
