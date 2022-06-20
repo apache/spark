@@ -452,7 +452,13 @@ private[yarn] class YarnAllocator(
     // resources on those nodes for earlier allocateResource calls, so notifying driver
     // to put those executors in decommissioning state
     allocateResponse.getUpdatedNodes.asScala.filter (node =>
-      isDecommissioningNode(node) &&
+      // SPARK-39491: In hadoop-2.7 there is no support for node state DECOMMISSIONING
+      // In Hadoop-2.8, hadoop3.1 and later version of spark there is a support
+      // to node state DECOMMISSIONING.
+      // Therefore using string comparison instead for compilation.
+      // Should revert to `node.getNodeState == NodeState.DECOMMISSIONING` when
+      // Hadoop 2.7 is no longer supported
+      node.getNodeState.toString.equals("DECOMMISSIONING") &&
         !decommissioningNodesCache.containsKey(getHostAddress(node)))
       .foreach { node =>
         val host = getHostAddress(node)
@@ -462,21 +468,6 @@ private[yarn] class YarnAllocator(
   }
 
   private def getHostAddress(nodeReport: NodeReport): String = nodeReport.getNodeId.getHost
-
-  /**
-   * Checks if node is in DECOMMISSIONING STATE
-   *
-   * Visible for testing.
-   */
-  def isDecommissioningNode(node: NodeReport): Boolean = {
-    // In hadoop-2.7 there is no support for node state DECOMMISSIONING
-    // In Hadoop-2.8, hadoop3.1 and later version of spark there is a support
-    // to node state DECOMMISSIONING.
-    // Inorder to build the spark using hadoop2 and hadoop3, not
-    // using YarnNodeState for the node state DECOMMISSIONING here and
-    // instead comparing Node states on spark end
-    NodeState.getYarnNodeState(node.getNodeState) == NodeState.DECOMMISSIONING
-  }
 
   /**
    * Update the set of container requests that we will sync with the RM based on the number of
@@ -1019,36 +1010,4 @@ private object YarnAllocator {
     ContainerExitStatus.ABORTED,
     ContainerExitStatus.DISKS_FAILED
   )
-}
-
-/**
- * State of the node.
- * Add the node state depending upon the cluster manager for Yarn
- */
-private[spark] object NodeState extends Enumeration {
-  val RUNNING, DECOMMISSIONED, DECOMMISSIONING, LOST, OTHER = Value
-  type NodeState = Value
-
-  // Helper method to get NodeState of the Yarn.
-  def getYarnNodeState(state: YarnNodeState): NodeState.Value = {
-    // In hadoop-2.7 there is no support for node state DECOMMISSIONING
-    // In Hadoop-2.8, hadoop3.1 and later version of spark there is a support
-    // to node state DECOMMISSIONING.
-    // Inorder to build the spark using hadoop2 and hadoop3,
-    // using string comparison for the YARN node state DECOMMISSIONING here and
-    // for other states we are matching the YarnNodeState and assigning
-    // the node state at spark end
-    if (state.toString.equals(NodeState.DECOMMISSIONING.toString)) {
-      NodeState.DECOMMISSIONING
-    } else {
-      state match {
-        case YarnNodeState.RUNNING => NodeState.RUNNING
-        case YarnNodeState.DECOMMISSIONED => NodeState.DECOMMISSIONED
-        case YarnNodeState.LOST => NodeState.LOST
-        case YarnNodeState.UNHEALTHY => NodeState.LOST
-        case _ => NodeState.OTHER
-      }
-    }
-  }
-
 }

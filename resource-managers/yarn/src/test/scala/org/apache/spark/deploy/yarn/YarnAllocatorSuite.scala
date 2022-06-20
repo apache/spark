@@ -48,7 +48,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{ManualClock, VersionUtils}
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
@@ -142,7 +142,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       Map(),
       new MockResolver(),
       clock)
-    (spy(allocator), sparkConfClone)
+    (allocator, sparkConfClone)
   }
 
   def createContainer(
@@ -746,6 +746,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("Test YARN container decommissioning") {
+    assume(VersionUtils.isHadoop3)
     val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
     val rmClientSpy = spy(rmClient)
     val allocateResponse = mock(classOf[AllocateResponse])
@@ -797,16 +798,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     when(nodeReport.getNodeId).thenReturn(nodeId)
     when(nodeId.getHost).thenReturn("host1")
     when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)
-
-    val isDecommissioningAnswer: Answer[Boolean] = new Answer[Boolean]() {
-      @throws[Throwable]
-      override def answer(invocationOnMock: InvocationOnMock): Boolean = {
-        true
-      }
-    }
-
-    doAnswer(isDecommissioningAnswer).when(handler)
-      .isDecommissioningNode(org.mockito.ArgumentMatchers.any())
+    when(nodeReport.getNodeState).thenReturn(NodeState.valueOf("DECOMMISSIONING"))
 
     handler.allocateResources()
     verify(rpcEndPoint, times(1)).
