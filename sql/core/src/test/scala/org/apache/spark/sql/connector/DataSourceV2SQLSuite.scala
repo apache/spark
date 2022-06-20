@@ -89,30 +89,6 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  test("DescribeTable using v2 catalog") {
-    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
-      " USING foo" +
-      " PARTITIONED BY (id)")
-    val descriptionDf = spark.sql("DESCRIBE TABLE testcat.table_name")
-    assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-      Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
-    val description = descriptionDf.collect()
-    assert(description === Seq(
-      Row("id", "bigint", ""),
-      Row("data", "string", ""),
-      Row("", "", ""),
-      Row("# Partitioning", "", ""),
-      Row("Part 0", "id", "")))
-
-    val e = intercept[AnalysisException] {
-      sql("DESCRIBE TABLE testcat.table_name PARTITION (id = 1)")
-    }
-    assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
-  }
-
   test("DescribeTable with v2 catalog when table does not exist.") {
     intercept[AnalysisException] {
       spark.sql("DESCRIBE TABLE testcat.table_name")
