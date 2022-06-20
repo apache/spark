@@ -1989,6 +1989,11 @@ private[spark] object Utils extends Logging {
   val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
 
   /**
+   * Whether the underlying JVM prefer IPv6 addresses.
+   */
+  val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
+
+  /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
    */
   val windowsDrive = "([a-zA-Z])".r

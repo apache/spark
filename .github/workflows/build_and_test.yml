@@ -132,11 +132,15 @@ jobs:
     - name: Check all modules
       id: set-outputs
       run: |
-        build=`./dev/is-changed.py -m avro,build,catalyst,core,docker-integration-tests,examples,graphx,hadoop-cloud,hive,hive-thriftserver,kubernetes,kvstore,launcher,mesos,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,spark-ganglia-lgpl,sparkr,sql,sql-kafka-0-10,streaming,streaming-kafka-0-10,streaming-kinesis-asl,tags,unsafe,yarn`
-        pyspark=`./dev/is-changed.py -m avro,build,catalyst,core,graphx,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,sql,tags,unsafe`
-        sparkr=`./dev/is-changed.py -m avro,build,catalyst,core,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,repl,sketch,sparkr,sql,tags,unsafe`
-        tpcds=`./dev/is-changed.py -m build,catalyst,core,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
-        docker=`./dev/is-changed.py -m build,catalyst,core,docker-integration-tests,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
+        # is-changed.py is missing in branch-3.2, and it might run in scheduled build, see also SPARK-39517
+        build=true; pyspark=true; sparkr=true; tpcds=true; docker=true;
+        if [ -f "./dev/is-changed.py" ]; then
+          build=`./dev/is-changed.py -m avro,build,catalyst,core,docker-integration-tests,examples,graphx,hadoop-cloud,hive,hive-thriftserver,kubernetes,kvstore,launcher,mesos,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,spark-ganglia-lgpl,sparkr,sql,sql-kafka-0-10,streaming,streaming-kafka-0-10,streaming-kinesis-asl,tags,unsafe,yarn`
+          pyspark=`./dev/is-changed.py -m avro,build,catalyst,core,graphx,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,sql,tags,unsafe`
+          sparkr=`./dev/is-changed.py -m avro,build,catalyst,core,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,repl,sketch,sparkr,sql,tags,unsafe`
+          tpcds=`./dev/is-changed.py -m build,catalyst,core,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
+          docker=`./dev/is-changed.py -m build,catalyst,core,docker-integration-tests,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
+        fi
         echo "{\"build\": \"$build\", \"pyspark\": \"$pyspark\", \"sparkr\": \"$sparkr\", \"tpcds\": \"$tpcds\", \"docker\": \"$docker\"}" > required.json
         cat required.json
         echo "::set-output name=required::$(cat required.json)"

@@ -401,7 +401,7 @@ class QueryCompilationErrorsSuite
     )
   }
 
-  test("MISSING_COLUMN: SELECT distinct does not work correctly " +
+  test("UNRESOLVED_COLUMN: SELECT distinct does not work correctly " +
     "if order by missing attribute") {
     checkAnswer(
       sql(
@@ -424,9 +424,9 @@ class QueryCompilationErrorsSuite
             |order by struct.a, struct.b
             |""".stripMargin)
       },
-      errorClass = "MISSING_COLUMN",
-      msg = """Column 'struct.a' does not exist. """ +
-        """Did you mean one of the following\? \[a, b\]; line 6 pos 9;
+      errorClass = "UNRESOLVED_COLUMN",
+      msg = """A column or function parameter with name `struct`.`a` cannot be resolved. """ +
+        """Did you mean one of the following\? \[`a`, `b`\]; line 6 pos 9;
            |'Sort \['struct.a ASC NULLS FIRST, 'struct.b ASC NULLS FIRST\], true
            |\+\- Distinct
            |   \+\- Project \[struct#\w+\.a AS a#\w+, struct#\w+\.b AS b#\w+\]
@@ -440,16 +440,17 @@ class QueryCompilationErrorsSuite
       matchMsg = true)
   }
 
-  test("MISSING_COLUMN - SPARK-21335: support un-aliased subquery") {
+  test("UNRESOLVED_COLUMN - SPARK-21335: support un-aliased subquery") {
     withTempView("v") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
       checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
 
       checkErrorClass(
         exception = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)")),
-        errorClass = "MISSING_COLUMN",
-        msg = """Column 'v.i' does not exist. Did you mean one of the following\? """ +
-          """\[__auto_generated_subquery_name.i\]; line 1 pos 7;
+        errorClass = "UNRESOLVED_COLUMN",
+        msg = "A column or function parameter with name `v`.`i` cannot be resolved. " +
+          """Did you mean one of the following\? """ +
+          """\[`__auto_generated_subquery_name`.`i`\]; line 1 pos 7;
             |'Project \['v.i\]
             |\+\- SubqueryAlias __auto_generated_subquery_name
             |   \+\- Project \[i#\w+\]

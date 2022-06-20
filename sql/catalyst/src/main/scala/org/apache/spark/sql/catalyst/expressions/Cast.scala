@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -110,7 +110,7 @@ object Cast {
     case (StringType, _: CalendarIntervalType) => true
     case (StringType, _: AnsiIntervalType) => true
 
-    case (_: AnsiIntervalType, _: IntegralType) => true
+    case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
@@ -194,8 +194,7 @@ object Cast {
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
-    case (_: DayTimeIntervalType, _: IntegralType) => true
-    case (_: YearMonthIntervalType, _: IntegralType) => true
+    case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -967,10 +966,17 @@ case class Cast(
    * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
   private[this] def changePrecision(value: Decimal, decimalType: DecimalType): Decimal = {
+    changePrecision(value, decimalType, !ansiEnabled)
+  }
+
+  private[this] def changePrecision(
+      value: Decimal,
+      decimalType: DecimalType,
+      nullOnOverflow: Boolean): Decimal = {
     if (value.changePrecision(decimalType.precision, decimalType.scale)) {
       value
     } else {
-      if (!ansiEnabled) {
+      if (nullOnOverflow) {
         null
       } else {
         throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
@@ -1015,6 +1021,18 @@ case class Cast(
       } catch {
         case _: NumberFormatException => null
       }
+    case x: DayTimeIntervalType =>
+      buildCast[Long](_, dt =>
+        changePrecision(
+          value = dayTimeIntervalToDecimal(dt, x.endField),
+          decimalType = target,
+          nullOnOverflow = false))
+    case x: YearMonthIntervalType =>
+      buildCast[Int](_, ym =>
+        changePrecision(
+          value = Decimal(yearMonthIntervalToInt(ym, x.startField, x.endField)),
+          decimalType = target,
+          nullOnOverflow = false))
   }
 
   // DoubleConverter
@@ -1515,14 +1533,15 @@ case class Cast(
       evPrim: ExprValue,
       evNull: ExprValue,
       canNullSafeCast: Boolean,
-      ctx: CodegenContext): Block = {
+      ctx: CodegenContext,
+      nullOnOverflow: Boolean): Block = {
     if (canNullSafeCast) {
       code"""
          |$d.changePrecision(${decimalType.precision}, ${decimalType.scale});
          |$evPrim = $d;
        """.stripMargin
     } else {
-      val overflowCode = if (!ansiEnabled) {
+      val overflowCode = if (nullOnOverflow) {
         s"$evNull = true;"
       } else {
         s"""
@@ -1538,6 +1557,16 @@ case class Cast(
          |}
        """.stripMargin
     }
+  }
+
+  private[this] def changePrecision(
+      d: ExprValue,
+      decimalType: DecimalType,
+      evPrim: ExprValue,
+      evNull: ExprValue,
+      canNullSafeCast: Boolean,
+      ctx: CodegenContext): Block = {
+    changePrecision(d, decimalType, evPrim, evNull, canNullSafeCast, ctx, !ansiEnabled)
   }
 
   private[this] def castToDecimalCode(
@@ -1604,6 +1633,22 @@ case class Cast(
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }
+          """
+      case x: DayTimeIntervalType =>
+        (c, evPrim, evNull) =>
+          val u = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+          code"""
+            Decimal $tmp = $u.dayTimeIntervalToDecimal($c, (byte)${x.endField});
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx, false)}
+          """
+      case x: YearMonthIntervalType =>
+        (c, evPrim, evNull) =>
+          val u = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+          val tmpYm = ctx.freshVariable("tmpYm", classOf[Int])
+          code"""
+            int $tmpYm = $u.yearMonthIntervalToInt($c, (byte)${x.startField}, (byte)${x.endField});
+            Decimal $tmp = Decimal.apply($tmpYm);
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx, false)}
           """
     }
   }
