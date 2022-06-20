@@ -117,14 +117,13 @@ class DecisionTreeClassifier @Since("1.4.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses = getNumClasses(dataset)
+    val numClasses = getNumClasses(dataset, $(labelCol))
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
         ".train() called with non-matching numClasses and thresholds.length." +
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
-    validateNumClasses(numClasses)
 
     val instances = dataset.select(
       checkClassificationLabels($(labelCol), Some(numClasses)),

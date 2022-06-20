@@ -133,7 +133,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
       val consumer = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
         topicPartition, kafkaParams, taskContext, useCache)
       try {
-        val rcvd = (0 until data.length).map { offset =>
+        val rcvd = data.indices.map { offset =>
           val bytes = consumer.get(offset, 10000).value()
           new String(bytes)
         }

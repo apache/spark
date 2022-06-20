@@ -2673,8 +2673,8 @@ class DataFrameSuite extends QueryTest
     val err = intercept[AnalysisException] {
       df.groupBy($"d", $"b").as[GroupByKey, Row]
     }
-    assert(err.getErrorClass == "MISSING_COLUMN")
-    assert(err.messageParameters.head == "d")
+    assert(err.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(err.messageParameters.head == "`d`")
   }
 
   test("emptyDataFrame should be foldable") {

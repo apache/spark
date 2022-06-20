@@ -203,12 +203,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13.2 - silencer 1.7.7 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.9 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.7"
+        val silencerVersion = "1.7.9"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -1165,6 +1165,13 @@ object TestSettings {
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
     (Test / javaOptions) += "-Dio.netty.tryReflectionSetAccessible=true",
+    (Test / javaOptions) ++= {
+      if ("true".equals(System.getProperty("java.net.preferIPv6Addresses"))) {
+        Seq("-Djava.net.preferIPv6Addresses=true")
+      } else {
+        Seq.empty
+      }
+    },
     (Test / javaOptions) ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",

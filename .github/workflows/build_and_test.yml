@@ -37,6 +37,8 @@ on:
     - cron: '0 13 * * *'
     # Java 17
     - cron: '0 16 * * *'
+    # branch-3.3
+    - cron: '0 19 * * *'
   workflow_call:
     inputs:
       ansi_enabled:
@@ -99,6 +101,12 @@ jobs:
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
           echo '::set-output name=hadoop::hadoop3'
+        elif [ "${{ github.event.schedule }}" = "0 19 * * *" ]; then
+          echo '::set-output name=java::8'
+          echo '::set-output name=branch::branch-3.3'
+          echo '::set-output name=type::scheduled'
+          echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
+          echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
           echo '::set-output name=branch::master'  # NOTE: UPDATE THIS WHEN CUTTING BRANCH
@@ -132,11 +140,15 @@ jobs:
     - name: Check all modules
       id: set-outputs
       run: |
-        build=`./dev/is-changed.py -m avro,build,catalyst,core,docker-integration-tests,examples,graphx,hadoop-cloud,hive,hive-thriftserver,kubernetes,kvstore,launcher,mesos,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,spark-ganglia-lgpl,sparkr,sql,sql-kafka-0-10,streaming,streaming-kafka-0-10,streaming-kinesis-asl,tags,unsafe,yarn`
-        pyspark=`./dev/is-changed.py -m avro,build,catalyst,core,graphx,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,sql,tags,unsafe`
-        sparkr=`./dev/is-changed.py -m avro,build,catalyst,core,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,repl,sketch,sparkr,sql,tags,unsafe`
-        tpcds=`./dev/is-changed.py -m build,catalyst,core,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
-        docker=`./dev/is-changed.py -m build,catalyst,core,docker-integration-tests,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
+        # is-changed.py is missing in branch-3.2, and it might run in scheduled build, see also SPARK-39517
+        build=true; pyspark=true; sparkr=true; tpcds=true; docker=true;
+        if [ -f "./dev/is-changed.py" ]; then
+          build=`./dev/is-changed.py -m avro,build,catalyst,core,docker-integration-tests,examples,graphx,hadoop-cloud,hive,hive-thriftserver,kubernetes,kvstore,launcher,mesos,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,spark-ganglia-lgpl,sparkr,sql,sql-kafka-0-10,streaming,streaming-kafka-0-10,streaming-kinesis-asl,tags,unsafe,yarn`
+          pyspark=`./dev/is-changed.py -m avro,build,catalyst,core,graphx,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,sql,tags,unsafe`
+          sparkr=`./dev/is-changed.py -m avro,build,catalyst,core,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,repl,sketch,sparkr,sql,tags,unsafe`
+          tpcds=`./dev/is-changed.py -m build,catalyst,core,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
+          docker=`./dev/is-changed.py -m build,catalyst,core,docker-integration-tests,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
+        fi
         echo "{\"build\": \"$build\", \"pyspark\": \"$pyspark\", \"sparkr\": \"$sparkr\", \"tpcds\": \"$tpcds\", \"docker\": \"$docker\"}" > required.json
         cat required.json
         echo "::set-output name=required::$(cat required.json)"
@@ -550,6 +562,7 @@ jobs:
         python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 
+        python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
         apt-get update -y
         apt-get install -y ruby ruby-dev
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2'), repos='https://cloud.r-project.org/')"

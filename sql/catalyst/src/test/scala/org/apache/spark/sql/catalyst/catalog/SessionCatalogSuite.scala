@@ -156,25 +156,24 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(defaultValueColumnE == "41 + 1")
 
       // Analyze the default column values.
-      val analyzer = new Analyzer(new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
       val statementType = "CREATE TABLE"
-      assert(ResolveDefaultColumns.analyze(analyzer, columnA, statementType).sql == "42")
-      assert(ResolveDefaultColumns.analyze(analyzer, columnB, statementType).sql == "'abc'")
+      assert(ResolveDefaultColumns.analyze(columnA, statementType).sql == "42")
+      assert(ResolveDefaultColumns.analyze(columnB, statementType).sql == "'abc'")
       assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(analyzer, columnC, statementType)
+        ResolveDefaultColumns.analyze(columnC, statementType)
       }.getMessage.contains("fails to parse as a valid expression"))
       assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(analyzer, columnD, statementType)
+        ResolveDefaultColumns.analyze(columnD, statementType)
       }.getMessage.contains("fails to resolve as a valid expression"))
       assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(analyzer, columnE, statementType)
+        ResolveDefaultColumns.analyze(columnE, statementType)
       }.getMessage.contains("statement provided a value of incompatible type"))
 
       // Make sure that constant-folding default values does not take place when the feature is
       // disabled.
       withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
         val result: StructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          analyzer, db1tbl3.schema, db1tbl3.provider, "CREATE TABLE")
+          db1tbl3.schema, db1tbl3.provider, "CREATE TABLE")
         val columnEWithFeatureDisabled: StructField = findField("e", result)
         // No constant-folding has taken place to the EXISTS_DEFAULT metadata.
         assert(!columnEWithFeatureDisabled.metadata.contains("EXISTS_DEFAULT"))

@@ -96,7 +96,7 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
       allRanges.map { range => SequenceNumberRanges(Array(range)) }.toArray
     ).map { bytes => new String(bytes).toInt }.collectPartitions()
     assert(receivedData3.length === allRanges.size)
-    for (i <- 0 until allRanges.size) {
+    for (i <- allRanges.indices) {
       assert(receivedData3(i).toSeq === shardIdToData(allRanges(i).shardId))
     }
   }

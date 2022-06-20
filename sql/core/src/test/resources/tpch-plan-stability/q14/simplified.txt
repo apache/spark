@@ -1,5 +1,5 @@
 WholeStageCodegen (3)
-  HashAggregate [sum,isEmpty,sum,isEmpty] [sum(CASE WHEN StartsWith(p_type, PROMO) THEN CheckOverflow((promote_precision(cast(l_extendedprice as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) ELSE 0 END),sum(CheckOverflow((promote_precision(cast(l_extendedprice as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0))),promo_revenue,sum,isEmpty,sum,isEmpty]
+  HashAggregate [sum,isEmpty,sum,isEmpty] [sum(CASE WHEN StartsWith(p_type, PROMO) THEN (l_extendedprice * (1 - l_discount)) ELSE 0 END),sum((l_extendedprice * (1 - l_discount))),promo_revenue,sum,isEmpty,sum,isEmpty]
     InputAdapter
       Exchange #1
         WholeStageCodegen (2)

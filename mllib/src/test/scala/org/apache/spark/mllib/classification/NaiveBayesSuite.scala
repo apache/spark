@@ -36,7 +36,7 @@ object NaiveBayesSuite {
 
   private def calcLabel(p: Double, pi: Array[Double]): Int = {
     var sum = 0.0
-    for (j <- 0 until pi.length) {
+    for (j <- pi.indices) {
       sum += pi(j)
       if (p < sum) return j
     }

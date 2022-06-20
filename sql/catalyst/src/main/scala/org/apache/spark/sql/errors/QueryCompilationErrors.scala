@@ -144,6 +144,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         s"side of the join. The $side-side columns: [${plan.output.map(_.name).mkString(", ")}]")
   }
 
+  def unresolvedColumnError(
+      colName: String, candidates: Seq[String], origin: Origin): Throwable = {
+    val candidateIds = candidates.map(candidate => toSQLId(candidate))
+    new AnalysisException(
+      errorClass = "UNRESOLVED_COLUMN",
+      messageParameters = Array(toSQLId(colName), candidateIds.mkString(", ")),
+      origin = origin)
+  }
+
   def dataTypeMismatchForDeserializerError(
       dataType: DataType, desiredType: String): Throwable = {
     new AnalysisException(
@@ -1992,7 +2001,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
         s"${table.identifier}, which is created by Hive and uses the " +
         "following unsupported serde configuration\n" +
-        builder.toString()
+        builder.toString() + "\n" +
+        s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` to show Hive DDL instead."
     )
   }
 
