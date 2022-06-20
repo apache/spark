@@ -37,6 +37,8 @@ on:
     - cron: '0 13 * * *'
     # Java 17
     - cron: '0 16 * * *'
+    # branch-3.3
+    - cron: '0 19 * * *'
   workflow_call:
     inputs:
       ansi_enabled:
@@ -98,6 +100,12 @@ jobs:
           echo '::set-output name=branch::master'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
+          echo '::set-output name=hadoop::hadoop3'
+        elif [ "${{ github.event.schedule }}" = "0 19 * * *" ]; then
+          echo '::set-output name=java::8'
+          echo '::set-output name=branch::branch-3.3'
+          echo '::set-output name=type::scheduled'
+          echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
           echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
