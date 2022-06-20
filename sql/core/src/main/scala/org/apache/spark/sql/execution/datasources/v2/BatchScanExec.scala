@@ -27,8 +27,10 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.InternalRowSet
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeFiltering}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeFiltering, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.sources.Filter
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
@@ -56,16 +58,27 @@ case class BatchScanExec(
 
   @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
-      case DynamicPruningExpression(e) => DataSourceStrategy.translateRuntimeFilter(e)
+      case DynamicPruningExpression(e) =>
+        if (scan.isInstanceOf[SupportsRuntimeFiltering]) {
+          DataSourceStrategy.translateRuntimeFilter(e)
+        } else if (scan.isInstanceOf[SupportsRuntimeV2Filtering]) {
+          DataSourceV2Strategy.translateRuntimeFilterV2(e)
+        } else {
+          None
+        }
       case _ => None
     }
 
     if (dataSourceFilters.nonEmpty) {
       val originalPartitioning = outputPartitioning
 
-      // the cast is safe as runtime filters are only assigned if the scan can be filtered
-      val filterableScan = scan.asInstanceOf[SupportsRuntimeFiltering]
-      filterableScan.filter(dataSourceFilters.toArray)
+      if (scan.isInstanceOf[SupportsRuntimeFiltering]) {
+        val filterableScan = scan.asInstanceOf[SupportsRuntimeFiltering]
+        filterableScan.filter(dataSourceFilters.map(_.asInstanceOf[Filter]).toArray)
+      } else if (scan.isInstanceOf[SupportsRuntimeV2Filtering]) {
+        val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
+        filterableScan.filter(dataSourceFilters.map(_.asInstanceOf[Predicate]).toArray)
+      }
 
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
