@@ -49,7 +49,46 @@ jobs:
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
-      required: ${{ steps.set-outputs.outputs.required }}
+      # Run scheduled jobs for Apache Spark only
+      # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
+      spark-required: >-
+        ${{  inputs.type == 'scheduled'
+         || (inputs.type == 'regular' && steps.changes.outputs.build-required == 'true') }}
+
+      # Run PySpark coverage scheduled jobs for Apache Spark only
+      # Run scheduled jobs with JDK 17 in Apache Spark
+      # Run regular jobs for commit in both Apache Spark and forked repository, but only if pyspark changes exist
+      pyspark-required: >-
+        ${{  inputs.type == 'pyspark-coverage-scheduled'
+         || (inputs.type == 'scheduled' && inputs.java == '17')
+         || (inputs.type == 'regular' && steps.changes.outputs.pyspark-required == 'true') }}
+
+      # Run scheduled jobs with JDK 17 in Apache Spark
+      # Run regular jobs for commit in both Apache Spark and forked repository, but only if sparkr changes exist
+      sparkr-required: >-
+        ${{ (inputs.type == 'scheduled' && inputs.java == '17')
+         || (inputs.type == 'regular' && steps.changes.outputs.sparkr-required == 'true') }}
+
+      # Run for regular jobs
+      lint-required: >-
+        ${{ inputs.type == 'regular' }}
+
+      # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
+      java-required: >-
+        ${{ inputs.type == 'regular' && steps.changes.outputs.build-required == 'true' }}
+
+      # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
+      scala-required: >-
+        ${{ inputs.type == 'regular' && steps.changes.outputs.build-required == 'true' }}
+
+      # Run regular jobs for commit in both Apache Spark and forked repository, but only if tpcds changes exist
+      tpcds-required: >-
+        ${{ inputs.type == 'regular' && steps.changes.outputs.tpcds-required == 'true' }}
+
+      # Run regular jobs for commit in both Apache Spark and forked repository, but only if docker changes exist
+      docker-required: >-
+        ${{ inputs.type == 'regular' && steps.changes.outputs.docker-required == 'true' }}
+
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -65,7 +104,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Check all modules
-      id: set-outputs
+      id: changes
       run: |
         # is-changed.py is missing in branch-3.2, and it might run in scheduled build, see also SPARK-39517
         build=true; pyspark=true; sparkr=true; tpcds=true; docker=true;
@@ -76,18 +115,17 @@ jobs:
           tpcds=`./dev/is-changed.py -m build,catalyst,core,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
           docker=`./dev/is-changed.py -m build,catalyst,core,docker-integration-tests,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
         fi
-        echo "{\"build\": \"$build\", \"pyspark\": \"$pyspark\", \"sparkr\": \"$sparkr\", \"tpcds\": \"$tpcds\", \"docker\": \"$docker\"}" > required.json
-        cat required.json
-        echo "::set-output name=required::$(cat required.json)"
+        echo "::set-output name=build-required::$build"
+        echo "::set-output name=pyspark-required::$pyspark"
+        echo "::set-output name=sparkr-required::$sparkr"
+        echo "::set-output name=tpcds-required::$tpcds"
+        echo "::set-output name=docker-required::$docker"
 
-  # Build: build Spark and run the tests for specified modules.
-  build:
+  # Build Spark and run the tests for specified modules.
+  spark:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: precondition
-    # Run scheduled jobs for Apache Spark only
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
-    if: >-
-      inputs.type == 'scheduled' || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true')
+    if: needs.precondition.outputs.spark-required == 'true'
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
@@ -225,16 +263,11 @@ jobs:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/unit-tests.log"
 
+  # Build PySpark and run the tests for specified modules.
   pyspark:
-    needs: precondition
-    # Run PySpark coverage scheduled jobs for Apache Spark only
-    # Run scheduled jobs with JDK 17 in Apache Spark
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if pyspark changes exist
-    if: >-
-      inputs.type == 'pyspark-coverage-scheduled'
-      || (inputs.type == 'scheduled' && inputs.java == '17')
-      || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).pyspark == 'true')
     name: "Build modules: ${{ matrix.modules }}"
+    needs: precondition
+    if: needs.precondition.outputs.pyspark-required == 'true'
     runs-on: ubuntu-20.04
     container:
       image: dongjoon/apache-spark-github-action-image:20220207
@@ -334,13 +367,9 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: precondition
-    # Run scheduled jobs with JDK 17 in Apache Spark
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if sparkr changes exist
-    if: >-
-      (inputs.type == 'scheduled' && inputs.java == '17')
-      || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).sparkr == 'true')
     name: "Build modules: sparkr"
+    needs: precondition
+    if: needs.precondition.outputs.sparkr-required == 'true'
     runs-on: ubuntu-20.04
     container:
       image: dongjoon/apache-spark-github-action-image:20220207
@@ -405,8 +434,9 @@ jobs:
 
   # Static analysis, and documentation build
   lint:
-    if: inputs.type == 'regular'
-    name: Linters, licenses, dependencies and documentation generation
+    name: "Linters, licenses, dependencies and documentation generation"
+    needs: precondition
+    if: needs.precondition.outputs.lint-required == 'true'
     runs-on: ubuntu-20.04
     env:
       LC_ALL: C.UTF-8
@@ -519,17 +549,16 @@ jobs:
         bundle exec jekyll build
 
   java-11-17:
+    name: "Java ${{ matrix.java }} build with Maven"
     needs: precondition
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
-    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
-    name: Java ${{ matrix.java }} build with Maven
+    if: needs.precondition.outputs.java-required == 'true'
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
         java:
           - 11
           - 17
-    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -575,10 +604,9 @@ jobs:
         rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:
+    name: "Scala 2.13 build with SBT"
     needs: precondition
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
-    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
-    name: Scala 2.13 build with SBT
+    if: needs.precondition.outputs.scala-required == 'true'
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
@@ -621,10 +649,9 @@ jobs:
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
 
   tpcds-1g:
+    name: "Run TPC-DS queries with SF=1"
     needs: precondition
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if tpcds changes exist
-    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).tpcds == 'true'
-    name: Run TPC-DS queries with SF=1
+    if: needs.precondition.outputs.tpcds-required == 'true'
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
@@ -719,10 +746,9 @@ jobs:
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
+    name: "Run Docker integration tests"
     needs: precondition
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if docker changes exist
-    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).docker == 'true'
-    name: Run Docker integration tests
+    if: needs.precondition.outputs.docker-required == 'true'
     runs-on: ubuntu-20.04
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
