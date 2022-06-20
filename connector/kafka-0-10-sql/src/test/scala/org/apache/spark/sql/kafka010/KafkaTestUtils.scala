@@ -505,8 +505,8 @@ class KafkaTestUtils(
     props.put("transaction.state.log.min.isr", "1")
 
     if (secure) {
-      props.put("listeners", "SASL_PLAINTEXT://$localHostNameForURI:0")
-      props.put("advertised.listeners", "SASL_PLAINTEXT://$localHostNameForURI:0")
+      props.put("listeners", s"SASL_PLAINTEXT://$localHostNameForURI:0")
+      props.put("advertised.listeners", s"SASL_PLAINTEXT://$localHostNameForURI:0")
       props.put("inter.broker.listener.name", "SASL_PLAINTEXT")
       props.put("delegation.token.master.key", UUID.randomUUID().toString)
       props.put("sasl.enabled.mechanisms", "GSSAPI,SCRAM-SHA-512")
