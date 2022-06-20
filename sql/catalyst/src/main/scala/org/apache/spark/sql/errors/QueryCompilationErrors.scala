@@ -965,6 +965,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
   }
 
+  def cannotRenameTableWithDifferentCatalogName(
+      catalog: String,
+      from: Identifier,
+      to: Identifier): Throwable = {
+    new AnalysisException(
+      s"Cannot rename a table from '$catalog.$from' to '$to'. Please rename table in same catalog.")
+  }
+
   private def notSupportedForV2TablesError(cmd: String): Throwable = {
     new AnalysisException(s"$cmd is not supported for v2 tables.")
   }

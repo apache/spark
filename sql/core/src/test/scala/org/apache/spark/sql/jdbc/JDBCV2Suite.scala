@@ -120,6 +120,24 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(sql("SELECT name, id FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
   }
 
+  test("SPARK-39527: rename a table") {
+    val e1 = intercept[AnalysisException] {
+      sql("ALTER TABLE h2.test.empty_table RENAME TO h3.test.empty_table2")
+    }.getMessage
+    assert(e1 == "Cannot rename a table from 'h2.test.empty_table' to " +
+      "'h3.test.empty_table2'. Please rename table in same catalog.")
+    val e2 = intercept[AnalysisException] {
+      sql("ALTER TABLE h2.test.empty_table RENAME TO test.empty_table2")
+    }.getMessage
+    assert(e2 == "Cannot rename a table from 'h2.test.empty_table' to " +
+      "'test.empty_table2'. Please rename table in same catalog.")
+    sql("ALTER TABLE h2.test.empty_table RENAME TO h2.test.empty_table2")
+    checkAnswer(
+      sql("SHOW TABLES IN h2.test LIKE 'empty*'"),
+      Seq(Row("test", "empty_table2", false)))
+    sql("ALTER TABLE h2.test.empty_table2 RENAME TO h2.test.empty_table")
+  }
+
   private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
