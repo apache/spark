@@ -42,6 +42,11 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
     extends Logging
     with Serializable {
 
+  private val rdd = predictionAndLabels.map {
+    case (pred: Array[T], lab: Array[T]) => (pred, lab)
+    case (pred: Array[T], lab: Array[T], _: Array[Double]) => (pred, lab)
+  }
+
   /**
    * Compute the average precision of all the queries, truncated at ranking position k.
    *
@@ -62,14 +67,9 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
   @Since("1.2.0")
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels
-      .map {
-        case (pred: Array[T], lab: Array[T]) =>
-          countRelevantItemRatio(pred, lab, k, k)
-        case (pred: Array[T], lab: Array[T], _) =>
-          countRelevantItemRatio(pred, lab, k, k)
-      }
-      .mean()
+    rdd.map { case (pred, lab) =>
+      countRelevantItemRatio(pred, lab, k, k)
+    }.mean()
   }
 
   /**
@@ -79,18 +79,11 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
    */
   @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
-    predictionAndLabels
-      .map {
-        case (pred: Array[T], lab: Array[T]) =>
-          val labSet = lab.toSet
-          val k = math.max(pred.length, labSet.size)
-          averagePrecision(pred, labSet, k)
-        case (pred: Array[T], lab: Array[T], _) =>
-          val labSet = lab.toSet
-          val k = math.max(pred.length, labSet.size)
-          averagePrecision(pred, labSet, k)
-      }
-      .mean()
+    rdd.map { case (pred, lab) =>
+      val labSet = lab.toSet
+      val k = math.max(pred.length, labSet.size)
+      averagePrecision(pred, labSet, k)
+    }.mean()
   }
 
   /**
@@ -103,14 +96,9 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
   @Since("3.0.0")
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels
-      .map {
-        case (pred: Array[T], lab: Array[T]) =>
-          averagePrecision(pred, lab.toSet, k)
-        case (pred: Array[T], lab: Array[T], _) =>
-          averagePrecision(pred, lab.toSet, k)
-      }
-      .mean()
+    rdd.map { case (pred, lab) =>
+      averagePrecision(pred, lab.toSet, k)
+    }.mean()
   }
 
   /**
@@ -247,14 +235,9 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
   @Since("3.0.0")
   def recallAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels
-      .map {
-        case (pred: Array[T], lab: Array[T]) =>
-          countRelevantItemRatio(pred, lab, k, lab.toSet.size)
-        case (pred: Array[T], lab: Array[T], _) =>
-          countRelevantItemRatio(pred, lab, k, lab.toSet.size)
-      }
-      .mean()
+    rdd.map { case (pred, lab) =>
+      countRelevantItemRatio(pred, lab, k, lab.toSet.size)
+    } .mean()
   }
 
   /**
