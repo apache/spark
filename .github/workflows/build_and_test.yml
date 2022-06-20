@@ -153,283 +153,128 @@ jobs:
         cat required.json
         echo "::set-output name=required::$(cat required.json)"
 
-  # Build: build Spark and run the tests for specified modules.
-  build:
-    name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
+  spark-core:
+    name: "Build and Test"
+    uses: ./.github/workflows/build_and_test_spark.yml
     needs: [configure-jobs, precondition]
-    # Run scheduled jobs for Apache Spark only
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
-    if: >-
-      needs.configure-jobs.outputs.type == 'scheduled'
-      || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true')
-    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-      matrix:
-        java:
-          - ${{ needs.configure-jobs.outputs.java }}
-        hadoop:
-          - ${{ needs.configure-jobs.outputs.hadoop }}
-        hive:
-          - hive2.3
-        # TODO(SPARK-32246): We don't test 'streaming-kinesis-asl' for now.
-        # Kinesis tests depends on external Amazon kinesis service.
-        # Note that the modules below are from sparktestsupport/modules.py.
-        modules:
-          - >-
-            core, unsafe, kvstore, avro,
-            network-common, network-shuffle, repl, launcher,
-            examples, sketch, graphx
-          - >-
-            catalyst, hive-thriftserver
-          - >-
-            streaming, sql-kafka-0-10, streaming-kafka-0-10,
-            mllib-local, mllib,
-            yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl
-        # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
-        included-tags: [""]
-        excluded-tags: [""]
-        comment: [""]
-        include:
-          # Hive tests
-          - modules: hive
-            java: ${{ needs.configure-jobs.outputs.java }}
-            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
-            hive: hive2.3
-            included-tags: org.apache.spark.tags.SlowHiveTest
-            comment: "- slow tests"
-          - modules: hive
-            java: ${{ needs.configure-jobs.outputs.java }}
-            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
-            hive: hive2.3
-            excluded-tags: org.apache.spark.tags.SlowHiveTest
-            comment: "- other tests"
-          # SQL tests
-          - modules: sql
-            java: ${{ needs.configure-jobs.outputs.java }}
-            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
-            hive: hive2.3
-            included-tags: org.apache.spark.tags.ExtendedSQLTest
-            comment: "- slow tests"
-          - modules: sql
-            java: ${{ needs.configure-jobs.outputs.java }}
-            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
-            hive: hive2.3
-            excluded-tags: org.apache.spark.tags.ExtendedSQLTest
-            comment: "- other tests"
-    env:
-      MODULES_TO_TEST: ${{ matrix.modules }}
-      EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
-      INCLUDED_TAGS: ${{ matrix.included-tags }}
-      HADOOP_PROFILE: ${{ matrix.hadoop }}
-      HIVE_PROFILE: ${{ matrix.hive }}
-      GITHUB_PREV_SHA: ${{ github.event.before }}
-      SPARK_LOCAL_IP: localhost
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
-      # In order to fetch changed files
-      with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    - name: Check changes
-      id: changes
-      run: |
-        changed=$(./dev/is-changed.py -m "$MODULES_TO_TEST")
-        echo "Changes exist: $changed"
-        echo "::set-output name=exist::$changed"
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v2
-      if: steps.changes.outputs.exist != 'false'
-      with:
-        path: |
-          build/apache-maven-*
-          build/scala-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v2
-      if: steps.changes.outputs.exist != 'false'
-      with:
-        path: ~/.cache/coursier
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
-    - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v1
-      if: steps.changes.outputs.exist != 'false'
-      with:
-        java-version: ${{ matrix.java }}
-    - name: Install Python 3.8
-      uses: actions/setup-python@v2
-      # We should install one Python that is higher then 3+ for SQL and Yarn because:
-      # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
-      # - Yarn has a Python specific test too, for example, YarnClusterSuite.
-      if: >
-        steps.changes.outputs.exist != 'false' &&
-        (contains(matrix.modules, 'yarn') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')))
-      with:
-        python-version: 3.8
-        architecture: x64
-    - name: Install Python packages (Python 3.8)
-      if: steps.changes.outputs.exist != 'false' && (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
-      run: |
-        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy xmlrunner
-        python3.8 -m pip list
-    # Run the tests.
-    - name: Run tests
-      if: steps.changes.outputs.exist != 'false'
-      env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
-      run: |
-        # Hive "other tests" test needs larger metaspace size based on experiment.
-        if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
-        export SERIAL_SBT_TESTS=1
-        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
-    - name: Upload test results to report
-      if: always() && steps.changes.outputs.exist != 'false'
-      uses: actions/upload-artifact@v2
-      with:
-        name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
-        path: "**/target/test-reports/*.xml"
-    - name: Upload unit tests log files
-      if: failure() && steps.changes.outputs.exist != 'false'
-      uses: actions/upload-artifact@v2
-      with:
-        name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
-        path: "**/target/unit-tests.log"
+    if: needs.precondition.outputs.spark-core-required == 'true'
+    with:
+      job-type: ${{ needs.configure-jobs.outputs.type }}
+      branch: ${{ needs.configure-jobs.outputs.branch }}
+      java-version: ${{ needs.configure-jobs.outputs.java }}
+      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
+      hive-version: hive2.3
+      envs: ${{ needs.configure-jobs.outputs.envs }}
+      modules: ${{ needs.precondition.outputs.spark-core-modules }}
+      included-tags: ""
+      excluded-tags: ""
+      comment: ""
+      ansi_enabled: ${{ inputs.ansi_enabled }}
 
-  pyspark:
+  spark-catalyst:
+    name: "Build and Test"
+    uses: ./.github/workflows/build_and_test_spark.yml
     needs: [configure-jobs, precondition]
-    # Run PySpark coverage scheduled jobs for Apache Spark only
-    # Run scheduled jobs with JDK 17 in Apache Spark
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if pyspark changes exist
-    if: >-
-      needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled'
-      || (needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
-      || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).pyspark == 'true')
-    name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
-    runs-on: ubuntu-20.04
-    container:
-      image: dongjoon/apache-spark-github-action-image:20220207
-    strategy:
-      fail-fast: false
-      matrix:
-        java:
-          - ${{ needs.configure-jobs.outputs.java }}
-        modules:
-          - >-
-            pyspark-sql, pyspark-mllib, pyspark-resource
-          - >-
-            pyspark-core, pyspark-streaming, pyspark-ml
-          - >-
-            pyspark-pandas
-          - >-
-            pyspark-pandas-slow
-    env:
-      MODULES_TO_TEST: ${{ matrix.modules }}
-      HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
-      HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
-      SPARK_LOCAL_IP: localhost
-      SKIP_UNIDOC: true
-      SKIP_MIMA: true
-      METASPACE_SIZE: 1g
-      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
-      # In order to fetch changed files
-      with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    - name: Check changes
-      id: changes
-      run: |
-        changed=$(./dev/is-changed.py -m "$MODULES_TO_TEST")
-        echo "Changes exist: $changed"
-        echo "::set-output name=exist::$changed"
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v2
-      if: steps.changes.outputs.exist != 'false'
-      with:
-        path: |
-          build/apache-maven-*
-          build/scala-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v2
-      if: steps.changes.outputs.exist != 'false'
-      with:
-        path: ~/.cache/coursier
-        key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          pyspark-coursier-
-    - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v1
-      if: steps.changes.outputs.exist != 'false'
-      with:
-        java-version: ${{ matrix.java }}
-    - name: List Python packages (Python 3.9, PyPy3)
-      run: |
-        python3.9 -m pip list
-        pypy3 -m pip list
-    - name: Install Conda for pip packaging test
-      if: steps.changes.outputs.exist != 'false'
-      run: |
-        curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
-        bash miniconda.sh -b -p $HOME/miniconda
-    # Run the tests.
-    - name: Run tests
-      if: steps.changes.outputs.exist != 'false'
-      env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
-      run: |
-        export PATH=$PATH:$HOME/miniconda/bin
-        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
-    - name: Upload coverage to Codecov
-      if: steps.changes.outputs.exist != 'false' && needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled'
-      uses: codecov/codecov-action@v2
-      with:
-        files: ./python/coverage.xml
-        flags: unittests
-        name: PySpark
-    - name: Upload test results to report
-      if: always() && steps.changes.outputs.exist != 'false'
-      uses: actions/upload-artifact@v2
-      with:
-        name: test-results-${{ matrix.modules }}--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
-        path: "**/target/test-reports/*.xml"
-    - name: Upload unit tests log files
-      if: failure() && steps.changes.outputs.exist != 'false'
-      uses: actions/upload-artifact@v2
-      with:
-        name: unit-tests-log-${{ matrix.modules }}--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
-        path: "**/target/unit-tests.log"
+    if: needs.precondition.outputs.spark-catalyst == 'true'
+    with:
+      job-type: ${{ needs.configure-jobs.outputs.type }}
+      branch: ${{ needs.configure-jobs.outputs.branch }}
+      java-version: ${{ needs.configure-jobs.outputs.java }}
+      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
+      hive-version: hive2.3
+      envs: ${{ needs.configure-jobs.outputs.envs }}
+      modules: ${{ needs.precondition.outputs.spark-catalyst-modules }}
+      included-tags: ""
+      excluded-tags: ""
+      comment: ""
+      ansi_enabled: ${{ inputs.ansi_enabled }}
+
+  spark-streaming:
+    name: "Build and Test"
+    uses: ./.github/workflows/build_and_test_spark.yml
+    needs: [configure-jobs, precondition]
+    if: needs.precondition.outputs.spark-streaming == 'true'
+    with:
+      job-type: ${{ needs.configure-jobs.outputs.type }}
+      branch: ${{ needs.configure-jobs.outputs.branch }}
+      java-version: ${{ needs.configure-jobs.outputs.java }}
+      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
+      hive-version: hive2.3
+      envs: ${{ needs.configure-jobs.outputs.envs }}
+      modules: ${{ needs.precondition.outputs.spark-streaming-modules }}
+      included-tags: ""
+      excluded-tags: ""
+      comment: ""
+      ansi_enabled: ${{ inputs.ansi_enabled }}
+
+  spark-hive:
+    name: "Build and Test"
+    uses: ./.github/workflows/build_and_test_spark.yml
+    needs: [configure-jobs, precondition]
+    if: needs.precondition.outputs.spark-hive == 'true'
+    with:
+      job-type: ${{ needs.configure-jobs.outputs.type }}
+      branch: ${{ needs.configure-jobs.outputs.branch }}
+      java-version: ${{ needs.configure-jobs.outputs.java }}
+      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
+      hive-version: hive2.3
+      envs: ${{ needs.configure-jobs.outputs.envs }}
+      modules: ${{ needs.precondition.outputs.spark-hive-modules }}
+      included-tags: ${{ matrix.included-tags }}
+      excluded-tags: ${{ matrix.excluded-tags }}
+      comment: ${{ matrix.comment }}
+      ansi_enabled: ${{ inputs.ansi_enabled }}
+
+  spark-hive-slow:
+    name: "Build and Test"
+    uses: ./.github/workflows/build_and_test_spark.yml
+    needs: [configure-jobs, precondition]
+    if: needs.precondition.outputs.spark-hive-slow == 'true'
+    with:
+      job-type: ${{ needs.configure-jobs.outputs.type }}
+      branch: ${{ needs.configure-jobs.outputs.branch }}
+      java-version: ${{ needs.configure-jobs.outputs.java }}
+      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
+      hive-version: hive2.3
+      envs: ${{ needs.configure-jobs.outputs.envs }}
+      modules: ${{ needs.precondition.outputs.spark-hive-slow-modules }}
+      included-tags: org.apache.spark.tags.SlowHiveTest
+      comment: "- slow tests"
+      ansi_enabled: ${{ inputs.ansi_enabled }}
+
+  spark-sql:
+    name: "Build and Test"
+    uses: ./.github/workflows/build_and_test_spark.yml
+    needs: [configure-jobs, precondition]
+    if: needs.precondition.outputs.spark-sql == 'true'
+    with:
+      job-type: ${{ needs.configure-jobs.outputs.type }}
+      branch: ${{ needs.configure-jobs.outputs.branch }}
+      java-version: ${{ needs.configure-jobs.outputs.java }}
+      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
+      hive-version: hive2.3
+      envs: ${{ needs.configure-jobs.outputs.envs }}
+      modules: ${{ needs.precondition.outputs.spark-sql-modules }}
+      excluded-tags: org.apache.spark.tags.ExtendedSQLTest
+      comment: "- other tests"
+      ansi_enabled: ${{ inputs.ansi_enabled }}
+
+  spark-sql-slow:
+    name: "Build and Test"
+    uses: ./.github/workflows/build_and_test_spark.yml
+    needs: [configure-jobs, precondition]
+    if: needs.precondition.outputs.spark-sql-slow == 'true'
+    with:
+      job-type: ${{ needs.configure-jobs.outputs.type }}
+      branch: ${{ needs.configure-jobs.outputs.branch }}
+      java-version: ${{ needs.configure-jobs.outputs.java }}
+      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
+      hive-version: hive2.3
+      envs: ${{ needs.configure-jobs.outputs.envs }}
+      modules: ${{ needs.precondition.outputs.spark-sql-slow-modules }}
+      included-tags: org.apache.spark.tags.ExtendedSQLTest
+      comment: "- slow tests"
+      ansi_enabled: ${{ inputs.ansi_enabled }}
 
   sparkr:
     needs: [configure-jobs, precondition]

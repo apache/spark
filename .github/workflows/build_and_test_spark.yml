@@ -1,0 +1,154 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: Build and test (PySpark)
+
+on:
+  workflow_call:
+    inputs:
+      job-type:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
+      java-version:
+        required: true
+        type: string
+      hadoop-version:
+        required: true
+        type: string
+      hive-version:
+        required: true
+        type: string
+      envs:
+        required: true
+        type: string
+      modules:
+        required: true
+        type: string
+      included-tags:
+        required: false
+        type: string
+        default: ""
+      excluded-tags:
+        required: false
+        type: string
+        default: ""
+      comment:
+        required: false
+        type: string
+        default: ""
+      ansi_enabled:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # Build Spark and run the tests for specified modules.
+  build:
+    name: "${{ inputs.branch }}, ${{ inputs.job-type }} job: ${{ inputs.modules }} ${{ inputs.comment }} (JDK ${{ inputs.java-version }}, ${{ inputs.hadoop-version }}, ${{ inputs.hive-version }})"
+    needs: [configure-jobs, precondition]
+    # Run scheduled jobs for Apache Spark only
+    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
+    if: >-
+      inputs.job-type == 'scheduled'
+      || (inputs.job-type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true')
+    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
+    runs-on: ubuntu-20.04
+    env:
+      MODULES_TO_TEST: ${{ inputs.modules }}
+      EXCLUDED_TAGS: ${{ inputs.excluded-tags }}
+      INCLUDED_TAGS: ${{ inputs.included-tags }}
+      HADOOP_PROFILE: ${{ inputs.hadoop-version }}
+      HIVE_PROFILE: ${{ inputs.hive-version }}
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+      SPARK_LOCAL_IP: localhost
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v2
+        # In order to fetch changed files
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+      - name: Cache Scala, SBT and Maven
+        uses: actions/cache@v2
+        with:
+          path: |
+            build/apache-maven-*
+            build/scala-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Coursier local repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/coursier
+          key: ${{ inputs.java-version }}-${{ inputs.hadoop-version }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          restore-keys: |
+            ${{ inputs.java-version }}-${{ inputs.hadoop-version }}-coursier-
+      - name: Install Java ${{ inputs.java-version }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ inputs.java-version }}
+      - name: Install Python 3.8
+        uses: actions/setup-python@v2
+        # We should install one Python that is higher then 3+ for SQL and Yarn because:
+        # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
+        # - Yarn has a Python specific test too, for example, YarnClusterSuite.
+        if: contains(inputs.modules, 'yarn') || (contains(inputs.modules, 'sql') && !contains(inputs.modules, 'sql-'))
+        with:
+          python-version: 3.8
+          architecture: x64
+      - name: Install Python packages (Python 3.8)
+        if: (contains(inputs.modules, 'sql') && !contains(inputs.modules, 'sql-'))
+        run: |
+          python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy xmlrunner
+          python3.8 -m pip list
+      # Run the tests.
+      - name: Run tests
+        env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
+        run: |
+          # Hive "other tests" test needs larger metaspace size based on experiment.
+          if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
+          export SERIAL_SBT_TESTS=1
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
+      - name: Upload test results to report
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-results-${{ inputs.modules }}-${{ inputs.comment }}-${{ inputs.java-version }}-${{ inputs.hadoop-version }}-${{ inputs.hive-version }}
+          path: "**/target/test-reports/*.xml"
+      - name: Upload unit tests log files
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: unit-tests-log-${{ inputs.modules }}-${{ inputs.comment }}-${{ inputs.java-version }}-${{ inputs.hadoop-version }}-${{ inputs.hive-version }}
+          path: "**/target/unit-tests.log"

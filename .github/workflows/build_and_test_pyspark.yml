@@ -1,0 +1,134 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: Build and test (PySpark)
+
+on:
+  workflow_call:
+    inputs:
+      job-type:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
+      java-version:
+        required: true
+        type: string
+      hadoop-version:
+        required: true
+        type: string
+      envs:
+        required: true
+        type: string
+      modules:
+        required: true
+        type: string
+      ansi_enabled:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  pyspark:
+    name: "${{ inputs.branch }}, ${{ inputs.job-type }} job: ${{ inputs.modules }}"
+    runs-on: ubuntu-20.04
+    container:
+      image: dongjoon/apache-spark-github-action-image:20220207
+    env:
+      MODULES_TO_TEST: ${{ inputs.modules }}
+      HADOOP_PROFILE: ${{ inputs.hadoop-version }}
+      HIVE_PROFILE: hive2.3
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+      SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
+      SKIP_MIMA: true
+      METASPACE_SIZE: 1g
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v2
+        # In order to fetch changed files
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+      - name: Cache Scala, SBT and Maven
+        uses: actions/cache@v2
+        with:
+          path: |
+            build/apache-maven-*
+            build/scala-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Coursier local repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/coursier
+          key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          restore-keys: |
+            pyspark-coursier-
+      - name: Install Java ${{ matrix.java }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ matrix.java }}
+      - name: List Python packages (Python 3.9, PyPy3)
+        run: |
+          python3.9 -m pip list
+          pypy3 -m pip list
+      - name: Install Conda for pip packaging test
+        run: |
+          curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
+          bash miniconda.sh -b -p $HOME/miniconda
+      # Run the tests.
+      - name: Run tests
+        env: ${{ fromJSON(inputs.envs) }}
+        run: |
+          export PATH=$PATH:$HOME/miniconda/bin
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
+      - name: Upload coverage to Codecov
+        if: inputs.job-type == 'pyspark-coverage-scheduled'
+        uses: codecov/codecov-action@v2
+        with:
+          files: ./python/coverage.xml
+          flags: unittests
+          name: PySpark
+      - name: Upload test results to report
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-results-${{ inputs.modules }}--8-${{ inputs.hadoop-version }}-hive2.3
+          path: "**/target/test-reports/*.xml"
+      - name: Upload unit tests log files
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: unit-tests-log-${{ inputs.modules }}--8-${{ inputs.hadoop-version }}-hive2.3
+          path: "**/target/unit-tests.log"
