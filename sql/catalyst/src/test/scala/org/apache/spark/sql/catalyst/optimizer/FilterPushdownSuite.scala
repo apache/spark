@@ -154,14 +154,7 @@ class FilterPushdownSuite extends PlanTest {
         .where($"e" === 1)
         .analyze
 
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      testRelation
-        .where($"a" + $"b" === 1)
-        .select($"a" + $"b" as "e")
-        .analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 
   test("nondeterministic: can always push down filter through project with deterministic field") {
@@ -1432,5 +1425,47 @@ class FilterPushdownSuite extends PlanTest {
 
     val correctAnswer = RebalancePartitions(Seq.empty, testRelation.where($"a" > 3)).analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-39481: Do not push down complex filter condition") {
+    val originalQuery =
+      testRelation.select(('a + 1).as("new_a"), 'a).where('new_a > 1 && 'a.in(1, 2, 3))
+    val correctAnswer = testRelation.where('a.in(1, 2, 3)).select(('a + 1).as("new_a"), 'a)
+      .where('new_a > 1)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-39481: Push down condition if it is not complex condition") {
+    val originalQuery =
+      testRelation.select('a.as("new_a"), 'a).where('new_a > 1 && 'a.in(1, 2, 3))
+    val correctAnswer = testRelation.where('a.in(1, 2, 3) && 'a > 1).select('a.as("new_a"), 'a)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-39481: Push down condition if it is complex condition but it is not from project") {
+    val originalQuery = testRelation.select('a, 'b, ('a + 1).as("new_a"))
+      .where('a > 1 || 'a.in(1, 2, 3))
+    val correctAnswer = testRelation.where('a > 1 || 'a.in(1, 2, 3))
+      .select('a, 'b, ('a + 1).as("new_a"))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-39481: Push down complex filter condition if children contains join") {
+    val left = testRelation.subquery("x")
+    val right = testRelation1.subquery("y")
+
+    val originalQuery =
+      left.join(right, joinType = LeftOuter, condition = Some("x.b".attr === "y.d".attr))
+        .select('a, 'b, 'c, 'd, ('b + 1).as("new_b"))
+        .where('a > 1 && 'new_b > 1)
+    val correctAnswer =
+      left.where(('b + 1) > 1 && 'a > 1)
+        .join(right, joinType = LeftOuter, condition = Some("x.b".attr === "y.d".attr))
+        .select('a, 'b, 'c, 'd, ('b + 1).as("new_b"))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }

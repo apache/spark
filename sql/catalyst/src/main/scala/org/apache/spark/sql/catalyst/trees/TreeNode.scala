@@ -350,6 +350,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
+   * Test whether all the [[TreeNode]] satisfies the conditions specified in `f`.
+   * The condition is recursively applied to this node and all of its children (pre-order).
+   */
+  def forall(f: BaseType => Boolean): Boolean = if (!f(this)) {
+    false
+  } else {
+    children.forall(_.forall(f))
+  }
+
+  /**
    * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
    */

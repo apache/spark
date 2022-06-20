@@ -1568,7 +1568,23 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
-      project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      val complexMap = aliasMap.filterNot(_._2.child match {
+        case _: Attribute => true
+        case _: Literal => true
+        case _ => false
+      })
+      if (complexMap.nonEmpty && doNotPushComplexPredicate(grandChild)) {
+        val predicates = splitConjunctivePredicates(condition)
+        val (remainingPredicates, pushedPredicates) =
+          predicates.partition(_.references.exists(complexMap.contains))
+        val pushedFilter = pushedPredicates.map(replaceAlias(_, aliasMap)).reduceLeftOption(And)
+          .map(e => project.copy(child = Filter(e, grandChild)))
+          .getOrElse(project)
+        remainingPredicates.reduceLeftOption(And).map(Filter(_, pushedFilter))
+          .getOrElse(pushedFilter)
+      } else {
+        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      }
 
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
@@ -1728,6 +1744,16 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
       case _ => false
     }
+  }
+
+  /**
+   * Do not push complex predicate for these LogicalPlan to reduce complex expression evaluation.
+   */
+  private def doNotPushComplexPredicate(plan: LogicalPlan): Boolean = plan.forall {
+    case _: Filter => true
+    case _: Project => true
+    case _: LeafNode => true
+    case _ => false
   }
 }
 
