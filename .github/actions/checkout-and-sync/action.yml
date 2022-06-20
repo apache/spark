@@ -1,0 +1,31 @@
+name: 'Checkout and Sync sources'
+author: 'Apache Spark'
+description: 'A composite GitHub Action that git checkout sources and syncs with upstream'
+
+inputs:
+  branch:
+    description: "The branch"
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Checkout Spark repository
+    uses: actions/checkout@v2
+    with:
+      fetch-depth: 0
+      repository: apache/spark
+      ref: ${{ input.branch }}
+
+  - name: Sync the current branch with the latest in Apache Spark
+    if: github.repository != 'apache/spark'
+    shell: bash
+    run: |
+      echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+      git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+      git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+      git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+
+branding:
+  icon: 'check-circle'
+  color: 'green'

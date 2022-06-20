@@ -116,19 +116,10 @@ jobs:
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
     steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        branch: ${{ needs.configure-jobs.outputs.branch }}
     - name: Check all modules
       id: set-outputs
       run: |
@@ -215,20 +206,10 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
     steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
-      # In order to fetch changed files
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        branch: ${{ needs.configure-jobs.outputs.branch }}
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -325,20 +306,10 @@ jobs:
       METASPACE_SIZE: 1g
       SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
-      # In order to fetch changed files
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        branch: ${{ needs.configure-jobs.outputs.branch }}
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -415,20 +386,10 @@ jobs:
       SKIP_MIMA: true
       SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
-      # In order to fetch changed files
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        branch: ${{ needs.configure-jobs.outputs.branch }}
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -480,18 +441,10 @@ jobs:
     container:
       image: dongjoon/apache-spark-github-action-image:20220207
     steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        branch: ${{ needs.configure-jobs.outputs.branch }}
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -595,18 +548,10 @@ jobs:
           - 17
     runs-on: ubuntu-20.04
     steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        branch: ${{ needs.configure-jobs.outputs.branch }}
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -645,18 +590,10 @@ jobs:
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-20.04
     steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        branch: ${{ needs.configure-jobs.outputs.branch }}
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -694,18 +631,10 @@ jobs:
       SPARK_LOCAL_IP: localhost
       SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        branch: ${{ needs.configure-jobs.outputs.branch }}
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -794,19 +723,10 @@ jobs:
       ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
       SKIP_MIMA: true
     steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        branch: ${{ needs.configure-jobs.outputs.branch }}
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
