@@ -38,8 +38,8 @@ import org.apache.spark.internal.config.Worker.WORKER_DRIVER_TERMINATE_TIMEOUT
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.ui.UIUtils
-import org.apache.spark.util.logging.FileAppender
 import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
+import org.apache.spark.util.logging.FileAppender
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
