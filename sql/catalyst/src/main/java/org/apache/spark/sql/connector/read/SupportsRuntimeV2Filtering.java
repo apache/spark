@@ -46,11 +46,12 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * Implementations may use the predicates to prune initially planned {@link InputPartition}s.
    * <p>
    * If the scan also implements {@link SupportsReportPartitioning}, it must preserve
-   * the originally reported partitioning during runtime filtering. While applying runtime predicates,
-   * the scan may detect that some {@link InputPartition}s have no matching data. It can omit
-   * such partitions entirely only if it does not report a specific partitioning. Otherwise,
-   * the scan can replace the initially planned {@link InputPartition}s that have no matching
-   * data with empty {@link InputPartition}s but must preserve the overall number of partitions.
+   * the originally reported partitioning during runtime filtering. While applying runtime
+   * predicates, the scan may detect that some {@link InputPartition}s have no matching data. It
+   * can omit such partitions entirely only if it does not report a specific partitioning.
+   * Otherwise, the scan can replace the initially planned {@link InputPartition}s that have no
+   * matching data with empty {@link InputPartition}s but must preserve the overall number of
+   * partitions.
    * <p>
    * Note that Spark will call {@link Scan#toBatch()} again after filtering the scan at runtime.
    *
