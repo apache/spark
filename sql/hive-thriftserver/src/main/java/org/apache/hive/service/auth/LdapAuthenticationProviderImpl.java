@@ -42,7 +42,7 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
     ldapURL = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_URL);
     baseDN = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_BASEDN);
     ldapDomain = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_DOMAIN);
-    userDNPattern = conf.get("hive.server2.authentication.ldap.userDNPattern");
+    userDNPattern = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_USERDNPATTERN);
   }
 
   @Override
