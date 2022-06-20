@@ -167,7 +167,7 @@ Right keys [1]: [n_nationkey#14]
 Join condition: (((n_name#13 = FRANCE) AND (n_name#15 = GERMANY)) OR ((n_name#13 = GERMANY) AND (n_name#15 = FRANCE)))
 
 (30) Project [codegen id : 6]
-Output [4]: [n_name#13 AS supp_nation#16, n_name#15 AS cust_nation#17, year(l_shipdate#7) AS l_year#18, CheckOverflow((promote_precision(cast(l_extendedprice#5 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#6 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) AS volume#19]
+Output [4]: [n_name#13 AS supp_nation#16, n_name#15 AS cust_nation#17, year(l_shipdate#7) AS l_year#18, (l_extendedprice#5 * (1 - l_discount#6)) AS volume#19]
 Input [7]: [l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#11, n_name#13, n_nationkey#14, n_name#15]
 
 (31) HashAggregate [codegen id : 6]

@@ -186,7 +186,7 @@ Arguments: [avg(_w0#18) windowspecdefinition(i_category#13, i_brand#12, cc_name#
 
 (30) Filter [codegen id : 11]
 Input [9]: [i_category#13, i_brand#12, cc_name#10, d_year#7, d_moy#8, sum_sales#17, _w0#18, rn#19, avg_monthly_sales#20]
-Condition : ((isnotnull(avg_monthly_sales#20) AND (avg_monthly_sales#20 > 0.000000)) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#17 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#20 as decimal(22,6)))), DecimalType(22,6)))) / promote_precision(cast(avg_monthly_sales#20 as decimal(22,6)))), DecimalType(38,16)) > 0.1000000000000000))
+Condition : (((isnotnull(avg_monthly_sales#20) AND isnotnull(sum_sales#17)) AND (avg_monthly_sales#20 > 0.000000)) AND ((abs((sum_sales#17 - avg_monthly_sales#20)) / avg_monthly_sales#20) > 0.1000000000000000))
 
 (31) Project [codegen id : 11]
 Output [8]: [i_category#13, i_brand#12, cc_name#10, d_year#7, d_moy#8, sum_sales#17, avg_monthly_sales#20, rn#19]
@@ -277,7 +277,7 @@ Input [14]: [i_category#13, i_brand#12, cc_name#10, d_year#7, d_moy#8, sum_sales
 
 (52) TakeOrderedAndProject
 Input [8]: [i_category#13, i_brand#12, d_year#7, d_moy#8, avg_monthly_sales#20, sum_sales#17, psum#37, nsum#38]
-Arguments: 100, [CheckOverflow((promote_precision(cast(sum_sales#17 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#20 as decimal(22,6)))), DecimalType(22,6)) ASC NULLS FIRST, d_year#7 ASC NULLS FIRST], [i_category#13, i_brand#12, d_year#7, d_moy#8, avg_monthly_sales#20, sum_sales#17, psum#37, nsum#38]
+Arguments: 100, [(sum_sales#17 - avg_monthly_sales#20) ASC NULLS FIRST, d_year#7 ASC NULLS FIRST], [i_category#13, i_brand#12, d_year#7, d_moy#8, avg_monthly_sales#20, sum_sales#17, psum#37, nsum#38]
 
 ===== Subqueries =====
 

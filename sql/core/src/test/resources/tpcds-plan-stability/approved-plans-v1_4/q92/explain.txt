@@ -119,7 +119,7 @@ Input [3]: [ws_item_sk#7, sum#13, count#14]
 Keys [1]: [ws_item_sk#7]
 Functions [1]: [avg(UnscaledValue(ws_ext_discount_amt#8))]
 Aggregate Attributes [1]: [avg(UnscaledValue(ws_ext_discount_amt#8))#15]
-Results [2]: [CheckOverflow((1.300000 * promote_precision(cast((avg(UnscaledValue(ws_ext_discount_amt#8))#15 / 100.0) as decimal(11,6)))), DecimalType(14,7)) AS (1.3 * avg(ws_ext_discount_amt))#16, ws_item_sk#7]
+Results [2]: [(1.3 * cast((avg(UnscaledValue(ws_ext_discount_amt#8))#15 / 100.0) as decimal(11,6))) AS (1.3 * avg(ws_ext_discount_amt))#16, ws_item_sk#7]
 
 (20) Filter [codegen id : 4]
 Input [2]: [(1.3 * avg(ws_ext_discount_amt))#16, ws_item_sk#7]

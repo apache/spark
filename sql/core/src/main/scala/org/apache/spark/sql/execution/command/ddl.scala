@@ -364,8 +364,7 @@ case class AlterTableChangeColumnCommand(
             // Check that the proposed default value parses and analyzes correctly, and that the
             // type of the resulting expression is equivalent or coercible to the destination column
             // type.
-            ResolveDefaultColumns.analyze(
-              sparkSession.sessionState.analyzer, result, "ALTER TABLE ALTER COLUMN")
+            ResolveDefaultColumns.analyze(result, "ALTER TABLE ALTER COLUMN")
             result
           } else {
             withNewComment.clearCurrentDefaultValue()

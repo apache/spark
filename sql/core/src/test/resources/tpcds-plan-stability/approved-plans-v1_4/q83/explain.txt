@@ -256,7 +256,7 @@ Right keys [1]: [item_id#33]
 Join condition: None
 
 (45) Project [codegen id : 18]
-Output [8]: [item_id#11, sr_item_qty#12, (((cast(sr_item_qty#12 as double) / cast(((sr_item_qty#12 + cr_item_qty#23) + wr_item_qty#34) as double)) / 3.0) * 100.0) AS sr_dev#35, cr_item_qty#23, (((cast(cr_item_qty#23 as double) / cast(((sr_item_qty#12 + cr_item_qty#23) + wr_item_qty#34) as double)) / 3.0) * 100.0) AS cr_dev#36, wr_item_qty#34, (((cast(wr_item_qty#34 as double) / cast(((sr_item_qty#12 + cr_item_qty#23) + wr_item_qty#34) as double)) / 3.0) * 100.0) AS wr_dev#37, CheckOverflow((promote_precision(cast(((sr_item_qty#12 + cr_item_qty#23) + wr_item_qty#34) as decimal(21,1))) / 3.0), DecimalType(27,6)) AS average#38]
+Output [8]: [item_id#11, sr_item_qty#12, (((cast(sr_item_qty#12 as double) / cast(((sr_item_qty#12 + cr_item_qty#23) + wr_item_qty#34) as double)) / 3.0) * 100.0) AS sr_dev#35, cr_item_qty#23, (((cast(cr_item_qty#23 as double) / cast(((sr_item_qty#12 + cr_item_qty#23) + wr_item_qty#34) as double)) / 3.0) * 100.0) AS cr_dev#36, wr_item_qty#34, (((cast(wr_item_qty#34 as double) / cast(((sr_item_qty#12 + cr_item_qty#23) + wr_item_qty#34) as double)) / 3.0) * 100.0) AS wr_dev#37, (cast(((sr_item_qty#12 + cr_item_qty#23) + wr_item_qty#34) as decimal(20,0)) / 3.0) AS average#38]
 Input [5]: [item_id#11, sr_item_qty#12, cr_item_qty#23, item_id#33, wr_item_qty#34]
 
 (46) TakeOrderedAndProject

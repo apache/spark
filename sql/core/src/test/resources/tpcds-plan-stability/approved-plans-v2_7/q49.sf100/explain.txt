@@ -177,7 +177,7 @@ Input [7]: [ws_item_sk#1, sum#20, sum#21, sum#22, isEmpty#23, sum#24, isEmpty#25
 Keys [1]: [ws_item_sk#1]
 Functions [4]: [sum(coalesce(wr_return_quantity#11, 0)), sum(coalesce(ws_quantity#3, 0)), sum(coalesce(cast(wr_return_amt#12 as decimal(12,2)), 0.00)), sum(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))]
 Aggregate Attributes [4]: [sum(coalesce(wr_return_quantity#11, 0))#26, sum(coalesce(ws_quantity#3, 0))#27, sum(coalesce(cast(wr_return_amt#12 as decimal(12,2)), 0.00))#28, sum(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))#29]
-Results [3]: [ws_item_sk#1 AS item#30, CheckOverflow((promote_precision(cast(sum(coalesce(wr_return_quantity#11, 0))#26 as decimal(15,4))) / promote_precision(cast(sum(coalesce(ws_quantity#3, 0))#27 as decimal(15,4)))), DecimalType(35,20)) AS return_ratio#31, CheckOverflow((promote_precision(cast(sum(coalesce(cast(wr_return_amt#12 as decimal(12,2)), 0.00))#28 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))#29 as decimal(15,4)))), DecimalType(35,20)) AS currency_ratio#32]
+Results [3]: [ws_item_sk#1 AS item#30, (cast(sum(coalesce(wr_return_quantity#11, 0))#26 as decimal(15,4)) / cast(sum(coalesce(ws_quantity#3, 0))#27 as decimal(15,4))) AS return_ratio#31, (cast(sum(coalesce(cast(wr_return_amt#12 as decimal(12,2)), 0.00))#28 as decimal(15,4)) / cast(sum(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))#29 as decimal(15,4))) AS currency_ratio#32]
 
 (21) Exchange
 Input [3]: [item#30, return_ratio#31, currency_ratio#32]
@@ -297,7 +297,7 @@ Input [7]: [cs_item_sk#36, sum#54, sum#55, sum#56, isEmpty#57, sum#58, isEmpty#5
 Keys [1]: [cs_item_sk#36]
 Functions [4]: [sum(coalesce(cr_return_quantity#45, 0)), sum(coalesce(cs_quantity#38, 0)), sum(coalesce(cast(cr_return_amount#46 as decimal(12,2)), 0.00)), sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))]
 Aggregate Attributes [4]: [sum(coalesce(cr_return_quantity#45, 0))#60, sum(coalesce(cs_quantity#38, 0))#61, sum(coalesce(cast(cr_return_amount#46 as decimal(12,2)), 0.00))#62, sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#63]
-Results [3]: [cs_item_sk#36 AS item#64, CheckOverflow((promote_precision(cast(sum(coalesce(cr_return_quantity#45, 0))#60 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cs_quantity#38, 0))#61 as decimal(15,4)))), DecimalType(35,20)) AS return_ratio#65, CheckOverflow((promote_precision(cast(sum(coalesce(cast(cr_return_amount#46 as decimal(12,2)), 0.00))#62 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#63 as decimal(15,4)))), DecimalType(35,20)) AS currency_ratio#66]
+Results [3]: [cs_item_sk#36 AS item#64, (cast(sum(coalesce(cr_return_quantity#45, 0))#60 as decimal(15,4)) / cast(sum(coalesce(cs_quantity#38, 0))#61 as decimal(15,4))) AS return_ratio#65, (cast(sum(coalesce(cast(cr_return_amount#46 as decimal(12,2)), 0.00))#62 as decimal(15,4)) / cast(sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#63 as decimal(15,4))) AS currency_ratio#66]
 
 (48) Exchange
 Input [3]: [item#64, return_ratio#65, currency_ratio#66]
@@ -417,7 +417,7 @@ Input [7]: [ss_item_sk#70, sum#88, sum#89, sum#90, isEmpty#91, sum#92, isEmpty#9
 Keys [1]: [ss_item_sk#70]
 Functions [4]: [sum(coalesce(sr_return_quantity#79, 0)), sum(coalesce(ss_quantity#72, 0)), sum(coalesce(cast(sr_return_amt#80 as decimal(12,2)), 0.00)), sum(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))]
 Aggregate Attributes [4]: [sum(coalesce(sr_return_quantity#79, 0))#94, sum(coalesce(ss_quantity#72, 0))#95, sum(coalesce(cast(sr_return_amt#80 as decimal(12,2)), 0.00))#96, sum(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))#97]
-Results [3]: [ss_item_sk#70 AS item#98, CheckOverflow((promote_precision(cast(sum(coalesce(sr_return_quantity#79, 0))#94 as decimal(15,4))) / promote_precision(cast(sum(coalesce(ss_quantity#72, 0))#95 as decimal(15,4)))), DecimalType(35,20)) AS return_ratio#99, CheckOverflow((promote_precision(cast(sum(coalesce(cast(sr_return_amt#80 as decimal(12,2)), 0.00))#96 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))#97 as decimal(15,4)))), DecimalType(35,20)) AS currency_ratio#100]
+Results [3]: [ss_item_sk#70 AS item#98, (cast(sum(coalesce(sr_return_quantity#79, 0))#94 as decimal(15,4)) / cast(sum(coalesce(ss_quantity#72, 0))#95 as decimal(15,4))) AS return_ratio#99, (cast(sum(coalesce(cast(sr_return_amt#80 as decimal(12,2)), 0.00))#96 as decimal(15,4)) / cast(sum(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))#97 as decimal(15,4))) AS currency_ratio#100]
 
 (75) Exchange
 Input [3]: [item#98, return_ratio#99, currency_ratio#100]

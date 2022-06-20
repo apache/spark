@@ -63,6 +63,11 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
 
   private lazy val zero = Literal.default(resultType)
 
+  private def add(left: Expression, right: Expression): Expression = left.dataType match {
+    case _: DecimalType => DecimalAddNoOverflowCheck(left, right, left.dataType)
+    case _ => Add(left, right, useAnsiAdd)
+  }
+
   override lazy val aggBufferAttributes = if (shouldTrackIsEmpty) {
     sum :: isEmpty :: Nil
   } else {
@@ -82,9 +87,9 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
     // null if overflow happens under non-ansi mode.
     val sumExpr = if (child.nullable) {
       If(child.isNull, sum,
-        Add(sum, KnownNotNull(child).cast(resultType), failOnError = useAnsiAdd))
+        add(sum, KnownNotNull(child).cast(resultType)))
     } else {
-      Add(sum, child.cast(resultType), failOnError = useAnsiAdd)
+      add(sum, child.cast(resultType))
     }
     // The buffer becomes non-empty after seeing the first not-null input.
     val isEmptyExpr = if (child.nullable) {
@@ -99,10 +104,10 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
     // in case the input is nullable. The `sum` can only be null if there is no value, as
     // non-decimal type can produce overflowed value under non-ansi mode.
     if (child.nullable) {
-      Seq(coalesce(Add(coalesce(sum, zero), child.cast(resultType), failOnError = useAnsiAdd),
+      Seq(coalesce(add(coalesce(sum, zero), child.cast(resultType)),
         sum))
     } else {
-      Seq(Add(coalesce(sum, zero), child.cast(resultType), failOnError = useAnsiAdd))
+      Seq(add(coalesce(sum, zero), child.cast(resultType)))
     }
   }
 
@@ -128,11 +133,11 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
         // If both the buffer and the input do not overflow, just add them, as they can't be
         // null. See the comments inside `updateExpressions`: `sum` can only be null if
         // overflow happens.
-        Add(KnownNotNull(sum.left), KnownNotNull(sum.right), useAnsiAdd)),
+        add(KnownNotNull(sum.left), KnownNotNull(sum.right))),
       isEmpty.left && isEmpty.right)
   } else {
     Seq(coalesce(
-      Add(coalesce(sum.left, zero), sum.right, failOnError = useAnsiAdd),
+      add(coalesce(sum.left, zero), sum.right),
       sum.left))
   }
 

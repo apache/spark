@@ -70,7 +70,7 @@ Results [2]: [ss_item_sk#1 AS item_sk#10, cast((avg(UnscaledValue(ss_net_profit#
 
 (8) Filter [codegen id : 2]
 Input [2]: [item_sk#10, rank_col#11]
-Condition : (isnotnull(rank_col#11) AND (cast(rank_col#11 as decimal(13,7)) > CheckOverflow((0.900000 * promote_precision(Subquery scalar-subquery#12, [id=#13])), DecimalType(13,7))))
+Condition : (isnotnull(rank_col#11) AND (cast(rank_col#11 as decimal(13,7)) > (0.9 * Subquery scalar-subquery#12, [id=#13])))
 
 (9) Exchange
 Input [2]: [item_sk#10, rank_col#11]

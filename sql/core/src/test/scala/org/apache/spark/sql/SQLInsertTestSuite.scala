@@ -167,8 +167,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       createTable("t1", cols, Seq("int", "long", "string"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)"))
       assert(e1.getMessage.contains(
-        "[MISSING_COLUMN] Column 'c4' does not exist. Did you mean one of the following? " +
-          "[c1, c2, c3]"))
+        "[UNRESOLVED_COLUMN] A column or function parameter with name `c4` cannot be resolved. " +
+          "Did you mean one of the following? [`c1`, `c2`, `c3`]"))
     }
   }
 

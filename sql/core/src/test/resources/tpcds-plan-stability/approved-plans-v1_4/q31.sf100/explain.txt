@@ -599,10 +599,10 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (107) BroadcastHashJoin [codegen id : 42]
 Left keys [1]: [ca_county#34]
 Right keys [1]: [ca_county#45]
-Join condition: ((CASE WHEN (web_sales#49 > 0.00) THEN CheckOverflow((promote_precision(web_sales#60) / promote_precision(web_sales#49)), DecimalType(37,20)) END > CASE WHEN (store_sales#37 > 0.00) THEN CheckOverflow((promote_precision(store_sales#13) / promote_precision(store_sales#37)), DecimalType(37,20)) END) AND (CASE WHEN (web_sales#60 > 0.00) THEN CheckOverflow((promote_precision(web_sales#71) / promote_precision(web_sales#60)), DecimalType(37,20)) END > CASE WHEN (store_sales#13 > 0.00) THEN CheckOverflow((promote_precision(store_sales#25) / promote_precision(store_sales#13)), DecimalType(37,20)) END))
+Join condition: ((CASE WHEN (web_sales#49 > 0.00) THEN (web_sales#60 / web_sales#49) END > CASE WHEN (store_sales#37 > 0.00) THEN (store_sales#13 / store_sales#37) END) AND (CASE WHEN (web_sales#60 > 0.00) THEN (web_sales#71 / web_sales#60) END > CASE WHEN (store_sales#13 > 0.00) THEN (store_sales#25 / store_sales#13) END))
 
 (108) Project [codegen id : 42]
-Output [6]: [ca_county#34, d_year#31, CheckOverflow((promote_precision(web_sales#60) / promote_precision(web_sales#49)), DecimalType(37,20)) AS web_q1_q2_increase#72, CheckOverflow((promote_precision(store_sales#13) / promote_precision(store_sales#37)), DecimalType(37,20)) AS store_q1_q2_increase#73, CheckOverflow((promote_precision(web_sales#71) / promote_precision(web_sales#60)), DecimalType(37,20)) AS web_q2_q3_increase#74, CheckOverflow((promote_precision(store_sales#25) / promote_precision(store_sales#13)), DecimalType(37,20)) AS store_q2_q3_increase#75]
+Output [6]: [ca_county#34, d_year#31, (web_sales#60 / web_sales#49) AS web_q1_q2_increase#72, (store_sales#13 / store_sales#37) AS store_q1_q2_increase#73, (web_sales#71 / web_sales#60) AS web_q2_q3_increase#74, (store_sales#25 / store_sales#13) AS store_q2_q3_increase#75]
 Input [9]: [store_sales#13, store_sales#25, ca_county#34, d_year#31, store_sales#37, ca_county#45, web_sales#49, web_sales#60, web_sales#71]
 
 (109) Exchange
