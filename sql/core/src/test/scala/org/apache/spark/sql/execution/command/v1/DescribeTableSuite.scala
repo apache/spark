@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.types.StringType
 
@@ -47,6 +47,17 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         Seq(
           Row("data", "string", null),
           Row("id", "bigint", null)))
+    }
+  }
+
+  test("Describing a partition is not supported") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+        "PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
+      }
+      assert(e.message === "Partition not found in table 'table' database 'ns':\nid -> 1")
     }
   }
 }
