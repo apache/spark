@@ -237,7 +237,7 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
     require(k > 0, "ranking position k should be positive")
     rdd.map { case (pred, lab) =>
       countRelevantItemRatio(pred, lab, k, lab.toSet.size)
-    } .mean()
+    }.mean()
   }
 
   /**
@@ -284,9 +284,8 @@ object RankingMetrics {
   @Since("1.4.0")
   def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]
-    val rdd = predictionAndLabels.rdd.map {
-      case (predictions, labels) =>
-        (predictions.asScala.toArray, labels.asScala.toArray)
+    val rdd = predictionAndLabels.rdd.map { case (predictions, labels) =>
+      (predictions.asScala.toArray, labels.asScala.toArray)
     }
     new RankingMetrics(rdd)
   }
