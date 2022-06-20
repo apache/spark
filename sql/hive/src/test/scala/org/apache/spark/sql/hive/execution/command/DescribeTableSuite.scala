@@ -30,12 +30,14 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
   test("Table Ownership") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t(k int)")
-      checkAnswer(
-        sql(s"DESCRIBE TABLE EXTENDED $t")
-          .where("col_name='Owner'")
-          .select("col_name", "data_type"),
-        Row("Owner", Utils.getCurrentUserName()))
+      sql(s"CREATE TABLE $t (c int) $defaultUsing")
+      checkHiveClientCalls(expected = 6) {
+        checkAnswer(
+          sql(s"DESCRIBE TABLE EXTENDED $t")
+            .where("col_name='Owner'")
+            .select("col_name", "data_type"),
+          Row("Owner", Utils.getCurrentUserName()))
+      }
     }
   }
 }
