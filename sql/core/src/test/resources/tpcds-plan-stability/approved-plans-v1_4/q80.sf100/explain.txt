@@ -270,7 +270,7 @@ Input [7]: [ss_store_sk#2, ss_ext_sales_price#5, ss_net_profit#6, sr_return_amt#
 (37) HashAggregate [codegen id : 9]
 Input [5]: [ss_ext_sales_price#5, ss_net_profit#6, sr_return_amt#15, sr_net_loss#16, s_store_id#24]
 Keys [1]: [s_store_id#24]
-Functions [3]: [partial_sum(UnscaledValue(ss_ext_sales_price#5)), partial_sum(coalesce(cast(sr_return_amt#15 as decimal(12,2)), 0.00)), partial_sum(CheckOverflow((promote_precision(cast(ss_net_profit#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(sr_net_loss#16 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))]
+Functions [3]: [partial_sum(UnscaledValue(ss_ext_sales_price#5)), partial_sum(coalesce(cast(sr_return_amt#15 as decimal(12,2)), 0.00)), partial_sum((ss_net_profit#6 - coalesce(cast(sr_net_loss#16 as decimal(12,2)), 0.00)))]
 Aggregate Attributes [5]: [sum#25, sum#26, isEmpty#27, sum#28, isEmpty#29]
 Results [6]: [s_store_id#24, sum#30, sum#31, isEmpty#32, sum#33, isEmpty#34]
 
@@ -281,9 +281,9 @@ Arguments: hashpartitioning(s_store_id#24, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 (39) HashAggregate [codegen id : 10]
 Input [6]: [s_store_id#24, sum#30, sum#31, isEmpty#32, sum#33, isEmpty#34]
 Keys [1]: [s_store_id#24]
-Functions [3]: [sum(UnscaledValue(ss_ext_sales_price#5)), sum(coalesce(cast(sr_return_amt#15 as decimal(12,2)), 0.00)), sum(CheckOverflow((promote_precision(cast(ss_net_profit#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(sr_net_loss#16 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))]
-Aggregate Attributes [3]: [sum(UnscaledValue(ss_ext_sales_price#5))#35, sum(coalesce(cast(sr_return_amt#15 as decimal(12,2)), 0.00))#36, sum(CheckOverflow((promote_precision(cast(ss_net_profit#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(sr_net_loss#16 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))#37]
-Results [5]: [MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#5))#35,17,2) AS sales#38, sum(coalesce(cast(sr_return_amt#15 as decimal(12,2)), 0.00))#36 AS returns#39, sum(CheckOverflow((promote_precision(cast(ss_net_profit#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(sr_net_loss#16 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))#37 AS profit#40, store channel AS channel#41, concat(store, s_store_id#24) AS id#42]
+Functions [3]: [sum(UnscaledValue(ss_ext_sales_price#5)), sum(coalesce(cast(sr_return_amt#15 as decimal(12,2)), 0.00)), sum((ss_net_profit#6 - coalesce(cast(sr_net_loss#16 as decimal(12,2)), 0.00)))]
+Aggregate Attributes [3]: [sum(UnscaledValue(ss_ext_sales_price#5))#35, sum(coalesce(cast(sr_return_amt#15 as decimal(12,2)), 0.00))#36, sum((ss_net_profit#6 - coalesce(cast(sr_net_loss#16 as decimal(12,2)), 0.00)))#37]
+Results [5]: [MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#5))#35,17,2) AS sales#38, sum(coalesce(cast(sr_return_amt#15 as decimal(12,2)), 0.00))#36 AS returns#39, sum((ss_net_profit#6 - coalesce(cast(sr_net_loss#16 as decimal(12,2)), 0.00)))#37 AS profit#40, store channel AS channel#41, concat(store, s_store_id#24) AS id#42]
 
 (40) Scan parquet default.catalog_sales
 Output [7]: [cs_catalog_page_sk#43, cs_item_sk#44, cs_promo_sk#45, cs_order_number#46, cs_ext_sales_price#47, cs_net_profit#48, cs_sold_date_sk#49]
@@ -409,7 +409,7 @@ Input [7]: [cs_catalog_page_sk#43, cs_ext_sales_price#47, cs_net_profit#48, cr_r
 (68) HashAggregate [codegen id : 19]
 Input [5]: [cs_ext_sales_price#47, cs_net_profit#48, cr_return_amount#52, cr_net_loss#53, cp_catalog_page_id#59]
 Keys [1]: [cp_catalog_page_id#59]
-Functions [3]: [partial_sum(UnscaledValue(cs_ext_sales_price#47)), partial_sum(coalesce(cast(cr_return_amount#52 as decimal(12,2)), 0.00)), partial_sum(CheckOverflow((promote_precision(cast(cs_net_profit#48 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_net_loss#53 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))]
+Functions [3]: [partial_sum(UnscaledValue(cs_ext_sales_price#47)), partial_sum(coalesce(cast(cr_return_amount#52 as decimal(12,2)), 0.00)), partial_sum((cs_net_profit#48 - coalesce(cast(cr_net_loss#53 as decimal(12,2)), 0.00)))]
 Aggregate Attributes [5]: [sum#60, sum#61, isEmpty#62, sum#63, isEmpty#64]
 Results [6]: [cp_catalog_page_id#59, sum#65, sum#66, isEmpty#67, sum#68, isEmpty#69]
 
@@ -420,9 +420,9 @@ Arguments: hashpartitioning(cp_catalog_page_id#59, 5), ENSURE_REQUIREMENTS, [pla
 (70) HashAggregate [codegen id : 20]
 Input [6]: [cp_catalog_page_id#59, sum#65, sum#66, isEmpty#67, sum#68, isEmpty#69]
 Keys [1]: [cp_catalog_page_id#59]
-Functions [3]: [sum(UnscaledValue(cs_ext_sales_price#47)), sum(coalesce(cast(cr_return_amount#52 as decimal(12,2)), 0.00)), sum(CheckOverflow((promote_precision(cast(cs_net_profit#48 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_net_loss#53 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))]
-Aggregate Attributes [3]: [sum(UnscaledValue(cs_ext_sales_price#47))#70, sum(coalesce(cast(cr_return_amount#52 as decimal(12,2)), 0.00))#71, sum(CheckOverflow((promote_precision(cast(cs_net_profit#48 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_net_loss#53 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))#72]
-Results [5]: [MakeDecimal(sum(UnscaledValue(cs_ext_sales_price#47))#70,17,2) AS sales#73, sum(coalesce(cast(cr_return_amount#52 as decimal(12,2)), 0.00))#71 AS returns#74, sum(CheckOverflow((promote_precision(cast(cs_net_profit#48 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_net_loss#53 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))#72 AS profit#75, catalog channel AS channel#76, concat(catalog_page, cp_catalog_page_id#59) AS id#77]
+Functions [3]: [sum(UnscaledValue(cs_ext_sales_price#47)), sum(coalesce(cast(cr_return_amount#52 as decimal(12,2)), 0.00)), sum((cs_net_profit#48 - coalesce(cast(cr_net_loss#53 as decimal(12,2)), 0.00)))]
+Aggregate Attributes [3]: [sum(UnscaledValue(cs_ext_sales_price#47))#70, sum(coalesce(cast(cr_return_amount#52 as decimal(12,2)), 0.00))#71, sum((cs_net_profit#48 - coalesce(cast(cr_net_loss#53 as decimal(12,2)), 0.00)))#72]
+Results [5]: [MakeDecimal(sum(UnscaledValue(cs_ext_sales_price#47))#70,17,2) AS sales#73, sum(coalesce(cast(cr_return_amount#52 as decimal(12,2)), 0.00))#71 AS returns#74, sum((cs_net_profit#48 - coalesce(cast(cr_net_loss#53 as decimal(12,2)), 0.00)))#72 AS profit#75, catalog channel AS channel#76, concat(catalog_page, cp_catalog_page_id#59) AS id#77]
 
 (71) Scan parquet default.web_sales
 Output [7]: [ws_item_sk#78, ws_web_site_sk#79, ws_promo_sk#80, ws_order_number#81, ws_ext_sales_price#82, ws_net_profit#83, ws_sold_date_sk#84]
@@ -548,7 +548,7 @@ Input [7]: [ws_web_site_sk#79, ws_ext_sales_price#82, ws_net_profit#83, wr_retur
 (99) HashAggregate [codegen id : 29]
 Input [5]: [ws_ext_sales_price#82, ws_net_profit#83, wr_return_amt#87, wr_net_loss#88, web_site_id#94]
 Keys [1]: [web_site_id#94]
-Functions [3]: [partial_sum(UnscaledValue(ws_ext_sales_price#82)), partial_sum(coalesce(cast(wr_return_amt#87 as decimal(12,2)), 0.00)), partial_sum(CheckOverflow((promote_precision(cast(ws_net_profit#83 as decimal(13,2))) - promote_precision(cast(coalesce(cast(wr_net_loss#88 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))]
+Functions [3]: [partial_sum(UnscaledValue(ws_ext_sales_price#82)), partial_sum(coalesce(cast(wr_return_amt#87 as decimal(12,2)), 0.00)), partial_sum((ws_net_profit#83 - coalesce(cast(wr_net_loss#88 as decimal(12,2)), 0.00)))]
 Aggregate Attributes [5]: [sum#95, sum#96, isEmpty#97, sum#98, isEmpty#99]
 Results [6]: [web_site_id#94, sum#100, sum#101, isEmpty#102, sum#103, isEmpty#104]
 
@@ -559,9 +559,9 @@ Arguments: hashpartitioning(web_site_id#94, 5), ENSURE_REQUIREMENTS, [plan_id=14
 (101) HashAggregate [codegen id : 30]
 Input [6]: [web_site_id#94, sum#100, sum#101, isEmpty#102, sum#103, isEmpty#104]
 Keys [1]: [web_site_id#94]
-Functions [3]: [sum(UnscaledValue(ws_ext_sales_price#82)), sum(coalesce(cast(wr_return_amt#87 as decimal(12,2)), 0.00)), sum(CheckOverflow((promote_precision(cast(ws_net_profit#83 as decimal(13,2))) - promote_precision(cast(coalesce(cast(wr_net_loss#88 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))]
-Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_sales_price#82))#105, sum(coalesce(cast(wr_return_amt#87 as decimal(12,2)), 0.00))#106, sum(CheckOverflow((promote_precision(cast(ws_net_profit#83 as decimal(13,2))) - promote_precision(cast(coalesce(cast(wr_net_loss#88 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))#107]
-Results [5]: [MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#82))#105,17,2) AS sales#108, sum(coalesce(cast(wr_return_amt#87 as decimal(12,2)), 0.00))#106 AS returns#109, sum(CheckOverflow((promote_precision(cast(ws_net_profit#83 as decimal(13,2))) - promote_precision(cast(coalesce(cast(wr_net_loss#88 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)))#107 AS profit#110, web channel AS channel#111, concat(web_site, web_site_id#94) AS id#112]
+Functions [3]: [sum(UnscaledValue(ws_ext_sales_price#82)), sum(coalesce(cast(wr_return_amt#87 as decimal(12,2)), 0.00)), sum((ws_net_profit#83 - coalesce(cast(wr_net_loss#88 as decimal(12,2)), 0.00)))]
+Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_sales_price#82))#105, sum(coalesce(cast(wr_return_amt#87 as decimal(12,2)), 0.00))#106, sum((ws_net_profit#83 - coalesce(cast(wr_net_loss#88 as decimal(12,2)), 0.00)))#107]
+Results [5]: [MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#82))#105,17,2) AS sales#108, sum(coalesce(cast(wr_return_amt#87 as decimal(12,2)), 0.00))#106 AS returns#109, sum((ws_net_profit#83 - coalesce(cast(wr_net_loss#88 as decimal(12,2)), 0.00)))#107 AS profit#110, web channel AS channel#111, concat(web_site, web_site_id#94) AS id#112]
 
 (102) Union
 

@@ -4225,13 +4225,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("""SELECT from_json(R'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
   }
 
-  test("SPARK-36979: Add RewriteLateralSubquery rule into nonExcludableRules") {
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-      "org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery") {
-      sql("SELECT * FROM testData, LATERAL (SELECT * FROM testData)").collect()
-    }
-  }
-
   test("TABLE SAMPLE") {
     withTable("test") {
       sql("CREATE TABLE test(c int) USING PARQUET")

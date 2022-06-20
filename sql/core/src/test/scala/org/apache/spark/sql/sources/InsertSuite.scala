@@ -1024,7 +1024,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
-      val COLUMN_DEFAULT_NOT_FOUND = "Column 'default' does not exist"
+      val COLUMN_DEFAULT_NOT_FOUND = "`default` cannot be resolved."
       val BAD_SUBQUERY = "cannot evaluate expression scalarsubquery() in inline table definition"
     }
     // The default value fails to analyze.
@@ -1278,7 +1278,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         assert(intercept[AnalysisException] {
           sql("insert into t (I) select true from (select 1)")
         }.getMessage.contains(
-          "[MISSING_COLUMN] Column 'I' does not exist. Did you mean one of the following? [i, s]"))
+          "[UNRESOLVED_COLUMN] A column or function parameter with name `I` cannot be resolved. " +
+            "Did you mean one of the following? [`i`, `s`]"))
       }
     }
   }
@@ -1757,8 +1758,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |)
           """.stripMargin)
       }
-      assert(ex.getErrorClass == "MISSING_COLUMN")
-      assert(ex.messageParameters.head == "c3")
+      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(ex.messageParameters.head == "`c3`")
     }
   }
 

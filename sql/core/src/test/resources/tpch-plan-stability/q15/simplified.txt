@@ -20,7 +20,7 @@ WholeStageCodegen (4)
                               Exchange #4
                                 WholeStageCodegen (2)
                                   HashAggregate [total_revenue] [max,max]
-                                    HashAggregate [l_suppkey,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(l_extendedprice as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0))),total_revenue,sum,isEmpty]
+                                    HashAggregate [l_suppkey,sum,isEmpty] [sum((l_extendedprice * (1 - l_discount))),total_revenue,sum,isEmpty]
                                       InputAdapter
                                         Exchange [l_suppkey] #5
                                           WholeStageCodegen (1)
@@ -30,7 +30,7 @@ WholeStageCodegen (4)
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.lineitem [l_suppkey,l_extendedprice,l_discount,l_shipdate]
-                      HashAggregate [l_suppkey,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(l_extendedprice as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0))),supplier_no,total_revenue,sum,isEmpty]
+                      HashAggregate [l_suppkey,sum,isEmpty] [sum((l_extendedprice * (1 - l_discount))),supplier_no,total_revenue,sum,isEmpty]
                         InputAdapter
                           Exchange [l_suppkey] #3
                             WholeStageCodegen (1)

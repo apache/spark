@@ -201,7 +201,7 @@ Input [5]: [l_extendedprice#8, l_discount#9, n_name#13, n_regionkey#14, r_region
 (36) HashAggregate [codegen id : 6]
 Input [3]: [l_extendedprice#8, l_discount#9, n_name#13]
 Keys [1]: [n_name#13]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
+Functions [1]: [partial_sum((l_extendedprice#8 * (1 - l_discount#9)))]
 Aggregate Attributes [2]: [sum#17, isEmpty#18]
 Results [3]: [n_name#13, sum#19, isEmpty#20]
 
@@ -212,9 +212,9 @@ Arguments: hashpartitioning(n_name#13, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 (38) HashAggregate [codegen id : 7]
 Input [3]: [n_name#13, sum#19, isEmpty#20]
 Keys [1]: [n_name#13]
-Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#21]
-Results [2]: [n_name#13, sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#21 AS revenue#22]
+Functions [1]: [sum((l_extendedprice#8 * (1 - l_discount#9)))]
+Aggregate Attributes [1]: [sum((l_extendedprice#8 * (1 - l_discount#9)))#21]
+Results [2]: [n_name#13, sum((l_extendedprice#8 * (1 - l_discount#9)))#21 AS revenue#22]
 
 (39) Exchange
 Input [2]: [n_name#13, revenue#22]

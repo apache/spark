@@ -225,7 +225,7 @@ Right keys [1]: [s_store_sk#21]
 Join condition: None
 
 (30) Project [codegen id : 8]
-Output [5]: [sales#14, coalesce(returns#28, 0.00) AS returns#30, CheckOverflow((promote_precision(cast(profit#15 as decimal(18,2))) - promote_precision(cast(coalesce(profit_loss#29, 0.00) as decimal(18,2)))), DecimalType(18,2)) AS profit#31, store channel AS channel#32, s_store_sk#7 AS id#33]
+Output [5]: [sales#14, coalesce(returns#28, 0.00) AS returns#30, (profit#15 - coalesce(profit_loss#29, 0.00)) AS profit#31, store channel AS channel#32, s_store_sk#7 AS id#33]
 Input [6]: [s_store_sk#7, sales#14, profit#15, s_store_sk#21, returns#28, profit_loss#29]
 
 (31) Scan parquet default.catalog_sales
@@ -316,7 +316,7 @@ Results [2]: [MakeDecimal(sum(UnscaledValue(cr_return_amount#47))#55,17,2) AS re
 Join condition: None
 
 (49) Project [codegen id : 14]
-Output [5]: [sales#45, returns#57, CheckOverflow((promote_precision(cast(profit#46 as decimal(18,2))) - promote_precision(cast(profit_loss#58 as decimal(18,2)))), DecimalType(18,2)) AS profit#59, catalog channel AS channel#60, cs_call_center_sk#34 AS id#61]
+Output [5]: [sales#45, returns#57, (profit#46 - profit_loss#58) AS profit#59, catalog channel AS channel#60, cs_call_center_sk#34 AS id#61]
 Input [5]: [cs_call_center_sk#34, sales#45, profit#46, returns#57, profit_loss#58]
 
 (50) Scan parquet default.web_sales
@@ -458,7 +458,7 @@ Right keys [1]: [wp_web_page_sk#81]
 Join condition: None
 
 (79) Project [codegen id : 22]
-Output [5]: [sales#74, coalesce(returns#88, 0.00) AS returns#90, CheckOverflow((promote_precision(cast(profit#75 as decimal(18,2))) - promote_precision(cast(coalesce(profit_loss#89, 0.00) as decimal(18,2)))), DecimalType(18,2)) AS profit#91, web channel AS channel#92, wp_web_page_sk#67 AS id#93]
+Output [5]: [sales#74, coalesce(returns#88, 0.00) AS returns#90, (profit#75 - coalesce(profit_loss#89, 0.00)) AS profit#91, web channel AS channel#92, wp_web_page_sk#67 AS id#93]
 Input [6]: [wp_web_page_sk#67, sales#74, profit#75, wp_web_page_sk#81, returns#88, profit_loss#89]
 
 (80) Union

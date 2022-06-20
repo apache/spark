@@ -101,7 +101,7 @@ Input [6]: [o_orderkey#3, o_orderdate#5, o_shippriority#6, l_orderkey#7, l_exten
 (18) HashAggregate [codegen id : 3]
 Input [5]: [o_orderdate#5, o_shippriority#6, l_orderkey#7, l_extendedprice#8, l_discount#9]
 Keys [3]: [l_orderkey#7, o_orderdate#5, o_shippriority#6]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
+Functions [1]: [partial_sum((l_extendedprice#8 * (1 - l_discount#9)))]
 Aggregate Attributes [2]: [sum#11, isEmpty#12]
 Results [5]: [l_orderkey#7, o_orderdate#5, o_shippriority#6, sum#13, isEmpty#14]
 
@@ -112,9 +112,9 @@ Arguments: hashpartitioning(l_orderkey#7, o_orderdate#5, o_shippriority#6, 5), E
 (20) HashAggregate [codegen id : 4]
 Input [5]: [l_orderkey#7, o_orderdate#5, o_shippriority#6, sum#13, isEmpty#14]
 Keys [3]: [l_orderkey#7, o_orderdate#5, o_shippriority#6]
-Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#15]
-Results [4]: [l_orderkey#7, sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#15 AS revenue#16, o_orderdate#5, o_shippriority#6]
+Functions [1]: [sum((l_extendedprice#8 * (1 - l_discount#9)))]
+Aggregate Attributes [1]: [sum((l_extendedprice#8 * (1 - l_discount#9)))#15]
+Results [4]: [l_orderkey#7, sum((l_extendedprice#8 * (1 - l_discount#9)))#15 AS revenue#16, o_orderdate#5, o_shippriority#6]
 
 (21) TakeOrderedAndProject
 Input [4]: [l_orderkey#7, revenue#16, o_orderdate#5, o_shippriority#6]

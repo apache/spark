@@ -154,7 +154,7 @@ Input [3]: [ctr_store_sk#11, sum#17, count#18]
 Keys [1]: [ctr_store_sk#11]
 Functions [1]: [avg(ctr_total_return#12)]
 Aggregate Attributes [1]: [avg(ctr_total_return#12)#19]
-Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#12)#19) * 1.200000), DecimalType(24,7)) AS (avg(ctr_total_return) * 1.2)#20, ctr_store_sk#11 AS ctr_store_sk#11#21]
+Results [2]: [(avg(ctr_total_return#12)#19 * 1.2) AS (avg(ctr_total_return) * 1.2)#20, ctr_store_sk#11 AS ctr_store_sk#11#21]
 
 (23) Filter [codegen id : 6]
 Input [2]: [(avg(ctr_total_return) * 1.2)#20, ctr_store_sk#11#21]
