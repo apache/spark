@@ -17,18 +17,23 @@
 # under the License.
 #
 
-name: "Build and test (ANSI)"
+name: "Build (master, Scala 2.13, Hadoop 3, JDK 8)"
 
 on:
-  push:
-    branches:
-      - '**'
+  schedule:
+    - cron: '0 19 * * *'
 
 jobs:
-  call-build-and-test:
-    name: Call main build
+  run-build:
+    name: Run
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      ansi_enabled: true
-
+      java: 8
+      branch: master
+      hadoop: hadoop3
+      type: scheduled
+      envs: >-
+        {
+          "SCALA_PROFILE": "scala2.13"
+        }
