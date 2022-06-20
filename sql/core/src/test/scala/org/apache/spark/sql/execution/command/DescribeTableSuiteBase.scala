@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 
 /**
  * This base suite contains unified tests for the `DESCRIBE TABLE` command that check V1 and V2
@@ -40,6 +41,47 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"DESCRIBE TABLE ${tbl}_non_existence")
       }
       assert(e.getMessage.contains(s"Table or view not found: ${tbl}_non_existence"))
+    }
+  }
+
+  test("SPARK-34561: drop/add columns to a dataset of `DESCRIBE TABLE`") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (c0 INT) $defaultUsing")
+      val description = sql(s"DESCRIBE TABLE $tbl")
+      val noCommentDataset = description.drop("comment")
+      val expectedSchema = new StructType()
+        .add(
+          name = "col_name",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "name of the column").build())
+        .add(
+          name = "data_type",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "data type of the column").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("col_name").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
+  test("SPARK-34576: drop/add columns to a dataset of `DESCRIBE COLUMN`") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (c0 INT) $defaultUsing")
+      val description = sql(s"DESCRIBE TABLE $tbl c0")
+      val noCommentDataset = description.drop("info_value")
+      val expectedSchema = new StructType()
+        .add(
+          name = "info_name",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "name of the column info").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("info_name").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
     }
   }
 }
