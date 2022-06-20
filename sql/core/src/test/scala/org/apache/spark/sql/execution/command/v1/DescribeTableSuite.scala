@@ -68,4 +68,39 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
  */
 class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[DescribeTableSuiteBase].commandVersion
+
+  test("DESCRIBE TABLE EXTENDED of a partitioned table") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
+        " PARTITIONED BY (id)" +
+        " TBLPROPERTIES ('bar'='baz')" +
+        " COMMENT 'this is a test table'" +
+        " LOCATION 'file:/tmp/testcat/table_name'")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf.filter("col_name != 'Created Time'"),
+        Seq(
+          Row("data", "string", null),
+          Row("id", "bigint", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null),
+          Row("", "", ""),
+          Row("# Detailed Table Information", "", ""),
+          Row("Database", "ns", ""),
+          Row("Table", "table", ""),
+          Row("Last Access", "UNKNOWN", ""),
+          Row("Created By", "Spark 3.4.0-SNAPSHOT", ""),
+          Row("Type", "EXTERNAL", ""),
+          Row("Provider", "parquet", ""),
+          Row("Comment", "this is a test table", ""),
+          Row("Table Properties", "[bar=baz]", ""),
+          Row("Location", "file:/tmp/testcat/table_name", ""),
+          Row("Partition Provider", "Catalog", "")))
+    }
+  }
 }
