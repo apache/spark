@@ -686,7 +686,7 @@ jobs:
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
-        SPARK_ANSI_SQL_MODE: ${{ inputs.envs.SPARK_ANSI_SQL_MODE }}
+        SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.preferSortMergeJoin=true
@@ -694,14 +694,14 @@ jobs:
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
-        SPARK_ANSI_SQL_MODE: ${{ inputs.envs.SPARK_ANSI_SQL_MODE }}
+        SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=10485760
     - name: Run TPC-DS queries (Shuffled hash join)
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
-        SPARK_ANSI_SQL_MODE: ${{ inputs.envs.SPARK_ANSI_SQL_MODE }}
+        SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true

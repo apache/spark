@@ -69,7 +69,7 @@ jobs:
               // Assume that runs were not found.
             }
 
-            const name = 'Build and test'
+            const name = 'Build'
             const head_sha = context.payload.pull_request.head.sha
             let status = 'queued'
 
