@@ -106,7 +106,7 @@ jobs:
           echo '::set-output name=branch::branch-3.3'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
-          echo '::set-output name=hadoop::hadoop3.3'
+          echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
           echo '::set-output name=branch::master'  # NOTE: UPDATE THIS WHEN CUTTING BRANCH
