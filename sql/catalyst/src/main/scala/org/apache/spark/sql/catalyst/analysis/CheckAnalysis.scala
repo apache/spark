@@ -91,6 +91,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
   }
 
+  private def isMapWithStringKey(e: Expression): Boolean = if (e.resolved) {
+    e.dataType match {
+      case m: MapType => m.keyType.isInstanceOf[StringType]
+      case _ => false
+    }
+  } else {
+    false
+  }
+
+  private def failUnresolvedAttribute(
+      operator: LogicalPlan,
+      a: Attribute,
+      errorClass: String): Nothing = {
+    val missingCol = a.sql
+    val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+    val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+    throw QueryCompilationErrors.unresolvedAttributeError(
+      errorClass, missingCol, orderedCandidates, a.origin)
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures. Inline all CTEs in the plan to help check
@@ -160,11 +180,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan =>
-        // Check argument data types of higher-order functions downwards first.
-        // If the arguments of the higher-order functions are resolved but the type check fails,
-        // the argument functions will not get resolved, but we should report the argument type
-        // check failure instead of claiming the argument functions are unresolved.
         operator transformExpressionsDown {
+          // Check argument data types of higher-order functions downwards first.
+          // If the arguments of the higher-order functions are resolved but the type check fails,
+          // the argument functions will not get resolved, but we should report the argument type
+          // check failure instead of claiming the argument functions are unresolved.
           case hof: HigherOrderFunction
               if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
             hof.checkArgumentDataTypes() match {
@@ -172,15 +192,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 hof.failAnalysis(
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
             }
+
+          // If an attribute can't be resolved as a map key of string type, either the key should be
+          // surrounded with single quotes, or there is a typo in the attribute name.
+          case GetMapValue(map, key: Attribute, _) if isMapWithStringKey(map) && !key.resolved =>
+            failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
-            val missingCol = a.sql
-            val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
-            val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
-            throw QueryCompilationErrors.unresolvedColumnError(
-              missingCol, orderedCandidates, a.origin)
+            failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
 
           case s: Star =>
             withPosition(s) {
