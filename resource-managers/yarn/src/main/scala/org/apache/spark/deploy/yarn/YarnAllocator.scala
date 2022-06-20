@@ -30,7 +30,6 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.api.records.{NodeState => YarnNodeState}
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
