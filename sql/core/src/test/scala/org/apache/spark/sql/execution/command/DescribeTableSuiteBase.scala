@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 /**
  * This base suite contains unified tests for the `DESCRIBE TABLE` command that check V1 and V2
@@ -33,4 +33,13 @@ import org.apache.spark.sql.QueryTest
  */
 trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DESCRIBE TABLE"
+
+  test("DESCRIBE TABLE in a catalog when table does not exist") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      val e = intercept[AnalysisException] {
+        sql(s"DESCRIBE TABLE ${tbl}_non_existence")
+      }
+      assert(e.getMessage.contains(s"Table or view not found: ${tbl}_non_existence"))
+    }
+  }
 }
