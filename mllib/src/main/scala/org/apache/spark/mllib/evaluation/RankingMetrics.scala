@@ -45,6 +45,7 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
   private val rdd = predictionAndLabels.map {
     case (pred: Array[T], lab: Array[T]) => (pred, lab)
     case (pred: Array[T], lab: Array[T], _: Array[Double]) => (pred, lab)
+    case _ => throw new IllegalArgumentException(s"Expected RDD of tuples or triplets")
   }
 
   /**
