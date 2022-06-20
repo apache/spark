@@ -382,7 +382,7 @@ Right keys [3]: [cs_sold_year#74, cs_item_sk#54, cs_customer_sk#75]
 Join condition: None
 
 (69) Project [codegen id : 23]
-Output [13]: [round((cast(ss_qty#24 as double) / cast(coalesce((ws_qty#50 + cs_qty#76), 1) as double)), 2) AS ratio#79, ss_qty#24 AS store_qty#80, ss_wc#25 AS store_wholesale_cost#81, ss_sp#26 AS store_sales_price#82, (coalesce(ws_qty#50, 0) + coalesce(cs_qty#76, 0)) AS other_chan_qty#83, CheckOverflow((promote_precision(cast(coalesce(ws_wc#51, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_wc#77, 0.00) as decimal(18,2)))), DecimalType(18,2)) AS other_chan_wholesale_cost#84, CheckOverflow((promote_precision(cast(coalesce(ws_sp#52, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_sp#78, 0.00) as decimal(18,2)))), DecimalType(18,2)) AS other_chan_sales_price#85, ss_sold_year#23, ss_item_sk#1, ss_customer_sk#2, ss_qty#24, ss_wc#25, ss_sp#26]
+Output [13]: [round((cast(ss_qty#24 as double) / cast(coalesce((ws_qty#50 + cs_qty#76), 1) as double)), 2) AS ratio#79, ss_qty#24 AS store_qty#80, ss_wc#25 AS store_wholesale_cost#81, ss_sp#26 AS store_sales_price#82, (coalesce(ws_qty#50, 0) + coalesce(cs_qty#76, 0)) AS other_chan_qty#83, (coalesce(ws_wc#51, 0.00) + coalesce(cs_wc#77, 0.00)) AS other_chan_wholesale_cost#84, (coalesce(ws_sp#52, 0.00) + coalesce(cs_sp#78, 0.00)) AS other_chan_sales_price#85, ss_sold_year#23, ss_item_sk#1, ss_customer_sk#2, ss_qty#24, ss_wc#25, ss_sp#26]
 Input [15]: [ss_sold_year#23, ss_item_sk#1, ss_customer_sk#2, ss_qty#24, ss_wc#25, ss_sp#26, ws_qty#50, ws_wc#51, ws_sp#52, cs_sold_year#74, cs_item_sk#54, cs_customer_sk#75, cs_qty#76, cs_wc#77, cs_sp#78]
 
 (70) TakeOrderedAndProject

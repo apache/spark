@@ -325,9 +325,9 @@ class MasterSuite extends SparkFunSuite
     val conf = new SparkConf()
     val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
-    val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
+    val masterUrl = s"http://${Utils.localCanonicalHostName()}:${localCluster.masterWebUIPort}"
     try {
-      eventually(timeout(5.seconds), interval(100.milliseconds)) {
+      eventually(timeout(50.seconds), interval(100.milliseconds)) {
         val json = Utils
           .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
@@ -362,9 +362,9 @@ class MasterSuite extends SparkFunSuite
     conf.set(UI_REVERSE_PROXY, true)
     val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
-    val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
+    val masterUrl = s"http://${Utils.localCanonicalHostName()}:${localCluster.masterWebUIPort}"
     try {
-      eventually(timeout(5.seconds), interval(100.milliseconds)) {
+      eventually(timeout(50.seconds), interval(100.milliseconds)) {
         val json = Utils
           .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
@@ -400,9 +400,9 @@ class MasterSuite extends SparkFunSuite
     conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
     val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
-    val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
+    val masterUrl = s"http://${Utils.localCanonicalHostName()}:${localCluster.masterWebUIPort}"
     try {
-      eventually(timeout(5.seconds), interval(100.milliseconds)) {
+      eventually(timeout(50.seconds), interval(100.milliseconds)) {
         val json = Utils
           .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")

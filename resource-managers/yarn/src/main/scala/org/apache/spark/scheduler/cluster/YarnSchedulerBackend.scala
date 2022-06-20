@@ -334,6 +334,10 @@ private[spark] abstract class YarnSchedulerBackend(
         amEndpoint = Option(am)
         reset()
 
+      case s @ DecommissionExecutorsOnHost(hostId) =>
+        logDebug(s"Requesting to decommission host ${hostId}. Sending to driver")
+        driverEndpoint.send(s)
+
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
 

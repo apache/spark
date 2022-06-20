@@ -50,8 +50,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Boolean]("dataTypeMismatchError")
 
-  val DATA_TYPE_MISMATCH_ERROR_MESSAGE = TreeNodeTag[String]("dataTypeMismatchError")
-
   protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
   }
@@ -176,27 +174,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
         }
 
-        val expressions = getAllExpressions(operator)
-
-        expressions.foreach(_.foreachUp {
-          case e: Expression =>
-            e.getTagValue(DATA_TYPE_MISMATCH_ERROR_MESSAGE) match {
-              case Some(message) =>
-                e.failAnalysis(s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
-                  extraHintForAnsiTypeCoercionExpression(operator))
-              case _ =>
-            }
-          case _ =>
-        })
-
-        expressions.foreach(_.foreachUp {
+        getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             val missingCol = a.sql
             val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
             val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
-            a.failAnalysis(
-              errorClass = "MISSING_COLUMN",
-              messageParameters = Array(missingCol, orderedCandidates.mkString(", ")))
+            throw QueryCompilationErrors.unresolvedColumnError(
+              missingCol, orderedCandidates, a.origin)
 
           case s: Star =>
             withPosition(s) {
@@ -301,20 +285,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               failAnalysis("Input argument tolerance must be non-negative.")
             }
 
-          case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
-            def isAggregateExpression(expr: Expression): Boolean = {
-              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
-            }
-
+          case Aggregate(groupingExprs, aggregateExprs, _) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case expr: Expression if isAggregateExpression(expr) =>
+              case expr: Expression if AggregateExpression.isAggregate(expr) =>
                 val aggFunction = expr match {
                   case agg: AggregateExpression => agg.aggregateFunction
                   case udf: PythonUDF => udf
                 }
                 aggFunction.children.foreach { child =>
                   child.foreach {
-                    case expr: Expression if isAggregateExpression(expr) =>
+                    case expr: Expression if AggregateExpression.isAggregate(expr) =>
                       failAnalysis(
                         s"It is not allowed to use an aggregate function in the argument of " +
                           s"another aggregate function. Please use the inner aggregate function " +

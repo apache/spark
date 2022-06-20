@@ -85,10 +85,4 @@ object functions {
   def array_to_vector(v: Column): Column = {
     arrayToVectorUdf(v)
   }
-
-  private[ml] def checkNonNegativeWeight = udf {
-    value: Double =>
-      require(value >= 0, s"illegal weight value: $value. weight must be >= 0.0.")
-      value
-  }
 }

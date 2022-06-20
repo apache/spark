@@ -251,12 +251,6 @@
       "Key <keyValue> does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ]
   },
-  "MISSING_COLUMN" : {
-    "message" : [
-      "Column '<columnName>' does not exist. Did you mean one of the following? [<proposal>]"
-    ],
-    "sqlState" : "42000"
-  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
       "Unknown static partition column: <columnName>"
@@ -349,6 +343,12 @@
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
       "Unrecognized SQL type <typeName>"
+    ],
+    "sqlState" : "42000"
+  },
+  "UNRESOLVED_COLUMN" : {
+    "message" : [
+      "A column or function parameter with name <objectName> cannot be resolved. Did you mean one of the following? [<objectList>]"
     ],
     "sqlState" : "42000"
   },

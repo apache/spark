@@ -965,7 +965,7 @@ private[spark] class MapOutputTrackerMaster(
         statuses.length.toLong * totalSizes.length / parallelAggThreshold + 1).toInt
       if (parallelism <= 1) {
         statuses.filter(_ != null).foreach { s =>
-          for (i <- 0 until totalSizes.length) {
+          for (i <- totalSizes.indices) {
             totalSizes(i) += s.getSizeForBlock(i)
           }
         }
