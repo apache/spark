@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.errors.QueryParsingErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -105,12 +104,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       operator: LogicalPlan,
       a: Attribute,
       errorClass: String): Nothing = {
-    val unresolvedAttribute = toSQLId(a.sql)
-    val candidates = operator.inputSet.toSeq.map(s => toSQLId(s.qualifiedName))
-    val orderedCandidates = StringUtils.orderStringsBySimilarity(unresolvedAttribute, candidates)
-    a.failAnalysis(
-      errorClass = errorClass,
-      messageParameters = Array(unresolvedAttribute, orderedCandidates.mkString(", ")))
+    val missingCol = a.sql
+    val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+    val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+    throw QueryCompilationErrors.unresolvedAttributeError(
+      errorClass, missingCol, orderedCandidates, a.origin)
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
@@ -203,7 +201,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
-            failUnresolvedAttribute(operator, a, "MISSING_COLUMN")
+            failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
 
           case s: Star =>
             withPosition(s) {

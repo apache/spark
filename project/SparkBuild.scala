@@ -1165,6 +1165,13 @@ object TestSettings {
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
     (Test / javaOptions) += "-Dio.netty.tryReflectionSetAccessible=true",
+    (Test / javaOptions) ++= {
+      if ("true".equals(System.getProperty("java.net.preferIPv6Addresses"))) {
+        Seq("-Djava.net.preferIPv6Addresses=true")
+      } else {
+        Seq.empty
+      }
+    },
     (Test / javaOptions) ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",

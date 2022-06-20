@@ -3273,7 +3273,7 @@ select * from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'y.f1' does not exist. Did you mean one of the following? [j.f1, j.f1, x.q1, x.q2]; line 2 pos 72
+[UNRESOLVED_COLUMN] A column or function parameter with name `y`.`f1` cannot be resolved. Did you mean one of the following? [`j`.`f1`, `j`.`f1`, `x`.`q1`, `x`.`q2`]; line 2 pos 72
 
 
 -- !query
@@ -3292,7 +3292,7 @@ select udf(t1.uunique1) from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 't1.uunique1' does not exist. Did you mean one of the following? [t1.unique1, t2.unique1, t1.unique2, t2.unique2, t1.hundred, t2.hundred, t1.stringu1, t1.even, t1.four, t1.string4, t2.stringu1, t1.stringu2, t1.ten, t1.tenthous, t2.even, t2.four, t1.odd, t2.string4, t2.stringu2, t2.ten, t2.tenthous, t1.thousand, t1.twenty, t1.two, t1.fivethous, t2.odd, t2.thousand, t2.twenty, t2.two, t2.fivethous, t1.twothousand, t2.twothousand]; line 1 pos 11
+[UNRESOLVED_COLUMN] A column or function parameter with name `t1`.`uunique1` cannot be resolved. Did you mean one of the following? [`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`, `t2`.`hundred`, `t1`.`stringu1`, `t1`.`even`, `t1`.`four`, `t1`.`string4`, `t2`.`stringu1`, `t1`.`stringu2`, `t1`.`ten`, `t1`.`tenthous`, `t2`.`even`, `t2`.`four`, `t1`.`odd`, `t2`.`string4`, `t2`.`stringu2`, `t2`.`ten`, `t2`.`tenthous`, `t1`.`thousand`, `t1`.`twenty`, `t1`.`two`, `t1`.`fivethous`, `t2`.`odd`, `t2`.`thousand`, `t2`.`twenty`, `t2`.`two`, `t2`.`fivethous`, `t1`.`twothousand`, `t2`.`twothousand`]; line 1 pos 11
 
 
 -- !query
@@ -3302,7 +3302,7 @@ select udf(udf(t2.uunique1)) from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 't2.uunique1' does not exist. Did you mean one of the following? [t2.unique1, t1.unique1, t2.unique2, t1.unique2, t2.hundred, t1.hundred, t2.stringu1, t2.even, t2.four, t2.string4, t1.stringu1, t2.stringu2, t2.ten, t2.tenthous, t1.even, t1.four, t2.odd, t1.string4, t1.stringu2, t1.ten, t1.tenthous, t2.thousand, t2.twenty, t2.two, t2.fivethous, t1.odd, t1.thousand, t1.twenty, t1.two, t1.fivethous, t2.twothousand, t1.twothousand]; line 1 pos 15
+[UNRESOLVED_COLUMN] A column or function parameter with name `t2`.`uunique1` cannot be resolved. Did you mean one of the following? [`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`, `t1`.`hundred`, `t2`.`stringu1`, `t2`.`even`, `t2`.`four`, `t2`.`string4`, `t1`.`stringu1`, `t2`.`stringu2`, `t2`.`ten`, `t2`.`tenthous`, `t1`.`even`, `t1`.`four`, `t2`.`odd`, `t1`.`string4`, `t1`.`stringu2`, `t1`.`ten`, `t1`.`tenthous`, `t2`.`thousand`, `t2`.`twenty`, `t2`.`two`, `t2`.`fivethous`, `t1`.`odd`, `t1`.`thousand`, `t1`.`twenty`, `t1`.`two`, `t1`.`fivethous`, `t2`.`twothousand`, `t1`.`twothousand`]; line 1 pos 15
 
 
 -- !query
@@ -3312,7 +3312,7 @@ select udf(uunique1) from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'uunique1' does not exist. Did you mean one of the following? [t1.unique1, t2.unique1, t1.unique2, t2.unique2, t1.even, t2.even, t1.four, t2.four, t1.ten, t2.ten, t1.hundred, t2.hundred, t1.odd, t2.odd, t1.two, t2.two, t1.stringu1, t2.stringu1, t1.twenty, t2.twenty, t1.string4, t2.string4, t1.stringu2, t2.stringu2, t1.tenthous, t2.tenthous, t1.thousand, t2.thousand, t1.fivethous, t2.fivethous, t1.twothousand, t2.twothousand]; line 1 pos 11
+[UNRESOLVED_COLUMN] A column or function parameter with name `uunique1` cannot be resolved. Did you mean one of the following? [`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`, `t2`.`even`, `t1`.`four`, `t2`.`four`, `t1`.`ten`, `t2`.`ten`, `t1`.`hundred`, `t2`.`hundred`, `t1`.`odd`, `t2`.`odd`, `t1`.`two`, `t2`.`two`, `t1`.`stringu1`, `t2`.`stringu1`, `t1`.`twenty`, `t2`.`twenty`, `t1`.`string4`, `t2`.`string4`, `t1`.`stringu2`, `t2`.`stringu2`, `t1`.`tenthous`, `t2`.`tenthous`, `t1`.`thousand`, `t2`.`thousand`, `t1`.`fivethous`, `t2`.`fivethous`, `t1`.`twothousand`, `t2`.`twothousand`]; line 1 pos 11
 
 
 -- !query
@@ -3512,7 +3512,7 @@ select udf(udf(f1,g)) from int4_tbl a, (select udf(udf(f1)) as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'f1' does not exist. Did you mean one of the following? []; line 1 pos 55
+[UNRESOLVED_COLUMN] A column or function parameter with name `f1` cannot be resolved. Did you mean one of the following? []; line 1 pos 55
 
 
 -- !query
@@ -3521,7 +3521,7 @@ select udf(f1,g) from int4_tbl a, (select a.f1 as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'a.f1' does not exist. Did you mean one of the following? []; line 1 pos 42
+[UNRESOLVED_COLUMN] A column or function parameter with name `a`.`f1` cannot be resolved. Did you mean one of the following? []; line 1 pos 42
 
 
 -- !query
@@ -3530,7 +3530,7 @@ select udf(udf(f1,g)) from int4_tbl a cross join (select udf(f1) as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'f1' does not exist. Did you mean one of the following? []; line 1 pos 61
+[UNRESOLVED_COLUMN] A column or function parameter with name `f1` cannot be resolved. Did you mean one of the following? []; line 1 pos 61
 
 
 -- !query
@@ -3539,7 +3539,7 @@ select udf(f1,g) from int4_tbl a cross join (select udf(udf(a.f1)) as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'a.f1' does not exist. Did you mean one of the following? []; line 1 pos 60
+[UNRESOLVED_COLUMN] A column or function parameter with name `a`.`f1` cannot be resolved. Did you mean one of the following? []; line 1 pos 60
 
 
 -- !query
