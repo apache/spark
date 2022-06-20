@@ -116,10 +116,14 @@ jobs:
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
     steps:
-    - name: Checkout Spark repository and sync with latest master
-      uses: ./.github/actions/checkout-and-sync
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
       with:
-        branch: ${{ needs.configure-jobs.outputs.branch }}
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.configure-jobs.outputs.branch }}
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/sync-fork-with-upstream
     - name: Check all modules
       id: set-outputs
       run: |
@@ -206,10 +210,14 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
     steps:
-    - name: Checkout Spark repository and sync with latest master
-      uses: ./.github/actions/checkout-and-sync
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
       with:
-        branch: ${{ needs.configure-jobs.outputs.branch }}
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.configure-jobs.outputs.branch }}
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/sync-fork-with-upstream
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -306,10 +314,14 @@ jobs:
       METASPACE_SIZE: 1g
       SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
-    - name: Checkout Spark repository and sync with latest master
-      uses: ./.github/actions/checkout-and-sync
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
       with:
-        branch: ${{ needs.configure-jobs.outputs.branch }}
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.configure-jobs.outputs.branch }}
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/sync-fork-with-upstream
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -386,10 +398,14 @@ jobs:
       SKIP_MIMA: true
       SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
-    - name: Checkout Spark repository and sync with latest master
-      uses: ./.github/actions/checkout-and-sync
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
       with:
-        branch: ${{ needs.configure-jobs.outputs.branch }}
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.configure-jobs.outputs.branch }}
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/sync-fork-with-upstream
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -441,10 +457,14 @@ jobs:
     container:
       image: dongjoon/apache-spark-github-action-image:20220207
     steps:
-    - name: Checkout Spark repository and sync with latest master
-      uses: ./.github/actions/checkout-and-sync
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
       with:
-        branch: ${{ needs.configure-jobs.outputs.branch }}
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.configure-jobs.outputs.branch }}
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/sync-fork-with-upstream
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -548,10 +568,14 @@ jobs:
           - 17
     runs-on: ubuntu-20.04
     steps:
-    - name: Checkout Spark repository and sync with latest master
-      uses: ./.github/actions/checkout-and-sync
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
       with:
-        branch: ${{ needs.configure-jobs.outputs.branch }}
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.configure-jobs.outputs.branch }}
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/sync-fork-with-upstream
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -590,10 +614,14 @@ jobs:
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-20.04
     steps:
-    - name: Checkout Spark repository and sync with latest master
-      uses: ./.github/actions/checkout-and-sync
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
       with:
-        branch: ${{ needs.configure-jobs.outputs.branch }}
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.configure-jobs.outputs.branch }}
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/sync-fork-with-upstream
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -631,10 +659,14 @@ jobs:
       SPARK_LOCAL_IP: localhost
       SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
-    - name: Checkout Spark repository and sync with latest master
-      uses: ./.github/actions/checkout-and-sync
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
       with:
-        branch: ${{ needs.configure-jobs.outputs.branch }}
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.configure-jobs.outputs.branch }}
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/sync-fork-with-upstream
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -723,10 +755,14 @@ jobs:
       ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
       SKIP_MIMA: true
     steps:
-    - name: Checkout Spark repository and sync with latest master
-      uses: ./.github/actions/checkout-and-sync
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
       with:
-        branch: ${{ needs.configure-jobs.outputs.branch }}
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.configure-jobs.outputs.branch }}
+    - name: Checkout Spark repository and sync with latest master
+      uses: ./.github/actions/sync-fork-with-upstream
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:

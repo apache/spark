@@ -1,23 +1,11 @@
-name: 'Checkout and Sync sources'
+name: 'Sync sources'
 author: 'Apache Spark'
-description: 'A composite GitHub Action that git checkout sources and syncs with upstream'
-
-inputs:
-  branch:
-    description: "The branch"
-    required: true
+description: 'A composite GitHub Action that syncs fork branch with Spark master'
 
 runs:
   using: 'composite'
   steps:
-  - name: Checkout Spark repository
-    uses: actions/checkout@v2
-    with:
-      fetch-depth: 0
-      repository: apache/spark
-      ref: ${{ input.branch }}
-
-  - name: Sync the current branch with the latest in Apache Spark
+  - name: Sync the current branch with the latest master in Apache Spark
     if: github.repository != 'apache/spark'
     shell: bash
     run: |
