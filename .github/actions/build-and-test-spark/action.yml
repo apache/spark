@@ -1,0 +1,141 @@
+name: 'Build and Test Spark'
+author: 'Apache Spark'
+description: 'A composite GitHub Action that builds and tests a set of Spark modules'
+
+inputs:
+  job-type:
+    description: "The type of the job: regular, scheduled, pyspark-coverage-scheduled"
+    required: true
+  branch:
+    description: "The branch"
+    required: true
+  java-version:
+    description: "The Java version"
+    required: true
+  hadoop-version:
+    description: "The Hadoop version"
+    required: true
+  hive-version:
+    description: "The Hive version"
+    required: true
+  envs:
+    description: "Environment varias as JSON object"
+    required: false
+    default: "{}"
+  modules:
+    description: "The modules to be build and tested as a comma-separated list"
+    required: true
+  included-tags:
+    description: "Tags to include for testing"
+    required: false
+    default: ""
+  excluded-tags:
+    description: "Tags to exclude for testing"
+    required: false
+    default: ""
+  label:
+    description: "Job label"
+    required: false
+    default: ""
+  ansi_enabled:
+    description: "Use ANSI mode: 'true' or 'false'"
+    required: false
+    default: "false"
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set env
+      run: |
+        echo "MODULES_TO_TEST=${{ inputs.modules }}" >> $GITHUB_ENV
+        echo "EXCLUDED_TAGS=${{ inputs.excluded-tags }}" >> $GITHUB_ENV
+        echo "INCLUDED_TAGS=${{ inputs.included-tags }}" >> $GITHUB_ENV
+        echo "HADOOP_PROFILE=${{ inputs.hadoop-version }}" >> $GITHUB_ENV
+        echo "HIVE_PROFILE=${{ inputs.hive-version }}" >> $GITHUB_ENV
+        echo "GITHUB_PREV_SHA=${{ github.event.before }}" >> $GITHUB_ENV
+        echo "SPARK_LOCAL_IP=localhost" >> $GITHUB_ENV
+
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
+      # In order to fetch changed files
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ inputs.branch }}
+
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      run: |
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+
+    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+
+    - name: Cache Coursier local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/coursier
+        key: ${{ inputs.java-version }}-${{ inputs.hadoop-version }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          ${{ inputs.java-version }}-${{ inputs.hadoop-version }}-coursier-
+
+    - name: Install Java ${{ inputs.java-version }}
+      uses: actions/setup-java@v1
+      with:
+        java-version: ${{ inputs.java-version }}
+
+    - name: Install Python 3.8
+      uses: actions/setup-python@v2
+      # We should install one Python that is higher then 3+ for SQL and Yarn because:
+      # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
+      # - Yarn has a Python specific test too, for example, YarnClusterSuite.
+      if: contains(inputs.modules, 'yarn') || (contains(inputs.modules, 'sql') && !contains(inputs.modules, 'sql-'))
+      with:
+        python-version: 3.8
+        architecture: x64
+
+    - name: Install Python packages (Python 3.8)
+      if: (contains(inputs.modules, 'sql') && !contains(inputs.modules, 'sql-'))
+      run: |
+        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy xmlrunner
+        python3.8 -m pip list
+
+    # Run the tests.
+    - name: Run tests
+      env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
+      run: |
+        # Hive "other tests" test needs larger metaspace size based on experiment.
+        if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
+        export SERIAL_SBT_TESTS=1
+        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
+
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-results-${{ inputs.modules }}-${{ inputs.comment }}-${{ inputs.java-version }}-${{ inputs.hadoop-version }}-${{ inputs.hive-version }}
+        path: "**/target/test-reports/*.xml"
+
+    - name: Upload unit tests log files
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: unit-tests-log-${{ inputs.modules }}-${{ inputs.comment }}-${{ inputs.java-version }}-${{ inputs.hadoop-version }}-${{ inputs.hive-version }}
+        path: "**/target/unit-tests.log"
+
+branding:
+  icon: 'check-circle'
+  color: 'green'

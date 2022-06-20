@@ -153,128 +153,97 @@ jobs:
         cat required.json
         echo "::set-output name=required::$(cat required.json)"
 
-  spark-core:
-    name: "Build and Test"
-    uses: ./.github/workflows/build_and_test_spark.yml
+  # Build Spark and run the tests for specified modules.
+  spark:
+    name: "Build modules (${{ needs.configure-jobs.outputs.branch }}, ${{ needs.configure-jobs.outputs.type }} job): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
     needs: [configure-jobs, precondition]
-    if: needs.precondition.outputs.spark-core-required == 'true'
-    with:
-      job-type: ${{ needs.configure-jobs.outputs.type }}
-      branch: ${{ needs.configure-jobs.outputs.branch }}
-      java-version: ${{ needs.configure-jobs.outputs.java }}
-      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
-      hive-version: hive2.3
-      envs: ${{ needs.configure-jobs.outputs.envs }}
-      modules: ${{ needs.precondition.outputs.spark-core-modules }}
-      included-tags: ""
-      excluded-tags: ""
-      comment: ""
-      ansi_enabled: ${{ inputs.ansi_enabled }}
+    # Run scheduled jobs for Apache Spark only
+    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
+    if: >-
+      needs.configure-jobs.outputs.type == 'scheduled'
+      || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true')
+    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # TODO(SPARK-32246): We don't test 'streaming-kinesis-asl' for now.
+          # Kinesis tests depends on external Amazon kinesis service.
+          # Note that the modules below are from sparktestsupport/modules.py.
+          - modules: >-
+              core, unsafe, kvstore, avro,
+              network-common, network-shuffle, repl, launcher,
+              examples, sketch, graphx
+            java: ${{ needs.configure-jobs.outputs.java }}
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            hive: hive2.3
 
-  spark-catalyst:
-    name: "Build and Test"
-    uses: ./.github/workflows/build_and_test_spark.yml
-    needs: [configure-jobs, precondition]
-    if: needs.precondition.outputs.spark-catalyst == 'true'
-    with:
-      job-type: ${{ needs.configure-jobs.outputs.type }}
-      branch: ${{ needs.configure-jobs.outputs.branch }}
-      java-version: ${{ needs.configure-jobs.outputs.java }}
-      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
-      hive-version: hive2.3
-      envs: ${{ needs.configure-jobs.outputs.envs }}
-      modules: ${{ needs.precondition.outputs.spark-catalyst-modules }}
-      included-tags: ""
-      excluded-tags: ""
-      comment: ""
-      ansi_enabled: ${{ inputs.ansi_enabled }}
+          - modules: catalyst, hive-thriftserver
+            java: ${{ needs.configure-jobs.outputs.java }}
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            hive: hive2.3
 
-  spark-streaming:
-    name: "Build and Test"
-    uses: ./.github/workflows/build_and_test_spark.yml
-    needs: [configure-jobs, precondition]
-    if: needs.precondition.outputs.spark-streaming == 'true'
-    with:
-      job-type: ${{ needs.configure-jobs.outputs.type }}
-      branch: ${{ needs.configure-jobs.outputs.branch }}
-      java-version: ${{ needs.configure-jobs.outputs.java }}
-      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
-      hive-version: hive2.3
-      envs: ${{ needs.configure-jobs.outputs.envs }}
-      modules: ${{ needs.precondition.outputs.spark-streaming-modules }}
-      included-tags: ""
-      excluded-tags: ""
-      comment: ""
-      ansi_enabled: ${{ inputs.ansi_enabled }}
+          - modules: >-
+              streaming, sql-kafka-0-10, streaming-kafka-0-10,
+              mllib-local, mllib,
+              yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl
+            java: ${{ needs.configure-jobs.outputs.java }}
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            hive: hive2.3
 
-  spark-hive:
-    name: "Build and Test"
-    uses: ./.github/workflows/build_and_test_spark.yml
-    needs: [configure-jobs, precondition]
-    if: needs.precondition.outputs.spark-hive == 'true'
-    with:
-      job-type: ${{ needs.configure-jobs.outputs.type }}
-      branch: ${{ needs.configure-jobs.outputs.branch }}
-      java-version: ${{ needs.configure-jobs.outputs.java }}
-      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
-      hive-version: hive2.3
-      envs: ${{ needs.configure-jobs.outputs.envs }}
-      modules: ${{ needs.precondition.outputs.spark-hive-modules }}
-      included-tags: ${{ matrix.included-tags }}
-      excluded-tags: ${{ matrix.excluded-tags }}
-      comment: ${{ matrix.comment }}
-      ansi_enabled: ${{ inputs.ansi_enabled }}
+          # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
 
-  spark-hive-slow:
-    name: "Build and Test"
-    uses: ./.github/workflows/build_and_test_spark.yml
-    needs: [configure-jobs, precondition]
-    if: needs.precondition.outputs.spark-hive-slow == 'true'
-    with:
-      job-type: ${{ needs.configure-jobs.outputs.type }}
-      branch: ${{ needs.configure-jobs.outputs.branch }}
-      java-version: ${{ needs.configure-jobs.outputs.java }}
-      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
-      hive-version: hive2.3
-      envs: ${{ needs.configure-jobs.outputs.envs }}
-      modules: ${{ needs.precondition.outputs.spark-hive-slow-modules }}
-      included-tags: org.apache.spark.tags.SlowHiveTest
-      comment: "- slow tests"
-      ansi_enabled: ${{ inputs.ansi_enabled }}
+          # Hive tests
+          - modules: hive
+            java: ${{ needs.configure-jobs.outputs.java }}
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            hive: hive2.3
+            included-tags: org.apache.spark.tags.SlowHiveTest
+            label: "- slow tests"
+          - modules: hive
+            java: ${{ needs.configure-jobs.outputs.java }}
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.SlowHiveTest
+            label: "- other tests"
 
-  spark-sql:
-    name: "Build and Test"
-    uses: ./.github/workflows/build_and_test_spark.yml
-    needs: [configure-jobs, precondition]
-    if: needs.precondition.outputs.spark-sql == 'true'
-    with:
-      job-type: ${{ needs.configure-jobs.outputs.type }}
-      branch: ${{ needs.configure-jobs.outputs.branch }}
-      java-version: ${{ needs.configure-jobs.outputs.java }}
-      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
-      hive-version: hive2.3
-      envs: ${{ needs.configure-jobs.outputs.envs }}
-      modules: ${{ needs.precondition.outputs.spark-sql-modules }}
-      excluded-tags: org.apache.spark.tags.ExtendedSQLTest
-      comment: "- other tests"
-      ansi_enabled: ${{ inputs.ansi_enabled }}
+          # SQL tests
+          - modules: sql
+            java: ${{ needs.configure-jobs.outputs.java }}
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            hive: hive2.3
+            included-tags: org.apache.spark.tags.ExtendedSQLTest
+            label: "- slow tests"
+          - modules: sql
+            java: ${{ needs.configure-jobs.outputs.java }}
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest
+            label: "- other tests"
 
-  spark-sql-slow:
-    name: "Build and Test"
-    uses: ./.github/workflows/build_and_test_spark.yml
-    needs: [configure-jobs, precondition]
-    if: needs.precondition.outputs.spark-sql-slow == 'true'
-    with:
-      job-type: ${{ needs.configure-jobs.outputs.type }}
-      branch: ${{ needs.configure-jobs.outputs.branch }}
-      java-version: ${{ needs.configure-jobs.outputs.java }}
-      hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
-      hive-version: hive2.3
-      envs: ${{ needs.configure-jobs.outputs.envs }}
-      modules: ${{ needs.precondition.outputs.spark-sql-slow-modules }}
-      included-tags: org.apache.spark.tags.ExtendedSQLTest
-      comment: "- slow tests"
-      ansi_enabled: ${{ inputs.ansi_enabled }}
+    steps:
+    - name: "Check for changes"
+      id: changes
+      run: |
+        true
+
+    - name: "Build and test"
+      uses: ./.github/actions/build-and-test-spark
+      # should be 'true' if not 'false', but we want to fall back to running tests if output is unexpected
+      if: steps.changes.outputs.exist != 'false'
+      with:
+        job-type: ${{ needs.configure-jobs.outputs.type }}
+        branch: ${{ needs.configure-jobs.outputs.branch }}
+        java-version: ${{ needs.configure-jobs.outputs.java }}
+        hadoop-version: ${{ needs.configure-jobs.outputs.hadoop }}
+        hive-version: hive2.3
+        envs: ${{ needs.configure-jobs.outputs.envs }}
+        modules: ${{ matrix.modules }}
+        included-tags: ${{ matrix.included-tags }}
+        excluded-tags: ${{ matrix.excluded-tags }}
+        label: ${{ matrix.label }}
+        ansi_enabled: ${{ inputs.ansi_enabled }}
 
   sparkr:
     needs: [configure-jobs, precondition]
