@@ -19,12 +19,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
+    <artifactId>spark-parent_2.13</artifactId>
     <version>3.4.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-kubernetes-integration-tests_2.12</artifactId>
+  <artifactId>spark-kubernetes-integration-tests_2.13</artifactId>
   <properties>
     <download-maven-plugin.version>1.3.0</download-maven-plugin.version>
     <extraScalaTestArgs></extraScalaTestArgs>

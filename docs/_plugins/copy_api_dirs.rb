@@ -26,8 +26,8 @@ if not (ENV['SKIP_API'] == '1')
     curr_dir = pwd
     cd("..")
 
-    puts "Running 'build/sbt -Pkinesis-asl clean compile unidoc' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt -Pkinesis-asl clean compile unidoc") || raise("Unidoc generation failed")
+    puts "Running 'build/sbt -Pscala-2.13 -Pkinesis-asl clean compile unidoc' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt -Pscala-2.13 -Pkinesis-asl clean compile unidoc") || raise("Unidoc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")
@@ -37,7 +37,7 @@ if not (ENV['SKIP_API'] == '1')
 
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.
-    source = "../target/scala-2.12/unidoc"
+    source = "../target/scala-2.13/unidoc"
     dest = "api/scala"
 
     puts "Making directory " + dest
@@ -119,8 +119,8 @@ if not (ENV['SKIP_API'] == '1')
     puts "Moving to project root and building API docs."
     cd("..")
 
-    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean package -Phive") || raise("PySpark doc generation failed")
+    puts "Running 'build/sbt -Pscala-2.13 clean package -Phive' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt -Pscala-2.13 clean package -Phive") || raise("PySpark doc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")
@@ -165,8 +165,8 @@ if not (ENV['SKIP_API'] == '1')
       puts "Moving to project root and building API docs."
       cd("..")
 
-      puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
-      system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
+      puts "Running 'build/sbt -Pscala-2.13 clean package -Phive' from " + pwd + "; this may take a few minutes..."
+      system("build/sbt -Pscala-2.13 clean package -Phive") || raise("SQL doc generation failed")
 
       puts "Moving back into docs dir."
       cd("docs")
