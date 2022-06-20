@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.types.StringType
 
@@ -28,22 +28,21 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
 
   test("DESCRIBE TABLE with non-'partitioned-by' clause") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-        "CLUSTERED BY (id) INTO 3 BUCKETS")
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
       val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
         Seq(
           ("col_name", StringType),
           ("data_type", StringType),
           ("comment", StringType)))
-      checkAnswer(
+      QueryTest.checkAnswer(
         descriptionDf,
         Seq(
           Row("data", "string", ""),
           Row("id", "bigint", ""),
           Row("", "", ""),
           Row("# Partitioning", "", ""),
-          Row("Part 0", "bucket(3, id)", "")))
+          Row("Not partitioned", "", "")))
     }
   }
 
