@@ -844,6 +844,21 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       df.write.format("orc").save(path)
     }
   }
+
+  test("SPARK-39381: Make vectorized orc columar writer batch size configurable") {
+    Seq(10, 100).foreach(batchSize => {
+      withSQLConf(SQLConf.ORC_VECTORIZED_WRITER_BATCH_SIZE.key -> batchSize.toString) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          val df = spark.range(1, 1024, 1, 1).map { _ =>
+            val byteData = Array.fill[Byte](5 * 1024 * 1024)('X')
+            byteData
+          }.toDF()
+          df.write.format("orc").save(path)
+        }
+      }
+    })
+  }
 }
 
 class OrcV1QuerySuite extends OrcQuerySuite {

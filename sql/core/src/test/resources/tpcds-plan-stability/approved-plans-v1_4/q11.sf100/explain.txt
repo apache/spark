@@ -150,7 +150,7 @@ Input [12]: [ss_customer_sk#1, ss_ext_discount_amt#2, ss_ext_list_price#3, d_yea
 (16) HashAggregate [codegen id : 6]
 Input [10]: [c_customer_id#9, c_first_name#10, c_last_name#11, c_preferred_cust_flag#12, c_birth_country#13, c_login#14, c_email_address#15, ss_ext_discount_amt#2, ss_ext_list_price#3, d_year#7]
 Keys [8]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#7, c_preferred_cust_flag#12, c_birth_country#13, c_login#14, c_email_address#15]
-Functions [1]: [partial_sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#3 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#2 as decimal(8,2)))), DecimalType(8,2))))]
+Functions [1]: [partial_sum(UnscaledValue((ss_ext_list_price#3 - ss_ext_discount_amt#2)))]
 Aggregate Attributes [1]: [sum#16]
 Results [9]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#7, c_preferred_cust_flag#12, c_birth_country#13, c_login#14, c_email_address#15, sum#17]
 
@@ -161,9 +161,9 @@ Arguments: hashpartitioning(c_customer_id#9, c_first_name#10, c_last_name#11, d_
 (18) HashAggregate [codegen id : 7]
 Input [9]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#7, c_preferred_cust_flag#12, c_birth_country#13, c_login#14, c_email_address#15, sum#17]
 Keys [8]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#7, c_preferred_cust_flag#12, c_birth_country#13, c_login#14, c_email_address#15]
-Functions [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#3 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#2 as decimal(8,2)))), DecimalType(8,2))))]
-Aggregate Attributes [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#3 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#2 as decimal(8,2)))), DecimalType(8,2))))#18]
-Results [2]: [c_customer_id#9 AS customer_id#19, MakeDecimal(sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#3 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#2 as decimal(8,2)))), DecimalType(8,2))))#18,18,2) AS year_total#20]
+Functions [1]: [sum(UnscaledValue((ss_ext_list_price#3 - ss_ext_discount_amt#2)))]
+Aggregate Attributes [1]: [sum(UnscaledValue((ss_ext_list_price#3 - ss_ext_discount_amt#2)))#18]
+Results [2]: [c_customer_id#9 AS customer_id#19, MakeDecimal(sum(UnscaledValue((ss_ext_list_price#3 - ss_ext_discount_amt#2)))#18,18,2) AS year_total#20]
 
 (19) Filter [codegen id : 7]
 Input [2]: [customer_id#19, year_total#20]
@@ -231,7 +231,7 @@ Input [12]: [ss_customer_sk#21, ss_ext_discount_amt#22, ss_ext_list_price#23, d_
 (34) HashAggregate [codegen id : 14]
 Input [10]: [c_customer_id#29, c_first_name#30, c_last_name#31, c_preferred_cust_flag#32, c_birth_country#33, c_login#34, c_email_address#35, ss_ext_discount_amt#22, ss_ext_list_price#23, d_year#27]
 Keys [8]: [c_customer_id#29, c_first_name#30, c_last_name#31, d_year#27, c_preferred_cust_flag#32, c_birth_country#33, c_login#34, c_email_address#35]
-Functions [1]: [partial_sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#23 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#22 as decimal(8,2)))), DecimalType(8,2))))]
+Functions [1]: [partial_sum(UnscaledValue((ss_ext_list_price#23 - ss_ext_discount_amt#22)))]
 Aggregate Attributes [1]: [sum#36]
 Results [9]: [c_customer_id#29, c_first_name#30, c_last_name#31, d_year#27, c_preferred_cust_flag#32, c_birth_country#33, c_login#34, c_email_address#35, sum#37]
 
@@ -242,9 +242,9 @@ Arguments: hashpartitioning(c_customer_id#29, c_first_name#30, c_last_name#31, d
 (36) HashAggregate [codegen id : 15]
 Input [9]: [c_customer_id#29, c_first_name#30, c_last_name#31, d_year#27, c_preferred_cust_flag#32, c_birth_country#33, c_login#34, c_email_address#35, sum#37]
 Keys [8]: [c_customer_id#29, c_first_name#30, c_last_name#31, d_year#27, c_preferred_cust_flag#32, c_birth_country#33, c_login#34, c_email_address#35]
-Functions [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#23 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#22 as decimal(8,2)))), DecimalType(8,2))))]
-Aggregate Attributes [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#23 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#22 as decimal(8,2)))), DecimalType(8,2))))#18]
-Results [3]: [c_customer_id#29 AS customer_id#38, c_preferred_cust_flag#32 AS customer_preferred_cust_flag#39, MakeDecimal(sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price#23 as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt#22 as decimal(8,2)))), DecimalType(8,2))))#18,18,2) AS year_total#40]
+Functions [1]: [sum(UnscaledValue((ss_ext_list_price#23 - ss_ext_discount_amt#22)))]
+Aggregate Attributes [1]: [sum(UnscaledValue((ss_ext_list_price#23 - ss_ext_discount_amt#22)))#18]
+Results [3]: [c_customer_id#29 AS customer_id#38, c_preferred_cust_flag#32 AS customer_preferred_cust_flag#39, MakeDecimal(sum(UnscaledValue((ss_ext_list_price#23 - ss_ext_discount_amt#22)))#18,18,2) AS year_total#40]
 
 (37) Exchange
 Input [3]: [customer_id#38, customer_preferred_cust_flag#39, year_total#40]
@@ -317,7 +317,7 @@ Input [12]: [ws_bill_customer_sk#41, ws_ext_discount_amt#42, ws_ext_list_price#4
 (53) HashAggregate [codegen id : 23]
 Input [10]: [c_customer_id#48, c_first_name#49, c_last_name#50, c_preferred_cust_flag#51, c_birth_country#52, c_login#53, c_email_address#54, ws_ext_discount_amt#42, ws_ext_list_price#43, d_year#46]
 Keys [8]: [c_customer_id#48, c_first_name#49, c_last_name#50, c_preferred_cust_flag#51, c_birth_country#52, c_login#53, c_email_address#54, d_year#46]
-Functions [1]: [partial_sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#43 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#42 as decimal(8,2)))), DecimalType(8,2))))]
+Functions [1]: [partial_sum(UnscaledValue((ws_ext_list_price#43 - ws_ext_discount_amt#42)))]
 Aggregate Attributes [1]: [sum#55]
 Results [9]: [c_customer_id#48, c_first_name#49, c_last_name#50, c_preferred_cust_flag#51, c_birth_country#52, c_login#53, c_email_address#54, d_year#46, sum#56]
 
@@ -328,9 +328,9 @@ Arguments: hashpartitioning(c_customer_id#48, c_first_name#49, c_last_name#50, c
 (55) HashAggregate [codegen id : 24]
 Input [9]: [c_customer_id#48, c_first_name#49, c_last_name#50, c_preferred_cust_flag#51, c_birth_country#52, c_login#53, c_email_address#54, d_year#46, sum#56]
 Keys [8]: [c_customer_id#48, c_first_name#49, c_last_name#50, c_preferred_cust_flag#51, c_birth_country#52, c_login#53, c_email_address#54, d_year#46]
-Functions [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#43 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#42 as decimal(8,2)))), DecimalType(8,2))))]
-Aggregate Attributes [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#43 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#42 as decimal(8,2)))), DecimalType(8,2))))#57]
-Results [2]: [c_customer_id#48 AS customer_id#58, MakeDecimal(sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#43 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#42 as decimal(8,2)))), DecimalType(8,2))))#57,18,2) AS year_total#59]
+Functions [1]: [sum(UnscaledValue((ws_ext_list_price#43 - ws_ext_discount_amt#42)))]
+Aggregate Attributes [1]: [sum(UnscaledValue((ws_ext_list_price#43 - ws_ext_discount_amt#42)))#57]
+Results [2]: [c_customer_id#48 AS customer_id#58, MakeDecimal(sum(UnscaledValue((ws_ext_list_price#43 - ws_ext_discount_amt#42)))#57,18,2) AS year_total#59]
 
 (56) Filter [codegen id : 24]
 Input [2]: [customer_id#58, year_total#59]
@@ -407,7 +407,7 @@ Input [12]: [ws_bill_customer_sk#60, ws_ext_discount_amt#61, ws_ext_list_price#6
 (73) HashAggregate [codegen id : 32]
 Input [10]: [c_customer_id#67, c_first_name#68, c_last_name#69, c_preferred_cust_flag#70, c_birth_country#71, c_login#72, c_email_address#73, ws_ext_discount_amt#61, ws_ext_list_price#62, d_year#65]
 Keys [8]: [c_customer_id#67, c_first_name#68, c_last_name#69, c_preferred_cust_flag#70, c_birth_country#71, c_login#72, c_email_address#73, d_year#65]
-Functions [1]: [partial_sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#62 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#61 as decimal(8,2)))), DecimalType(8,2))))]
+Functions [1]: [partial_sum(UnscaledValue((ws_ext_list_price#62 - ws_ext_discount_amt#61)))]
 Aggregate Attributes [1]: [sum#74]
 Results [9]: [c_customer_id#67, c_first_name#68, c_last_name#69, c_preferred_cust_flag#70, c_birth_country#71, c_login#72, c_email_address#73, d_year#65, sum#75]
 
@@ -418,9 +418,9 @@ Arguments: hashpartitioning(c_customer_id#67, c_first_name#68, c_last_name#69, c
 (75) HashAggregate [codegen id : 33]
 Input [9]: [c_customer_id#67, c_first_name#68, c_last_name#69, c_preferred_cust_flag#70, c_birth_country#71, c_login#72, c_email_address#73, d_year#65, sum#75]
 Keys [8]: [c_customer_id#67, c_first_name#68, c_last_name#69, c_preferred_cust_flag#70, c_birth_country#71, c_login#72, c_email_address#73, d_year#65]
-Functions [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#62 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#61 as decimal(8,2)))), DecimalType(8,2))))]
-Aggregate Attributes [1]: [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#62 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#61 as decimal(8,2)))), DecimalType(8,2))))#57]
-Results [2]: [c_customer_id#67 AS customer_id#76, MakeDecimal(sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price#62 as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt#61 as decimal(8,2)))), DecimalType(8,2))))#57,18,2) AS year_total#77]
+Functions [1]: [sum(UnscaledValue((ws_ext_list_price#62 - ws_ext_discount_amt#61)))]
+Aggregate Attributes [1]: [sum(UnscaledValue((ws_ext_list_price#62 - ws_ext_discount_amt#61)))#57]
+Results [2]: [c_customer_id#67 AS customer_id#76, MakeDecimal(sum(UnscaledValue((ws_ext_list_price#62 - ws_ext_discount_amt#61)))#57,18,2) AS year_total#77]
 
 (76) Exchange
 Input [2]: [customer_id#76, year_total#77]
@@ -433,7 +433,7 @@ Arguments: [customer_id#76 ASC NULLS FIRST], false, 0
 (78) SortMergeJoin [codegen id : 35]
 Left keys [1]: [customer_id#19]
 Right keys [1]: [customer_id#76]
-Join condition: (CASE WHEN (year_total#59 > 0.00) THEN CheckOverflow((promote_precision(year_total#77) / promote_precision(year_total#59)), DecimalType(38,20)) END > CASE WHEN (year_total#20 > 0.00) THEN CheckOverflow((promote_precision(year_total#40) / promote_precision(year_total#20)), DecimalType(38,20)) END)
+Join condition: (CASE WHEN (year_total#59 > 0.00) THEN (year_total#77 / year_total#59) END > CASE WHEN (year_total#20 > 0.00) THEN (year_total#40 / year_total#20) END)
 
 (79) Project [codegen id : 35]
 Output [1]: [customer_preferred_cust_flag#39]

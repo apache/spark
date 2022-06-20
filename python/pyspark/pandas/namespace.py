@@ -278,7 +278,7 @@ def read_csv(
         The character used to denote the start and end of a quoted item. Quoted items can include
         the delimiter and it will be ignored.
     escapechar : str (length 1), default None
-        One-character string used to escape delimiter
+        One-character string used to escape other characters.
     comment: str, optional
         Indicates the line should not be parsed.
     encoding: str, optional

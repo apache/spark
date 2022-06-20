@@ -871,8 +871,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v1")
             }
-            assert(e.getErrorClass == "MISSING_COLUMN")
-            assert(e.messageParameters.sameElements(Array("C1", "spark_catalog.default.t.c1")))
+            checkError(e,
+              errorClass = "UNRESOLVED_COLUMN",
+              parameters = Map(
+                "objectName" -> "`C1`",
+                "objectList" -> "`spark_catalog`.`default`.`t`.`c1`"))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
             checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
@@ -890,8 +893,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v4")
             }
-            assert(e.getErrorClass == "MISSING_COLUMN")
-            assert(e.messageParameters.sameElements(Array("a", "spark_catalog.default.t.c1")))
+            checkError(e,
+              errorClass = "UNRESOLVED_COLUMN",
+              parameters = Map(
+                "objectName" -> "`a`",
+                "objectList" -> "`spark_catalog`.`default`.`t`.`c1`"))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {
             val e = intercept[ArithmeticException] {

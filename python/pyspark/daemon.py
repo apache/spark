@@ -25,7 +25,7 @@ import traceback
 import time
 import gc
 from errno import EINTR, EAGAIN
-from socket import AF_INET, SOCK_STREAM, SOMAXCONN
+from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.worker import main as worker_main
@@ -86,11 +86,17 @@ def manager():
     # Create a new process group to corral our children
     os.setpgid(0, 0)
 
-    # Create a listening socket on the AF_INET loopback interface
-    listen_sock = socket.socket(AF_INET, SOCK_STREAM)
-    listen_sock.bind(("127.0.0.1", 0))
-    listen_sock.listen(max(1024, SOMAXCONN))
-    listen_host, listen_port = listen_sock.getsockname()
+    # Create a listening socket on the loopback interface
+    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+        listen_sock = socket.socket(AF_INET6, SOCK_STREAM)
+        listen_sock.bind(("::1", 0, 0, 0))
+        listen_sock.listen(max(1024, SOMAXCONN))
+        listen_host, listen_port, _, _ = listen_sock.getsockname()
+    else:
+        listen_sock = socket.socket(AF_INET, SOCK_STREAM)
+        listen_sock.bind(("127.0.0.1", 0))
+        listen_sock.listen(max(1024, SOMAXCONN))
+        listen_host, listen_port = listen_sock.getsockname()
 
     # re-open stdin/stdout in 'wb' mode
     stdin_bin = os.fdopen(sys.stdin.fileno(), "rb", 4)

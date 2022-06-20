@@ -1806,7 +1806,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // now we should submit stage 1, and the map output from stage 0 should be registered
 
     // check that we have all the map output for stage 0
-    (0 until reduceRdd.partitions.length).foreach { reduceIdx =>
+    reduceRdd.partitions.indices.foreach { reduceIdx =>
       val statuses = mapOutputTracker.getMapSizesByExecutorId(0, reduceIdx)
       // really we should have already thrown an exception rather than fail either of these
       // asserts, but just to be extra defensive let's double check the statuses are OK

@@ -969,7 +969,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("+$89,1,2,3,45.123", "S$999,0,0,0,999.00000") -> Decimal(8912345.123),
       ("-454", "S999") -> Decimal(-454),
       ("+454", "S999") -> Decimal(454),
-      ("<454>", "999PR") -> Decimal(-454),
+      ("454", "999PR") -> Decimal(454),
+      (" 454 ", "999PR") -> Decimal(454),
       ("454-", "999MI") -> Decimal(-454),
       ("-$54", "MI$99") -> Decimal(-54),
       // The input string contains more digits than fit in a long integer.
@@ -1106,6 +1107,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // The trailing PR required exactly one leading < and trailing >.
       ("<454", "999PR"),
       ("454>", "999PR"),
+      ("<454 ", "999PR"),
+      (" 454>", "999PR"),
       ("<<454>>", "999PR"),
       // At least three digits were required.
       ("45", "S$999,099.99"),
