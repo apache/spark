@@ -19,6 +19,7 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL}
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
@@ -72,7 +73,7 @@ private[sql] trait QueryErrorsBase {
   }
 
   def toSQLId(parts: String): String = {
-    toSQLId(parts.split("\\."))
+    toSQLId(UnresolvedAttribute.parseAttributeName(parts))
   }
 
   def toSQLType(t: DataType): String = {

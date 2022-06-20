@@ -261,7 +261,7 @@ Right keys [1]: [r_regionkey#19]
 Join condition: None
 
 (47) Project [codegen id : 8]
-Output [3]: [year(o_orderdate#12) AS o_year#21, CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) AS volume#22, n_name#18 AS nation#23]
+Output [3]: [year(o_orderdate#12) AS o_year#21, (l_extendedprice#6 * (1 - l_discount#7)) AS volume#22, n_name#18 AS nation#23]
 Input [6]: [l_extendedprice#6, l_discount#7, o_orderdate#12, n_regionkey#16, n_name#18, r_regionkey#19]
 
 (48) HashAggregate [codegen id : 8]
@@ -280,7 +280,7 @@ Input [5]: [o_year#21, sum#28, isEmpty#29, sum#30, isEmpty#31]
 Keys [1]: [o_year#21]
 Functions [2]: [sum(CASE WHEN (nation#23 = BRAZIL) THEN volume#22 ELSE 0 END), sum(volume#22)]
 Aggregate Attributes [2]: [sum(CASE WHEN (nation#23 = BRAZIL) THEN volume#22 ELSE 0 END)#32, sum(volume#22)#33]
-Results [2]: [o_year#21, CheckOverflow((promote_precision(sum(CASE WHEN (nation#23 = BRAZIL) THEN volume#22 ELSE 0 END)#32) / promote_precision(sum(volume#22)#33)), DecimalType(38,6)) AS mkt_share#34]
+Results [2]: [o_year#21, (sum(CASE WHEN (nation#23 = BRAZIL) THEN volume#22 ELSE 0 END)#32 / sum(volume#22)#33) AS mkt_share#34]
 
 (51) Exchange
 Input [2]: [o_year#21, mkt_share#34]
