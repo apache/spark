@@ -95,6 +95,9 @@
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
     "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set <config> to \"false\" to bypass this error." ]
   },
+  "INVALID_BUCKET_FILE" : {
+    "message" : [ "Invalid bucket file: <path>" ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name <fieldName> is invalid: <path> is not a struct." ],
     "sqlState" : "42000"
