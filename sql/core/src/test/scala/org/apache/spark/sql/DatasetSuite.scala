@@ -325,13 +325,13 @@ class DatasetSuite extends QueryTest
       var e = intercept[AnalysisException] {
         ds.select(expr("`(_1)?+.+`").as[Int])
       }
-      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
       assert(e.messageParameters.head == "`(_1)?+.+`")
 
       e = intercept[AnalysisException] {
         ds.select(expr("`(_1|_2)`").as[Int])
       }
-      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
       assert(e.messageParameters.head == "`(_1|_2)`")
 
       e = intercept[AnalysisException] {
@@ -934,8 +934,8 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getErrorClass == "MISSING_COLUMN")
-    assert(e.messageParameters.sameElements(Array("c", "a, b")))
+    assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(e.messageParameters.sameElements(Array("`c`", "`a`, `b`")))
   }
 
   test("runtime nullability check") {

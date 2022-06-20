@@ -404,15 +404,17 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("use executor-specific secret file configuration.") {
-    val secretFileFromDriver = createTempSecretFile("driver-secret")
-    val secretFileFromExecutor = createTempSecretFile("executor-secret")
-    val conf = new SparkConf()
-      .setMaster("k8s://127.0.0.1")
-      .set(AUTH_SECRET_FILE_DRIVER, Some(secretFileFromDriver.getAbsolutePath))
-      .set(AUTH_SECRET_FILE_EXECUTOR, Some(secretFileFromExecutor.getAbsolutePath))
-      .set(SecurityManager.SPARK_AUTH_CONF, "true")
-    val mgr = new SecurityManager(conf, authSecretFileConf = AUTH_SECRET_FILE_EXECUTOR)
-    assert(encodeFileAsBase64(secretFileFromExecutor) === mgr.getSecretKey())
+    withSecretFile("driver-secret") { secretFileFromDriver =>
+      withSecretFile("executor-secret") { secretFileFromExecutor =>
+        val conf = new SparkConf()
+          .setMaster("k8s://127.0.0.1")
+          .set(AUTH_SECRET_FILE_DRIVER, Some(secretFileFromDriver.getAbsolutePath))
+          .set(AUTH_SECRET_FILE_EXECUTOR, Some(secretFileFromExecutor.getAbsolutePath))
+          .set(SecurityManager.SPARK_AUTH_CONF, "true")
+        val mgr = new SecurityManager(conf, authSecretFileConf = AUTH_SECRET_FILE_EXECUTOR)
+        assert(encodeFileAsBase64(secretFileFromExecutor) === mgr.getSecretKey())
+      }
+    }
   }
 
   test("secret file must be defined in both driver and executor") {
@@ -496,10 +498,11 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
                 }
 
               case FILE =>
-                val secretFile = createTempSecretFile()
-                conf.set(AUTH_SECRET_FILE, secretFile.getAbsolutePath)
-                mgr.initializeAuth()
-                assert(encodeFileAsBase64(secretFile) === mgr.getSecretKey())
+                withSecretFile() { secretFile =>
+                  conf.set(AUTH_SECRET_FILE, secretFile.getAbsolutePath)
+                  mgr.initializeAuth()
+                  assert(encodeFileAsBase64(secretFile) === mgr.getSecretKey())
+                }
             }
           }
         }
@@ -511,11 +514,13 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
   }
 
-  private def createTempSecretFile(contents: String = "test-secret"): File = {
+  private def withSecretFile(contents: String = "test-secret")(f: File => Unit): Unit = {
     val secretDir = Utils.createTempDir("temp-secrets")
     val secretFile = new File(secretDir, "temp-secret.txt")
     Files.write(secretFile.toPath, contents.getBytes(UTF_8))
-    secretFile
+    try f(secretFile) finally {
+      Utils.deleteRecursively(secretDir)
+    }
   }
 }
 

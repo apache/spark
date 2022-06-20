@@ -226,6 +226,9 @@ class JDBCOptions(
   // The prefix that is added to the query sent to the JDBC database.
   // This is required to support some complex queries with some JDBC databases.
   val prepareQuery = parameters.get(JDBC_PREPARE_QUERY).map(_ + " ").getOrElse("")
+
+  // Infers timestamp values as TimestampNTZ type when reading data.
+  val inferTimestampNTZType = parameters.getOrElse(JDBC_INFER_TIMESTAMP_NTZ, "false").toBoolean
 }
 
 class JdbcOptionsInWrite(
@@ -287,4 +290,5 @@ object JDBCOptions {
   val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
+  val JDBC_INFER_TIMESTAMP_NTZ = newOption("inferTimestampNTZType")
 }

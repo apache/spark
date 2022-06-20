@@ -165,7 +165,7 @@ Input [7]: [cs_warehouse_sk#1, cs_sales_price#4, cr_refunded_cash#11, i_item_id#
 (30) HashAggregate [codegen id : 8]
 Input [5]: [cs_sales_price#4, cr_refunded_cash#11, w_state#19, i_item_id#14, d_date#17]
 Keys [2]: [w_state#19, i_item_id#14]
-Functions [2]: [partial_sum(CASE WHEN (d_date#17 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END), partial_sum(CASE WHEN (d_date#17 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)]
+Functions [2]: [partial_sum(CASE WHEN (d_date#17 < 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00)) ELSE 0.00 END), partial_sum(CASE WHEN (d_date#17 >= 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00)) ELSE 0.00 END)]
 Aggregate Attributes [4]: [sum#20, isEmpty#21, sum#22, isEmpty#23]
 Results [6]: [w_state#19, i_item_id#14, sum#24, isEmpty#25, sum#26, isEmpty#27]
 
@@ -176,9 +176,9 @@ Arguments: hashpartitioning(w_state#19, i_item_id#14, 5), ENSURE_REQUIREMENTS, [
 (32) HashAggregate [codegen id : 9]
 Input [6]: [w_state#19, i_item_id#14, sum#24, isEmpty#25, sum#26, isEmpty#27]
 Keys [2]: [w_state#19, i_item_id#14]
-Functions [2]: [sum(CASE WHEN (d_date#17 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END), sum(CASE WHEN (d_date#17 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)]
-Aggregate Attributes [2]: [sum(CASE WHEN (d_date#17 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)#28, sum(CASE WHEN (d_date#17 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)#29]
-Results [4]: [w_state#19, i_item_id#14, sum(CASE WHEN (d_date#17 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)#28 AS sales_before#30, sum(CASE WHEN (d_date#17 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)#29 AS sales_after#31]
+Functions [2]: [sum(CASE WHEN (d_date#17 < 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00)) ELSE 0.00 END), sum(CASE WHEN (d_date#17 >= 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00)) ELSE 0.00 END)]
+Aggregate Attributes [2]: [sum(CASE WHEN (d_date#17 < 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00)) ELSE 0.00 END)#28, sum(CASE WHEN (d_date#17 >= 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00)) ELSE 0.00 END)#29]
+Results [4]: [w_state#19, i_item_id#14, sum(CASE WHEN (d_date#17 < 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00)) ELSE 0.00 END)#28 AS sales_before#30, sum(CASE WHEN (d_date#17 >= 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#11 as decimal(12,2)), 0.00)) ELSE 0.00 END)#29 AS sales_after#31]
 
 (33) TakeOrderedAndProject
 Input [4]: [w_state#19, i_item_id#14, sales_before#30, sales_after#31]

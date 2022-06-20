@@ -384,7 +384,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     instr.logParams(this, labelCol, featuresCol, weightCol, offsetCol, predictionCol,
       linkPredictionCol, family, solver, fitIntercept, link, maxIter, regParam, tol,
       aggregationDepth)
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
 
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {

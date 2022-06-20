@@ -80,12 +80,14 @@ class OrcFileFormat
     conf.asInstanceOf[JobConf]
       .setOutputFormat(classOf[org.apache.orc.mapred.OrcOutputFormat[OrcStruct]])
 
+    val batchSize = sparkSession.sessionState.conf.orcVectorizedWriterBatchSize
+
     new OutputWriterFactory {
       override def newInstance(
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(path, dataSchema, context)
+        new OrcOutputWriter(path, dataSchema, context, batchSize)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {

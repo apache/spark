@@ -208,7 +208,7 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
     val expectedBuckets1 = Array(0.0, 0.0, 1.0, 1.0)
     val expectedBuckets2 = Array(1.0, 1.0, 0.0, 0.0)
 
-    val data = (0 until validData1.length).map { idx =>
+    val data = validData1.indices.map { idx =>
       (validData1(idx), validData2(idx), expectedBuckets1(idx), expectedBuckets2(idx))
     }
     val dataFrame: DataFrame = data.toDF("feature1", "feature2", "expected1", "expected2")
@@ -256,7 +256,7 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
     val expectedBuckets1 = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0)
     val expectedBuckets2 = Array(1.0, 0.0, 1.0, 1.0, 1.0, 2.0, 3.0)
 
-    val data = (0 until validData1.length).map { idx =>
+    val data = validData1.indices.map { idx =>
       (validData1(idx), validData2(idx), expectedBuckets1(idx), expectedBuckets2(idx))
     }
     val dataFrame: DataFrame = data.toDF("feature1", "feature2", "expected1", "expected2")
@@ -281,7 +281,7 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
     val expectedBuckets1 = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 4.0)
     val expectedBuckets2 = Array(2.0, 1.0, 2.0, 1.0, 1.0, 2.0, 2.0, 3.0, 4.0, 4.0)
 
-    val data = (0 until validData1.length).map { idx =>
+    val data = validData1.indices.map { idx =>
       (validData1(idx), validData2(idx), expectedBuckets1(idx), expectedBuckets2(idx))
     }
     val dataFrame: DataFrame = data.toDF("feature1", "feature2", "expected1", "expected2")

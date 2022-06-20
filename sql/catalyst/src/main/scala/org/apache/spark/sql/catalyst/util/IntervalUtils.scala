@@ -1346,6 +1346,15 @@ object IntervalUtils {
     }
   }
 
+  def dayTimeIntervalToDecimal(v: Long, endField: Byte): Decimal = {
+    endField match {
+      case DAY => Decimal(v / MICROS_PER_DAY)
+      case HOUR => Decimal(v / MICROS_PER_HOUR)
+      case MINUTE => Decimal(v / MICROS_PER_MINUTE)
+      case SECOND => Decimal(v, Decimal.MAX_LONG_DIGITS, 6)
+    }
+  }
+
   def dayTimeIntervalToInt(v: Long, startField: Byte, endField: Byte): Int = {
     val vLong = dayTimeIntervalToLong(v, startField, endField)
     val vInt = vLong.toInt

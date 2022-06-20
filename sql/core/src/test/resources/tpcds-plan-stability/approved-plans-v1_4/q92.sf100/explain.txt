@@ -95,7 +95,7 @@ Input [3]: [ws_item_sk#3, sum#12, count#13]
 Keys [1]: [ws_item_sk#3]
 Functions [1]: [avg(UnscaledValue(ws_ext_discount_amt#4))]
 Aggregate Attributes [1]: [avg(UnscaledValue(ws_ext_discount_amt#4))#14]
-Results [2]: [CheckOverflow((1.300000 * promote_precision(cast((avg(UnscaledValue(ws_ext_discount_amt#4))#14 / 100.0) as decimal(11,6)))), DecimalType(14,7)) AS (1.3 * avg(ws_ext_discount_amt))#15, ws_item_sk#3]
+Results [2]: [(1.3 * cast((avg(UnscaledValue(ws_ext_discount_amt#4))#14 / 100.0) as decimal(11,6))) AS (1.3 * avg(ws_ext_discount_amt))#15, ws_item_sk#3]
 
 (15) Filter
 Input [2]: [(1.3 * avg(ws_ext_discount_amt))#15, ws_item_sk#3]
