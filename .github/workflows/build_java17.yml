@@ -35,6 +35,6 @@ jobs:
       type: scheduled
       envs: >-
         {
-          "SKIP_MIMA": "true"
+          "SKIP_MIMA": "true",
           "SKIP_UNIDOC": "true"
         }
