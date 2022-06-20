@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build"
+name: "Main"
 
 on:
   push:

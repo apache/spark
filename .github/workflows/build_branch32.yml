@@ -19,19 +19,15 @@
 
 name: "Build (branch-3.2, Scala 2.13, Hadoop 3, JDK 8)"
 
-# on:
-#   schedule:
-#     - cron: '0 4 * * *'
 on:
-  push:
-    branches:
-    - '**'
+  schedule:
+    - cron: '0 4 * * *'
 
 jobs:
   run-build:
     name: Run
     uses: ./.github/workflows/build_and_test.yml
-    # if: github.repository == 'apache/spark'
+    if: github.repository == 'apache/spark'
     with:
       java: 8
       branch: branch-3.2

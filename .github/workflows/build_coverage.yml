@@ -19,19 +19,15 @@
 
 name: "Build with Coverage (master, Scala 2.12, Hadoop 3, JDK 8)"
 
-# on:
-#   schedule:
-#     - cron: '0 10 * * *'
 on:
-  push:
-    branches:
-    - '**'
+  schedule:
+    - cron: '0 10 * * *'
 
 jobs:
   run-build:
     name: Run
     uses: ./.github/workflows/build_and_test.yml
-    # if: github.repository == 'apache/spark'
+    if: github.repository == 'apache/spark'
     with:
       java: 8
       branch: master
