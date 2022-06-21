@@ -23,7 +23,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
 import org.apache.spark.util.Utils
@@ -77,6 +77,15 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
       throw new SparkException("ResourceProfiles are only supported on YARN and Kubernetes " +
         "and Standalone with dynamic allocation enabled.")
     }
+
+    if (isStandalone && rp.getExecutorCores.isEmpty &&
+      sparkConf.getOption(config.EXECUTOR_CORES.key).isEmpty) {
+      logWarning(s"Executor cores is not set for resource profile: ${rp.id}, and " +
+        s"spark.executor.cores is also not specified, you may get more executors allocated than " +
+        s"expected. It's recommended to set executor cores explicitly. Check this issue " +
+        s"for more details: https://issues.apache.org/jira/browse/SPARK-30299")
+    }
+
     true
   }
 
