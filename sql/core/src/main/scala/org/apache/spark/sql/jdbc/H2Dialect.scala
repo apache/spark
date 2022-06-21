@@ -71,16 +71,16 @@ private[sql] object H2Dialect extends JdbcDialect {
         case f: GeneralAggregateFunc if f.name() == "CORR" && !f.isDistinct =>
           assert(f.children().length == 2)
           Some(s"CORR(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "REGR_INTERCEPT" =>
+        case f: GeneralAggregateFunc if f.name() == "REGR_INTERCEPT" && !f.isDistinct =>
           assert(f.children().length == 2)
           Some(s"REGR_INTERCEPT(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "REGR_R2" && f.isDistinct == false =>
+        case f: GeneralAggregateFunc if f.name() == "REGR_R2" && !f.isDistinct =>
           assert(f.children().length == 2)
           Some(s"REGR_R2(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "REGR_SLOPE" && f.isDistinct == false =>
+        case f: GeneralAggregateFunc if f.name() == "REGR_SLOPE" && !f.isDistinct =>
           assert(f.children().length == 2)
           Some(s"REGR_SLOPE(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "REGR_SXY" && f.isDistinct == false =>
+        case f: GeneralAggregateFunc if f.name() == "REGR_SXY" && !f.isDistinct =>
           assert(f.children().length == 2)
           Some(s"REGR_SXY(${f.children().head}, ${f.children().last})")
         case _ => None
