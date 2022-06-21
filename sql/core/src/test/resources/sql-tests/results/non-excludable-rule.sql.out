@@ -37,3 +37,19 @@ SELECT id FROM range(3) WHERE id > (SELECT max(id) FROM tmp)
 struct<id:bigint>
 -- !query output
 2
+
+
+-- !query
+SET spark.sql.optimizer.excludedRules=org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.excludedRules	org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery
+
+
+-- !query
+SELECT * FROM testData, LATERAL (SELECT * FROM testData) LIMIT 1
+-- !query schema
+struct<key:int,value:string,key:int,value:string>
+-- !query output
+1	1	1	1

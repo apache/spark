@@ -229,7 +229,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'year' does not exist. Did you mean one of the following? [__auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings]; line 4 pos 0
+[UNRESOLVED_COLUMN] A column or function parameter with name `year` cannot be resolved. Did you mean one of the following? [`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`]; line 4 pos 0
 
 
 -- !query
@@ -323,7 +323,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 's' does not exist. Did you mean one of the following? [coursesales.year, coursesales.course, coursesales.earnings]; line 4 pos 15
+[UNRESOLVED_COLUMN] A column or function parameter with name `s` cannot be resolved. Did you mean one of the following? [`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`]; line 4 pos 15
 
 
 -- !query

@@ -887,8 +887,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
       val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.getErrorClass == "MISSING_COLUMN")
-      assert(e.messageParameters.sameElements(Array("a", "t.i, t.j")))
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(e.messageParameters.sameElements(Array("`a`", "`t`.`i`, `t`.`j`")))
     }
   }
 

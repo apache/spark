@@ -17,17 +17,13 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.util.DatasetUtils._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -43,23 +39,6 @@ private[spark] trait ClassifierParams
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), new VectorUDT)
-  }
-
-  /**
-   * Extract [[labelCol]], weightCol(if any) and [[featuresCol]] from the given dataset,
-   * and put it in an RDD with strong types.
-   * Validates the label on the classifier is a valid integer in the range [0, numClasses).
-   */
-  protected def extractInstances(
-      dataset: Dataset[_],
-      numClasses: Int): RDD[Instance] = {
-    val validateInstance = (instance: Instance) => {
-      val label = instance.label
-      require(label.toLong == label && label >= 0 && label < numClasses, s"Classifier was given" +
-        s" dataset with invalid label $label. Labels must be integers in range" +
-        s" [0, $numClasses).")
-    }
-    extractInstances(dataset, validateInstance)
   }
 }
 
@@ -81,89 +60,6 @@ abstract class Classifier[
   def setRawPredictionCol(value: String): E = set(rawPredictionCol, value).asInstanceOf[E]
 
   // TODO: defaultEvaluator (follow-up PR)
-
-  /**
-   * Extract [[labelCol]] and [[featuresCol]] from the given dataset,
-   * and put it in an RDD with strong types.
-   *
-   * @param dataset  DataFrame with columns for labels ([[org.apache.spark.sql.types.NumericType]])
-   *                 and features (`Vector`).
-   * @param numClasses  Number of classes label can take.  Labels must be integers in the range
-   *                    [0, numClasses).
-   * @note Throws `SparkException` if any label is a non-integer or is negative
-   */
-  protected def extractLabeledPoints(dataset: Dataset[_], numClasses: Int): RDD[LabeledPoint] = {
-    validateNumClasses(numClasses)
-    dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        validateLabel(label, numClasses)
-        LabeledPoint(label, features)
-    }
-  }
-
-  /**
-   * Validates that number of classes is greater than zero.
-   *
-   * @param numClasses Number of classes label can take.
-   */
-  protected def validateNumClasses(numClasses: Int): Unit = {
-    require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
-      s" $numClasses, but requires numClasses > 0.")
-  }
-
-  /**
-   * Validates the label on the classifier is a valid integer in the range [0, numClasses).
-   *
-   * @param label The label to validate.
-   * @param numClasses Number of classes label can take.  Labels must be integers in the range
-   *                  [0, numClasses).
-   */
-  protected def validateLabel(label: Double, numClasses: Int): Unit = {
-    require(label.toLong == label && label >= 0 && label < numClasses, s"Classifier was given" +
-      s" dataset with invalid label $label.  Labels must be integers in range" +
-      s" [0, $numClasses).")
-  }
-
-  /**
-   * Get the number of classes.  This looks in column metadata first, and if that is missing,
-   * then this assumes classes are indexed 0,1,...,numClasses-1 and computes numClasses
-   * by finding the maximum label value.
-   *
-   * Label validation (ensuring all labels are integers >= 0) needs to be handled elsewhere,
-   * such as in `extractLabeledPoints()`.
-   *
-   * @param dataset  Dataset which contains a column [[labelCol]]
-   * @param maxNumClasses  Maximum number of classes allowed when inferred from data.  If numClasses
-   *                       is specified in the metadata, then maxNumClasses is ignored.
-   * @return  number of classes
-   * @throws IllegalArgumentException  if metadata does not specify numClasses, and the
-   *                                   actual numClasses exceeds maxNumClasses
-   */
-  protected def getNumClasses(dataset: Dataset[_], maxNumClasses: Int = 100): Int = {
-    MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
-      case Some(n: Int) => n
-      case None =>
-        // Get number of classes from dataset itself.
-        val maxLabelRow: Array[Row] = dataset
-          .select(max(checkClassificationLabels($(labelCol), Some(maxNumClasses))))
-          .take(1)
-        if (maxLabelRow.isEmpty || maxLabelRow(0).get(0) == null) {
-          throw new SparkException("ML algorithm was given empty dataset.")
-        }
-        val maxDoubleLabel: Double = maxLabelRow.head.getDouble(0)
-        require((maxDoubleLabel + 1).isValidInt, s"Classifier found max label value =" +
-          s" $maxDoubleLabel but requires integers in range [0, ... ${Int.MaxValue})")
-        val numClasses = maxDoubleLabel.toInt + 1
-        require(numClasses <= maxNumClasses, s"Classifier inferred $numClasses from label values" +
-          s" in column $labelCol, but this exceeded the max numClasses ($maxNumClasses) allowed" +
-          s" to be inferred from values.  To avoid this error for labels with > $maxNumClasses" +
-          s" classes, specify numClasses explicitly in the metadata; this can be done by applying" +
-          s" StringIndexer to the label column.")
-        logInfo(this.getClass.getCanonicalName + s" inferred $numClasses classes for" +
-          s" labelCol=$labelCol since numClasses was not specified in the column metadata.")
-        numClasses
-    }
-  }
 }
 
 /**
