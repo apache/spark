@@ -330,17 +330,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       if (isView) {
         throw QueryCompilationErrors.cannotRenameTableWithAlterViewError()
       }
-      if (newIdent.head.equalsIgnoreCase(catalog.name())) {
-        RenameTableExec(
-          catalog,
-          oldIdent,
-          newIdent.tail.asIdentifier,
-          invalidateTableCache(r),
-          session.sharedState.cacheManager.cacheQuery) :: Nil
-      } else {
-        throw QueryCompilationErrors.cannotRenameTableWithDifferentCatalogName(
-          catalog.name, oldIdent, newIdent.asIdentifier)
-      }
+      RenameTableExec(
+        catalog,
+        oldIdent,
+        newIdent.asIdentifier,
+        invalidateTableCache(r),
+        session.sharedState.cacheManager.cacheQuery) :: Nil
 
     case SetNamespaceProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil

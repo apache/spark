@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -35,6 +36,20 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case UnresolvedDBObjectName(CatalogAndIdentifier(catalog, identifier), _) =>
       ResolvedDBObjectName(catalog, identifier.namespace :+ identifier.name())
+
+    case rename @ RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), newIdent, isView) =>
+      if (newIdent.size > 2) {
+        newIdent match {
+          case CatalogAndIdentifier(newCatalog, _)
+            if newCatalog.name() != catalog.name() =>
+            throw QueryCompilationErrors.cannotRenameTableWithDifferentCatalogName(
+              catalog.name, oldIdent, newIdent.asIdentifier)
+          case _ =>
+            RenameTable(r, newIdent.tail, isView)
+        }
+      } else {
+        rename
+      }
   }
 
   object NonSessionCatalogAndTable {

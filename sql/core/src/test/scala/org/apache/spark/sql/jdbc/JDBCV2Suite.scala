@@ -126,16 +126,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }.getMessage
     assert(e1 == "Cannot rename a table from 'h2.test.empty_table' to " +
       "'h3.test.empty_table2'. Please rename table in same catalog.")
-    val e2 = intercept[AnalysisException] {
-      sql("ALTER TABLE h2.test.empty_table RENAME TO test.empty_table2")
-    }.getMessage
-    assert(e2 == "Cannot rename a table from 'h2.test.empty_table' to " +
-      "'test.empty_table2'. Please rename table in same catalog.")
-    sql("ALTER TABLE h2.test.empty_table RENAME TO h2.test.empty_table2")
+    sql("ALTER TABLE h2.test.empty_table RENAME TO test.empty_table2")
     checkAnswer(
       sql("SHOW TABLES IN h2.test LIKE 'empty*'"),
       Seq(Row("test", "empty_table2", false)))
     sql("ALTER TABLE h2.test.empty_table2 RENAME TO h2.test.empty_table")
+    sql("ALTER TABLE h2.test.empty_table RENAME TO h2.test.empty_table3")
+    checkAnswer(
+      sql("SHOW TABLES IN h2.test LIKE 'empty*'"),
+      Seq(Row("test", "empty_table3", false)))
+    sql("ALTER TABLE h2.test.empty_table3 RENAME TO h2.test.empty_table")
   }
 
   private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
