@@ -260,17 +260,20 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def cannotCleanReservedNamespacePropertyError(
-      property: String, ctx: ParserRuleContext, msg: String): Throwable = {
-    new ParseException(s"$property is a reserved namespace property, $msg.", ctx)
+      property: String, ctx: ParserRuleContext, msg: String): ParseException = {
+    new ParseException("UNSUPPORTED_FEATURE",
+      Array(s"$property is a reserved namespace property, $msg."), ctx)
   }
 
-  def propertiesAndDbPropertiesBothSpecifiedError(ctx: CreateNamespaceContext): Throwable = {
-    new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
+  def propertiesAndDbPropertiesBothSpecifiedError(ctx: CreateNamespaceContext): ParseException = {
+    new ParseException("UNSUPPORTED_FEATURE",
+      Array("set PROPERTIES and DBPROPERTIES at the same time."), ctx)
   }
 
   def cannotCleanReservedTablePropertyError(
-      property: String, ctx: ParserRuleContext, msg: String): Throwable = {
-    new ParseException(s"$property is a reserved table property, $msg.", ctx)
+      property: String, ctx: ParserRuleContext, msg: String): ParseException = {
+    new ParseException("UNSUPPORTED_FEATURE",
+      Array(s"$property is a reserved table property, $msg."), ctx)
   }
 
   def duplicatedTablePathsFoundError(
@@ -367,15 +370,17 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
-      keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"'$keyCandidate' is an invalid property key, please " +
-      s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
+      keyCandidate: String, valueStr: String, ctx: ParserRuleContext): ParseException = {
+    new ParseException(errorClass = "INVALID_PROPERTY_KEY",
+      messageParameters = Array(toSQLConf(keyCandidate),
+        toSQLConf(keyCandidate), toSQLConf(valueStr)), ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
-      valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"'$valueCandidate' is an invalid property value, please " +
-      s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
+      valueCandidate: String, keyStr: String, ctx: ParserRuleContext): ParseException = {
+    new ParseException(errorClass = "INVALID_PROPERTY_VALUE",
+      messageParameters = Array(toSQLConf(valueCandidate),
+        toSQLConf(keyStr), toSQLConf(valueCandidate)), ctx)
   }
 
   def unexpectedFormatForResetConfigurationError(ctx: ResetConfigurationContext): Throwable = {

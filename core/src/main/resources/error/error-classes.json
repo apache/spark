@@ -113,6 +113,12 @@
     "message" : [ "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>" ],
     "sqlState" : "22023"
   },
+  "INVALID_PROPERTY_KEY" : {
+    "message" : [ "<key> is an invalid property key, please use quotes, e.g. SET <key>=<value>" ]
+  },
+  "INVALID_PROPERTY_VALUE" : {
+    "message" : [ "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>" ]
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [ "Invalid SQL syntax: <inputString>" ],
     "sqlState" : "42000"
