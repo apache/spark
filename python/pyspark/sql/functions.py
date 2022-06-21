@@ -2519,6 +2519,9 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
 
 def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
+    Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC)
+    to a timestamp of that moment in the current system time zone.
+
     .. versionadded:: 3.1.0
 
     Examples
@@ -2532,6 +2535,9 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     +-------------------+
     |2008-12-25 07:30:00|
     +-------------------+
+    >>> time_df.select(timestamp_seconds('unix_time').alias('ts')).printSchema()
+    root
+     |-- ts: timestamp (nullable = true)
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
 
