@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -390,7 +391,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-39061: inline should handle null struct") {
+  def testNullStruct(): Unit = {
     val df = sql(
       """select * from values
         |(
@@ -413,6 +414,16 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("select a, inline(b) from t1"),
       Row(1, 0, 1) :: Row(1, null, null) :: Row(1, 2, 3) :: Row(1, null, null) :: Nil)
+  }
+
+  test("SPARK-39061: inline should handle null struct") {
+    testNullStruct
+  }
+
+  test("SPARK-39496: inline eval path should handle null struct") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      testNullStruct
+    }
   }
 }
 

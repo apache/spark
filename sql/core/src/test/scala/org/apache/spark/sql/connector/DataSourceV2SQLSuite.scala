@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{BooleanType, LongType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{LongType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -89,71 +89,6 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  test("DescribeTable using v2 catalog") {
-    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
-      " USING foo" +
-      " PARTITIONED BY (id)")
-    val descriptionDf = spark.sql("DESCRIBE TABLE testcat.table_name")
-    assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-      Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
-    val description = descriptionDf.collect()
-    assert(description === Seq(
-      Row("id", "bigint", ""),
-      Row("data", "string", ""),
-      Row("", "", ""),
-      Row("# Partitioning", "", ""),
-      Row("Part 0", "id", "")))
-
-    val e = intercept[AnalysisException] {
-      sql("DESCRIBE TABLE testcat.table_name PARTITION (id = 1)")
-    }
-    assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
-  }
-
-  test("DescribeTable with v2 catalog when table does not exist.") {
-    intercept[AnalysisException] {
-      spark.sql("DESCRIBE TABLE testcat.table_name")
-    }
-  }
-
-  test("DescribeTable extended using v2 catalog") {
-    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
-      " USING foo" +
-      " PARTITIONED BY (id)" +
-      " TBLPROPERTIES ('bar'='baz', 'password' = 'password')" +
-      " COMMENT 'this is a test table'" +
-      " LOCATION 'file:/tmp/testcat/table_name'")
-    val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
-    assert(descriptionDf.schema.map(field => (field.name, field.dataType))
-      === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
-    assert(descriptionDf.collect()
-      .map(_.toSeq)
-      .map(_.toArray.map(_.toString.trim)) === Array(
-      Array("id", "bigint", ""),
-      Array("data", "string", ""),
-      Array("", "", ""),
-      Array("# Partitioning", "", ""),
-      Array("Part 0", "id", ""),
-      Array("", "", ""),
-      Array("# Metadata Columns", "", ""),
-      Array("index", "int", "Metadata column used to conflict with a data column"),
-      Array("_partition", "string", "Partition key used to store the row"),
-      Array("", "", ""),
-      Array("# Detailed Table Information", "", ""),
-      Array("Name", "testcat.table_name", ""),
-      Array("Comment", "this is a test table", ""),
-      Array("Location", "file:/tmp/testcat/table_name", ""),
-      Array("Provider", "foo", ""),
-      Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
-      Array("Table Properties", "[bar=baz,password=*********(redacted)]", "")))
-  }
-
   test("Describe column for v2 catalog") {
     val t = "testcat.tbl"
     withTable(t) {
@@ -175,8 +110,8 @@ class DataSourceV2SQLSuite
 
       assertAnalysisErrorClass(
         s"DESCRIBE $t invalid_col",
-        "MISSING_COLUMN",
-        Array("invalid_col", "testcat.tbl.id, testcat.tbl.data"))
+        "UNRESOLVED_COLUMN",
+        Array("`invalid_col`", "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
     }
   }
 
@@ -1050,8 +985,8 @@ class DataSourceV2SQLSuite
       val ex = intercept[AnalysisException] {
         sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
       }
-      assert(ex.getErrorClass == "MISSING_COLUMN")
-      assert(ex.messageParameters.head == "ns1.ns2.ns3.tbl.id")
+      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(ex.messageParameters.head == "`ns1`.`ns2`.`ns3`.`tbl`.`id`")
     }
   }
 
@@ -1710,18 +1645,18 @@ class DataSourceV2SQLSuite
       // UPDATE non-existing column
       assertAnalysisErrorClass(
         s"UPDATE $t SET dummy='abc'",
-        "MISSING_COLUMN",
+        "UNRESOLVED_COLUMN",
         Array(
-          "dummy",
-          "testcat.ns1.ns2.tbl.p, testcat.ns1.ns2.tbl.id, " +
-            "testcat.ns1.ns2.tbl.age, testcat.ns1.ns2.tbl.name"))
+          "`dummy`",
+          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
       assertAnalysisErrorClass(
         s"UPDATE $t SET name='abc' WHERE dummy=1",
-        "MISSING_COLUMN",
+        "UNRESOLVED_COLUMN",
         Array(
-          "dummy",
-          "testcat.ns1.ns2.tbl.p, testcat.ns1.ns2.tbl.id, " +
-            "testcat.ns1.ns2.tbl.age, testcat.ns1.ns2.tbl.name"))
+          "`dummy`",
+          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
 
       // UPDATE is not implemented yet.
       val e = intercept[UnsupportedOperationException] {
@@ -2410,49 +2345,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-34561: drop/add columns to a dataset of `DESCRIBE TABLE`") {
-    val tbl = s"${catalogAndNamespace}tbl"
-    withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
-      val description = sql(s"DESCRIBE TABLE $tbl")
-      val noCommentDataset = description.drop("comment")
-      val expectedSchema = new StructType()
-        .add(
-          name = "col_name",
-          dataType = StringType,
-          nullable = false,
-          metadata = new MetadataBuilder().putString("comment", "name of the column").build())
-        .add(
-          name = "data_type",
-          dataType = StringType,
-          nullable = false,
-          metadata = new MetadataBuilder().putString("comment", "data type of the column").build())
-      assert(noCommentDataset.schema === expectedSchema)
-      val isNullDataset = noCommentDataset
-        .withColumn("is_null", noCommentDataset("col_name").isNull)
-      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
-    }
-  }
-
-  test("SPARK-34576: drop/add columns to a dataset of `DESCRIBE COLUMN`") {
-    val tbl = s"${catalogAndNamespace}tbl"
-    withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
-      val description = sql(s"DESCRIBE TABLE $tbl c0")
-      val noCommentDataset = description.drop("info_value")
-      val expectedSchema = new StructType()
-        .add(
-          name = "info_name",
-          dataType = StringType,
-          nullable = false,
-          metadata = new MetadataBuilder().putString("comment", "name of the column info").build())
-      assert(noCommentDataset.schema === expectedSchema)
-      val isNullDataset = noCommentDataset
-        .withColumn("is_null", noCommentDataset("info_name").isNull)
-      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
-    }
-  }
-
   test("SPARK-34923: do not propagate metadata columns through Project") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
@@ -2773,7 +2665,7 @@ class DataSourceV2SQLSuite
         assert(e2.getMessage.contains(errMsg))
       }
       checkSubqueryError("SELECT 1 FROM non_exist", "Table or view not found: non_exist")
-      checkSubqueryError("SELECT col", "MISSING_COLUMN")
+      checkSubqueryError("SELECT col", "UNRESOLVED_COLUMN")
       checkSubqueryError("SELECT 1, 2", "Scalar subquery must return only one column")
       checkSubqueryError("SELECT * FROM VALUES (1), (2)", "MULTI_VALUE_SUBQUERY_ERROR")
     }

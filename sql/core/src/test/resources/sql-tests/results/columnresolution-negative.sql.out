@@ -158,7 +158,7 @@ SELECT db1.t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'db1.t1.i1' does not exist. Did you mean one of the following? [spark_catalog.mydb2.t1.i1, spark_catalog.mydb2.t1.i1]; line 1 pos 7
+[UNRESOLVED_COLUMN] A column or function parameter with name `db1`.`t1`.`i1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]; line 1 pos 7
 
 
 -- !query
@@ -183,7 +183,7 @@ SELECT mydb1.t1 FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'mydb1.t1' does not exist. Did you mean one of the following? [spark_catalog.mydb1.t1.i1]; line 1 pos 7
+[UNRESOLVED_COLUMN] A column or function parameter with name `mydb1`.`t1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb1`.`t1`.`i1`]; line 1 pos 7
 
 
 -- !query
@@ -201,7 +201,7 @@ SELECT t1 FROM mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 't1' does not exist. Did you mean one of the following? [spark_catalog.mydb1.t1.i1]; line 1 pos 7
+[UNRESOLVED_COLUMN] A column or function parameter with name `t1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb1`.`t1`.`i1`]; line 1 pos 7
 
 
 -- !query
@@ -218,7 +218,7 @@ SELECT mydb1.t1.i1 FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 'mydb1.t1.i1' does not exist. Did you mean one of the following? [spark_catalog.mydb2.t1.i1]; line 1 pos 7
+[UNRESOLVED_COLUMN] A column or function parameter with name `mydb1`.`t1`.`i1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb2`.`t1`.`i1`]; line 1 pos 7
 
 
 -- !query
