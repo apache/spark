@@ -386,6 +386,7 @@ private[spark] class ApplicationMaster(
   final def finish(status: FinalApplicationStatus, code: Int, msg: String = null): Unit = {
     synchronized {
       if (!finished) {
+        var errorMsg = msg
         val inShutdown = ShutdownHookManager.inShutdown()
         if (registered || !isClusterMode) {
           exitCode = code
@@ -393,10 +394,13 @@ private[spark] class ApplicationMaster(
         } else {
           finalStatus = FinalApplicationStatus.FAILED
           exitCode = ApplicationMaster.EXIT_SC_NOT_INITED
+          if(msg == null) {
+            errorMsg = "User did not initialize spark context"
+          }
         }
         logInfo(s"Final app status: $finalStatus, exitCode: $exitCode" +
-          Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
-        finalMsg = ComStrUtils.abbreviate(msg, sparkConf.get(AM_FINAL_MSG_LIMIT).toInt)
+          Option(errorMsg).map(msg => s", (reason: $errorMsg)").getOrElse(""))
+        finalMsg = ComStrUtils.abbreviate(errorMsg, sparkConf.get(AM_FINAL_MSG_LIMIT).toInt)
         finished = true
         if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
           logDebug("shutting down reporter thread")
