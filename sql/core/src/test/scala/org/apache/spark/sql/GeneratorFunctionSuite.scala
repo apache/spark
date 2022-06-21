@@ -364,7 +364,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       Row(1, 6) :: Row(3, 6) :: Nil)
   }
 
-  test("SPARK-39061/SPARK-39496: inline should handle null struct") {
+  test("SPARK-39496: inline should handle null struct") {
     val df = sql(
       """select * from values
         |(
