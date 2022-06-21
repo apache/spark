@@ -244,7 +244,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
   override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
     namespace match {
-      case Array(db) =>
+      case Array(db) if catalog.databaseExists(db) =>
         catalog.getDatabaseMetadata(db).toMetadata
 
       case _ =>
