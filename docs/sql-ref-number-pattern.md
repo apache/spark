@@ -19,4 +19,101 @@ license: |
   limitations under the License.
 ---
 
-TODO: Add the content of Number Patterns for Formatting and Parsing
+### Description
+
+Functions such as `to_number` and `try_to_number` support converting between values of string and
+Decimal type. Such functions accept format strings indicating how to map between these types.
+
+### Syntax
+
+Number format strings support the following syntax:
+```
+  { ' [ S ] [ L | $ ] 
+      [ 0 | 9 | G | , ] [...] 
+      [ . | D ] 
+      [ 0 | 9 ] [...] 
+      [ L | $ ] [ PR | MI | S ] ' }
+```
+
+### Elements
+
+Each number format string can contain the following elements (case insensitive):
+
+- **`0`** or **`9`**
+
+  Specifies an expected digit between `0` and `9`.
+
+  A `0` to the left of the decimal point indicates that at least this many digits must be present.
+
+  A leading `9` indicates that these digits are optional.
+
+  The input value must not be larger than the number of digits to the left of the decimal point 
+  allowed by the format string.
+
+  Digits to the right of the decimal point in the format string indicate the most digits that the
+  input value may have to the right of the decimal point.
+
+- **`.`** or **`D`**
+
+  Specifies the position of the decimal point.
+
+  The input value does not need to include a decimal point.
+
+- **`,`** or **`G`**
+
+  Specifies the position of the `,` grouping (thousands) separator.
+
+  There must be a `0` or `9` to the left and right of each grouping separator. 
+
+- **`$`**
+
+  Specifies the location of the `$` currency sign. This character may only be specified once.
+
+- **`S`** 
+
+  Specifies the position of an optional '+' or '-' sign. This character may only be specified once.
+
+- **`MI`**
+
+  Specifies an optional `-` sign at the end, but no `+`.
+
+- **`PR`**
+
+  Maps negative input values to wrapping angle brackets (`<1>`) in the corresponding string.
+
+  Positive input values do not receive wrapping angle brackets.
+
+### Examples
+
+The following examples use the `try_to_number` SQL function which accepts an input string as the
+first argument and a format string as the second argument, returning a Decimal value.
+
+Note that this format string used in these examples expects:
+* an optional sign at the beginning
+* followed by a dollar sign
+* followed by a number between 3 and 6 digits long
+* thousands separators
+* up to two dights beyond the decimal point
+
+```sql
+-- The negative number with currency symbol maps to characters in the format string.
+> SELECT try_to_number('-$12,345.67', 'S$999,099.99');
+ -12345.67
+ 
+-- The plus sign is optional, and so are fractional digits.
+> SELECT try_to_number('$345', 'S$999,099.99');
+ 345.00
+ 
+-- The format requires at least three digits.
+> SELECT try_to_number('$45', 'S$999,099.99');
+ NULL
+ 
+-- The format requires at least three digits.
+> SELECT try_to_number('$045', 'S$999,099.99');
+ 45.00
+ 
+-- Using brackets to denote negative values
+> SELECT try_to_number('<1234>', '999999PR');
+ -1234
+```
+
