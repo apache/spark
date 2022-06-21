@@ -1272,8 +1272,11 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN)) {
     case filter @ Filter(condition, child) =>
-      val newFilters = filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))
+      var newFilters = filter.constraints
+      val itr = (child.constraints ++ splitConjunctivePredicates(condition)).iterator
+      while (itr.hasNext) {
+        newFilters = newFilters - itr.next()
+      }
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
