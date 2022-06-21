@@ -50,6 +50,7 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import (
     AtomicType,
     DataType,
+    StructField,
     StructType,
     _make_type_verifier,
     _infer_schema,
@@ -981,11 +982,9 @@ class SparkSession(SparkConversionMixin):
                 # TODO: Apply the logic below when self._jconf.arrowPySparkEnabled() is True
                 spark_type = _from_numpy_type(data.dtype)
                 if spark_type is not None:
-
-                    struct = StructType()
-                    for name in column_names:
-                        struct.add(name, spark_type, nullable=True)
-                    schema = struct
+                    schema = StructType(
+                        [StructField(name, spark_type, nullable=True) for name in column_names]
+                    )
 
             data = pd.DataFrame(data, columns=column_names)
 
