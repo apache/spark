@@ -3420,8 +3420,8 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       i.userSpecifiedCols.map { col =>
         i.table.resolve(Seq(col), resolver).getOrElse(
-          throw QueryCompilationErrors.unresolvedColumnError(
-            col, i.table.output.map(_.name), i.origin))
+          throw QueryCompilationErrors.unresolvedAttributeError(
+            "UNRESOLVED_COLUMN", col, i.table.output.map(_.name), i.origin))
       }
     }
 

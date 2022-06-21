@@ -451,7 +451,11 @@ private[yarn] class YarnAllocator(
     // resources on those nodes for earlier allocateResource calls, so notifying driver
     // to put those executors in decommissioning state
     allocateResponse.getUpdatedNodes.asScala.filter (node =>
-      node.getNodeState == NodeState.DECOMMISSIONING &&
+      // SPARK-39491: Hadoop 2.7 does not support `NodeState.DECOMMISSIONING`,
+      // there change to use string comparison instead for compilation.
+      // Should revert to `node.getNodeState == NodeState.DECOMMISSIONING` when
+      // Hadoop 2.7 is no longer supported.
+      node.getNodeState.toString.equals("DECOMMISSIONING") &&
         !decommissioningNodesCache.containsKey(getHostAddress(node)))
       .foreach { node =>
         val host = getHostAddress(node)

@@ -20,105 +20,32 @@
 name: Build and test
 
 on:
-  push:
-    branches:
-    - '**'
-  schedule:
-    # Note that the scheduled jobs are only for master branch.
-    # master, Hadoop 2
-    - cron: '0 1 * * *'
-    # master
-    - cron: '0 4 * * *'
-    # branch-3.2
-    - cron: '0 7 * * *'
-    # PySpark coverage for master branch
-    - cron: '0 10 * * *'
-    # Java 11
-    - cron: '0 13 * * *'
-    # Java 17
-    - cron: '0 16 * * *'
-    # branch-3.3
-    - cron: '0 19 * * *'
   workflow_call:
     inputs:
-      ansi_enabled:
+      java:
         required: false
-        type: boolean
-        default: false
-
+        type: string
+        default: 8
+      branch:
+        required: false
+        type: string
+        default: master
+      hadoop:
+        required: false
+        type: string
+        default: hadoop3
+      type:
+        required: false
+        type: string
+        default: regular
+      envs:
+        required: false
+        type: string
+        default: "{}"
 jobs:
-  configure-jobs:
-    name: Configure jobs
-    runs-on: ubuntu-20.04
-    # All other jobs in this workflow depend on this job,
-    # so the entire workflow is skipped when these conditions evaluate to false:
-    # Run all jobs for Apache Spark repository
-    # Run only non-scheduled jobs for forked repositories
-    if: github.repository == 'apache/spark' || github.event_name != 'schedule'
-    outputs:
-      java: ${{ steps.set-outputs.outputs.java }}
-      branch: ${{ steps.set-outputs.outputs.branch }}
-      hadoop: ${{ steps.set-outputs.outputs.hadoop }}
-      type: ${{ steps.set-outputs.outputs.type }}
-      envs: ${{ steps.set-outputs.outputs.envs }}
-    steps:
-    - name: Configure branch and additional environment variables
-      id: set-outputs
-      run: |
-        if [ "${{ github.event.schedule }}" = "0 1 * * *" ]; then
-          echo '::set-output name=java::8'
-          echo '::set-output name=branch::master'
-          echo '::set-output name=type::scheduled'
-          echo '::set-output name=envs::{}'
-          echo '::set-output name=hadoop::hadoop2'
-        elif [ "${{ github.event.schedule }}" = "0 4 * * *" ]; then
-          echo '::set-output name=java::8'
-          echo '::set-output name=branch::master'
-          echo '::set-output name=type::scheduled'
-          echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
-          echo '::set-output name=hadoop::hadoop3'
-        elif [ "${{ github.event.schedule }}" = "0 7 * * *" ]; then
-          echo '::set-output name=java::8'
-          echo '::set-output name=branch::branch-3.2'
-          echo '::set-output name=type::scheduled'
-          echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
-          echo '::set-output name=hadoop::hadoop3.2'
-        elif [ "${{ github.event.schedule }}" = "0 10 * * *" ]; then
-          echo '::set-output name=java::8'
-          echo '::set-output name=branch::master'
-          echo '::set-output name=type::pyspark-coverage-scheduled'
-          echo '::set-output name=envs::{"PYSPARK_CODECOV": "true"}'
-          echo '::set-output name=hadoop::hadoop3'
-        elif [ "${{ github.event.schedule }}" = "0 13 * * *" ]; then
-          echo '::set-output name=java::11'
-          echo '::set-output name=branch::master'
-          echo '::set-output name=type::scheduled'
-          echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
-          echo '::set-output name=hadoop::hadoop3'
-        elif [ "${{ github.event.schedule }}" = "0 16 * * *" ]; then
-          echo '::set-output name=java::17'
-          echo '::set-output name=branch::master'
-          echo '::set-output name=type::scheduled'
-          echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
-          echo '::set-output name=hadoop::hadoop3'
-        elif [ "${{ github.event.schedule }}" = "0 19 * * *" ]; then
-          echo '::set-output name=java::8'
-          echo '::set-output name=branch::branch-3.3'
-          echo '::set-output name=type::scheduled'
-          echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
-          echo '::set-output name=hadoop::hadoop3'
-        else
-          echo '::set-output name=java::8'
-          echo '::set-output name=branch::master'  # NOTE: UPDATE THIS WHEN CUTTING BRANCH
-          echo '::set-output name=type::regular'
-          echo '::set-output name=envs::{"SPARK_ANSI_SQL_MODE": "${{ inputs.ansi_enabled }}"}'
-          echo '::set-output name=hadoop::hadoop3'
-        fi
-
   precondition:
     name: Check changes
     runs-on: ubuntu-20.04
-    needs: configure-jobs
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -129,7 +56,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -155,22 +82,21 @@ jobs:
 
   # Build: build Spark and run the tests for specified modules.
   build:
-    name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
-    needs: [configure-jobs, precondition]
+    name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
+    needs: precondition
     # Run scheduled jobs for Apache Spark only
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
     if: >-
-      needs.configure-jobs.outputs.type == 'scheduled'
-      || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true')
+      inputs.type == 'scheduled' || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true')
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
         java:
-          - ${{ needs.configure-jobs.outputs.java }}
+          - ${{ inputs.java }}
         hadoop:
-          - ${{ needs.configure-jobs.outputs.hadoop }}
+          - ${{ inputs.hadoop }}
         hive:
           - hive2.3
         # TODO(SPARK-32246): We don't test 'streaming-kinesis-asl' for now.
@@ -194,27 +120,27 @@ jobs:
         include:
           # Hive tests
           - modules: hive
-            java: ${{ needs.configure-jobs.outputs.java }}
-            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- slow tests"
           - modules: hive
-            java: ${{ needs.configure-jobs.outputs.java }}
-            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- other tests"
           # SQL tests
           - modules: sql
-            java: ${{ needs.configure-jobs.outputs.java }}
-            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- slow tests"
           - modules: sql
-            java: ${{ needs.configure-jobs.outputs.java }}
-            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- other tests"
@@ -233,7 +159,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -280,7 +206,7 @@ jobs:
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
-      env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
+      env: ${{ fromJSON(inputs.envs) }}
       run: |
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
@@ -300,15 +226,15 @@ jobs:
         path: "**/target/unit-tests.log"
 
   pyspark:
-    needs: [configure-jobs, precondition]
+    needs: precondition
     # Run PySpark coverage scheduled jobs for Apache Spark only
     # Run scheduled jobs with JDK 17 in Apache Spark
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if pyspark changes exist
     if: >-
-      needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled'
-      || (needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
-      || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).pyspark == 'true')
-    name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
+      inputs.type == 'pyspark-coverage-scheduled'
+      || (inputs.type == 'scheduled' && inputs.java == '17')
+      || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).pyspark == 'true')
+    name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
       image: dongjoon/apache-spark-github-action-image:20220207
@@ -316,7 +242,7 @@ jobs:
       fail-fast: false
       matrix:
         java:
-          - ${{ needs.configure-jobs.outputs.java }}
+          - ${{ inputs.java }}
         modules:
           - >-
             pyspark-sql, pyspark-mllib, pyspark-resource
@@ -328,14 +254,13 @@ jobs:
             pyspark-pandas-slow
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
-      HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
+      HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
-      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -343,7 +268,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -384,12 +309,12 @@ jobs:
         bash miniconda.sh -b -p $HOME/miniconda
     # Run the tests.
     - name: Run tests
-      env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
+      env: ${{ fromJSON(inputs.envs) }}
       run: |
         export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
-      if: needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled'
+      if: inputs.type == 'pyspark-coverage-scheduled'
       uses: codecov/codecov-action@v2
       with:
         files: ./python/coverage.xml
@@ -399,33 +324,32 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-${{ matrix.modules }}--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
+        name: test-results-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: unit-tests-log-${{ matrix.modules }}--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
+        name: unit-tests-log-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: [configure-jobs, precondition]
+    needs: precondition
     # Run scheduled jobs with JDK 17 in Apache Spark
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if sparkr changes exist
     if: >-
-      (needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
-      || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).sparkr == 'true')
+      (inputs.type == 'scheduled' && inputs.java == '17')
+      || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).sparkr == 'true')
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
       image: dongjoon/apache-spark-github-action-image:20220207
     env:
-      HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
+      HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_MIMA: true
-      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -433,7 +357,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -460,11 +384,12 @@ jobs:
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           sparkr-coursier-
-    - name: Install Java ${{ needs.configure-jobs.outputs.java }}
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v1
       with:
-        java-version: ${{ needs.configure-jobs.outputs.java }}
+        java-version: ${{ inputs.java }}
     - name: Run tests
+      env: ${{ fromJSON(inputs.envs) }}
       run: |
         # The followings are also used by `r-lib/actions/setup-r` to avoid
         # R issues at docker environment
@@ -475,13 +400,12 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-sparkr--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
+        name: test-results-sparkr--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
 
   # Static analysis, and documentation build
   lint:
-    needs: configure-jobs
-    if: needs.configure-jobs.outputs.type == 'regular'
+    if: inputs.type == 'regular'
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
     env:
@@ -497,7 +421,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -595,9 +519,9 @@ jobs:
         bundle exec jekyll build
 
   java-11-17:
-    needs: [configure-jobs, precondition]
+    needs: precondition
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
-    if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
+    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
     name: Java ${{ matrix.java }} build with Maven
     strategy:
       fail-fast: false
@@ -612,7 +536,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -651,9 +575,9 @@ jobs:
         rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:
-    needs: [configure-jobs, precondition]
+    needs: precondition
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
-    if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
+    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-20.04
     steps:
@@ -662,7 +586,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -697,21 +621,20 @@ jobs:
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
 
   tpcds-1g:
-    needs: [configure-jobs, precondition]
+    needs: precondition
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if tpcds changes exist
-    if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).tpcds == 'true'
+    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).tpcds == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
-      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -763,6 +686,7 @@ jobs:
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
+        SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.preferSortMergeJoin=true
@@ -770,12 +694,14 @@ jobs:
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
+        SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=10485760
     - name: Run TPC-DS queries (Shuffled hash join)
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
+        SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true
@@ -783,23 +709,23 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-tpcds--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
+        name: test-results-tpcds--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: unit-tests-log-tpcds--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
+        name: unit-tests-log-tpcds--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
-    needs: [configure-jobs, precondition]
+    needs: precondition
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if docker changes exist
-    if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).docker == 'true'
+    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).docker == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-20.04
     env:
-      HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
+      HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
@@ -811,7 +737,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ needs.configure-jobs.outputs.branch }}
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -848,11 +774,11 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-docker-integration--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
+        name: test-results-docker-integration--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: unit-tests-log-docker-integration--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
+        name: unit-tests-log-docker-integration--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"

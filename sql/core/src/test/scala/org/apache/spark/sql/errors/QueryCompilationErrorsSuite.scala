@@ -401,6 +401,18 @@ class QueryCompilationErrorsSuite
     )
   }
 
+  test("UNRESOLVED_MAP_KEY: string type literal should be quoted") {
+    checkAnswer(sql("select m['a'] from (select map('a', 'b') as m, 'aa' as aa)"), Row("b"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select m[a] from (select map('a', 'b') as m, 'aa' as aa)")
+      },
+      errorClass = "UNRESOLVED_MAP_KEY",
+      parameters = Map("columnName" -> "`a`",
+        "proposal" ->
+          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"))
+  }
+
   test("UNRESOLVED_COLUMN: SELECT distinct does not work correctly " +
     "if order by missing attribute") {
     checkAnswer(

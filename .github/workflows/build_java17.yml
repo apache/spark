@@ -17,22 +17,24 @@
 # under the License.
 #
 
-name: Cancelling Duplicates
+name: "Build (master, Scala 2.12, Hadoop 3, JDK 17)"
+
 on:
-  workflow_run:
-    workflows: 
-      - 'Build'
-    types: ['requested']
+  schedule:
+    - cron: '0 22 * * *'
 
 jobs:
-  cancel-duplicate-workflow-runs:
-    name: "Cancel duplicate workflow runs"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: potiuk/cancel-workflow-runs@4723494a065d162f8e9efd071b98e0126e00f866 # @master
-        name: "Cancel duplicate workflow runs"
-        with:
-          cancelMode: allDuplicates
-          token: ${{ secrets.GITHUB_TOKEN }}
-          sourceRunId: ${{ github.event.workflow_run.id }}
-          skipEventTypes: '["push", "schedule"]'
+  run-build:
+    name: Run
+    uses: ./.github/workflows/build_and_test.yml
+    if: github.repository == 'apache/spark'
+    with:
+      java: 17
+      branch: master
+      hadoop: hadoop3
+      type: scheduled
+      envs: >-
+        {
+          "SKIP_MIMA": "true",
+          "SKIP_UNIDOC": "true"
+        }
