@@ -119,7 +119,8 @@ case class AddColumns(
         col.dataType,
         col.nullable,
         col.comment.orNull,
-        col.position.map(_.position).orNull)
+        col.position.map(_.position).orNull,
+        col.default.orNull)
     }
   }
 
@@ -154,7 +155,8 @@ case class ReplaceColumns(
         col.dataType,
         col.nullable,
         col.comment.orNull,
-        null)
+        null,
+        col.default.orNull)
     }
     deleteChanges ++ addChanges
   }

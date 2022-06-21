@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -130,23 +131,34 @@ private[sql] object CatalogV2Util {
   /**
    * Apply schema changes to a schema and return the result.
    */
-  def applySchemaChanges(schema: StructType, changes: Seq[TableChange]): StructType = {
+  def applySchemaChanges(
+      schema: StructType,
+      changes: Seq[TableChange],
+      tableProvider: Option[String],
+      statementType: String): StructType = {
     changes.foldLeft(schema) { (schema, change) =>
       change match {
         case add: AddColumn =>
           add.fieldNames match {
             case Array(name) =>
               val field = StructField(name, add.dataType, nullable = add.isNullable)
-              val newField = Option(add.comment).map(field.withComment).getOrElse(field)
-              addField(schema, newField, add.position())
-
+              val fieldWithDefault: StructField =
+                Option(add.defaultValue).map(field.withCurrentDefaultValue).getOrElse(field)
+              val fieldWithComment: StructField =
+                Option(add.comment).map(fieldWithDefault.withComment).getOrElse(fieldWithDefault)
+              addField(schema, fieldWithComment, add.position(), tableProvider, statementType)
             case names =>
               replace(schema, names.init, parent => parent.dataType match {
                 case parentType: StructType =>
                   val field = StructField(names.last, add.dataType, nullable = add.isNullable)
-                  val newField = Option(add.comment).map(field.withComment).getOrElse(field)
-                  Some(parent.copy(dataType = addField(parentType, newField, add.position())))
-
+                  val fieldWithDefault: StructField =
+                    Option(add.defaultValue).map(field.withCurrentDefaultValue).getOrElse(field)
+                  val fieldWithComment: StructField =
+                    Option(add.comment).map(fieldWithDefault.withComment)
+                      .getOrElse(fieldWithDefault)
+                  Some(parent.copy(dataType =
+                    addField(parentType, fieldWithComment, add.position(), tableProvider,
+                      statementType)))
                 case _ =>
                   throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
               })
@@ -176,7 +188,7 @@ private[sql] object CatalogV2Util {
               throw new IllegalArgumentException("Field not found: " + name)
             }
             val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
-            addField(withFieldRemoved, oldField, update.position())
+            addField(withFieldRemoved, oldField, update.position(), tableProvider, statementType)
           }
 
           update.fieldNames() match {
@@ -204,8 +216,10 @@ private[sql] object CatalogV2Util {
   private def addField(
       schema: StructType,
       field: StructField,
-      position: ColumnPosition): StructType = {
-    if (position == null) {
+      position: ColumnPosition,
+      tableProvider: Option[String],
+      statementType: String): StructType = {
+    val newSchema: StructType = if (position == null) {
       schema.add(field)
     } else if (position.isInstanceOf[First]) {
       StructType(field +: schema.fields)
@@ -218,6 +232,7 @@ private[sql] object CatalogV2Util {
       val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
     }
+    constantFoldCurrentDefaultsToExistDefaults(newSchema, tableProvider, statementType)
   }
 
   private def replace(
