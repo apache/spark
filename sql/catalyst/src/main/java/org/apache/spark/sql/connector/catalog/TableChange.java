@@ -436,9 +436,7 @@ public interface TableChange {
     }
 
     @Nullable
-    public String defaultValue() {
-      return defaultValue;
-    }
+    public String defaultValue() { return defaultValue; }
 
     @Override
     public boolean equals(Object o) {
