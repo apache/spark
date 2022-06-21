@@ -1043,4 +1043,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
     assert(e.getMessage === "Got the unexpected unit 'SECS'.")
   }
+
+  test("SPARK-39539 MillisToMicros should be able to return microseconds" +
+    " of Long.MinValue and Long.MinValue") {
+    assert(millisToMicros(Long.MinValue) === Long.MinValue)
+    assert(millisToMicros(Long.MaxValue) === Long.MaxValue)
+  }
 }

@@ -237,7 +237,13 @@ object DateTimeUtils {
    * Converts milliseconds since the epoch to microseconds.
    */
   def millisToMicros(millis: Long): Long = {
-    Math.multiplyExact(millis, MICROS_PER_MILLIS)
+    if (millis < MIN_MICROS) {
+      Long.MinValue
+    } else if (millis > MAX_MICROS) {
+      Long.MaxValue
+    } else {
+      Math.multiplyExact(millis, MICROS_PER_MILLIS)
+    }
   }
 
   private final val gmtUtf8 = UTF8String.fromString("GMT")
@@ -516,6 +522,10 @@ object DateTimeUtils {
   // min second cause overflow in instant to micro
   private val MIN_SECONDS = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
 
+  // See issue SPARK-39539
+  // min millis and max millis cause overflow in millis to micro
+  private val MIN_MICROS = Math.floorDiv(Long.MinValue, MICROS_PER_MILLIS)
+  private val MAX_MICROS = Math.floorDiv(Long.MaxValue, MICROS_PER_MILLIS)
   /**
    * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
    * instance of `java.time.Instant`. The epoch microsecond count is a simple incrementing count of
