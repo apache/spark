@@ -32,11 +32,11 @@ jobs:
       java: 8
       branch: master
       hadoop: hadoop3
-      jobs: >-
-        {
-          "pyspark": "true"
-        }
       envs: >-
         {
           "PYSPARK_CODECOV": "true"
+        }
+      jobs: >-
+        {
+          "pyspark": "true"
         }
