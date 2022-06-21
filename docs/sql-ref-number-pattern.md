@@ -27,6 +27,7 @@ Decimal type. Such functions accept format strings indicating how to map between
 ### Syntax
 
 Number format strings support the following syntax:
+
 ```
   { ' [ S ] [ L | $ ] 
       [ 0 | 9 | G | , ] [...] 
@@ -83,17 +84,52 @@ Each number format string can contain the following elements (case insensitive):
 
   Positive input values do not receive wrapping angle brackets.
 
+### Function types and error handling
+
+* The `to_number` function accepts an input string and a format string argument. It requires that
+the input string matches the provided format and raises an error otherwise. The function then
+returns the corresponding Decimal value.
+* The `try_to_number` function accepts an input string and a format string argument. It works the
+same as the `to_number` function except that it returns NULL instead of raising an error if the
+input string does not match the given number format.
+
 ### Examples
 
-The following examples use the `try_to_number` SQL function which accepts an input string as the
-first argument and a format string as the second argument, returning a Decimal value.
+The following examples use the `to_number` and `try_to_number` SQL functions which each accept an
+input string as the first argument and a format string as the second argument.
 
-Note that this format string used in these examples expects:
-* an optional sign at the beginning
-* followed by a dollar sign
-* followed by a number between 3 and 6 digits long
-* thousands separators
-* up to two dights beyond the decimal point
+Note that the format string used in most of these examples expects:
+* an optional sign at the beginning,
+* followed by a dollar sign,
+* followed by a number between 3 and 6 digits long,
+* thousands separators,
+* up to two digits beyond the decimal point.
+
+#### For the `to_number` function:
+
+```sql
+-- The negative number with currency symbol maps to characters in the format string.
+> SELECT to_number('-$12,345.67', 'S$999,099.99');
+ -12345.67
+ 
+-- The plus sign is optional, and so are fractional digits.
+> SELECT to_number('$345', 'S$999,099.99');
+ 345.00
+ 
+-- The format requires at least three digits.
+> SELECT to_number('$45', 'S$999,099.99');
+Error: the input string does not match the given number format
+ 
+-- The format requires at least three digits.
+> SELECT to_number('$045', 'S$999,099.99');
+ 45.00
+ 
+-- MI indicates an optional minus sign at the end of the input string.
+> SELECT to_number('1234-', '999999MI');
+ -1234
+```
+
+#### For the `try_to_number` function:
 
 ```sql
 -- The negative number with currency symbol maps to characters in the format string.
