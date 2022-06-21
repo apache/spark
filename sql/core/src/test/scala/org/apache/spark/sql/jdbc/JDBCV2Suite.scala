@@ -439,11 +439,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df12 = sql(
       """
         |SELECT * FROM h2.test.employee
-        |WHERE IF(SALARY > 10000, BONUS, BONUS + 200) > 1200
+        |WHERE IF(SALARY > 10000, SALARY, LEAST(SALARY, 1000)) > 1200
         |""".stripMargin)
-    checkFiltersRemoved(df12, false)
-    checkPushedInfo(df12, "PushedFilters: []")
-    checkAnswer(df12, Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
+    checkFiltersRemoved(df12)
+    checkPushedInfo(df12, "PushedFilters: " +
+      "[(CASE WHEN SALARY > 10000.00 THEN SALARY ELSE LEAST(SALARY, 1000.00) END) > 1200.00]")
+    checkAnswer(df12, Seq(Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
   }
 
   test("scan with filter push-down with ansi mode") {

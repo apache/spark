@@ -99,7 +99,6 @@ public class V2ExpressionSQLBuilder {
         case "COALESCE":
         case "GREATEST":
         case "LEAST":
-        case "IF":
         case "RAND":
         case "LN":
         case "EXP":

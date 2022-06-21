@@ -118,12 +118,6 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: <code>IF</code>
- *   <ul>
- *    <li>SQL semantic: <code>IF(expr1, expr2, expr3)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
  *  <li>Name: <code>RAND</code>
  *   <ul>
  *    <li>SQL semantic: <code>RAND([seed])</code></li>
