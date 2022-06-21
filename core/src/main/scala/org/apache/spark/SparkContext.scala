@@ -276,7 +276,12 @@ class SparkContext(config: SparkConf) extends Logging {
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master, conf))
+    SparkEnv.createDriverEnv(
+      conf,
+      isLocal,
+      listenerBus,
+      SparkContext.numDriverCores(master, conf),
+      this)
   }
 
   private[spark] def env: SparkEnv = _env
