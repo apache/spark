@@ -31,6 +31,7 @@ import scala.collection.mutable.PriorityQueue
  * return the average of the two top values of heaps. Otherwise we return the top of the
  * heap which has one more element.
  */
+//MD: 这个中位数堆，确实设计很巧妙
 private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
 
   /**
@@ -43,6 +44,7 @@ private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
    * Stores all the numbers greater than the current median in a largerHalf,
    * i.e median is the minimum, at the root.
    */
+    //md: 对于larger部分，维护一个小顶堆，这样再rebalance时比较方便的找到可以迁移到smaller的堆中去
   private[this] val largerHalf = PriorityQueue.empty[Double](ord.reverse)
 
   def isEmpty(): Boolean = {

@@ -35,6 +35,9 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
    */
   protected def planLater(plan: LogicalPlan): PhysicalPlan
 
+  //md: 这里的Strategy本质上就是一种rule，只不过只为logical plan to physical plan服务的；
+  // 所以这里的apply方法，类似于rule.apply()，去尝试探索当下这个strategy最有机会优化的可能性（但已经是局部转化了）
+  // 所以，从这里看spark的整个优化过程，logical部分是做rule迭代优化（都是heuristic为主），而physical部分也是heuristic而且是局部有效的
   def apply(plan: LogicalPlan): Seq[PhysicalPlan]
 }
 

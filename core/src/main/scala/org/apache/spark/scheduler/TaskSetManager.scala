@@ -442,6 +442,7 @@ private[spark] class TaskSetManager(
    *         dequeued task index)
    */
   @throws[TaskNotSerializableException]
+  //md: 这个方法的主要功能是，为对应的executor找到一个可执行的task（用于实际的调度）
   def resourceOffer(
       execId: String,
       host: String,
@@ -1338,6 +1339,7 @@ private[spark] object TaskSetManager {
  * Duplicates are handled in dequeueTaskFromList, which ensures that a
  * task hasn't already started running before launching it.
  */
+//md: 层次化的局部性task摆放
 private[scheduler] class PendingTasksByLocality {
 
   // Set of pending tasks for each executor.
