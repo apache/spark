@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StringType
 trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
   with command.TestsV1AndV2Commands {
 
-  test("Describing a partition is not supported") {
+  test("Describing of a non-existent partition") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
         "PARTITIONED BY (id)")
