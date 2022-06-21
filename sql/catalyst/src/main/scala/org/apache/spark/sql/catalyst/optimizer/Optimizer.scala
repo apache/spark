@@ -1568,15 +1568,14 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
-      val complexMap = aliasMap.filterNot(_._2.child match {
-        case _: Attribute => true
-        case _: Literal => true
-        case _ => false
-      })
-      if (complexMap.nonEmpty && doNotPushComplexPredicate(grandChild)) {
+      val complexExpressionsKeys = aliasMap.filter(_._2.child match {
+        case _: CreateNamedStruct => false // special case, filters may push through it.
+        case e => !e.foldable && e.children.nonEmpty
+      }).keySet
+      if (complexExpressionsKeys.nonEmpty && doNotPushComplexPredicate(grandChild)) {
         val predicates = splitConjunctivePredicates(condition)
         val (remainingPredicates, pushedPredicates) =
-          predicates.partition(_.references.exists(complexMap.contains))
+          predicates.partition(_.references.exists(complexExpressionsKeys.contains))
         val pushedFilter = pushedPredicates.map(replaceAlias(_, aliasMap)).reduceLeftOption(And)
           .map(e => project.copy(child = Filter(e, grandChild)))
           .getOrElse(project)

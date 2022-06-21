@@ -40,7 +40,8 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughNonJoin,
         BooleanSimplification,
         PushPredicateThroughJoin,
-        CollapseProject) ::
+        CollapseProject,
+        SimplifyExtractValueOps) ::
       Batch("Push extra predicate through join", FixedPoint(10),
         PushExtraPredicateThroughJoin,
         PushDownPredicates) :: Nil
@@ -1444,6 +1445,25 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
+  test("SPARK-39481: Push down condition if it is foldable expression") {
+    val originalQuery =
+      testRelation.select((Literal(1) * Literal(1)).as("na"), 'a).where('na === 1)
+    val correctAnswer =
+      testRelation.where((Literal(1) * Literal(1)) === Literal(1))
+        .select((Literal(1) * Literal(1)).as("na"), 'a)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-39481: Push down condition through CreateNamedStruct") {
+    val originalQuery =
+      testRelation.select(CreateNamedStruct(Seq("na", 'a)).as("col1"), 'a).where($"col1.na" > 1)
+    val correctAnswer = testRelation.where('a > 1)
+      .select(CreateNamedStruct(Seq("na", 'a)).as("col1"), 'a)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
   test("SPARK-39481: Push down condition if it is complex condition but it is not from project") {
     val originalQuery = testRelation.select('a, 'b, ('a + 1).as("new_a"))
       .where('a > 1 || 'a.in(1, 2, 3))
@@ -1453,7 +1473,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
-  test("SPARK-39481: Push down complex filter condition if children contains join") {
+  test("SPARK-39481: Push down complex filter condition if contains join") {
     val left = testRelation.subquery("x")
     val right = testRelation1.subquery("y")
 
