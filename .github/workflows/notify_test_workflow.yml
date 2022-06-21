@@ -46,7 +46,7 @@ jobs:
             const params = {
               owner: context.payload.pull_request.head.repo.owner.login,
               repo: context.payload.pull_request.head.repo.name,
-              id: 'build_and_test.yml',
+              id: 'build_main.yml',
               branch: context.payload.pull_request.head.ref,
             }
             const check_run_params = {
