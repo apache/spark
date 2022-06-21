@@ -27,21 +27,24 @@ on:
         type: string
         default: 8
       branch:
+        description: 'Branch to run the build against'
         required: false
         type: string
         default: master
       hadoop:
+        description: 'Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.'
         required: false
         type: string
         default: hadoop3
-      type:
-        required: false
-        type: string
-        default: regular
       envs:
+        description: 'Additional environment variables to set when running the tests. Should be in JSON format.'
         required: false
         type: string
         default: "{}"
+      jobs:
+        description: 'Jobs to run, and should be in JSON format. See precondition job below.'
+        required: false
+        type: string
 jobs:
   precondition:
     name: Check changes
@@ -67,27 +70,30 @@ jobs:
     - name: Check all modules
       id: set-outputs
       run: |
-        # is-changed.py is missing in branch-3.2, and it might run in scheduled build, see also SPARK-39517
-        build=true; pyspark=true; sparkr=true; tpcds=true; docker=true;
-        if [ -f "./dev/is-changed.py" ]; then
-          build=`./dev/is-changed.py -m avro,build,catalyst,core,docker-integration-tests,examples,graphx,hadoop-cloud,hive,hive-thriftserver,kubernetes,kvstore,launcher,mesos,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,spark-ganglia-lgpl,sparkr,sql,sql-kafka-0-10,streaming,streaming-kafka-0-10,streaming-kinesis-asl,tags,unsafe,yarn`
-          pyspark=`./dev/is-changed.py -m avro,build,catalyst,core,graphx,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,sql,tags,unsafe`
-          sparkr=`./dev/is-changed.py -m avro,build,catalyst,core,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,repl,sketch,sparkr,sql,tags,unsafe`
-          tpcds=`./dev/is-changed.py -m build,catalyst,core,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
-          docker=`./dev/is-changed.py -m build,catalyst,core,docker-integration-tests,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
+        if [ -z "${{ inputs.jobs }}" ]; then
+          # is-changed.py is missing in branch-3.2, and it might run in scheduled build, see also SPARK-39517
+          build=true; pyspark=true; sparkr=true; tpcds=true; docker=true;
+          if [ -f "./dev/is-changed.py" ]; then
+            # 'build' is always true because 1. it dose not save significant time and 2. most of PRs trigger the build.
+            pyspark_modules=`python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
+            pyspark=`./dev/is-changed.py -c -m $pyspark_modules`
+            sparkr=`./dev/is-changed.py -c -m sparkr`
+            tpcds=`./dev/is-changed.py -c -m sql`
+            docker=`./dev/is-changed.py -c -m docker-integration-tests`
+          fi
+          precondition="{\"build\": \"$build\", \"pyspark\": \"$pyspark\", \"sparkr\": \"$sparkr\", \"tpcds-1g\": \"$tpcds\", \"docker-integration-tests\": \"$docker\"}"
+          echo $precondition # For debugging
+          echo "::set-output name=required::$precondition"
+        else
+          # This is usually set by scheduled jobs.
+          echo "::set-output name=required::${{ inputs.jobs }}
         fi
-        echo "{\"build\": \"$build\", \"pyspark\": \"$pyspark\", \"sparkr\": \"$sparkr\", \"tpcds\": \"$tpcds\", \"docker\": \"$docker\"}" > required.json
-        cat required.json
-        echo "::set-output name=required::$(cat required.json)"
 
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: precondition
-    # Run scheduled jobs for Apache Spark only
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
-    if: >-
-      inputs.type == 'scheduled' || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true')
+    if: fromJson(needs.precondition.outputs.required).build == 'true')
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
@@ -230,10 +236,7 @@ jobs:
     # Run PySpark coverage scheduled jobs for Apache Spark only
     # Run scheduled jobs with JDK 17 in Apache Spark
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if pyspark changes exist
-    if: >-
-      inputs.type == 'pyspark-coverage-scheduled'
-      || (inputs.type == 'scheduled' && inputs.java == '17')
-      || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).pyspark == 'true')
+    if: fromJson(needs.precondition.outputs.required).pyspark == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
@@ -337,9 +340,7 @@ jobs:
     needs: precondition
     # Run scheduled jobs with JDK 17 in Apache Spark
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if sparkr changes exist
-    if: >-
-      (inputs.type == 'scheduled' && inputs.java == '17')
-      || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).sparkr == 'true')
+    if: fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
@@ -405,7 +406,6 @@ jobs:
 
   # Static analysis, and documentation build
   lint:
-    if: inputs.type == 'regular'
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
     env:
@@ -520,8 +520,7 @@ jobs:
 
   java-11-17:
     needs: precondition
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
-    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
+    if: fromJson(needs.precondition.outputs.required).build == 'true'
     name: Java ${{ matrix.java }} build with Maven
     strategy:
       fail-fast: false
@@ -576,8 +575,7 @@ jobs:
 
   scala-213:
     needs: precondition
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
-    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
+    if: fromJson(needs.precondition.outputs.required).build == 'true'
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-20.04
     steps:
@@ -622,8 +620,7 @@ jobs:
 
   tpcds-1g:
     needs: precondition
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if tpcds changes exist
-    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).tpcds == 'true'
+    if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
     env:
@@ -720,8 +717,7 @@ jobs:
 
   docker-integration-tests:
     needs: precondition
-    # Run regular jobs for commit in both Apache Spark and forked repository, but only if docker changes exist
-    if: inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).docker == 'true'
+    if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-20.04
     env:

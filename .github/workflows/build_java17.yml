@@ -32,7 +32,6 @@ jobs:
       java: 17
       branch: master
       hadoop: hadoop3
-      type: scheduled
       envs: >-
         {
           "SKIP_MIMA": "true",

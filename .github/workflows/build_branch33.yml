@@ -32,7 +32,6 @@ jobs:
       java: 8
       branch: branch-3.3
       hadoop: hadoop3
-      type: scheduled
       envs: >-
         {
           "SCALA_PROFILE": "scala2.13"

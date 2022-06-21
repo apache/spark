@@ -32,4 +32,3 @@ jobs:
       java: 8
       branch: master
       hadoop: hadoop2
-      type: scheduled

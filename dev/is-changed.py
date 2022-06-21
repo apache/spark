@@ -34,6 +34,9 @@ def parse_opts():
     parser.add_argument(
         "-f", "--fail", action="store_true", help="Exit with 1 if there is no relevant change."
     )
+    parser.add_argument(
+        "-c", "--check-dependent-modules", action="store_true", help="Check dependent modules."
+    )
 
     default_value = ",".join(sorted([m.name for m in modules.all_modules]))
     parser.add_argument(
@@ -52,8 +55,6 @@ def parse_opts():
 
 def main():
     opts = parse_opts()
-
-    test_modules = opts.modules.split(",")
     changed_files = []
     if os.environ.get("APACHE_SPARK_REF"):
         changed_files = identify_changed_files_from_git_commits(
@@ -63,17 +64,23 @@ def main():
         changed_files = identify_changed_files_from_git_commits(
             os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
         )
+
+    str_test_modules = [m.strip() for m in opts.modules.split(",")]
+    test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
+    if opts.check_dependent_modules:
+        test_modules = determine_modules_to_test(test_modules, deduplicated=False)
+
     changed_modules = determine_modules_to_test(
         determine_modules_for_files(changed_files), deduplicated=False
     )
-    module_names = [m.name for m in changed_modules]
+
     if len(changed_modules) == 0:
         print("false")
         if opts.fail:
             sys.exit(1)
-    elif "root" in test_modules or modules.root in changed_modules:
+    elif modules.root in test_modules or modules.root in changed_modules:
         print("true")
-    elif len(set(test_modules).intersection(module_names)) == 0:
+    elif len(set(test_modules).intersection(changed_modules)) == 0:
         print("false")
         if opts.fail:
             sys.exit(1)

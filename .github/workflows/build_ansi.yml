@@ -32,7 +32,6 @@ jobs:
       java: 8
       branch: master
       hadoop: hadoop3
-      type: scheduled
       envs: >-
         {
           "SPARK_ANSI_SQL_MODE": "true",
