@@ -144,13 +144,6 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(tempDir.list().size === 1)
   }
 
-  test("If commit fails, if task is retried it should not be locked, and will succeed.") {
-    val rdd = sc.parallelize(Seq(1), 1)
-    sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
-      rdd.partitions.indices)
-    assert(tempDir.list().size === 1)
-  }
-
   test("Job should not complete if all commits are denied") {
     // Create a mock OutputCommitCoordinator that denies all attempts to commit
     doReturn(false).when(outputCommitCoordinator).handleAskPermissionToCommit(
