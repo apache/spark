@@ -82,7 +82,7 @@ jobs:
 
   # Build: build Spark and run the tests for specified modules.
   build:
-    name: "Build modules (${{ format('{0}, {1} job', inputs.branch, inputs.type) }}): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
+    name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: precondition
     # Run scheduled jobs for Apache Spark only
     # Run regular jobs for commit in both Apache Spark and forked repository, but only if changes exist
@@ -234,7 +234,7 @@ jobs:
       inputs.type == 'pyspark-coverage-scheduled'
       || (inputs.type == 'scheduled' && inputs.java == '17')
       || (inputs.type == 'regular' && fromJson(needs.precondition.outputs.required).pyspark == 'true')
-    name: "Build modules (${{ format('{0}, {1} job', inputs.branch, inputs.type) }}): ${{ matrix.modules }}"
+    name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
       image: dongjoon/apache-spark-github-action-image:20220207
