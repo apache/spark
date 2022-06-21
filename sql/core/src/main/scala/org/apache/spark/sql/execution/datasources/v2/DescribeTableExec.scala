@@ -31,9 +31,9 @@ case class DescribeTableExec(
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
-    addPartitioning(rows)
 
     if (isExtended) {
+      addPartitioning(rows)
       addMetadataColumns(rows)
       addTableDetails(rows)
     }
@@ -62,7 +62,7 @@ case class DescribeTableExec(
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
     rows ++= table.schema.map{ column =>
       toCatalystRow(
-        column.name, column.dataType.simpleString, column.getComment().getOrElse(""))
+        column.name, column.dataType.simpleString, column.getComment().orNull)
     }
   }
 
@@ -81,10 +81,8 @@ case class DescribeTableExec(
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
-    rows += toCatalystRow("# Partitioning", "", "")
-    if (table.partitioning.isEmpty) {
-      rows += toCatalystRow("Not partitioned", "", "")
-    } else {
+    if (!table.partitioning.isEmpty) {
+      rows += toCatalystRow("# Partitioning", "", "")
       rows ++= table.partitioning.zipWithIndex.map {
         case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
       }

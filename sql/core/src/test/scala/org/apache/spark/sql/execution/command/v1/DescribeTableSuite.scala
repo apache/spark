@@ -33,23 +33,6 @@ import org.apache.spark.sql.types.StringType
 trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
   with command.TestsV1AndV2Commands {
 
-  test("DESCRIBE TABLE with non-'partitioned-by' clause") {
-    withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
-      val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-        Seq(
-          ("col_name", StringType),
-          ("data_type", StringType),
-          ("comment", StringType)))
-      QueryTest.checkAnswer(
-        descriptionDf,
-        Seq(
-          Row("data", "string", null),
-          Row("id", "bigint", null)))
-    }
-  }
-
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +

@@ -28,26 +28,6 @@ import org.apache.spark.util.Utils
  */
 class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuiteBase {
 
-  test("DESCRIBE TABLE with non-'partitioned-by' clause") {
-    withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
-      val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-        Seq(
-          ("col_name", StringType),
-          ("data_type", StringType),
-          ("comment", StringType)))
-      QueryTest.checkAnswer(
-        descriptionDf,
-        Seq(
-          Row("data", "string", ""),
-          Row("id", "bigint", ""),
-          Row("", "", ""),
-          Row("# Partitioning", "", ""),
-          Row("Not partitioned", "", "")))
-    }
-  }
-
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
@@ -74,8 +54,8 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
       QueryTest.checkAnswer(
         descriptionDf,
         Seq(
-          Row("id", "bigint", ""),
-          Row("data", "string", ""),
+          Row("id", "bigint", null),
+          Row("data", "string", null),
           Row("", "", ""),
           Row("# Partitioning", "", ""),
           Row("Part 0", "id", ""),
