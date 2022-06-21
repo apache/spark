@@ -144,8 +144,8 @@ case class JDBCScanBuilder(
 
   override def pushOffset(offset: Int): Boolean = {
     if (jdbcOptions.pushDownOffset && !isPartiallyPushed) {
-      // We pushing down offset when data source have only one partition.
-      // There are some push down path.
+      // Spark pushes down LIMIT first, then OFFSET. In SQL statements, OFFSET is applied before
+      // LIMIT. Here we need to adjust the LIMIT value to match SQL statements.
       // 1. For `dataset.limit(m).offset(n)`, try to push down `LIMIT (m - n) OFFSET n`.
       //    For example, `dataset.limit(5).offset(3)`, we can push down `LIMIT 2 OFFSET 3`.
       // 2. For `dataset.offset(n).limit(m)`, try to push down `LIMIT m OFFSET n`.
