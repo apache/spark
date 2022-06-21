@@ -195,6 +195,12 @@ class CSVOptions(
    */
   val enforceSchema = getBool("enforceSchema", default = true)
 
+  /**
+   * Infer columns with all valid date entries as date type (otherwise inferred as timestamp type).
+   * Disabled by default for backwards compatibility and performance. When enabled, date entries in
+   * timestamp columns will be cast to timestamp upon parsing.
+   */
+  val inferDate = getBool("inferDate")
 
   /**
    * String representation of an empty value in read and in write.

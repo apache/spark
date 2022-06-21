@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
-import java.time.ZoneOffset
 
 import scala.util.control.NonFatal
 
@@ -152,17 +151,6 @@ class UnivocityParser(
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
-  private def convertToDate(datum: String): Int = {
-    try {
-      dateFormatter.parse(datum)
-    } catch {
-      case NonFatal(e) =>
-        // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-        // compatibility.
-        val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-        DateTimeUtils.stringToDate(str).getOrElse(throw e)
-    }
-  }
 
   /**
    * Create a converter which converts the string value to a value according to a desired type.
@@ -211,6 +199,19 @@ class UnivocityParser(
         Decimal(decimalParser(datum), dt.precision, dt.scale)
       }
 
+    case _: DateType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          dateFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            DateTimeUtils.stringToDate(str).getOrElse(throw e)
+        }
+      }
+
     case _: TimestampType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         try {
@@ -222,7 +223,11 @@ class UnivocityParser(
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse {
               // There may be date type entries in timestamp column due to schema inference
-              daysToMicros(convertToDate(datum), options.zoneId)
+              if (options.inferDate) {
+                daysToMicros(dateFormatter.parse(datum), options.zoneId)
+              } else {
+                throw(e)
+              }
             }
         }
       }
@@ -233,13 +238,13 @@ class UnivocityParser(
           timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         } catch {
           case NonFatal(e) =>
-          // There may be date type entries in timestampNTZ column due to schema inference
-          daysToMicros(convertToDate(datum), ZoneOffset.UTC)
+            if (options.inferDate) {
+              daysToMicros(dateFormatter.parse(datum), options.zoneId)
+            } else {
+              throw(e)
+            }
         }
       }
-
-    case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(convertToDate)
 
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)

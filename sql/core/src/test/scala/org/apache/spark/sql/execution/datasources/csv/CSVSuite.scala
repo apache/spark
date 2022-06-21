@@ -2794,8 +2794,10 @@ abstract class CSVSuite
     val options = Map(
       "header" -> "true",
       "inferSchema" -> "true",
-      "timestampFormat" -> "dd/MM/yyyy HH:mm",
-      "dateFormat" -> "MM_dd_yyyy")
+      "timestampFormat" -> "yyyy-MM-dd'T'HH:mm",
+      "dateFormat" -> "yyyy-MM-dd",
+      "inferDate" -> "true")
+
     val results = spark.read
       .format("csv")
       .options(options)

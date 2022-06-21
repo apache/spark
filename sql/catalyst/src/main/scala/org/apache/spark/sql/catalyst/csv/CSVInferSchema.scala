@@ -116,6 +116,23 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   def inferField(typeSoFar: DataType, field: String): DataType = {
     if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
+    } else
+    if (options.inferDate) {
+      val typeElemInfer = typeSoFar match {
+        case NullType => tryParseInteger(field)
+        case IntegerType => tryParseInteger(field)
+        case LongType => tryParseLong(field)
+        case _: DecimalType => tryParseDecimal(field)
+        case DoubleType => tryParseDouble(field)
+        case DateType => tryParseDateTime(field)
+        case TimestampNTZType => tryParseDateTime(field)
+        case TimestampType => tryParseDateTime(field)
+        case BooleanType => tryParseBoolean(field)
+        case StringType => StringType
+        case other: DataType =>
+          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
+      }
+      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     } else {
       val typeElemInfer = typeSoFar match {
         case NullType => tryParseInteger(field)
@@ -123,7 +140,9 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case LongType => tryParseLong(field)
         case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
-        case DateType | TimestampNTZType | TimestampType => tryParseDateTime(field)
+        case DateType => tryParseDateTime(field)
+        case TimestampNTZType => tryParseTimestampNTZ(field)
+        case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
@@ -174,8 +193,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   private def tryParseDouble(field: String): DataType = {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
-    } else {
+    } else if (options.inferDate) {
       tryParseDateTime(field)
+    } else {
+      tryParseTimestampNTZ(field)
     }
   }
 

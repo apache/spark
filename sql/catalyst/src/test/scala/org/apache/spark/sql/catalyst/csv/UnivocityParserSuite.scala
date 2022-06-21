@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.csv
 
 import java.math.BigDecimal
 import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.time.{ZoneId, ZoneOffset}
 import java.util.{Locale, TimeZone}
 
 import org.apache.commons.lang3.time.FastDateFormat
-
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -359,16 +360,16 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern))
   }
 
-  test("dates should be parsed correctly in a timestamp column") {
+  test("SPARK-39469: dates should be parsed correctly in a timestamp column when inferDate=true") {
     def checkDate(dataType: DataType): Unit = {
       val timestampsOptions =
-        new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy HH:mm",
+        new CSVOptions(Map("inferDate" -> "true", "timestampFormat" -> "dd/MM/yyyy HH:mm",
           "timestampNTZFormat" -> "dd-MM-yyyy HH:mm", "dateFormat" -> "dd_MM_yyyy"),
           false, "UTC")
       val dateString = "08_09_2001"
-      val date = days(2001, 9, 8)
+      val expected = date(2001, 9, 8, 0, 0, 0, 0, ZoneOffset.UTC)
       val parser = new UnivocityParser(new StructType(), timestampsOptions)
-      assert(parser.makeConverter("d", dataType).apply(dateString) == date)
+      assert(parser.makeConverter("d", dataType).apply(dateString) == expected)
     }
     checkDate(TimestampType)
     checkDate(TimestampNTZType)
