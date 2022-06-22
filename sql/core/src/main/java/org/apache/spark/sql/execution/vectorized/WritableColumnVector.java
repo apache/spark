@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -24,7 +23,6 @@ import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.apache.avro.generic.GenericArray;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
