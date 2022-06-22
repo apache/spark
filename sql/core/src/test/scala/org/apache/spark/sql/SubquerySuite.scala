@@ -2215,8 +2215,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         val join =
           df.queryExecution.sparkPlan.collectFirst { case b: BroadcastNestedLoopJoinExec => b }
         assert(join.nonEmpty)
-        assert(join.head.right.isInstanceOf[GlobalLimitExec])
-        assert(join.head.right.asInstanceOf[GlobalLimitExec].limit === 1)
+        assert(join.head.right.isInstanceOf[LocalLimitExec])
+        assert(join.head.right.asInstanceOf[LocalLimitExec].limit === 1)
       }
     }
   }
