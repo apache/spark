@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -101,6 +101,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
     collect(plan) {
       case j: BroadcastHashJoinExec => j
+    }
+  }
+
+  def findTopLevelBroadcastNestedLoopJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
+    collect(plan) {
+      case j: BroadcastNestedLoopJoinExec => j
     }
   }
 
@@ -2574,6 +2580,23 @@ class AdaptiveQueryExecSuite
           |""".stripMargin)
       assert(findTopLevelAggregate(origin5).size == 4)
       assert(findTopLevelAggregate(adaptive5).size == 4)
+    }
+  }
+
+  test("SPARK-39551: Invalid plan check - invalid broadcast query stage") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT /*+ BROADCAST(t3) */ t3.b, count(t3.a) FROM testData2 t1
+          |INNER JOIN testData2 t2
+          |ON t1.b = t2.b AND t1.a = 0
+          |RIGHT OUTER JOIN testData2 t3
+          |ON t1.a > t3.a
+          |GROUP BY t3.b
+        """.stripMargin
+      )
+      assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
     }
   }
 }
