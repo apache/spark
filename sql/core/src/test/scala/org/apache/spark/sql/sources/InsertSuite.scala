@@ -1733,11 +1733,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t select 3, default")
         sql(
           """
-           alter table t
-           add column t array<
-             map<boolean, string>>
-           default array(
-             map(true, 'xyz'))""")
+            alter table t
+            add column t array<
+              map<boolean, string>>
+            default array(
+              map(true, 'xyz'))""")
         sql("insert into t select 4, default")
         checkAnswer(spark.table("t"),
           Seq(
