@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
 import org.apache.spark.sql.connector.expressions.IdentityTransform
 
@@ -86,13 +87,14 @@ case class DescribeTableExec(
       if (partitionColumnsOnly) {
         rows += toCatalystRow("# Partition Information", "", "")
         rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
-        val nameToField = table.schema.map(f => (f.name, f)).toMap
         rows ++= table.partitioning
-          .map(_.asInstanceOf[IdentityTransform])
-          .flatMap(_.ref.fieldNames())
-          .map { name =>
-            val field = nameToField(name)
-            toCatalystRow(name, field.dataType.simpleString, field.getComment().orNull)
+          .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
+          .flatMap(table.schema.findNestedField(_))
+          .map { case (path, field) =>
+            toCatalystRow(
+              (path :+ field.name).map(quoteIfNeeded(_)).mkString("."),
+              field.dataType.simpleString,
+              field.getComment().orNull)
           }
       } else {
         rows += emptyRow()

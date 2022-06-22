@@ -39,6 +39,23 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
     }
   }
 
+  test("DESCRIBE TABLE of a partitioned table by a nested column") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (s struct<id:INT, a:BIGINT>, data string) " +
+        s"$defaultUsing PARTITIONED BY (s.id, s.a)")
+      val descriptionDf = sql(s"DESCRIBE TABLE $tbl")
+      QueryTest.checkAnswer(
+        descriptionDf.filter("col_name != 'Created Time'"),
+        Seq(
+          Row("data", "string", null),
+          Row("s", "struct<id:int,a:bigint>", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("s.id", "int", null),
+          Row("s.a", "bigint", null)))
+    }
+  }
+
   test("DESCRIBE TABLE EXTENDED of a partitioned table") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
