@@ -246,7 +246,7 @@ object ResolveDefaultColumns {
         val expr = try {
           analyze(field, "")
         } catch {
-          case _: ParseException | _: AnalysisException | _: MatchError =>
+          case _: ParseException | _: AnalysisException =>
             throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(field.name, text)
         }
         // The expression should be a literal value by this point, possibly wrapped in a cast
