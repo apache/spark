@@ -37,10 +37,18 @@ class Database(NamedTuple):
 
 class Table(NamedTuple):
     name: str
-    database: Optional[str]
+    catalog: Optional[str]
+    namespace: Optional[List[str]]
     description: Optional[str]
     tableType: str
     isTemporary: bool
+
+    @property
+    def database(self) -> Optional[str]:
+        if self.namespace is not None and len(self.namespace) == 1:
+            return self.namespace[0]
+        else:
+            return None
 
 
 class Column(NamedTuple):
@@ -134,10 +142,18 @@ class Catalog:
         tables = []
         while iter.hasNext():
             jtable = iter.next()
+
+            jnamespace = jtable.namespace()
+            if jnamespace is not None:
+                namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
+            else:
+                namespace = None
+
             tables.append(
                 Table(
                     name=jtable.name(),
-                    database=jtable.database(),
+                    catalog=jtable.catalog(),
+                    namespace=namespace,
                     description=jtable.description(),
                     tableType=jtable.tableType(),
                     isTemporary=jtable.isTemporary(),
@@ -305,6 +321,9 @@ class Catalog:
         Returns
         -------
         :class:`DataFrame`
+
+        .. versionchanged:: 3.4
+           Made ``tableName`` support 3-layer namespace.
         """
         warnings.warn(
             "createExternalTable is deprecated since Spark 2.2, please use createTable instead.",
@@ -341,6 +360,9 @@ class Catalog:
 
         .. versionchanged:: 3.1
            Added the ``description`` parameter.
+
+        .. versionchanged:: 3.4
+           Made ``tableName`` support 3-layer namespace.
         """
         if path is not None:
             options["path"] = path
