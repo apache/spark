@@ -33,7 +33,7 @@ Number format strings support the following syntax:
       [ 0 | 9 | G | , ] [...] 
       [ . | D ] 
       [ 0 | 9 ] [...] 
-      [ L | $ ] [ PR | MI | S ] ' }
+      [ $ ] [ PR | MI | S ] ' }
 ```
 
 ### Elements
