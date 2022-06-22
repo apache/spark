@@ -2073,36 +2073,40 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val SPECULATION_EFFICIENCY_ENABLE =
-    ConfigBuilder("spark.speculation.efficiency.enabled")
-      .doc("When set to true, spark will evaluate the efficiency of task processing through the " +
-        "stage task metrics and only need to speculate the inefficient tasks. A task is " +
-        "inefficient when its data process rate is less than the average data process " +
-        "rate of all successful tasks in the stage multiplied by a multiplier.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(true)
-
-  private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER =
-    ConfigBuilder("spark.speculation.efficiency.processMultiplier")
-      .doc("A multiplier for evaluating the efficiency of task processing. A task is inefficient " +
-        "when its data process rate is less than the average data process rate of all " +
-        "successful tasks in the stage multiplied by the multiplier.")
+  private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER =
+    ConfigBuilder("spark.speculation.efficiency.processRateMultiplier")
+      .doc("A multiplier that used when evaluating inefficient tasks. The higher the multiplier " +
+        "is, the more tasks will be possibly considered as inefficient.")
       .version("3.4.0")
       .doubleConf
       .checkValue(v => v > 0.0 && v <= 1.0, "multiplier must be in (0.0, 1.0]")
       .createWithDefault(0.75)
 
   private[spark] val SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR =
-    ConfigBuilder("spark.speculation.efficiency.durationFactor")
-      .doc(s"When a task duration is large than the factor multiplied by the threshold which " +
-        s"may be ${SPECULATION_MULTIPLIER.key} * successfulTaskDurations.median or " +
-        s"${SPECULATION_MIN_THRESHOLD.key}, and it should be considered for " +
-        s"speculation to avoid that it is too late to launch a necessary speculation.")
+    ConfigBuilder("spark.speculation.efficiency.longRunTaskFactor")
+      .doc(s"A task will be speculated anyway as long as its duration has exceeded the value of " +
+        s"multiplying the factor and the time threshold (either be ${SPECULATION_MULTIPLIER.key} " +
+        s"* successfulTaskDurations.median or ${SPECULATION_MIN_THRESHOLD.key}) regardless of " +
+        s"it's efficient or not. This avoids missing the tasks when task slow isn't due to data" +
+        s"process rate.")
       .version("3.4.0")
       .doubleConf
       .checkValue(_ >= 1.0, "Duration factor must be >= 1.0")
       .createWithDefault(2.0)
+
+  private[spark] val SPECULATION_EFFICIENCY_ENABLE =
+    ConfigBuilder("spark.speculation.efficiency.enabled")
+      .doc(s"When set to true, spark will evaluate the efficiency of task processing through the " +
+        s"stage task metrics or its duration, and only need to speculate the inefficient tasks. " +
+        s"A task is inefficient when its data process rate is less than the average data process " +
+        s"rate of all successful tasks in the stage multiplied by a multiplier or its duration " +
+        s"has exceeded the value of multiplying " +
+        s"${SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR.key} and the time threshold (either be " +
+        s"${SPECULATION_MULTIPLIER.key} * successfulTaskDurations.median or " +
+        s"${SPECULATION_MIN_THRESHOLD.key}) ")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val DECOMMISSION_ENABLED =
     ConfigBuilder("spark.decommission.enabled")

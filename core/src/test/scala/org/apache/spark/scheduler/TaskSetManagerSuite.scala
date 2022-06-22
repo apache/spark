@@ -2253,19 +2253,24 @@ class TaskSetManagerSuite
   private def createTaskMetrics(
        taskSet: TaskSet,
        inefficientTaskIds: Set[Int],
-       inefficientMultiplier: Double = 0.6): Array[TaskMetrics] = {
+       efficientMultiplier: Double = 0.6): Array[TaskMetrics] = {
     taskSet.tasks.zipWithIndex.map { case (task, index) =>
       val metrics = task.metrics
       if (inefficientTaskIds.contains(index)) {
-        metrics.inputMetrics.setRecordsRead((inefficientMultiplier * RECORDS_NUM).toLong)
-        metrics.shuffleReadMetrics.setRecordsRead((inefficientMultiplier * RECORDS_NUM).toLong)
+        updateAndGetTaskMetrics(metrics, efficientMultiplier)
       } else {
-        metrics.inputMetrics.setRecordsRead(RECORDS_NUM)
-        metrics.shuffleReadMetrics.setRecordsRead(RECORDS_NUM)
+        updateAndGetTaskMetrics(metrics, 1)
       }
-      metrics.setExecutorRunTime(RUNTIME)
-      metrics
     }
+  }
+
+  private def updateAndGetTaskMetrics(
+      taskMetrics: TaskMetrics,
+      efficientMultiplier: Double): TaskMetrics = {
+    taskMetrics.inputMetrics.setRecordsRead((efficientMultiplier * RECORDS_NUM).toLong)
+    taskMetrics.shuffleReadMetrics.setRecordsRead((efficientMultiplier * RECORDS_NUM).toLong)
+    taskMetrics.setExecutorRunTime(RUNTIME)
+    taskMetrics
   }
 
   test("SPARK-32170: test speculation for TaskSet with single task") {
@@ -2305,17 +2310,20 @@ class TaskSetManagerSuite
       .set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
-    val speculativeDurations = Set(0, 10000)
+    val speculativeAllDurations = Set(0)
+    val speculativeInefficientDurations = Set(10000)
     val nonSpeculativeDurations = Set(50000)
-    (speculativeDurations ++ nonSpeculativeDurations).foreach { minDuration =>
+    (speculativeAllDurations ++ speculativeInefficientDurations
+      ++ nonSpeculativeDurations).foreach { minDuration =>
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
-      val taskSet = FakeTask.createTaskSet(4)
+      val taskSet = FakeTask.createTaskSet(5)
       val clock = new ManualClock()
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-      val taskMetricsByTask = createTaskMetrics(taskSet, Set(3), inefficientMultiplier = 0.4)
+      val taskMetricsByTask = createTaskMetrics(taskSet, Set(3), efficientMultiplier = 0.4)
       val blockManagerId = BlockManagerId("exec1", "localhost", 12345)
-      // offer resources for 4 tasks to start
+      // offer resources for 5 tasks to start
       for ((k, v) <- List(
+        "exec1" -> "host1",
         "exec1" -> "host1",
         "exec1" -> "host1",
         "exec2" -> "host2",
@@ -2326,10 +2334,16 @@ class TaskSetManagerSuite
         sched.taskIdToTaskSetManager.put(task.taskId, manager)
       }
       clock.advance(RUNTIME)
-      // complete the 3 tasks and leave 1 task in running
-      val taskMetrics: TaskMetrics =
+      // complete the 3 tasks and leave 2 task in running
+      val task3Metrics: TaskMetrics =
         ser.deserialize(ByteBuffer.wrap(ser.serialize(taskMetricsByTask(3)).array()))
-      sched.executorHeartbeatReceived("exec1", Array((3, taskMetrics.internalAccums)),
+      sched.executorHeartbeatReceived("exec1", Array((3, task3Metrics.internalAccums)),
+        blockManagerId, mutable.Map.empty[(Int, Int), ExecutorMetrics])
+
+      updateAndGetTaskMetrics(taskMetricsByTask(4), efficientMultiplier = 5)
+      val task4Metrics: TaskMetrics =
+        ser.deserialize(ByteBuffer.wrap(ser.serialize(taskMetricsByTask(4)).array()))
+      sched.executorHeartbeatReceived("exec1", Array((4, task4Metrics.internalAccums)),
         blockManagerId, mutable.Map.empty[(Int, Int), ExecutorMetrics])
       for (id <- Set(0, 1, 2)) {
         val resultBytes = ser.serialize(createTaskResult(id, taskMetricsByTask(id).internalAccums))
@@ -2338,13 +2352,16 @@ class TaskSetManagerSuite
           assert(sched.endedTasks(id) === Success)
         }
       }
-      // 1) when SPECULATION_MIN_THRESHOLD is equal 0s, the task 4 will be speculated
-      // by previous strategy.
-      // 2) when SPECULATION_MIN_THRESHOLD is equal 10s, the task 4 runtime(20s) is
-      // above (10s) and evaluated an inefficient task to speculate.
-      // 3) when SPECULATION_MIN_THRESHOLD is equal 50s, the task 4 runtime(20s) is
-      // less than (50s) and no needs to speculate.
-      if (speculativeDurations.contains(minDuration)) {
+      // 1) when SPECULATION_MIN_THRESHOLD is equal 0s, both the task 3 and the task 4 will be
+      // speculated by previous strategy.
+      // 2) when SPECULATION_MIN_THRESHOLD is equal 10s and runtime(20s) is above 10s, the task 3
+      //  will be evaluated an inefficient task to speculate, but the task 4 will not.
+      // 3) when SPECULATION_MIN_THRESHOLD is equal 50s, the task 3 and the task 4 runtime(20s) is
+      // less than (50s) and no needs to speculate at all.
+      if (speculativeAllDurations.contains(minDuration)) {
+        assert(manager.checkSpeculatableTasks(minDuration))
+        assert(sched.speculativeTasks.toSet === Set(3, 4))
+      } else if (speculativeInefficientDurations.contains(minDuration)) {
         assert(manager.checkSpeculatableTasks(minDuration))
         assert(sched.speculativeTasks.toSet === Set(3))
       } else {
@@ -2354,7 +2371,7 @@ class TaskSetManagerSuite
     }
   }
 
-  test("SPARK-32170: test SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER for " +
+  test("SPARK-32170: test SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER for " +
     "speculating inefficient tasks") {
     // set the speculation multiplier to be 0, so speculative tasks are launched based on
     // minTimeToSpeculation parameter to checkSpeculatableTasks
@@ -2364,12 +2381,12 @@ class TaskSetManagerSuite
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
     Seq(0.5, 0.8).foreach(processMultiplier => {
-      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER, processMultiplier)
+      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER, processMultiplier)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
       val taskSet = FakeTask.createTaskSet(4)
       val clock = new ManualClock()
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-      val taskMetricsByTask = createTaskMetrics(taskSet, Set(3), inefficientMultiplier = 0.6)
+      val taskMetricsByTask = createTaskMetrics(taskSet, Set(3), efficientMultiplier = 0.6)
       val blockManagerId = BlockManagerId("exec1", "localhost", 12345)
       // offer resources for 4 tasks to start
       for ((k, v) <- List(
@@ -2413,7 +2430,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf()
       .set(config.SPECULATION_MULTIPLIER, 0.0)
       .set(config.SPECULATION_ENABLED, true)
-      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER, 0.5)
+      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER, 0.5)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
     Seq(1.0, 2.0).foreach(factor => {
@@ -2422,7 +2439,7 @@ class TaskSetManagerSuite
       val taskSet = FakeTask.createTaskSet(4)
       val clock = new ManualClock()
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-      val taskMetricsByTask = createTaskMetrics(taskSet, Set(3), inefficientMultiplier = 0.6)
+      val taskMetricsByTask = createTaskMetrics(taskSet, Set(3), efficientMultiplier = 0.6)
       val blockManagerId = BlockManagerId("exec1", "localhost", 12345)
       // offer resources for 4 tasks to start
       for ((k, v) <- List(

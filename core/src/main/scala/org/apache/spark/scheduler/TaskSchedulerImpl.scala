@@ -861,7 +861,7 @@ private[spark] class TaskSchedulerImpl(
           val (accInfos, taskProcessRate) = getTaskAccumulableInfosAndProcessRate(updates)
           if (efficientTaskCalcualtionEnabled && taskProcessRate > 0.0) {
             taskSetMgr.taskProcessRateCalculator.foreach {
-              _.updateRuningTaskProcessRate(id, taskProcessRate)
+              _.updateRunningTaskProcessRate(id, taskProcessRate)
             }
           }
           (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)

@@ -83,7 +83,7 @@ private[spark] class TaskSetManager(
 
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
   private val efficientTaskProcessMultiplier =
-    conf.get(SPECULATION_EFFICIENCY_TASK_PROCESS_MULTIPLIER)
+    conf.get(SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER)
   private val efficientTaskDurationFactor = conf.get(SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR)
 
   // Quantile of tasks at which to start speculation
@@ -1099,8 +1099,22 @@ private[spark] class TaskSetManager(
           if (customizedThreshold || taskProcessRateCalculator.isEmpty) {
             true
           } else {
-            val longTimeTask = runtimeMs > efficientTaskDurationFactor * threshold
-            longTimeTask || taskProcessRateCalculator.exists(_.isInefficient(tid, runtimeMs, info))
+            isInefficient()
+          }
+        }
+
+        def isInefficient(): Boolean = {
+          (runtimeMs > efficientTaskDurationFactor * threshold) || taskProcessRateIsInefficient()
+        }
+
+        def taskProcessRateIsInefficient(): Boolean = {
+          if (taskProcessRateCalculator.isDefined) {
+            val calculator = taskProcessRateCalculator.get
+            val avgTaskProcessRate = calculator.getAvgTaskProcessRate()
+            avgTaskProcessRate <= 0.0 || calculator.getRunningTasksProcessRate(tid) <
+              avgTaskProcessRate * efficientTaskProcessMultiplier
+          } else {
+            true
           }
         }
 
@@ -1258,7 +1272,15 @@ private[spark] class TaskSetManager(
     private var totalRecordsRead = 0L
     private var totalExecutorRunTime = 0L
     private var avgTaskProcessRate = 0.0D
-    private val runingTasksProcessRate = new ConcurrentHashMap[Long, Double]()
+    private val runningTasksProcessRate = new ConcurrentHashMap[Long, Double]()
+
+    private[TaskSetManager] def getAvgTaskProcessRate(): Double = {
+      avgTaskProcessRate
+    }
+
+    private[TaskSetManager] def getRunningTasksProcessRate(taskId: Long): Double = {
+      runningTasksProcessRate.getOrDefault(taskId, 0.0)
+    }
 
     private[TaskSetManager] def updateAvgTaskProcessRate(
         taskId: Long,
@@ -1278,38 +1300,13 @@ private[spark] class TaskSetManager(
       totalRecordsRead += recordsRead
       totalExecutorRunTime += executorRunTime
       avgTaskProcessRate = sched.getTaskProcessRate(totalRecordsRead, totalExecutorRunTime)
-      runingTasksProcessRate.remove(taskId)
+      runningTasksProcessRate.remove(taskId)
     }
 
-    private[scheduler] def updateRuningTaskProcessRate(
+    private[scheduler] def updateRunningTaskProcessRate(
         taskId: Long,
         taskProcessRate: Double): Unit = {
-      runingTasksProcessRate.put(taskId, taskProcessRate)
-    }
-
-    private[TaskSetManager] def isInefficient(
-        tid: Long,
-        runtimeMs: Long,
-        taskInfo: TaskInfo): Boolean = {
-      // Only check inefficient tasks when avgTaskProcessRate > 0, because some stage
-      // tasks may have neither input records nor shuffleRead records, so the
-      // avgTaskProcessRate may be zero all the time, this case we should make sure
-      // it can be speculated. eg: some spark-sql like that 'msck repair table' or 'drop table'
-      // and so on.
-      if (avgTaskProcessRate <= 0.0) return true
-      val currentTaskProcessRate = runingTasksProcessRate.getOrDefault(tid, 0.0)
-      if (currentTaskProcessRate <= 0.0) {
-        true
-      } else {
-        val taskProcessThreshold = avgTaskProcessRate * efficientTaskProcessMultiplier
-        val isInefficientTask = currentTaskProcessRate < taskProcessThreshold
-        if (isInefficientTask) {
-          logInfo(s"Marking task ${taskInfo.index} in stage ${taskSet.id} " +
-            s"(on ${taskInfo.host}) as inenfficient because it ran ${runtimeMs}ms and " +
-            s"it's process rate ($currentTaskProcessRate) is less than ($taskProcessThreshold).")
-        }
-        isInefficientTask
-      }
+      runningTasksProcessRate.put(taskId, taskProcessRate)
     }
   }
 }
