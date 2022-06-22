@@ -395,7 +395,7 @@ private[spark] class ApplicationMaster(
           finalStatus = FinalApplicationStatus.FAILED
           exitCode = ApplicationMaster.EXIT_SC_NOT_INITED
           if(msg == null) {
-            errorMsg = "User did not initialize spark context"
+            errorMsg = "User did not initialize spark context!"
           }
         }
         logInfo(s"Final app status: $finalStatus, exitCode: $exitCode" +
