@@ -39,7 +39,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
     }
   }
 
-  test("DESCRIBE TABLE of a partitioned table by a nested column") {
+  test("DESCRIBE TABLE of a partitioned table by nested columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
       sql(s"CREATE TABLE $tbl (s struct<id:INT, a:BIGINT>, data string) " +
         s"$defaultUsing PARTITIONED BY (s.id, s.a)")
@@ -83,6 +83,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
           Row("Name", tbl, ""),
+          Row("Type", "MANAGED", ""),
           Row("Comment", "this is a test table", ""),
           Row("Location", "file:/tmp/testcat/table_name", ""),
           Row("Provider", "_", ""),
