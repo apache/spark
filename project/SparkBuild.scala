@@ -773,7 +773,7 @@ object Catalyst {
 
 object SQL {
   lazy val settings = Seq(
-    (Test / javaOptions) += "-XX:NewRatio=3",
+    (Test / javaOptions) += "-XX:NewRatio=4",
     (console / initialCommands) :=
       """
         |import org.apache.spark.SparkContext
