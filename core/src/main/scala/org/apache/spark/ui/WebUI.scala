@@ -140,8 +140,8 @@ private[spark] abstract class WebUI(
   def initialize(): Unit
 
   def initServer(): ServerInfo = {
-    val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
-    val server = startJettyServer(host, port, sslOptions, conf, name, poolSize)
+    val hostName = Utils.localHostNameForURI()
+    val server = startJettyServer(hostName, port, sslOptions, conf, name, poolSize)
     server
   }
 
