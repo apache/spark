@@ -149,11 +149,10 @@ private[spark] abstract class WebUI(
   def bind(): Unit = {
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
-      val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       val server = initServer()
       handlers.foreach(server.addHandler(_, securityManager))
       serverInfo = Some(server)
-      logInfo(s"Bound $className to $host, and started at $webUrl")
+      logInfo(s"Bound $className to ${Utils.localHostNameForURI()}, and started at $webUrl")
     } catch {
       case e: Exception =>
         logError(s"Failed to bind $className", e)
