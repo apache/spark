@@ -33,12 +33,14 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
  * @since 3.2.0
  */
 class CatalogMetadata(
-    val name: String)
+    val name: String,
+    @Nullable val description: String)
   extends DefinedByConstructorParams {
 
   override def toString: String = {
     "Catalog[" +
-      s"name='$name']"
+      s"name='$name', " +
+      Option(description).map { d => s"description='$d'] " }.getOrElse("]")
   }
 }
 

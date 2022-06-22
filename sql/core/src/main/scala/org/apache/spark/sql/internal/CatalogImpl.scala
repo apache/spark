@@ -707,7 +707,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def listCatalogs(): Dataset[CatalogMetadata] = {
     val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(None)
-    CatalogImpl.makeDataset(catalogs.map(name => new CatalogMetadata(name)), sparkSession)
+    CatalogImpl.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
+  }
+
+  private def makeCatalog(name: String): CatalogMetadata = {
+    new CatalogMetadata(
+      name = name,
+      description = null)
   }
 }
 
