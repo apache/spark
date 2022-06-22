@@ -39,13 +39,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case rename @ RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), newIdent, isView) =>
       if (newIdent.size > 2) {
-        newIdent match {
-          case CatalogAndIdentifier(newCatalog, _)
-            if newCatalog.name() != catalog.name() =>
-            throw QueryCompilationErrors.cannotRenameTableWithDifferentCatalogName(
-              catalog.name, oldIdent, newIdent.asIdentifier)
-          case _ =>
-            RenameTable(r, newIdent.tail, isView)
+        if (newIdent.head.equalsIgnoreCase(catalog.name())) {
+          RenameTable(r, newIdent.tail, isView)
+        } else {
+          throw QueryCompilationErrors.cannotRenameTableWithDifferentCatalogName(
+            catalog.name, oldIdent, newIdent.asIdentifier)
         }
       } else {
         rename
