@@ -29,7 +29,7 @@ Decimal type. Such functions accept format strings indicating how to map between
 Number format strings support the following syntax:
 
 ```
-  { ' [ S ] [ L | $ ] 
+  { ' [ S ] [ $ ] 
       [ 0 | 9 | G | , ] [...] 
       [ . | D ] 
       [ 0 | 9 ] [...] 
@@ -44,15 +44,10 @@ Each number format string can contain the following elements (case insensitive):
 
   Specifies an expected digit between `0` and `9`.
 
-  A `0` to the left of the decimal point indicates that at least this many digits must be present.
-
-  A leading `9` indicates that these digits are optional.
-
-  The input value must not be larger than the number of digits to the left of the decimal point 
-  allowed by the format string.
-
-  Digits to the right of the decimal point in the format string indicate the most digits that the
-  input value may have to the right of the decimal point.
+  A sequence of 0 or 9 in the format string matches a sequence of digits in the input string. If the
+  0/9 sequence starts with 0 and is before the decimal point, it can only match a digit sequence of
+  the same size. Otherwise, if the sequence starts with 9 or is after the decimal point, it can
+  match a digit sequence that has the same or smaller size.
 
 - **`.`** or **`D`**
 
