@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -108,7 +107,7 @@ object ResolveDefaultColumns {
           }
           val analyzed: Expression = analyze(field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
-            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
+            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, expressionToString(analyzed)).build()
           field.copy(metadata = newMetadata)
         } else {
           field
@@ -117,6 +116,54 @@ object ResolveDefaultColumns {
       StructType(newFields)
     } else {
       tableSchema
+    }
+  }
+
+  /**
+   * Computes the string representation of an expression suitable for use when storing the
+   * constant-folded result of DEFAULT column values.
+   */
+  private def expressionToString(expression: Expression): String = {
+    expression match {
+      case Cast(child, dataType, _, _) =>
+        s"CAST(${expressionToString(child)} AS ${dataType.catalogString})"
+      case Literal(value, dataType: DataType) =>
+        valueToString(value, dataType)
+      case _ =>
+        expression.sql
+    }
+  }
+
+  /**
+   * Computes the string representation of a value suitable for use when storing the
+   * constant-folded result of DEFAULT column values.
+   */
+  private def valueToString(value: Any, dataType: DataType): String = {
+    (value, dataType) match {
+      case (data: GenericArrayData, arrayType: ArrayType) =>
+        val arrayValues: Array[String] =
+          data.array.map {
+            valueToString(_, arrayType.elementType)
+          }
+        s"ARRAY(${arrayValues.mkString(", ")})"
+      case (row: GenericInternalRow, structType: StructType) =>
+        val structValues: Array[String] =
+          row.values.zip(structType.fields.map(_.dataType)).map {
+            case (value: Any, fieldType: DataType) =>
+              valueToString(value, fieldType)
+          }
+        s"STRUCT(${structValues.mkString(", ")})"
+      case (data: ArrayBasedMapData, mapType: MapType) =>
+        val keyData = data.keyArray.asInstanceOf[GenericArrayData]
+        val valueData = data.valueArray.asInstanceOf[GenericArrayData]
+        val keysAndValues: Array[String] =
+          keyData.array.zip(valueData.array).map {
+            case (key: Any, value: Any) =>
+              s"${valueToString(key, mapType.keyType)}, ${valueToString(value, mapType.valueType)}"
+          }
+        s"MAP(${keysAndValues.mkString(", ")})"
+      case _ =>
+        Literal(value, dataType).sql
     }
   }
 
@@ -197,12 +244,9 @@ object ResolveDefaultColumns {
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
         val expr = try {
-          val expr = CatalystSqlParser.parseExpression(text)
-          expr match {
-            case _: ExprLiteral | _: Cast => expr
-          }
+          analyze(field, "")
         } catch {
-          case _: ParseException | _: MatchError =>
+          case _: ParseException | _: AnalysisException | _: MatchError =>
             throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(field.name, text)
         }
         // The expression should be a literal value by this point, possibly wrapped in a cast
