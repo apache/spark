@@ -589,4 +589,25 @@ abstract class Catalog {
    * @since 2.0.0
    */
   def refreshByPath(path: String): Unit
+
+  /**
+   * Returns the current default catalog in this session.
+   *
+   * @since 3.2.0
+   */
+  def currentCatalog(): String
+
+  /**
+   * Sets the current default catalog in this session.
+   *
+   * @since 3.2.0
+   */
+  def setCurrentCatalog(catalogName: String): Unit
+
+  /**
+   * Returns a list of catalogs in this session.
+   *
+   * @since 3.2.0
+   */
+  def listCatalogs(): Dataset[CatalogMetadata]
 }
