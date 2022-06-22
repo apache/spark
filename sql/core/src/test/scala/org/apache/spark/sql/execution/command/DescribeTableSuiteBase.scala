@@ -44,7 +44,7 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("DESCRIBE TABLE with non-'partitioned-by' clause") {
+  test("DESCRIBE TABLE of a non-partitioned table") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
       val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")

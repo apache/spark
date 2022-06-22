@@ -72,7 +72,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           Row("Last Access", "UNKNOWN", ""),
           Row("Created By", "Spark 3.4.0-SNAPSHOT", ""),
           Row("Type", "EXTERNAL", ""),
-          Row("Provider", "hive", ""),
+          Row("Provider", getProvider(), ""),
           Row("Comment", "this is a test table", ""),
           Row("Location", "file:/tmp/testcat/table_name", ""),
           Row("Serde Library", "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe", ""),

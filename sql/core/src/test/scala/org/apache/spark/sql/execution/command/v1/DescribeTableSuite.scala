@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.types.StringType
@@ -32,6 +34,8 @@ import org.apache.spark.sql.types.StringType
  */
 trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
   with command.TestsV1AndV2Commands {
+
+  def getProvider(): String = defaultUsing.stripPrefix("USING").trim.toLowerCase(Locale.ROOT)
 
   test("Describing of a non-existent partition") {
     withNamespaceAndTable("ns", "table") { tbl =>
@@ -79,7 +83,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("Last Access", "UNKNOWN", ""),
           Row("Created By", "Spark 3.4.0-SNAPSHOT", ""),
           Row("Type", "EXTERNAL", ""),
-          Row("Provider", "parquet", ""),
+          Row("Provider", getProvider(), ""),
           Row("Comment", "this is a test table", ""),
           Row("Table Properties", "[bar=baz]", ""),
           Row("Location", "file:/tmp/testcat/table_name", ""),
