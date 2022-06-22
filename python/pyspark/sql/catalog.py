@@ -321,9 +321,6 @@ class Catalog:
         Returns
         -------
         :class:`DataFrame`
-
-        .. versionchanged:: 3.4
-           Made ``tableName`` support 3-layer namespace.
         """
         warnings.warn(
             "createExternalTable is deprecated since Spark 2.2, please use createTable instead.",
