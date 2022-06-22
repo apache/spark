@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
+import org.apache.spark.sql.connector.expressions.IdentityTransform
 
 case class DescribeTableExec(
     output: Seq[Attribute],
@@ -80,11 +81,25 @@ case class DescribeTableExec(
   }
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
-    if (!table.partitioning.isEmpty) {
-      rows += emptyRow()
-      rows += toCatalystRow("# Partitioning", "", "")
-      rows ++= table.partitioning.zipWithIndex.map {
-        case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+    if (table.partitioning.nonEmpty) {
+      val partitionColumnsOnly = table.partitioning.forall(t => t.isInstanceOf[IdentityTransform])
+      if (partitionColumnsOnly) {
+        rows += toCatalystRow("# Partition Information", "", "")
+        rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
+        val nameToField = table.schema.map(f => (f.name, f)).toMap
+        rows ++= table.partitioning
+          .map(_.asInstanceOf[IdentityTransform])
+          .flatMap(_.ref.fieldNames())
+          .map { name =>
+            val field = nameToField(name)
+            toCatalystRow(name, field.dataType.simpleString, field.getComment().orNull)
+          }
+      } else {
+        rows += emptyRow()
+        rows += toCatalystRow("# Partitioning", "", "")
+        rows ++= table.partitioning.zipWithIndex.map {
+          case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+        }
       }
     }
   }

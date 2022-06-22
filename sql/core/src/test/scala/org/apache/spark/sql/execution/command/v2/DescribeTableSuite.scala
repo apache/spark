@@ -56,9 +56,9 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
         Seq(
           Row("id", "bigint", null),
           Row("data", "string", null),
-          Row("", "", ""),
-          Row("# Partitioning", "", ""),
-          Row("Part 0", "id", ""),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null),
           Row("", "", ""),
           Row("# Metadata Columns", "", ""),
           Row("index", "int", "Metadata column used to conflict with a data column"),
