@@ -297,7 +297,30 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
-    makeDatabase(dbName)
+    // `dbName` could be either a single database name (behavior in Spark 3.3 and prior) or a
+    // qualified namespace with catalog name. To maintain backwards compatibility, we first assume
+    // it's a single database name and return the database from sessionCatalog if it exists.
+    // Otherwise we try 3-part name parsing and locate the database. If the parased identifier
+    // contains both catalog name and database name, we then search the database in the catalog.
+    if (sessionCatalog.databaseExists(dbName) || sessionCatalog.isGlobalTempViewDB(dbName)) {
+      makeDatabase(dbName)
+    } else {
+      val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+      val plan = UnresolvedNamespace(ident)
+      val resolved = sparkSession.sessionState.executePlan(plan).analyzed
+      val db = ident.tail
+      // metadata only includes 'owner' AFAICT in tests
+      val metadata = resolved match {
+        // TODO unify this somehow?
+        case ResolvedNamespace(catalog: SupportsNamespaces, _) =>
+          catalog.loadNamespaceMetadata(db.toArray)
+        case _ => throw new RuntimeException(s"unexpected catalog resolved: $resolved")
+      }
+      new Database(
+        name = db.mkString("."),
+        description = metadata.get("description"),
+        locationUri = metadata.get("locationUri"))
+    }
   }
 
   /**
@@ -551,10 +574,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def dropTempView(viewName: String): Boolean = {
+    // `viewName` could be either a traditional database.view name (behavior in Spark 3.3 and prior)
+    // or a 3-part name. To maintain backwards compatibility, we first assume it's a traditional
+    // (2-part) name by checking
+    // Otherwise we try 3-part name parsing and locate the database. If the parased identifier
+    // contains both catalog name and database name, we then search the database in the catalog.
+    // if
     sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
       uncacheView(viewDef)
       sessionCatalog.dropTempView(viewName)
     }
+    // 3-part name
+    // val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(viewName)
   }
 
   /**

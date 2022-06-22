@@ -816,4 +816,21 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       assert(spark.table(tableName).collect().length == 0)
     }
   }
+
+  test("three layer namespace compatibility - get database") {
+    Seq(("testcat", "somedb"), ("testcat", "ns.somedb")).foreach { case (catalog, db) =>
+      val qualifiedDb = s"$catalog.$db"
+      sql(s"CREATE NAMESPACE $qualifiedDb")
+      assert(spark.catalog.getDatabase(qualifiedDb).name === db)
+    }
+    intercept[AnalysisException](spark.catalog.getDatabase("randomcat.db10"))
+  }
+
+  test("get database when there is `default` catalog") {
+    spark.conf.set("spark.sql.catalog.default", classOf[InMemoryCatalog].getName)
+    val db = "testdb"
+    val qualified = s"default.$db"
+    sql(s"CREATE NAMESPACE $qualified")
+    assert(spark.catalog.getDatabase(qualified).name === db)
+  }
 }
