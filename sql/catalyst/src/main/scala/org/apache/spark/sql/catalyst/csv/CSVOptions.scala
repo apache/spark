@@ -198,9 +198,17 @@ class CSVOptions(
   /**
    * Infer columns with all valid date entries as date type (otherwise inferred as timestamp type).
    * Disabled by default for backwards compatibility and performance. When enabled, date entries in
-   * timestamp columns will be cast to timestamp upon parsing.
+   * timestamp columns will be cast to timestamp upon parsing. Not compatible with
+   * legacyTimeParserPolicy == LEGACY
    */
-  val inferDate = getBool("inferDate")
+  val inferDate = {
+    val inferDateFlag = getBool("inferDate")
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY && inferDateFlag) {
+      throw QueryExecutionErrors.inferDateWithLegacyTimeParserError()
+    }
+    inferDateFlag
+  }
+
 
   /**
    * String representation of an empty value in read and in write.

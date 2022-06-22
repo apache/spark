@@ -529,6 +529,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
        """.stripMargin)
   }
 
+  def inferDateWithLegacyTimeParserError(): Throwable = {
+    new IllegalArgumentException(
+      """
+         | Cannot infer date in schema inference when LegacyTimeParserPolicy is 'legacy'. Legacy
+         | Date formatter does not support strict date format matching which is required to avoid
+         | inferring timestamps and other non-date entries to date.
+       """.stripMargin)
+  }
+
   def streamedOperatorUnsupportedByDataSourceError(
       className: String, operator: String): Throwable = {
     new UnsupportedOperationException(

@@ -151,7 +151,6 @@ class UnivocityParser(
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
-
   /**
    * Create a converter which converts the string value to a value according to a desired type.
    * Currently, we do not support complex types (`ArrayType`, `MapType`, `StructType`).
@@ -237,12 +236,8 @@ class UnivocityParser(
         try {
           timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         } catch {
-          case NonFatal(e) =>
-            if (options.inferDate) {
-              daysToMicros(dateFormatter.parse(datum), options.zoneId)
-            } else {
-              throw(e)
-            }
+          case NonFatal(e) if (options.inferDate) =>
+            daysToMicros(dateFormatter.parse(datum), options.zoneId)
         }
       }
 

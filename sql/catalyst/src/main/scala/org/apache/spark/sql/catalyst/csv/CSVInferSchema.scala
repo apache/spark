@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{FAST_DATE_FORMAT, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -46,10 +46,12 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     isParsing = true,
     forTimestampNTZ = true)
 
+//  val FAST_DATE_FORMAT, SIMPLE_DATE_FORMAT, LENIENT_SIMPLE_DATE_FORMAT = Value
+
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT,
+    legacyFormat = LENIENT_SIMPLE_DATE_FORMAT,
     isParsing = true)
 
   private val decimalParser = if (options.locale == Locale.US) {
@@ -116,23 +118,6 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   def inferField(typeSoFar: DataType, field: String): DataType = {
     if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
-    } else
-    if (options.inferDate) {
-      val typeElemInfer = typeSoFar match {
-        case NullType => tryParseInteger(field)
-        case IntegerType => tryParseInteger(field)
-        case LongType => tryParseLong(field)
-        case _: DecimalType => tryParseDecimal(field)
-        case DoubleType => tryParseDouble(field)
-        case DateType => tryParseDateTime(field)
-        case TimestampNTZType => tryParseDateTime(field)
-        case TimestampType => tryParseDateTime(field)
-        case BooleanType => tryParseBoolean(field)
-        case StringType => StringType
-        case other: DataType =>
-          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
-      }
-      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     } else {
       val typeElemInfer = typeSoFar match {
         case NullType => tryParseInteger(field)
