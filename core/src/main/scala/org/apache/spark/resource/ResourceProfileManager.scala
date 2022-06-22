@@ -80,10 +80,9 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
 
     if (isStandalone && rp.getExecutorCores.isEmpty &&
       sparkConf.getOption(config.EXECUTOR_CORES.key).isEmpty) {
-      logWarning(s"Executor cores is not set for resource profile: ${rp.id}, and " +
-        s"spark.executor.cores is also not specified, you may get more executors allocated than " +
-        s"expected. It's recommended to set executor cores explicitly. Check this issue " +
-        s"for more details: https://issues.apache.org/jira/browse/SPARK-30299")
+      logWarning("Neither executor cores is set for resource profile, nor spark.executor.cores " +
+        "is explicitly set, you may get more executors allocated than expected. It's recommended " +
+        "to set executor cores explicitly. Please check SPARK-30299 for more details.")
     }
 
     true

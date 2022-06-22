@@ -113,10 +113,9 @@ private[spark] class StandaloneSchedulerBackend(
     val initialExecutorLimit =
       if (Utils.isDynamicAllocationEnabled(conf)) {
         if (coresPerExecutor.isEmpty) {
-          logWarning("Dynamic allocation without explicitly setting spark.executor.cores " +
-            "detected, you may get more executors allocated than expected. It's recommended to " +
-            "set spark.executor.cores explicitly. Check this issue for more details: " +
-            "https://issues.apache.org/jira/browse/SPARK-30299")
+          logWarning("Dynamic allocation enabled without spark.executor.cores explicitly " +
+            "set, you may get more executors allocated than expected. It's recommended to " +
+            "set spark.executor.cores explicitly. Please check SPARK-30299 for more details.")
         }
 
         Some(0)
