@@ -37,7 +37,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
    */
   def testTranslateFilter(catalystFilter: Expression, result: Option[Predicate]): Unit = {
     assertResult(result) {
-      DataSourceV2Strategy.translateFilterV2(catalystFilter, true)
+      DataSourceV2Strategy.translateFilterV2(catalystFilter)
     }
   }
 }
