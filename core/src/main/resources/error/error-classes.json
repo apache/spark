@@ -198,6 +198,23 @@
     "message" : [ "The feature is not supported: <feature>" ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_GENERATOR" : {
+    "message" : [ "The generator is not supported: " ],
+    "subClass" : {
+      "MULTI_GENERATOR" : {
+        "message" : [ "only one generator allowed per <clause> clause but found <num>: <generators>" ]
+      },
+      "NESTED_IN_EXPRESSIONS" : {
+        "message" : [ "nested in expressions <expression>" ]
+      },
+      "NOT_GENERATOR" : {
+        "message" : [ "<functionName> is expected to be a generator. However, its class is <classCanonicalName>, which is not a generator." ]
+      },
+      "OUTSIDE_SELECT" : {
+        "message" : [ "outside the SELECT clause, found: <plan>" ]
+      }
+    }
+  },
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
   },

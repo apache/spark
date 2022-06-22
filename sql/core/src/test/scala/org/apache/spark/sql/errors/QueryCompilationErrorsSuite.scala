@@ -205,4 +205,50 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       "The deserializer is not supported: try to map \"STRUCT<a: STRING, b: INT>\" " +
       "to Tuple1, but failed as the number of fields does not line up.")
   }
+
+  test("UNSUPPORTED_GENERATOR: " +
+    "generators are not supported when it's nested in expressions") {
+    val e = intercept[AnalysisException](
+      sql("""select explode(Array(1, 2, 3)) + 1""").collect()
+    )
+    assert(e.errorClass === Some("UNSUPPORTED_GENERATOR"))
+    assert(e.message ===
+      """The generator is not supported: """ +
+      """nested in expressions "(explode(array(1, 2, 3)) + 1)"""")
+  }
+
+  test("UNSUPPORTED_GENERATOR: only one generator allowed") {
+    val e = intercept[AnalysisException](
+      sql("""select explode(Array(1, 2, 3)), explode(Array(1, 2, 3))""").collect()
+    )
+    assert(e.errorClass === Some("UNSUPPORTED_GENERATOR"))
+    assert(e.message ===
+      "The generator is not supported: only one generator allowed per select clause " +
+      """but found 2: "explode(array(1, 2, 3))", "explode(array(1, 2, 3))"""")
+  }
+
+  test("UNSUPPORTED_GENERATOR: generators are not supported outside the SELECT clause") {
+    val e = intercept[AnalysisException](
+      sql("""select 1 from t order by explode(Array(1, 2, 3))""").collect()
+    )
+    assert(e.errorClass === Some("UNSUPPORTED_GENERATOR"))
+    assert(e.message ===
+      "The generator is not supported: outside the SELECT clause, found: " +
+      "'Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true")
+  }
+
+  test("UNSUPPORTED_GENERATOR: not a generator") {
+    val e = intercept[AnalysisException](
+      sql(
+        """
+          |SELECT explodedvalue.*
+          |FROM VALUES array(1, 2, 3) AS (value)
+          |LATERAL VIEW array_contains(value, 1) AS explodedvalue""".stripMargin).collect()
+    )
+    assert(e.errorClass === Some("UNSUPPORTED_GENERATOR"))
+    assert(e.message ===
+      """The generator is not supported: `array_contains` is expected to be a generator. """ +
+      "However, its class is org.apache.spark.sql.catalyst.expressions.ArrayContains, " +
+      "which is not a generator.")
+  }
 }
