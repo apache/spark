@@ -393,7 +393,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (cleanupLocalDirs) {
       deleteExecutorDirs(appShuffleInfo);
     }
-    if (removeFromDb){
+    if (removeFromDb) {
       removeAppShuffleInfoFromDB(appShuffleInfo);
     }
   }
