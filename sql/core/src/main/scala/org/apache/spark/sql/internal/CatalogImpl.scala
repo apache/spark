@@ -685,7 +685,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns the current default catalog in this session.
    *
-   * @since 3.2.0
+   * @since 3.4.0
    */
   override def currentCatalog(): String = {
     sparkSession.sessionState.catalogManager.currentCatalog.name()
@@ -694,7 +694,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Sets the current default catalog in this session.
    *
-   * @since 3.2.0
+   * @since 3.4.0
    */
   override def setCurrentCatalog(catalogName: String): Unit = {
     sparkSession.sessionState.catalogManager.setCurrentCatalog(catalogName)
@@ -703,7 +703,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns a list of catalogs in this session.
    *
-   * @since 3.2.0
+   * @since 3.4.0
    */
   override def listCatalogs(): Dataset[CatalogMetadata] = {
     val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(None)
