@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.csv
 
 import java.math.BigDecimal
 import java.text.{DecimalFormat, DecimalFormatSymbols}
-import java.time.{ZoneId, ZoneOffset}
+import java.time.{ZoneOffset}
 import java.util.{Locale, TimeZone}
 
 import org.apache.commons.lang3.time.FastDateFormat
-import org.apache.spark.SparkFunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -367,11 +367,15 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
           "timestampNTZFormat" -> "dd-MM-yyyy HH:mm", "dateFormat" -> "dd_MM_yyyy"),
           false, "UTC")
       val dateString = "08_09_2001"
-      val expected = date(2001, 9, 8, 0, 0, 0, 0, ZoneOffset.UTC)
+      val expected = dataType match {
+        case TimestampType | TimestampNTZType => date(2001, 9, 8, 0, 0, 0, 0, ZoneOffset.UTC)
+        case DateType => days(2001, 9, 8)
+      }
       val parser = new UnivocityParser(new StructType(), timestampsOptions)
       assert(parser.makeConverter("d", dataType).apply(dateString) == expected)
     }
     checkDate(TimestampType)
     checkDate(TimestampNTZType)
+    checkDate(DateType)
   }
 }
