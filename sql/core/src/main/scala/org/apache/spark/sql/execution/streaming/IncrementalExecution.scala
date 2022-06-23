@@ -78,8 +78,10 @@ class IncrementalExecution(
    */
   override
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
-    // Performing pre-optimization for streaming specific
+    // Performing streaming specific pre-optimization.
     val preOptimized = withCachedData.transform {
+      // We eliminate the "marker" node for writer on DSv1 as it's only used as representation
+      // of sink information.
       case w: WriteToMicroBatchDataSourceV1 => w.child
     }
     sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,

@@ -184,7 +184,7 @@ abstract class FileStreamSourceTest
   protected def getSourceFromFileStream(df: DataFrame): FileStreamSource = {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     df.queryExecution.analyzed
-      .collect { case StreamingRelation(dataSource, _, _, _) =>
+      .collect { case StreamingRelation(dataSource, _, _) =>
         // There is only one source in our tests so just set sourceId to 0
         dataSource.createSource(s"$checkpointLocation/sources/0").asInstanceOf[FileStreamSource]
       }.head
@@ -252,7 +252,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         reader.load()
       }
     df.queryExecution.analyzed
-      .collect { case s @ StreamingRelation(dataSource, _, _, _) => s.schema }.head
+      .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head
   }
 
   override def beforeAll(): Unit = {

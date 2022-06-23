@@ -31,13 +31,9 @@ import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
-    apply(dataSource, None)
-  }
-
-  def apply(dataSource: DataSource, catalogTable: Option[CatalogTable]): StreamingRelation = {
     StreamingRelation(
-      dataSource, dataSource.sourceInfo.name, dataSource.sourceInfo.schema.toAttributes,
-      catalogTable)
+      dataSource, dataSource.sourceInfo.name,
+      dataSource.sourceInfo.schema.toAttributes)
   }
 }
 
@@ -51,8 +47,7 @@ object StreamingRelation {
 case class StreamingRelation(
     dataSource: DataSource,
     sourceName: String,
-    output: Seq[Attribute],
-    catalogTable: Option[CatalogTable])
+    output: Seq[Attribute])
   extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
@@ -126,7 +121,6 @@ case class StreamingRelationExec(
     sourceName: String,
     output: Seq[Attribute],
     tableIdentifier: Option[String]) extends LeafExecNode {
-  // FIXME: check the representation of this node and come up with good format to show table name
   override def toString: String = sourceName
   override protected def doExecute(): RDD[InternalRow] = {
     throw QueryExecutionErrors.cannotExecuteStreamingRelationExecError()

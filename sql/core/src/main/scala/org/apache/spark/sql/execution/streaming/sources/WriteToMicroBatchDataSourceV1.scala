@@ -37,7 +37,7 @@ case class WriteToMicroBatchDataSourceV1(
 
   // Despite this is logically the top node, this node should behave like "pass-through"
   // since the DSv1 codepath on microbatch execution handles sink operation separately.
-  // We will eliminate this node in physical planning, which shouldn't make difference as
+  // We will eliminate this node in optimization phase, which shouldn't make difference as
   // this node is pass-through.
   override def output: Seq[Attribute] = query.output
 
