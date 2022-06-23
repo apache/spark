@@ -59,7 +59,11 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
 
   // The result type is the same as the input type.
   override lazy val dataType: DataType = {
-    if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
+    val resultType = child.dataType match {
+      case it: AnsiIntervalType => it
+      case _ => DoubleType
+    }
+    if (returnPercentileArray) ArrayType(resultType, false) else resultType
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
@@ -166,15 +170,9 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
 
   private def generateOutput(percentiles: Seq[Double]): Any = {
     val results = child.dataType match {
-      case ByteType => percentiles.map(_.toByte)
-      case ShortType => percentiles.map(_.toShort)
-      case IntegerType | _: YearMonthIntervalType => percentiles.map(_.toInt)
-      case LongType | _: DayTimeIntervalType => percentiles.map(_.toLong)
-      case FloatType => percentiles.map(_.toFloat)
-      case DoubleType => percentiles
-      case _: DecimalType => percentiles.map(Decimal(_))
-      case other: DataType =>
-        throw QueryExecutionErrors.dataTypeUnexpectedError(other)
+      case _: YearMonthIntervalType => percentiles.map(_.toInt)
+      case _: DayTimeIntervalType => percentiles.map(_.toLong)
+      case _ => percentiles
     }
     if (percentiles.isEmpty) {
       null
@@ -312,6 +310,10 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
       """,
   examples = """
     Examples:
+      > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
+       3.0
+      > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
+       [2.5,7.5]
       > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
        0-5
       > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
@@ -373,7 +375,7 @@ case class Percentile(
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
-       5
+       5.0
       > SELECT _FUNC_(col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
        0-5
   """,

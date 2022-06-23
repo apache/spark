@@ -41,9 +41,9 @@ SELECT
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
 FROM aggr
 -- !query schema
-struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY v):int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):int>
+struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY v):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):double>
 -- !query output
-10	30
+10.0	30.0
 
 
 -- !query
@@ -55,12 +55,12 @@ FROM aggr
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):int>
+struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):double>
 -- !query output
-0	10	30
-1	12	17
-2	17	26
-3	60	60
+0	10.0	30.0
+1	12.5	17.5
+2	17.5	26.25
+3	60.0	60.0
 4	NULL	NULL
 
 
@@ -70,9 +70,9 @@ SELECT
   percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
 FROM aggr
 -- !query schema
-struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY v):int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):int>
+struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY v):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):double>
 -- !query output
-10	30
+10.0	30.0
 
 
 -- !query
@@ -84,12 +84,12 @@ FROM aggr
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):int>
+struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):double>
 -- !query output
-0	10	30
-1	10	20
-2	10	30
-3	60	60
+0	10.0	30.0
+1	10.0	20.0
+2	10.0	30.0
+3	60.0	60.0
 4	NULL	NULL
 
 
@@ -100,9 +100,9 @@ SELECT
   percentile_cont(0.5) WITHIN GROUP (ORDER BY v)
 FROM aggr
 -- !query schema
-struct<median(v):int,percentile(v, 0.5, 1):int,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):int>
+struct<median(v):double,percentile(v, 0.5, 1):double,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):double>
 -- !query output
-20	20	20
+20.0	20.0	20.0
 
 
 -- !query
@@ -115,12 +115,12 @@ FROM aggr
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,median(v):int,percentile(v, 0.5, 1):int,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):int>
+struct<k:int,median(v):double,percentile(v, 0.5, 1):double,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):double>
 -- !query output
-0	20	20	20
-1	15	15	15
-2	22	22	22
-3	60	60	60
+0	20.0	20.0	20.0
+1	15.0	15.0	15.0
+2	22.5	22.5	22.5
+3	60.0	60.0	60.0
 4	NULL	NULL	NULL
 
 
@@ -136,25 +136,25 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
+struct<employee_name:string,department:string,salary:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
-Leslie Thompson	IT	5186	5917	5186	7381	8113
-Anthony Bow	Accounting	6627	8543	8435	9746	9998
-Foon Yue Tseng	Sales	6660	8550	6660	9721	10563
-Gerard Hernandez	SCM	6949	10449	10449	11303	11303
-Leslie Jennings	IT	8113	5917	5186	7381	8113
-Diane Murphy	Accounting	8435	8543	8435	9746	9998
-William Patterson	Accounting	8870	8543	8435	9746	9998
-Jeff Firrelli	Accounting	8992	8543	8435	9746	9998
-Julie Firrelli	Sales	9181	8550	6660	9721	10563
-Steve Patterson	Sales	9441	8550	6660	9721	10563
-Mary Patterson	Accounting	9998	8543	8435	9746	9998
-Loui Bondur	SCM	10449	10449	10449	11303	11303
-George Vanauf	Sales	10563	8550	6660	9721	10563
-Barry Jones	SCM	10586	10449	10449	11303	11303
-Pamela Castillo	SCM	11303	10449	10449	11303	11303
-Gerard Bondur	Accounting	11472	8543	8435	9746	9998
-Larry Bott	SCM	11798	10449	10449	11303	11303
+Leslie Thompson	IT	5186	5917.75	5186.0	7381.25	8113.0
+Anthony Bow	Accounting	6627	8543.75	8435.0	9746.5	9998.0
+Foon Yue Tseng	Sales	6660	8550.75	6660.0	9721.5	10563.0
+Gerard Hernandez	SCM	6949	10449.0	10449.0	11303.0	11303.0
+Leslie Jennings	IT	8113	5917.75	5186.0	7381.25	8113.0
+Diane Murphy	Accounting	8435	8543.75	8435.0	9746.5	9998.0
+William Patterson	Accounting	8870	8543.75	8435.0	9746.5	9998.0
+Jeff Firrelli	Accounting	8992	8543.75	8435.0	9746.5	9998.0
+Julie Firrelli	Sales	9181	8550.75	6660.0	9721.5	10563.0
+Steve Patterson	Sales	9441	8550.75	6660.0	9721.5	10563.0
+Mary Patterson	Accounting	9998	8543.75	8435.0	9746.5	9998.0
+Loui Bondur	SCM	10449	10449.0	10449.0	11303.0	11303.0
+George Vanauf	Sales	10563	8550.75	6660.0	9721.5	10563.0
+Barry Jones	SCM	10586	10449.0	10449.0	11303.0	11303.0
+Pamela Castillo	SCM	11303	10449.0	10449.0	11303.0	11303.0
+Gerard Bondur	Accounting	11472	8543.75	8435.0	9746.5	9998.0
+Larry Bott	SCM	11798	10449.0	10449.0	11303.0	11303.0
 
 
 -- !query
@@ -264,25 +264,25 @@ FROM basic_pays
 WINDOW w AS (PARTITION BY department)
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
+struct<employee_name:string,department:string,salary:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
-Leslie Thompson	IT	5186	5917	5186	7381	8113
-Anthony Bow	Accounting	6627	8543	8435	9746	9998
-Foon Yue Tseng	Sales	6660	8550	6660	9721	10563
-Gerard Hernandez	SCM	6949	10449	10449	11303	11303
-Leslie Jennings	IT	8113	5917	5186	7381	8113
-Diane Murphy	Accounting	8435	8543	8435	9746	9998
-William Patterson	Accounting	8870	8543	8435	9746	9998
-Jeff Firrelli	Accounting	8992	8543	8435	9746	9998
-Julie Firrelli	Sales	9181	8550	6660	9721	10563
-Steve Patterson	Sales	9441	8550	6660	9721	10563
-Mary Patterson	Accounting	9998	8543	8435	9746	9998
-Loui Bondur	SCM	10449	10449	10449	11303	11303
-George Vanauf	Sales	10563	8550	6660	9721	10563
-Barry Jones	SCM	10586	10449	10449	11303	11303
-Pamela Castillo	SCM	11303	10449	10449	11303	11303
-Gerard Bondur	Accounting	11472	8543	8435	9746	9998
-Larry Bott	SCM	11798	10449	10449	11303	11303
+Leslie Thompson	IT	5186	5917.75	5186.0	7381.25	8113.0
+Anthony Bow	Accounting	6627	8543.75	8435.0	9746.5	9998.0
+Foon Yue Tseng	Sales	6660	8550.75	6660.0	9721.5	10563.0
+Gerard Hernandez	SCM	6949	10449.0	10449.0	11303.0	11303.0
+Leslie Jennings	IT	8113	5917.75	5186.0	7381.25	8113.0
+Diane Murphy	Accounting	8435	8543.75	8435.0	9746.5	9998.0
+William Patterson	Accounting	8870	8543.75	8435.0	9746.5	9998.0
+Jeff Firrelli	Accounting	8992	8543.75	8435.0	9746.5	9998.0
+Julie Firrelli	Sales	9181	8550.75	6660.0	9721.5	10563.0
+Steve Patterson	Sales	9441	8550.75	6660.0	9721.5	10563.0
+Mary Patterson	Accounting	9998	8543.75	8435.0	9746.5	9998.0
+Loui Bondur	SCM	10449	10449.0	10449.0	11303.0	11303.0
+George Vanauf	Sales	10563	8550.75	6660.0	9721.5	10563.0
+Barry Jones	SCM	10586	10449.0	10449.0	11303.0	11303.0
+Pamela Castillo	SCM	11303	10449.0	10449.0	11303.0	11303.0
+Gerard Bondur	Accounting	11472	8543.75	8435.0	9746.5	9998.0
+Larry Bott	SCM	11798	10449.0	10449.0	11303.0	11303.0
 
 
 -- !query
@@ -300,18 +300,18 @@ WHERE salary > 8900
 WINDOW w AS (PARTITION BY department)
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_cont(0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_disc(0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_cont(0.5) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,percentile_disc(0.5) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
+struct<employee_name:string,department:string,salary:int,median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.5) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.5) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
-Jeff Firrelli	Accounting	8992	9998	9998	9998	9998	9998
-Julie Firrelli	Sales	9181	9441	9441	9441	9441	9441
-Steve Patterson	Sales	9441	9441	9441	9441	9441	9441
-Mary Patterson	Accounting	9998	9998	9998	9998	9998	9998
-Loui Bondur	SCM	10449	10944	10944	10586	10944	11303
-George Vanauf	Sales	10563	9441	9441	9441	9441	9441
-Barry Jones	SCM	10586	10944	10944	10586	10944	11303
-Pamela Castillo	SCM	11303	10944	10944	10586	10944	11303
-Gerard Bondur	Accounting	11472	9998	9998	9998	9998	9998
-Larry Bott	SCM	11798	10944	10944	10586	10944	11303
+Jeff Firrelli	Accounting	8992	9998.0	9998.0	9998.0	9998.0	9998.0
+Julie Firrelli	Sales	9181	9441.0	9441.0	9441.0	9441.0	9441.0
+Steve Patterson	Sales	9441	9441.0	9441.0	9441.0	9441.0	9441.0
+Mary Patterson	Accounting	9998	9998.0	9998.0	9998.0	9998.0	9998.0
+Loui Bondur	SCM	10449	10944.5	10944.5	10586.0	10944.5	11303.0
+George Vanauf	Sales	10563	9441.0	9441.0	9441.0	9441.0	9441.0
+Barry Jones	SCM	10586	10944.5	10944.5	10586.0	10944.5	11303.0
+Pamela Castillo	SCM	11303	10944.5	10944.5	10586.0	10944.5	11303.0
+Gerard Bondur	Accounting	11472	9998.0	9998.0	9998.0	9998.0	9998.0
+Larry Bott	SCM	11798	10944.5	10944.5	10586.0	10944.5	11303.0
 
 
 -- !query
