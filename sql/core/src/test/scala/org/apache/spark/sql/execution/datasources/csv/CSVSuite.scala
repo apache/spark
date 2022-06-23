@@ -2805,8 +2805,7 @@ abstract class CSVSuite
           .options(options)
           .load(testFile(dateInferSchemaFile))
       }.getMessage
-      assert(msg.contains("Cannot infer date in schema inference when " +
-        "LegacyTimeParserPolicy is 'legacy'"))
+      assert(msg.contains("CANNOT_INFER_DATE"))
     } else {
       val results = spark.read
         .format("csv")

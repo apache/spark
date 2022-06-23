@@ -124,18 +124,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
         case DateType => tryParseDateTime(field)
-        case TimestampNTZType =>
-          if (options.inferDate) {
-            tryParseDateTime(field)
-          } else {
-            tryParseTimestampNTZ(field)
-          }
-        case TimestampType =>
-          if (options.inferDate) {
-            tryParseDateTime(field)
-          } else {
-            tryParseTimestamp(field)
-          }
+        case TimestampNTZType if options.inferDate => tryParseDateTime(field)
+        case TimestampNTZType => tryParseTimestampNTZ(field)
+        case TimestampType if options.inferDate => tryParseDateTime(field)
+        case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>

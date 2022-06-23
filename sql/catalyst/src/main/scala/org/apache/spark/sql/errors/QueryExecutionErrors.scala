@@ -34,7 +34,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkThrowable, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -529,13 +529,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
        """.stripMargin)
   }
 
-  def inferDateWithLegacyTimeParserError(): Throwable = {
-    new IllegalArgumentException(
-      """
-         | Cannot infer date in schema inference when LegacyTimeParserPolicy is 'legacy'. Legacy
-         | Date formatter does not support strict date format matching which is required to avoid
-         | inferring timestamps and other non-date entries to date.
-       """.stripMargin)
+  def inferDateWithLegacyTimeParserError(): Throwable with SparkThrowable = {
+    new SparkIllegalArgumentException(errorClass = "CANNOT_INFER_DATE",
+      messageParameters = Array()
+    )
   }
 
   def streamedOperatorUnsupportedByDataSourceError(
