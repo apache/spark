@@ -574,18 +574,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def dropTempView(viewName: String): Boolean = {
-    // `viewName` could be either a traditional database.view name (behavior in Spark 3.3 and prior)
-    // or a 3-part name. To maintain backwards compatibility, we first assume it's a traditional
-    // (2-part) name by checking
-    // Otherwise we try 3-part name parsing and locate the database. If the parased identifier
-    // contains both catalog name and database name, we then search the database in the catalog.
-    // if
     sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
       uncacheView(viewDef)
       sessionCatalog.dropTempView(viewName)
     }
-    // 3-part name
-    // val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(viewName)
   }
 
   /**
