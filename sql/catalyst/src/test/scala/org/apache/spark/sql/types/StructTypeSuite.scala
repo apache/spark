@@ -449,7 +449,8 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       StructField("c1", LongType, true,
         new MetadataBuilder()
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
-          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT")
+          .putString(
+            ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
           .build()),
       StructField("c2", StringType, true,
         new MetadataBuilder()

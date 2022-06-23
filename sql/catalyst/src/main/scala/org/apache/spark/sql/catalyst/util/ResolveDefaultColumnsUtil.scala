@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -244,9 +245,12 @@ object ResolveDefaultColumns {
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
         val expr = try {
-          analyze(field, "")
+          val expr = analyze(field, "")
+          expr match {
+            case _: ExprLiteral | _: Cast => expr
+          }
         } catch {
-          case _: AnalysisException =>
+          case _: AnalysisException | _: MatchError =>
             throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(field.name, text)
         }
         // The expression should be a literal value by this point, possibly wrapped in a cast
