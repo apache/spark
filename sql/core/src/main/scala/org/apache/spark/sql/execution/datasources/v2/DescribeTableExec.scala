@@ -98,8 +98,13 @@ case class DescribeTableExec(
         rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
         rows ++= table.partitioning
           .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
-          .flatMap(table.schema.findNestedField(_))
-          .map { case (path, field) =>
+          .map { fieldNames =>
+            val nestedField = table.schema.findNestedField(fieldNames)
+            assert(nestedField.isDefined,
+              s"Not found the partition column ${fieldNames.map(quoteIfNeeded).mkString(".")} " +
+              s"in the table schema ${table.schema().catalogString}.")
+            nestedField.get
+          }.map { case (path, field) =>
             toCatalystRow(
               (path :+ field.name).map(quoteIfNeeded(_)).mkString("."),
               field.dataType.simpleString,
