@@ -58,11 +58,9 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
   override def nullable: Boolean = true
 
   // The result type is the same as the input type.
-  private lazy val internalDataType: DataType = {
+  override lazy val dataType: DataType = {
     if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
-
-  override lazy val dataType: DataType = internalDataType
 
   override def inputTypes: Seq[AbstractDataType] = {
     val percentageExpType = percentageExpression.dataType match {
