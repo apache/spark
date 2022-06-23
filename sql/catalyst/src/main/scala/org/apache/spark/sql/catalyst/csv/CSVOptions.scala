@@ -209,7 +209,6 @@ class CSVOptions(
     inferDateFlag
   }
 
-
   /**
    * String representation of an empty value in read and in write.
    */
