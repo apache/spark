@@ -64,7 +64,7 @@ case class LogicalRelation(
   }
 
   override def simpleString(maxFields: Int): String = {
-    s"Relation ${catalogTable.map(_.identifier.unquotedString).getOrElse("")} " +
+    s"Relation ${catalogTable.map(_.identifier.unquotedString).getOrElse("")}" +
       s"[${truncatedString(output, ",", maxFields)}] $relation"
   }
 
