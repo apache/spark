@@ -168,8 +168,8 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
 
   private def generateOutput(percentiles: Seq[Double]): Any = {
     val results = child.dataType match {
-      case _: YearMonthIntervalType => percentiles.map(_.toInt)
-      case _: DayTimeIntervalType => percentiles.map(_.toLong)
+      case IntegerType | _: YearMonthIntervalType => percentiles.map(_.toInt)
+      case LongType | _: DayTimeIntervalType => percentiles.map(_.toLong)
       case _ => percentiles
     }
     if (percentiles.isEmpty) {
@@ -297,7 +297,7 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
   usage =
     """
       _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
-       column `col` at the given percentage. The value of percentage must be
+       or ANSI interval column `col` at the given percentage. The value of percentage must be
        between 0.0 and 1.0. The value of frequency should be positive integral
 
       _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
@@ -308,10 +308,10 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
       """,
   examples = """
     Examples:
-      > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
-       3.0
-      > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
-       [2.5,7.5]
+      > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       0-5
+      > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
+       [0 00:00:02.000000000,0 00:00:05.000000000]
   """,
   group = "agg_funcs",
   since = "2.1.0")
@@ -365,11 +365,13 @@ case class Percentile(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(col) - Returns the median of numeric column `col`.",
+  usage = "_FUNC_(col) - Returns the median of numeric or ANSI interval column `col`.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
-       5.0
+       5
+      > SELECT _FUNC_(col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       0-5
   """,
   group = "agg_funcs",
   since = "3.4.0")
@@ -388,7 +390,7 @@ case class Median(child: Expression)
 
 /**
  * Return a percentile value based on a continuous distribution of
- * numeric column at the given percentage (specified in ORDER BY clause).
+ * numeric or ANSI interval column at the given percentage (specified in ORDER BY clause).
  * The value of percentage must be between 0.0 and 1.0.
  */
 case class PercentileCont(left: Expression, right: Expression, reverse: Boolean = false)
