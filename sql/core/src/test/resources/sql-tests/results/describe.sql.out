@@ -116,6 +116,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Created Time [not included in comparison]
@@ -148,6 +149,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Created Time [not included in comparison]
@@ -188,6 +190,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Created Time [not included in comparison]
@@ -228,6 +231,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Created Time [not included in comparison]

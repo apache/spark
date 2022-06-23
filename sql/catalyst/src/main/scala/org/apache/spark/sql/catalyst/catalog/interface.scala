@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -397,6 +398,9 @@ case class CatalogTable(
       if (lastAccessTime <= 0) "UNKNOWN" else new Date(lastAccessTime).toString
     }
 
+    if (tableType != CatalogTableType.VIEW && identifier.database.isDefined) {
+      map.put("Catalog", SESSION_CATALOG_NAME)
+    }
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
     if (owner != null && owner.nonEmpty) map.put("Owner", owner)

@@ -16,6 +16,7 @@ c                   	char(5)
 v                   	varchar(6)          	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_tbl            	                    
 Created Time [not included in comparison]
@@ -82,6 +83,7 @@ c                   	char(5)
 v                   	varchar(6)          	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_tbl2           	                    
 Created Time [not included in comparison]
@@ -126,6 +128,7 @@ c                   	char(5)
 v                   	varchar(6)          	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_tbl3           	                    
 Created Time [not included in comparison]
@@ -238,6 +241,7 @@ c                   	char(5)
 v                   	varchar(6)          	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_tbl1           	                    
 Created Time [not included in comparison]
@@ -274,6 +278,7 @@ c                   	char(5)
 v                   	varchar(6)          	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_tbl1           	                    
 Created Time [not included in comparison]
@@ -302,6 +307,7 @@ v                   	varchar(6)
 d                   	char(5)             	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_tbl1           	                    
 Created Time [not included in comparison]
@@ -359,6 +365,7 @@ v                   	varchar(6)
 d                   	char(5)             	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_tbl1           	                    
 Created Time [not included in comparison]
@@ -418,6 +425,7 @@ v                   	varchar(6)
 d                   	char(5)             	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_tbl1           	                    
 Created Time [not included in comparison]
@@ -475,6 +483,7 @@ v                   	varchar(6)
 d                   	char(5)             	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_tbl1           	                    
 Created Time [not included in comparison]
@@ -509,6 +518,7 @@ v2                  	varchar(2)
 c2                  	char(2)             	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_part           	                    
 Created Time [not included in comparison]
@@ -543,6 +553,7 @@ v2                  	varchar(2)
 c2                  	char(2)             	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_part           	                    
 Created Time [not included in comparison]
@@ -578,6 +589,7 @@ v2                  	varchar(2)
 c2                  	char(2)             	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_part           	                    
 Created Time [not included in comparison]
@@ -612,6 +624,7 @@ v2                  	varchar(2)
 c2                  	char(2)             	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_part           	                    
 Created Time [not included in comparison]
@@ -646,6 +659,7 @@ v2                  	varchar(2)
 c2                  	char(2)             	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	char_part           	                    
 Created Time [not included in comparison]
