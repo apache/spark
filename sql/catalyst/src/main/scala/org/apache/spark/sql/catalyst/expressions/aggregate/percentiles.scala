@@ -57,17 +57,22 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
-  override lazy val dataType: DataType = percentageExpression.dataType match {
-    case _: ArrayType => ArrayType(DoubleType, false)
-    case _ => DoubleType
+  // The result type is the same as the input type.
+  private lazy val internalDataType: DataType = {
+    if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
+
+  override lazy val dataType: DataType = internalDataType
 
   override def inputTypes: Seq[AbstractDataType] = {
     val percentageExpType = percentageExpression.dataType match {
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(NumericType, percentageExpType, IntegralType)
+    Seq(
+      TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType),
+      percentageExpType,
+      IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -161,8 +166,13 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
     }
   }
 
-  private def generateOutput(results: Seq[Double]): Any = {
-    if (results.isEmpty) {
+  private def generateOutput(percentiles: Seq[Double]): Any = {
+    val results = child.dataType match {
+      case _: YearMonthIntervalType => percentiles.map(_.toInt)
+      case _: DayTimeIntervalType => percentiles.map(_.toLong)
+      case _ => percentiles
+    }
+    if (percentiles.isEmpty) {
       null
     } else if (returnPercentileArray) {
       new GenericArrayData(results)
