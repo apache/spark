@@ -866,4 +866,35 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     sql(s"CREATE NAMESPACE $qualified")
     assert(spark.catalog.getDatabase(qualified).name === db)
   }
+
+  test("three layer namespace compatibility - current database") {
+    sql("CREATE NAMESPACE testcat.my_db")
+    spark.catalog.setCurrentDatabase("testcat.my_db")
+    // sessionCatalog still reports 'default' as current database
+    assert(sessionCatalog.getCurrentDatabase == "default")
+    assert(spark.catalog.currentDatabase == "testcat.my_db")
+    val e = intercept[AnalysisException] {
+      spark.catalog.setCurrentDatabase("testcat.unknown_db")
+    }
+    assert(e.getMessage.contains("testcat.unknown_db"))
+
+    // add namespace layer
+    sql("CREATE NAMESPACE testcat.ns1.my_db")
+    spark.catalog.setCurrentDatabase("testcat.ns1.my_db")
+    assert(spark.catalog.currentDatabase == "testcat.ns1.my_db")
+    val e2 = intercept[AnalysisException] {
+      spark.catalog.setCurrentDatabase("testcat.ns1.unknown_db")
+    }
+    assert(e2.getMessage.contains("testcat.ns1.unknown_db"))
+
+    // check that we can fall back to old sessionCatalog
+    createDatabase("my_db")
+    spark.catalog.setCurrentDatabase("my_db")
+    assert(spark.catalog.currentDatabase == "my_db")
+    assert(sessionCatalog.getCurrentDatabase == "my_db")
+    val e3 = intercept[AnalysisException] {
+      spark.catalog.setCurrentDatabase("unknown_db")
+    }
+    assert(e3.getMessage.contains("unknown_db"))
+  }
 }

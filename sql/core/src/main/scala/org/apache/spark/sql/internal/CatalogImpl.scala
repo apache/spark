@@ -44,30 +44,47 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   private def sessionCatalog: SessionCatalog = sparkSession.sessionState.catalog
 
-  private def requireDatabaseExists(dbName: String): Unit = {
-    if (!sessionCatalog.databaseExists(dbName)) {
-      throw QueryCompilationErrors.databaseDoesNotExistError(dbName)
-    }
-  }
-
   private def requireTableExists(dbName: String, tableName: String): Unit = {
     if (!sessionCatalog.tableExists(TableIdentifier(tableName, Some(dbName)))) {
       throw QueryCompilationErrors.tableDoesNotExistInDatabaseError(tableName, dbName)
     }
   }
 
+  // FIXME
+  private var currentDatabaseV2: Option[String] = None
+
   /**
    * Returns the current default database in this session.
    */
-  override def currentDatabase: String = sessionCatalog.getCurrentDatabase
+  override def currentDatabase: String =
+    currentDatabaseV2.getOrElse(sessionCatalog.getCurrentDatabase)
 
   /**
    * Sets the current default database in this session.
    */
   @throws[AnalysisException]("database does not exist")
   override def setCurrentDatabase(dbName: String): Unit = {
-    requireDatabaseExists(dbName)
-    sessionCatalog.setCurrentDatabase(dbName)
+    // `dbName` could be either a single database name (behavior in Spark 3.3 and prior) or
+    // a qualified namespace with catalog name. We assume it's a single database name
+    // and check if we can find the dbName in sessionCatalog. If so, we set the use old
+    // sessionCatalog APIs to set current database. Otherwise, we try 3-part name parsing and
+    // check if the database exists with catalogV2 APIs
+    if (sessionCatalog.databaseExists(dbName)) {
+      currentDatabaseV2 = None
+      sessionCatalog.setCurrentDatabase(dbName)
+    } else {
+      val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+      val plan = UnresolvedNamespace(ident)
+      sparkSession.sessionState.executePlan(plan).analyzed match {
+        case ResolvedNamespace(catalog: SupportsNamespaces, name) =>
+          if (catalog.namespaceExists(ident.tail.toArray)) {
+            currentDatabaseV2 = Some(dbName)
+          } else {
+            throw QueryCompilationErrors.databaseDoesNotExistError(dbName)
+          }
+        // TODO what to do if it doesn't support namespaces
+      }
+    }
   }
 
   /**
@@ -191,7 +208,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
-    requireDatabaseExists(dbName)
+    if (!sessionCatalog.databaseExists(dbName)) {
+      throw QueryCompilationErrors.databaseDoesNotExistError(dbName)
+    }
     val functions = sessionCatalog.listFunctions(dbName).map { case (functIdent, _) =>
       makeFunction(functIdent)
     }
