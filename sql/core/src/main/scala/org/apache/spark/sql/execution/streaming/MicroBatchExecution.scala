@@ -602,6 +602,8 @@ class MicroBatchExecution(
                 newRelation = newRelation.withMetadataColumns()
               }
               catalogTable.foreach { table =>
+                assert(newRelation.catalogTable.isEmpty,
+                  s"Source $source should not produce the information of catalog table by its own.")
                 newRelation = newRelation.copy(catalogTable = Some(table))
               }
               newRelation
