@@ -309,17 +309,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val plan = UnresolvedNamespace(ident)
       val resolved = sparkSession.sessionState.executePlan(plan).analyzed
       val db = ident.tail
-      // metadata only includes 'owner' AFAICT in tests
       val metadata = resolved match {
-        // TODO unify this somehow?
         case ResolvedNamespace(catalog: SupportsNamespaces, _) =>
           catalog.loadNamespaceMetadata(db.toArray)
+        // TODO what to do if it doesn't support namespaces
         case _ => throw new RuntimeException(s"unexpected catalog resolved: $resolved")
       }
       new Database(
         name = db.mkString("."),
-        description = metadata.get("description"),
-        locationUri = metadata.get("locationUri"))
+        description = metadata.get("comment"),
+        locationUri = metadata.get("location"))
     }
   }
 

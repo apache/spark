@@ -818,10 +818,14 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("three layer namespace compatibility - get database") {
-    Seq(("testcat", "somedb"), ("testcat", "ns.somedb")).foreach { case (catalog, db) =>
-      val qualifiedDb = s"$catalog.$db"
-      sql(s"CREATE NAMESPACE $qualifiedDb")
-      assert(spark.catalog.getDatabase(qualifiedDb).name === db)
+    Seq(("testcat", "somedb"), ("testcat", "ns.somedb")).foreach { case (catalog, dbName) =>
+      val qualifiedDb = s"$catalog.$dbName"
+      // TODO test properties? WITH DBPROPERTIES (prop='val')
+      sql(s"CREATE NAMESPACE $qualifiedDb COMMENT 'test comment' LOCATION '/test/location'")
+      val db = spark.catalog.getDatabase(qualifiedDb)
+      assert(db.name === dbName)
+      assert(db.description === "test comment")
+      assert(db.locationUri === "file:/test/location")
     }
     intercept[AnalysisException](spark.catalog.getDatabase("randomcat.db10"))
   }
