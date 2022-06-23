@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
@@ -180,7 +181,8 @@ case class DescribeDatabaseCommand(
       sparkSession.sessionState.catalog.getDatabaseMetadata(databaseName)
     val allDbProperties = dbMetadata.properties
     val result =
-      Row("Database Name", dbMetadata.name) ::
+      Row("Catalog Name", SESSION_CATALOG_NAME) ::
+        Row("Database Name", dbMetadata.name) ::
         Row("Comment", dbMetadata.description) ::
         Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
         Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
@@ -495,7 +497,7 @@ case class AlterTableAddPartitionCommand(
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
 
-    sparkSession.catalog.refreshTable(table.identifier.quotedString)
+    sparkSession.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
     if (table.stats.nonEmpty && sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       // Updating table stats only if new partition is not empty
       val addedSize = CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
@@ -547,7 +549,7 @@ case class AlterTableRenamePartitionCommand(
 
     catalog.renamePartitions(
       tableName, Seq(normalizedOldPartition), Seq(normalizedNewPartition))
-    sparkSession.catalog.refreshTable(table.identifier.quotedString)
+    sparkSession.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
     Seq.empty[Row]
   }
 
@@ -592,7 +594,7 @@ case class AlterTableDropPartitionCommand(
       table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
       retainData = retainData)
 
-    sparkSession.catalog.refreshTable(table.identifier.quotedString)
+    sparkSession.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
     CommandUtils.updateTableStats(sparkSession, table)
 
     Seq.empty[Row]
@@ -691,7 +693,7 @@ case class RepairTableCommand(
     // before Spark 2.1 unless they are converted via `msck repair table`.
     spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
     try {
-      spark.catalog.refreshTable(tableIdentWithDB)
+      spark.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
     } catch {
       case NonFatal(e) =>
         logError(s"Cannot refresh the table '$tableIdentWithDB'. A query of the table " +
@@ -879,7 +881,7 @@ case class AlterTableSetLocationCommand(
         // No partition spec is specified, so we set the location for the table itself
         catalog.alterTable(table.withNewStorage(locationUri = Some(locUri)))
     }
-    sparkSession.catalog.refreshTable(table.identifier.quotedString)
+    sparkSession.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
     CommandUtils.updateTableStats(sparkSession, table)
     Seq.empty[Row]
   }

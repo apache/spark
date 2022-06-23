@@ -284,7 +284,11 @@ case class CatalogTable(
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
-  def qualifiedName: String = identifier.unquotedString
+  def qualifiedName: String = if (tableType == CatalogTableType.VIEW) {
+    identifier.unquotedStringWithoutCatalog
+  } else {
+    identifier.unquotedString
+  }
 
   /**
    * Return the current catalog and namespace (concatenated as a Seq[String]) of when the view was

@@ -16,17 +16,17 @@ TakeOrderedAndProject (156)
    :              :           :     :  +- * BroadcastHashJoin Inner BuildRight (9)
    :              :           :     :     :- * Filter (3)
    :              :           :     :     :  +- * ColumnarToRow (2)
-   :              :           :     :     :     +- Scan parquet default.catalog_sales (1)
+   :              :           :     :     :     +- Scan parquet spark_catalog.default.catalog_sales (1)
    :              :           :     :     +- BroadcastExchange (8)
    :              :           :     :        +- * Project (7)
    :              :           :     :           +- * Filter (6)
    :              :           :     :              +- * ColumnarToRow (5)
-   :              :           :     :                 +- Scan parquet default.customer_demographics (4)
+   :              :           :     :                 +- Scan parquet spark_catalog.default.customer_demographics (4)
    :              :           :     +- ReusedExchange (11)
    :              :           +- BroadcastExchange (17)
    :              :              +- * Filter (16)
    :              :                 +- * ColumnarToRow (15)
-   :              :                    +- Scan parquet default.item (14)
+   :              :                    +- Scan parquet spark_catalog.default.item (14)
    :              +- * Sort (42)
    :                 +- Exchange (41)
    :                    +- * Project (40)
@@ -38,16 +38,16 @@ TakeOrderedAndProject (156)
    :                          :           :- * Project (25)
    :                          :           :  +- * Filter (24)
    :                          :           :     +- * ColumnarToRow (23)
-   :                          :           :        +- Scan parquet default.customer (22)
+   :                          :           :        +- Scan parquet spark_catalog.default.customer (22)
    :                          :           +- BroadcastExchange (29)
    :                          :              +- * Filter (28)
    :                          :                 +- * ColumnarToRow (27)
-   :                          :                    +- Scan parquet default.customer_address (26)
+   :                          :                    +- Scan parquet spark_catalog.default.customer_address (26)
    :                          +- * Sort (38)
    :                             +- Exchange (37)
    :                                +- * Filter (36)
    :                                   +- * ColumnarToRow (35)
-   :                                      +- Scan parquet default.customer_demographics (34)
+   :                                      +- Scan parquet spark_catalog.default.customer_demographics (34)
    :- * HashAggregate (72)
    :  +- Exchange (71)
    :     +- * HashAggregate (70)
@@ -66,11 +66,11 @@ TakeOrderedAndProject (156)
    :                          :           :- * Project (53)
    :                          :           :  +- * Filter (52)
    :                          :           :     +- * ColumnarToRow (51)
-   :                          :           :        +- Scan parquet default.customer (50)
+   :                          :           :        +- Scan parquet spark_catalog.default.customer (50)
    :                          :           +- BroadcastExchange (57)
    :                          :              +- * Filter (56)
    :                          :                 +- * ColumnarToRow (55)
-   :                          :                    +- Scan parquet default.customer_address (54)
+   :                          :                    +- Scan parquet spark_catalog.default.customer_address (54)
    :                          +- * Sort (63)
    :                             +- ReusedExchange (62)
    :- * HashAggregate (98)
@@ -91,12 +91,12 @@ TakeOrderedAndProject (156)
    :                          :           :- * Project (78)
    :                          :           :  +- * Filter (77)
    :                          :           :     +- * ColumnarToRow (76)
-   :                          :           :        +- Scan parquet default.customer (75)
+   :                          :           :        +- Scan parquet spark_catalog.default.customer (75)
    :                          :           +- BroadcastExchange (83)
    :                          :              +- * Project (82)
    :                          :                 +- * Filter (81)
    :                          :                    +- * ColumnarToRow (80)
-   :                          :                       +- Scan parquet default.customer_address (79)
+   :                          :                       +- Scan parquet spark_catalog.default.customer_address (79)
    :                          +- * Sort (89)
    :                             +- ReusedExchange (88)
    :- * HashAggregate (133)
@@ -112,7 +112,7 @@ TakeOrderedAndProject (156)
    :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (103)
    :              :     :     :     :- * Filter (101)
    :              :     :     :     :  +- * ColumnarToRow (100)
-   :              :     :     :     :     +- Scan parquet default.catalog_sales (99)
+   :              :     :     :     :     +- Scan parquet spark_catalog.default.catalog_sales (99)
    :              :     :     :     +- ReusedExchange (102)
    :              :     :     +- ReusedExchange (105)
    :              :     +- BroadcastExchange (125)
@@ -124,15 +124,15 @@ TakeOrderedAndProject (156)
    :              :              :        :- * Project (111)
    :              :              :        :  +- * Filter (110)
    :              :              :        :     +- * ColumnarToRow (109)
-   :              :              :        :        +- Scan parquet default.customer (108)
+   :              :              :        :        +- Scan parquet spark_catalog.default.customer (108)
    :              :              :        +- BroadcastExchange (116)
    :              :              :           +- * Project (115)
    :              :              :              +- * Filter (114)
    :              :              :                 +- * ColumnarToRow (113)
-   :              :              :                    +- Scan parquet default.customer_address (112)
+   :              :              :                    +- Scan parquet spark_catalog.default.customer_address (112)
    :              :              +- * Filter (122)
    :              :                 +- * ColumnarToRow (121)
-   :              :                    +- Scan parquet default.customer_demographics (120)
+   :              :                    +- Scan parquet spark_catalog.default.customer_demographics (120)
    :              +- ReusedExchange (128)
    +- * HashAggregate (154)
       +- Exchange (153)
@@ -147,17 +147,17 @@ TakeOrderedAndProject (156)
                   :     :     :  +- * BroadcastHashJoin Inner BuildRight (138)
                   :     :     :     :- * Filter (136)
                   :     :     :     :  +- * ColumnarToRow (135)
-                  :     :     :     :     +- Scan parquet default.catalog_sales (134)
+                  :     :     :     :     +- Scan parquet spark_catalog.default.catalog_sales (134)
                   :     :     :     +- ReusedExchange (137)
                   :     :     +- ReusedExchange (140)
                   :     +- BroadcastExchange (146)
                   :        +- * Filter (145)
                   :           +- * ColumnarToRow (144)
-                  :              +- Scan parquet default.item (143)
+                  :              +- Scan parquet spark_catalog.default.item (143)
                   +- ReusedExchange (149)
 
 
-(1) Scan parquet default.catalog_sales
+(1) Scan parquet spark_catalog.default.catalog_sales
 Output [9]: [cs_bill_customer_sk#1, cs_bill_cdemo_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cs_sold_date_sk#9]
 Batched: true
 Location: InMemoryFileIndex []
@@ -172,7 +172,7 @@ Input [9]: [cs_bill_customer_sk#1, cs_bill_cdemo_sk#2, cs_item_sk#3, cs_quantity
 Input [9]: [cs_bill_customer_sk#1, cs_bill_cdemo_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cs_sold_date_sk#9]
 Condition : ((isnotnull(cs_bill_cdemo_sk#2) AND isnotnull(cs_bill_customer_sk#1)) AND isnotnull(cs_item_sk#3))
 
-(4) Scan parquet default.customer_demographics
+(4) Scan parquet spark_catalog.default.customer_demographics
 Output [4]: [cd_demo_sk#11, cd_gender#12, cd_education_status#13, cd_dep_count#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
@@ -215,7 +215,7 @@ Join condition: None
 Output [8]: [cs_bill_customer_sk#1, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cd_dep_count#14]
 Input [10]: [cs_bill_customer_sk#1, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cs_sold_date_sk#9, cd_dep_count#14, d_date_sk#15]
 
-(14) Scan parquet default.item
+(14) Scan parquet spark_catalog.default.item
 Output [2]: [i_item_sk#16, i_item_id#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -250,7 +250,7 @@ Arguments: hashpartitioning(cs_bill_customer_sk#1, 5), ENSURE_REQUIREMENTS, [pla
 Input [8]: [cs_bill_customer_sk#1, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cd_dep_count#14, i_item_id#17]
 Arguments: [cs_bill_customer_sk#1 ASC NULLS FIRST], false, 0
 
-(22) Scan parquet default.customer
+(22) Scan parquet spark_catalog.default.customer
 Output [5]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_month#21, c_birth_year#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -268,7 +268,7 @@ Condition : (((c_birth_month#21 IN (9,5,12,4,1,10) AND isnotnull(c_customer_sk#1
 Output [4]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_year#22]
 Input [5]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_month#21, c_birth_year#22]
 
-(26) Scan parquet default.customer_address
+(26) Scan parquet spark_catalog.default.customer_address
 Output [4]: [ca_address_sk#23, ca_county#24, ca_state#25, ca_country#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -303,7 +303,7 @@ Arguments: hashpartitioning(c_current_cdemo_sk#19, 5), ENSURE_REQUIREMENTS, [pla
 Input [6]: [c_customer_sk#18, c_current_cdemo_sk#19, c_birth_year#22, ca_county#24, ca_state#25, ca_country#26]
 Arguments: [c_current_cdemo_sk#19 ASC NULLS FIRST], false, 0
 
-(34) Scan parquet default.customer_demographics
+(34) Scan parquet spark_catalog.default.customer_demographics
 Output [1]: [cd_demo_sk#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
@@ -376,7 +376,7 @@ Output [8]: [cs_bill_customer_sk#1, cs_quantity#4, cs_list_price#5, cs_sales_pri
 Input [8]: [cs_bill_customer_sk#1, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cd_dep_count#14, i_item_id#17]
 Arguments: [cs_bill_customer_sk#1 ASC NULLS FIRST], false, 0
 
-(50) Scan parquet default.customer
+(50) Scan parquet spark_catalog.default.customer
 Output [5]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_month#21, c_birth_year#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -394,7 +394,7 @@ Condition : (((c_birth_month#21 IN (9,5,12,4,1,10) AND isnotnull(c_customer_sk#1
 Output [4]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_year#22]
 Input [5]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_month#21, c_birth_year#22]
 
-(54) Scan parquet default.customer_address
+(54) Scan parquet spark_catalog.default.customer_address
 Output [3]: [ca_address_sk#23, ca_state#25, ca_country#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -487,7 +487,7 @@ Output [8]: [cs_bill_customer_sk#1, cs_quantity#4, cs_list_price#5, cs_sales_pri
 Input [8]: [cs_bill_customer_sk#1, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cd_dep_count#14, i_item_id#17]
 Arguments: [cs_bill_customer_sk#1 ASC NULLS FIRST], false, 0
 
-(75) Scan parquet default.customer
+(75) Scan parquet spark_catalog.default.customer
 Output [5]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_month#21, c_birth_year#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -505,7 +505,7 @@ Condition : (((c_birth_month#21 IN (9,5,12,4,1,10) AND isnotnull(c_customer_sk#1
 Output [4]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_year#22]
 Input [5]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_month#21, c_birth_year#22]
 
-(79) Scan parquet default.customer_address
+(79) Scan parquet spark_catalog.default.customer_address
 Output [3]: [ca_address_sk#23, ca_state#25, ca_country#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -595,7 +595,7 @@ Functions [7]: [avg(agg1#28), avg(agg2#29), avg(agg3#30), avg(agg4#31), avg(agg5
 Aggregate Attributes [7]: [avg(agg1#28)#148, avg(agg2#29)#149, avg(agg3#30)#150, avg(agg4#31)#151, avg(agg5#32)#152, avg(agg6#33)#153, avg(agg7#34)#154]
 Results [11]: [i_item_id#17, ca_country#26, null AS ca_state#155, null AS county#156, avg(agg1#28)#148 AS agg1#157, avg(agg2#29)#149 AS agg2#158, avg(agg3#30)#150 AS agg3#159, avg(agg4#31)#151 AS agg4#160, avg(agg5#32)#152 AS agg5#161, avg(agg6#33)#153 AS agg6#162, avg(agg7#34)#154 AS agg7#163]
 
-(99) Scan parquet default.catalog_sales
+(99) Scan parquet spark_catalog.default.catalog_sales
 Output [9]: [cs_bill_customer_sk#1, cs_bill_cdemo_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cs_sold_date_sk#9]
 Batched: true
 Location: InMemoryFileIndex []
@@ -634,7 +634,7 @@ Join condition: None
 Output [8]: [cs_bill_customer_sk#1, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cd_dep_count#14]
 Input [10]: [cs_bill_customer_sk#1, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cs_sold_date_sk#9, cd_dep_count#14, d_date_sk#15]
 
-(108) Scan parquet default.customer
+(108) Scan parquet spark_catalog.default.customer
 Output [5]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_month#21, c_birth_year#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -652,7 +652,7 @@ Condition : (((c_birth_month#21 IN (9,5,12,4,1,10) AND isnotnull(c_customer_sk#1
 Output [4]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_year#22]
 Input [5]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_birth_month#21, c_birth_year#22]
 
-(112) Scan parquet default.customer_address
+(112) Scan parquet spark_catalog.default.customer_address
 Output [2]: [ca_address_sk#23, ca_state#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -687,7 +687,7 @@ Input [5]: [c_customer_sk#18, c_current_cdemo_sk#19, c_current_addr_sk#20, c_bir
 Input [3]: [c_customer_sk#18, c_current_cdemo_sk#19, c_birth_year#22]
 Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=18]
 
-(120) Scan parquet default.customer_demographics
+(120) Scan parquet spark_catalog.default.customer_demographics
 Output [1]: [cd_demo_sk#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
@@ -753,7 +753,7 @@ Functions [7]: [avg(agg1#28), avg(agg2#29), avg(agg3#30), avg(agg4#31), avg(agg5
 Aggregate Attributes [7]: [avg(agg1#28)#192, avg(agg2#29)#193, avg(agg3#30)#194, avg(agg4#31)#195, avg(agg5#32)#196, avg(agg6#33)#197, avg(agg7#34)#198]
 Results [11]: [i_item_id#17, null AS ca_country#199, null AS ca_state#200, null AS county#201, avg(agg1#28)#192 AS agg1#202, avg(agg2#29)#193 AS agg2#203, avg(agg3#30)#194 AS agg3#204, avg(agg4#31)#195 AS agg4#205, avg(agg5#32)#196 AS agg5#206, avg(agg6#33)#197 AS agg6#207, avg(agg7#34)#198 AS agg7#208]
 
-(134) Scan parquet default.catalog_sales
+(134) Scan parquet spark_catalog.default.catalog_sales
 Output [9]: [cs_bill_customer_sk#1, cs_bill_cdemo_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cs_sold_date_sk#9]
 Batched: true
 Location: InMemoryFileIndex []
@@ -792,7 +792,7 @@ Join condition: None
 Output [8]: [cs_bill_customer_sk#1, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cd_dep_count#14]
 Input [10]: [cs_bill_customer_sk#1, cs_item_sk#3, cs_quantity#4, cs_list_price#5, cs_sales_price#6, cs_coupon_amt#7, cs_net_profit#8, cs_sold_date_sk#9, cd_dep_count#14, d_date_sk#15]
 
-(143) Scan parquet default.item
+(143) Scan parquet spark_catalog.default.item
 Output [1]: [i_item_sk#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -862,10 +862,10 @@ BroadcastExchange (161)
 +- * Project (160)
    +- * Filter (159)
       +- * ColumnarToRow (158)
-         +- Scan parquet default.date_dim (157)
+         +- Scan parquet spark_catalog.default.date_dim (157)
 
 
-(157) Scan parquet default.date_dim
+(157) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_date_sk#15, d_year#255]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

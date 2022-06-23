@@ -849,7 +849,7 @@ class SessionCatalog(
     if (isTempView) {
       None
     } else {
-      val viewName = metadata.identifier.unquotedString
+      val viewName = metadata.identifier.unquotedStringWithoutCatalog
       val viewText = metadata.viewText.get
       val userSpecifiedColumns =
         if (metadata.schema.fieldNames.toSeq == metadata.viewQueryColumnNames) {
@@ -1456,7 +1456,9 @@ class SessionCatalog(
         className, func.identifier)
     }
     val clazz = Utils.classForName(className)
-    val name = func.identifier.unquotedString
+    // do not add session catalog in function builder because we need use the name to lookup in
+    // external catalog
+    val name = func.identifier.unquotedStringWithoutCatalog
     (input: Seq[Expression]) => functionExpressionBuilder.makeExpression(name, clazz, input)
   }
 
@@ -1763,7 +1765,7 @@ class SessionCatalog(
   private def listRegisteredFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(_.database.forall(_ == db))
-    StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
+    StringUtils.filterPattern(functions.map(_.unquotedStringWithoutCatalog), pattern).map { f =>
       // In functionRegistry, function names are stored as an unquoted format.
       Try(parser.parseFunctionIdentifier(f)) match {
         case Success(e) => e

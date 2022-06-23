@@ -246,19 +246,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def viewDepthExceedsMaxResolutionDepthError(
       identifier: TableIdentifier, maxNestedViewDepth: Int, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"The depth of view $identifier exceeds the maximum " +
-      s"view resolution depth ($maxNestedViewDepth). Analysis is aborted to " +
+    new AnalysisException(s"The depth of view ${identifier.quotedStringWithoutCatalog} " +
+      s"exceeds the maximum view resolution depth ($maxNestedViewDepth). Analysis is aborted to " +
       s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
       "around this.", t.origin.line, t.origin.startPosition)
   }
 
   def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Inserting into a view is not allowed. View: $identifier.",
+    new AnalysisException(
+      s"Inserting into a view is not allowed. View: ${identifier.quotedStringWithoutCatalog}.",
       t.origin.line, t.origin.startPosition)
   }
 
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Writing into a view is not allowed. View: $identifier.",
+    new AnalysisException(
+      s"Writing into a view is not allowed. View: ${identifier.quotedStringWithoutCatalog}.",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -634,14 +636,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotRenameTempViewWithDatabaseSpecifiedError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
-    new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': cannot " +
+    new AnalysisException(s"RENAME TEMPORARY VIEW from '${oldName.quotedStringWithoutCatalog}' " +
+      s"to '${newName.quotedStringWithoutCatalog}': cannot " +
       s"specify database name '${newName.database.get}' in the destination table")
   }
 
   def cannotRenameTempViewToExistingTableError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
-    new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': " +
-      "destination table already exists")
+    new AnalysisException(s"RENAME TEMPORARY VIEW from '${oldName.quotedStringWithoutCatalog}' " +
+      s"to '${newName.quotedStringWithoutCatalog}': destination table already exists")
   }
 
   def invalidPartitionSpecError(details: String): Throwable = {
@@ -1734,7 +1737,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
-    new AnalysisException(s"Temporary view $tableIdent is not cached for analyzing columns.")
+    new AnalysisException(s"Temporary view ${tableIdent.quotedStringWithoutCatalog} " +
+      "is not cached for analyzing columns.")
   }
 
   def columnTypeNotSupportStatisticsCollectionError(
@@ -1894,11 +1898,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def alterAddColNotSupportViewError(table: TableIdentifier): Throwable = {
+    // scalastyle:off
     new AnalysisException(
       s"""
          |ALTER ADD COLUMNS does not support views.
-         |You must drop and re-create the views for adding the new columns. Views: $table
+         |You must drop and re-create the views for adding the new columns. Views: ${table.quotedStringWithoutCatalog}
        """.stripMargin)
+    // scalastyle:on
   }
 
   def alterAddColNotSupportDatasourceTableError(
@@ -2042,8 +2048,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def viewAlreadyExistsError(name: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"View $name already exists. If you want to update the view definition, " +
-        "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
+      s"View ${name.quotedStringWithoutCatalog} already exists. If you want to update " +
+        "the view definition, please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
   }
 
   def createPersistedViewFromDatasetAPINotAllowedError(): Throwable = {
@@ -2053,21 +2059,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def recursiveViewDetectedError(
       viewIdent: TableIdentifier,
       newPath: Seq[TableIdentifier]): Throwable = {
-    new AnalysisException(s"Recursive view $viewIdent detected " +
-      s"(cycle: ${newPath.mkString(" -> ")})")
+    new AnalysisException(s"Recursive view ${viewIdent.quotedStringWithoutCatalog} detected " +
+      s"(cycle: ${newPath.map(_.quotedStringWithoutCatalog).mkString(" -> ")})")
   }
 
   def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
       name: TableIdentifier,
       attrName: String): Throwable = {
-    new AnalysisException(s"Not allowed to create a permanent view $name without " +
+    new AnalysisException(
+      s"Not allowed to create a permanent view ${name.quotedStringWithoutCatalog} without " +
       s"explicitly assigning an alias for expression $attrName")
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempViewError(
       name: TableIdentifier,
       nameParts: String): Throwable = {
-    new AnalysisException(s"Not allowed to create a permanent view $name by " +
+    new AnalysisException(
+      s"Not allowed to create a permanent view ${name.quotedStringWithoutCatalog} by " +
       s"referencing a temporary view $nameParts. " +
       "Please create a temp view instead by CREATE TEMP VIEW")
   }
@@ -2075,7 +2083,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def notAllowedToCreatePermanentViewByReferencingTempFuncError(
       name: TableIdentifier,
       funcName: String): Throwable = {
-    new AnalysisException(s"Not allowed to create a permanent view $name by " +
+    new AnalysisException(
+      s"Not allowed to create a permanent view ${name.quotedStringWithoutCatalog} by " +
       s"referencing a temporary function `$funcName`")
   }
 
@@ -2134,7 +2143,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotSpecifyDatabaseForTempViewError(tableIdent: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"Temporary view '$tableIdent' should not have specified a database")
+      s"Temporary view '${tableIdent.quotedStringWithoutCatalog}' should not have specified a " +
+        "database")
   }
 
   def cannotCreateTempViewUsingHiveDataSourceError(): Throwable = {

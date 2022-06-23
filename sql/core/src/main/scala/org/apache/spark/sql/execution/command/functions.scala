@@ -100,7 +100,8 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val name = if (info.getDb != null) info.getDb + "." + info.getName else info.getName
+    val name = FunctionIdentifier(info.getName, Option(info.getDb)).unquotedString
+
     val result = if (info.getClassName != null) {
       Row(s"Function: $name") ::
         Row(s"Class: ${info.getClassName}") ::

@@ -50,6 +50,7 @@ ds                  	string
 hr                  	int                 	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
@@ -84,6 +85,7 @@ ds                  	string
 hr                  	int                 	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
@@ -119,6 +121,7 @@ ds                  	string
 hr                  	int                 	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
@@ -146,6 +149,7 @@ ds                  	string
 hr                  	int                 	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=11]	                    
@@ -181,6 +185,7 @@ ds                  	string
 hr                  	int                 	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
@@ -208,6 +213,7 @@ ds                  	string
 hr                  	int                 	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=11]	                    
@@ -235,6 +241,7 @@ ds                  	string
 hr                  	int                 	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[ds=2017-09-01, hr=5]	                    

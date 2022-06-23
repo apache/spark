@@ -13,27 +13,27 @@ TakeOrderedAndProject (32)
                :     :     :  +- * BroadcastHashJoin Inner BuildRight (9)
                :     :     :     :- * Filter (3)
                :     :     :     :  +- * ColumnarToRow (2)
-               :     :     :     :     +- Scan parquet default.web_sales (1)
+               :     :     :     :     +- Scan parquet spark_catalog.default.web_sales (1)
                :     :     :     +- BroadcastExchange (8)
                :     :     :        +- * Project (7)
                :     :     :           +- * Filter (6)
                :     :     :              +- * ColumnarToRow (5)
-               :     :     :                 +- Scan parquet default.date_dim (4)
+               :     :     :                 +- Scan parquet spark_catalog.default.date_dim (4)
                :     :     +- BroadcastExchange (14)
                :     :        +- * Filter (13)
                :     :           +- * ColumnarToRow (12)
-               :     :              +- Scan parquet default.web_site (11)
+               :     :              +- Scan parquet spark_catalog.default.web_site (11)
                :     +- BroadcastExchange (20)
                :        +- * Filter (19)
                :           +- * ColumnarToRow (18)
-               :              +- Scan parquet default.ship_mode (17)
+               :              +- Scan parquet spark_catalog.default.ship_mode (17)
                +- BroadcastExchange (26)
                   +- * Filter (25)
                      +- * ColumnarToRow (24)
-                        +- Scan parquet default.warehouse (23)
+                        +- Scan parquet spark_catalog.default.warehouse (23)
 
 
-(1) Scan parquet default.web_sales
+(1) Scan parquet spark_catalog.default.web_sales
 Output [5]: [ws_ship_date_sk#1, ws_web_site_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_sold_date_sk#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
@@ -47,7 +47,7 @@ Input [5]: [ws_ship_date_sk#1, ws_web_site_sk#2, ws_ship_mode_sk#3, ws_warehouse
 Input [5]: [ws_ship_date_sk#1, ws_web_site_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_sold_date_sk#5]
 Condition : (((isnotnull(ws_warehouse_sk#4) AND isnotnull(ws_ship_mode_sk#3)) AND isnotnull(ws_web_site_sk#2)) AND isnotnull(ws_ship_date_sk#1))
 
-(4) Scan parquet default.date_dim
+(4) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_date_sk#6, d_month_seq#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -78,7 +78,7 @@ Join condition: None
 Output [5]: [ws_ship_date_sk#1, ws_web_site_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_sold_date_sk#5]
 Input [6]: [ws_ship_date_sk#1, ws_web_site_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_sold_date_sk#5, d_date_sk#6]
 
-(11) Scan parquet default.web_site
+(11) Scan parquet spark_catalog.default.web_site
 Output [2]: [web_site_sk#8, web_name#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_site]
@@ -105,7 +105,7 @@ Join condition: None
 Output [5]: [ws_ship_date_sk#1, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_sold_date_sk#5, web_name#9]
 Input [7]: [ws_ship_date_sk#1, ws_web_site_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_sold_date_sk#5, web_site_sk#8, web_name#9]
 
-(17) Scan parquet default.ship_mode
+(17) Scan parquet spark_catalog.default.ship_mode
 Output [2]: [sm_ship_mode_sk#10, sm_type#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/ship_mode]
@@ -132,7 +132,7 @@ Join condition: None
 Output [5]: [ws_ship_date_sk#1, ws_warehouse_sk#4, ws_sold_date_sk#5, web_name#9, sm_type#11]
 Input [7]: [ws_ship_date_sk#1, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_sold_date_sk#5, web_name#9, sm_ship_mode_sk#10, sm_type#11]
 
-(23) Scan parquet default.warehouse
+(23) Scan parquet spark_catalog.default.warehouse
 Output [2]: [w_warehouse_sk#12, w_warehouse_name#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/warehouse]

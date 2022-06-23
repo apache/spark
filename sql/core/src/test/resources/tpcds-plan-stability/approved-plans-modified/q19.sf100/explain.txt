@@ -19,28 +19,28 @@ TakeOrderedAndProject (39)
                :     :        :     :        :  +- * Project (4)
                :     :        :     :        :     +- * Filter (3)
                :     :        :     :        :        +- * ColumnarToRow (2)
-               :     :        :     :        :           +- Scan parquet default.date_dim (1)
+               :     :        :     :        :           +- Scan parquet spark_catalog.default.date_dim (1)
                :     :        :     :        +- * Filter (8)
                :     :        :     :           +- * ColumnarToRow (7)
-               :     :        :     :              +- Scan parquet default.store_sales (6)
+               :     :        :     :              +- Scan parquet spark_catalog.default.store_sales (6)
                :     :        :     +- * Filter (14)
                :     :        :        +- * ColumnarToRow (13)
-               :     :        :           +- Scan parquet default.customer (12)
+               :     :        :           +- Scan parquet spark_catalog.default.customer (12)
                :     :        +- BroadcastExchange (20)
                :     :           +- * Filter (19)
                :     :              +- * ColumnarToRow (18)
-               :     :                 +- Scan parquet default.store (17)
+               :     :                 +- Scan parquet spark_catalog.default.store (17)
                :     +- * Filter (26)
                :        +- * ColumnarToRow (25)
-               :           +- Scan parquet default.customer_address (24)
+               :           +- Scan parquet spark_catalog.default.customer_address (24)
                +- BroadcastExchange (33)
                   +- * Project (32)
                      +- * Filter (31)
                         +- * ColumnarToRow (30)
-                           +- Scan parquet default.item (29)
+                           +- Scan parquet spark_catalog.default.item (29)
 
 
-(1) Scan parquet default.date_dim
+(1) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#1, d_year#2, d_moy#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -62,7 +62,7 @@ Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
 Input [1]: [d_date_sk#1]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
-(6) Scan parquet default.store_sales
+(6) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_item_sk#4, ss_customer_sk#5, ss_store_sk#6, ss_ext_sales_price#7, ss_sold_date_sk#8]
 Batched: true
 Location: InMemoryFileIndex []
@@ -90,7 +90,7 @@ Input [6]: [d_date_sk#1, ss_item_sk#4, ss_customer_sk#5, ss_store_sk#6, ss_ext_s
 Input [4]: [ss_item_sk#4, ss_customer_sk#5, ss_store_sk#6, ss_ext_sales_price#7]
 Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=2]
 
-(12) Scan parquet default.customer
+(12) Scan parquet spark_catalog.default.customer
 Output [2]: [c_customer_sk#10, c_current_addr_sk#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -113,7 +113,7 @@ Join condition: None
 Output [4]: [ss_item_sk#4, ss_store_sk#6, ss_ext_sales_price#7, c_current_addr_sk#11]
 Input [6]: [ss_item_sk#4, ss_customer_sk#5, ss_store_sk#6, ss_ext_sales_price#7, c_customer_sk#10, c_current_addr_sk#11]
 
-(17) Scan parquet default.store
+(17) Scan parquet spark_catalog.default.store
 Output [2]: [s_store_sk#12, s_zip#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -144,7 +144,7 @@ Input [6]: [ss_item_sk#4, ss_store_sk#6, ss_ext_sales_price#7, c_current_addr_sk
 Input [4]: [ss_item_sk#4, ss_ext_sales_price#7, c_current_addr_sk#11, s_zip#13]
 Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false), [plan_id=4]
 
-(24) Scan parquet default.customer_address
+(24) Scan parquet spark_catalog.default.customer_address
 Output [2]: [ca_address_sk#14, ca_zip#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -167,7 +167,7 @@ Join condition: NOT (substr(ca_zip#15, 1, 5) = substr(s_zip#13, 1, 5))
 Output [2]: [ss_item_sk#4, ss_ext_sales_price#7]
 Input [6]: [ss_item_sk#4, ss_ext_sales_price#7, c_current_addr_sk#11, s_zip#13, ca_address_sk#14, ca_zip#15]
 
-(29) Scan parquet default.item
+(29) Scan parquet spark_catalog.default.item
 Output [6]: [i_item_sk#16, i_brand_id#17, i_brand#18, i_manufact_id#19, i_manufact#20, i_manager_id#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]

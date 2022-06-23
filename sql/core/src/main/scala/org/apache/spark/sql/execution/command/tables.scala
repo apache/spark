@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -401,7 +402,7 @@ case class LoadDataCommand(
     }
 
     // Refresh the data and metadata cache to ensure the data visible to the users
-    sparkSession.catalog.refreshTable(tableIdentWithDB)
+    sparkSession.catalog.refreshTable(targetTable.identifier.quotedStringWithoutCatalog)
 
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
@@ -569,7 +570,7 @@ case class TruncateTableCommand(
     }
     // After deleting the data, refresh the table to make sure we don't keep around a stale
     // file relation in the metastore cache and cached table data in the cache manager.
-    spark.catalog.refreshTable(tableIdentWithDB)
+    spark.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
 
     CommandUtils.updateTableStats(spark, table)
     Seq.empty[Row]
@@ -696,6 +697,7 @@ case class DescribeTableCommand(
       buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Detailed Partition Information", "", "")
+    append(buffer, "Catalog", SESSION_CATALOG_NAME, "")
     append(buffer, "Database", table.database, "")
     append(buffer, "Table", tableIdentifier.table, "")
     partition.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
@@ -1378,7 +1380,7 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
     // drop the original cached version and make the new version cached lazily.
-    sparkSession.catalog.refreshTable(tableIdent.quotedString)
+    sparkSession.catalog.refreshTable(tableIdent.quotedStringWithoutCatalog)
     Seq.empty[Row]
   }
 }

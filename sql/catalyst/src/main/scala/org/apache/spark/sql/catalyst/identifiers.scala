@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LEGACY_IDENTIFIER_OUTPUT_CATALOG_NAME
+
 /**
  * An identifier that optionally specifies a database.
  *
- * Format (unquoted): "name" or "db.name"
- * Format (quoted): "`name`" or "`db`.`name`"
+ * Format (unquoted): "name" or "SESSION_CATALOG_NAME.db.name"
+ * Format (quoted): "`name`" or "`SESSION_CATALOG_NAME`.`db`.`name`"
  */
 sealed trait IdentifierWithDatabase {
   val identifier: String
@@ -34,13 +38,35 @@ sealed trait IdentifierWithDatabase {
   private def quoteIdentifier(name: String): String = name.replace("`", "``")
 
   def quotedString: String = {
+    if (SQLConf.get.getConf(LEGACY_IDENTIFIER_OUTPUT_CATALOG_NAME) && database.isDefined) {
+      val replacedId = quoteIdentifier(identifier)
+      val replacedDb = database.map(quoteIdentifier(_))
+      s"`$SESSION_CATALOG_NAME`.`${replacedDb.get}`.`$replacedId`"
+    } else {
+      quotedStringWithoutCatalog
+    }
+  }
+
+  def quotedStringWithoutCatalog: String = {
     val replacedId = quoteIdentifier(identifier)
     val replacedDb = database.map(quoteIdentifier(_))
 
-    if (replacedDb.isDefined) s"`${replacedDb.get}`.`$replacedId`" else s"`$replacedId`"
+    if (replacedDb.isDefined) {
+      s"`${replacedDb.get}`.`$replacedId`"
+    } else {
+      s"`$replacedId`"
+    }
   }
 
   def unquotedString: String = {
+    if (SQLConf.get.getConf(LEGACY_IDENTIFIER_OUTPUT_CATALOG_NAME) && database.isDefined) {
+      s"$SESSION_CATALOG_NAME.${database.get}.$identifier"
+    } else {
+      unquotedStringWithoutCatalog
+    }
+  }
+
+  def unquotedStringWithoutCatalog: String = {
     if (database.isDefined) s"${database.get}.$identifier" else identifier
   }
 

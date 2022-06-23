@@ -149,8 +149,8 @@ case class CreateViewCommand(
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
         // uncache the cached data before replacing an exists view
-        logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
-        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
+        logDebug(s"Try to uncache ${viewIdent.quotedStringWithoutCatalog} before replacing.")
+        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedStringWithoutCatalog)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
         // Nothing we need to retain from the old view, so just drop and create a new one
@@ -288,8 +288,8 @@ case class AlterViewAsCommand(
     val viewIdent = viewMeta.identifier
     checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
-    logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
-    CommandUtils.uncacheTableOrView(session, viewIdent.quotedString)
+    logDebug(s"Try to uncache ${viewIdent.quotedStringWithoutCatalog} before replacing.")
+    CommandUtils.uncacheTableOrView(session, viewIdent.quotedStringWithoutCatalog)
 
     val newProperties = generateViewProperties(
       viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
@@ -614,13 +614,13 @@ object ViewHelper extends SQLConfHelper with Logging {
     }.getOrElse(false)
     val storeAnalyzedPlanForView = conf.storeAnalyzedPlanForView || originalText.isEmpty
     if (replace && uncache) {
-      logDebug(s"Try to uncache ${name.quotedString} before replacing.")
+      logDebug(s"Try to uncache ${name.quotedStringWithoutCatalog} before replacing.")
       if (!storeAnalyzedPlanForView) {
         // Skip cyclic check because when stored analyzed plan for view, the depended
         // view is already converted to the underlying tables. So no cyclic views.
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
       }
-      CommandUtils.uncacheTableOrView(session, name.quotedString)
+      CommandUtils.uncacheTableOrView(session, name.quotedStringWithoutCatalog)
     }
     if (!storeAnalyzedPlanForView) {
       TemporaryViewRelation(

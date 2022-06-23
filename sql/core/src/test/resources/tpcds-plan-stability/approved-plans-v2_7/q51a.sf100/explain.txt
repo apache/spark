@@ -30,7 +30,7 @@ TakeOrderedAndProject (70)
                :                 :                 :                             +- * BroadcastHashJoin Inner BuildRight (5)
                :                 :                 :                                :- * Filter (3)
                :                 :                 :                                :  +- * ColumnarToRow (2)
-               :                 :                 :                                :     +- Scan parquet default.web_sales (1)
+               :                 :                 :                                :     +- Scan parquet spark_catalog.default.web_sales (1)
                :                 :                 :                                +- ReusedExchange (4)
                :                 :                 +- * Sort (21)
                :                 :                    +- Exchange (20)
@@ -57,7 +57,7 @@ TakeOrderedAndProject (70)
                :                                   :                             +- * BroadcastHashJoin Inner BuildRight (32)
                :                                   :                                :- * Filter (30)
                :                                   :                                :  +- * ColumnarToRow (29)
-               :                                   :                                :     +- Scan parquet default.store_sales (28)
+               :                                   :                                :     +- Scan parquet spark_catalog.default.store_sales (28)
                :                                   :                                +- ReusedExchange (31)
                :                                   +- * Sort (48)
                :                                      +- Exchange (47)
@@ -71,7 +71,7 @@ TakeOrderedAndProject (70)
                         +- ReusedExchange (61)
 
 
-(1) Scan parquet default.web_sales
+(1) Scan parquet spark_catalog.default.web_sales
 Output [3]: [ws_item_sk#1, ws_sales_price#2, ws_sold_date_sk#3]
 Batched: true
 Location: InMemoryFileIndex []
@@ -194,7 +194,7 @@ Arguments: hashpartitioning(item_sk#10, d_date#6, 5), ENSURE_REQUIREMENTS, [plan
 Input [3]: [item_sk#10, d_date#6, cume_sales#23]
 Arguments: [item_sk#10 ASC NULLS FIRST, d_date#6 ASC NULLS FIRST], false, 0
 
-(28) Scan parquet default.store_sales
+(28) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_item_sk#24, ss_sales_price#25, ss_sold_date_sk#26]
 Batched: true
 Location: InMemoryFileIndex []
@@ -395,10 +395,10 @@ BroadcastExchange (75)
 +- * Project (74)
    +- * Filter (73)
       +- * ColumnarToRow (72)
-         +- Scan parquet default.date_dim (71)
+         +- Scan parquet spark_catalog.default.date_dim (71)
 
 
-(71) Scan parquet default.date_dim
+(71) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#5, d_date#6, d_month_seq#63]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

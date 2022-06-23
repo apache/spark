@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, RefreshTable, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
@@ -263,7 +264,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         getTable3LNamespace(tableName)
       }
     } catch {
-      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+      case e: ParseException =>
         getTable3LNamespace(tableName)
     }
   }
@@ -332,7 +333,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
       tableExists(tableIdent.database.orNull, tableIdent.table)
     } catch {
-      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+      case e: ParseException =>
         val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
         val catalog =
           sparkSession.sessionState.catalogManager.catalog(ident(0)).asTableCatalog
@@ -600,7 +601,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           cascade = true)
       }
     } catch {
-      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+      case _: ParseException =>
         sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName),
           cascade = true)
     }
@@ -628,7 +629,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * The method fully refreshes a table or view with the given name including:
-   *   1. The relation cache in the session catalog. The method removes table entry from the cache.
+   *   1. The relation cache in the catalog. The method removes table entry from the cache.
    *   2. The file indexes of all relations used by the given view.
    *   3. Table/View schema in the Hive Metastore if the SQL config
    *      `spark.sql.hive.caseSensitiveInferenceMode` is set to `INFER_AND_SAVE`.
@@ -647,26 +648,38 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def refreshTable(tableName: String): Unit = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val relation = sparkSession.table(tableIdent).queryExecution.analyzed
-
-    relation.refresh()
-
-    // Temporary and global temporary views are not supposed to be put into the relation cache
-    // since they are tracked separately.
-    if (!sessionCatalog.isTempView(tableIdent)) {
-      sessionCatalog.invalidateCachedTable(tableIdent)
+    var tableIdent: TableIdentifier = null
+    try {
+      tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    } catch {
+      case _: ParseException =>
     }
+    if (tableIdent != null) {
+      val relation = sparkSession.table(tableIdent).queryExecution.analyzed
 
-    // Re-caches the logical plan of the relation.
-    // Note this is a no-op for the relation itself if it's not cached, but will clear all
-    // caches referencing this relation. If this relation is cached as an InMemoryRelation,
-    // this will clear the relation cache and caches of all its dependents.
-    relation match {
-      case SubqueryAlias(_, relationPlan) =>
-        sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)
-      case _ =>
-        throw QueryCompilationErrors.unexpectedTypeOfRelationError(relation, tableName)
+      relation.refresh()
+
+      // Temporary and global temporary views are not supposed to be put into the relation cache
+      // since they are tracked separately.
+      if (!sessionCatalog.isTempView(tableIdent)) {
+        sessionCatalog.invalidateCachedTable(tableIdent)
+      }
+
+      // Re-caches the logical plan of the relation.
+      // Note this is a no-op for the relation itself if it's not cached, but will clear all
+      // caches referencing this relation. If this relation is cached as an InMemoryRelation,
+      // this will clear the relation cache and caches of all its dependents.
+      relation match {
+        case SubqueryAlias(_, relationPlan) =>
+          sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)
+        case _ =>
+          throw QueryCompilationErrors.unexpectedTypeOfRelationError(relation, tableName)
+      }
+    } else {
+      val nameParts = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+      sparkSession.sessionState.executePlan(
+        RefreshTable(UnresolvedTableOrView(nameParts, "Catalog.refreshTable", true)))
+        .toRdd.collect()
     }
   }
 

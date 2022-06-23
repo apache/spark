@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, Ta
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -165,7 +166,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         }
         Seq(5 -> "e").toDF("i", "j").write.mode("append").format(format).saveAsTable("t1")
       }
-      assert(e.message.contains("The format of the existing table default.t1 is "))
+      assert(e.message.contains(
+        s"The format of the existing table $SESSION_CATALOG_NAME.default.t1 is "))
       assert(e.message.contains("It doesn't match the specified format"))
     }
   }
@@ -371,7 +373,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val hiddenGarbageFile = new File(tableLoc.getCanonicalPath, ".garbage")
         hiddenGarbageFile.createNewFile()
         val exMsgWithDefaultDB =
-          "Can not create the managed table('`default`.`tab1`'). The associated location"
+          s"Can not create the managed table('`$SESSION_CATALOG_NAME`.`default`.`tab1`'). " +
+            s"The associated location"
         var ex = intercept[AnalysisException] {
           sql(s"CREATE TABLE tab1 USING ${dataSource} AS SELECT 1, 'a'")
         }.getMessage
@@ -520,7 +523,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING parquet")
         }.getMessage
         assert(errMsg.contains(
-          "Found duplicate column(s) in the table definition of `default`.`t`"))
+          "Found duplicate column(s) in the table definition of " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`t`"))
       }
     }
   }
@@ -529,16 +533,16 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
     }
-    assert(e.message == "partition column c is not defined in table default.tbl, " +
-      "defined table columns are: a, b")
+    assert(e.message == "partition column c is not defined in table " +
+      s"$SESSION_CATALOG_NAME.default.tbl, defined table columns are: a, b")
   }
 
   test("create table - bucket column names not in table definition") {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
-    assert(e.message == "bucket column c is not defined in table default.tbl, " +
-      "defined table columns are: a, b")
+    assert(e.message == "bucket column c is not defined in table " +
+      s"$SESSION_CATALOG_NAME.default.tbl, defined table columns are: a, b")
   }
 
   test("create table - column repeated in partition columns") {
@@ -591,7 +595,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
               .option("path", dir2.getCanonicalPath)
               .saveAsTable("path_test")
           }.getMessage
-          assert(ex.contains("The location of the existing table `default`.`path_test`"))
+          assert(ex.contains(
+            s"The location of the existing table `$SESSION_CATALOG_NAME`.`default`.`path_test`"))
 
           checkAnswer(
             spark.table("path_test"), Row(1L, "a") :: Nil)
@@ -674,7 +679,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         checkAnswer(
           sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
             .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Namespace Name", dbNameWithoutBackTicks) ::
+          Row("Catalog Name", SESSION_CATALOG_NAME) ::
+            Row("Namespace Name", dbNameWithoutBackTicks) ::
             Row("Comment", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)

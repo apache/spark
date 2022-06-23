@@ -11,35 +11,35 @@ TakeOrderedAndProject (38)
                :     :  +- * BroadcastHashJoin Inner BuildRight (19)
                :     :     :- * Filter (3)
                :     :     :  +- * ColumnarToRow (2)
-               :     :     :     +- Scan parquet default.supplier (1)
+               :     :     :     +- Scan parquet spark_catalog.default.supplier (1)
                :     :     +- BroadcastExchange (18)
                :     :        +- * BroadcastHashJoin LeftAnti BuildRight (17)
                :     :           :- * BroadcastHashJoin LeftSemi BuildRight (11)
                :     :           :  :- * Project (7)
                :     :           :  :  +- * Filter (6)
                :     :           :  :     +- * ColumnarToRow (5)
-               :     :           :  :        +- Scan parquet default.lineitem (4)
+               :     :           :  :        +- Scan parquet spark_catalog.default.lineitem (4)
                :     :           :  +- BroadcastExchange (10)
                :     :           :     +- * ColumnarToRow (9)
-               :     :           :        +- Scan parquet default.lineitem (8)
+               :     :           :        +- Scan parquet spark_catalog.default.lineitem (8)
                :     :           +- BroadcastExchange (16)
                :     :              +- * Project (15)
                :     :                 +- * Filter (14)
                :     :                    +- * ColumnarToRow (13)
-               :     :                       +- Scan parquet default.lineitem (12)
+               :     :                       +- Scan parquet spark_catalog.default.lineitem (12)
                :     +- BroadcastExchange (25)
                :        +- * Project (24)
                :           +- * Filter (23)
                :              +- * ColumnarToRow (22)
-               :                 +- Scan parquet default.orders (21)
+               :                 +- Scan parquet spark_catalog.default.orders (21)
                +- BroadcastExchange (32)
                   +- * Project (31)
                      +- * Filter (30)
                         +- * ColumnarToRow (29)
-                           +- Scan parquet default.nation (28)
+                           +- Scan parquet spark_catalog.default.nation (28)
 
 
-(1) Scan parquet default.supplier
+(1) Scan parquet spark_catalog.default.supplier
 Output [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/supplier]
@@ -53,7 +53,7 @@ Input [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
 Input [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
 Condition : (isnotnull(s_suppkey#1) AND isnotnull(s_nationkey#3))
 
-(4) Scan parquet default.lineitem
+(4) Scan parquet spark_catalog.default.lineitem
 Output [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -71,7 +71,7 @@ Condition : ((((isnotnull(l_receiptdate#7) AND isnotnull(l_commitdate#6)) AND (l
 Output [2]: [l_orderkey#4, l_suppkey#5]
 Input [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
 
-(8) Scan parquet default.lineitem
+(8) Scan parquet spark_catalog.default.lineitem
 Output [2]: [l_orderkey#8, l_suppkey#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -89,7 +89,7 @@ Left keys [1]: [l_orderkey#4]
 Right keys [1]: [l_orderkey#8]
 Join condition: NOT (l_suppkey#9 = l_suppkey#5)
 
-(12) Scan parquet default.lineitem
+(12) Scan parquet spark_catalog.default.lineitem
 Output [4]: [l_orderkey#10, l_suppkey#11, l_commitdate#12, l_receiptdate#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -129,7 +129,7 @@ Join condition: None
 Output [3]: [s_name#2, s_nationkey#3, l_orderkey#4]
 Input [5]: [s_suppkey#1, s_name#2, s_nationkey#3, l_orderkey#4, l_suppkey#5]
 
-(21) Scan parquet default.orders
+(21) Scan parquet spark_catalog.default.orders
 Output [2]: [o_orderkey#14, o_orderstatus#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
@@ -160,7 +160,7 @@ Join condition: None
 Output [2]: [s_name#2, s_nationkey#3]
 Input [4]: [s_name#2, s_nationkey#3, l_orderkey#4, o_orderkey#14]
 
-(28) Scan parquet default.nation
+(28) Scan parquet spark_catalog.default.nation
 Output [2]: [n_nationkey#16, n_name#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]
