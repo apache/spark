@@ -442,8 +442,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       val (newChild, canRemoveLimit) = pushDownLimit(child, limit + offset)
       if (canRemoveLimit) {
         // Try to push down OFFSET only if the LIMIT operator has been pushed and can be removed.
-        // For `df.offset(n).limit(m)`, try to push down `limit(m + n).offset(n)`.
-        // For example, `df.offset(3).limit(5)`, we can push down `limit(8).offset(3)`.
         val isPushed = pushDownOffset(newChild, offset)
         if (isPushed) {
           newChild
