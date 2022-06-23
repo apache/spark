@@ -32,8 +32,7 @@ import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
     StreamingRelation(
-      dataSource, dataSource.sourceInfo.name,
-      dataSource.sourceInfo.schema.toAttributes)
+      dataSource, dataSource.sourceInfo.name, dataSource.sourceInfo.schema.toAttributes)
   }
 }
 
@@ -44,10 +43,7 @@ object StreamingRelation {
  * It should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
  * passing to [[StreamExecution]] to run a query.
  */
-case class StreamingRelation(
-    dataSource: DataSource,
-    sourceName: String,
-    output: Seq[Attribute])
+case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
   extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
