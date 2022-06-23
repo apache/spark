@@ -447,8 +447,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           newChild
         } else {
           // Still keep the OFFSET operator if we can't push it down.
-          // For example, `df.offset(3).limit(5)`, `limit(8)` has been pushed
-          // and can be removed, Spark still do `offset(3)`.
           Offset(Literal(offset), newChild)
         }
       } else {
