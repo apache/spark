@@ -168,9 +168,15 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
 
   private def generateOutput(percentiles: Seq[Double]): Any = {
     val results = child.dataType match {
+      case ByteType => percentiles.map(_.toByte)
+      case ShortType => percentiles.map(_.toShort)
       case IntegerType | _: YearMonthIntervalType => percentiles.map(_.toInt)
       case LongType | _: DayTimeIntervalType => percentiles.map(_.toLong)
-      case _ => percentiles
+      case FloatType => percentiles.map(_.toFloat)
+      case DoubleType => percentiles
+      case _: DecimalType => percentiles.map(Decimal(_))
+      case other: DataType =>
+        throw QueryExecutionErrors.dataTypeUnexpectedError(other)
     }
     if (percentiles.isEmpty) {
       null
