@@ -1114,4 +1114,17 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("a", 1, "x", "x"),
         Row("b", 0, null, null)))
   }
+
+  test("SPARK-38614: percent_rank should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", percent_rank().over(w)).limit(3),
+      Seq(
+        Row(0, 0.0d),
+        Row(1, 0.01d),
+        Row(2, 0.02d)
+      )
+    )
+  }
 }
