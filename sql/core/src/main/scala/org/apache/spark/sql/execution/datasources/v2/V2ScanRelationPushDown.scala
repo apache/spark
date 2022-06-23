@@ -430,7 +430,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
         if (isPushed) {
           newChild
         } else {
-          // For `df.limit(m).offset(n)`, only push down `limit(m)`.
           // Keep the OFFSET operator if we failed to push down OFFSET to the data source.
           offset.withNewChildren(Seq(newChild))
         }
