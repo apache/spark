@@ -422,28 +422,28 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("simple scan with OFFSET and LIMIT") {
-//    val df1 = spark.read
-//      .table("h2.test.employee")
-//      .where($"dept" === 1)
-//      .offset(1)
-//      .limit(1)
-//    checkLimitRemoved(df1)
-//    checkOffsetRemoved(df1)
-//    checkPushedInfo(df1,
-//      "[DEPT IS NOT NULL, DEPT = 1], PushedLimit: LIMIT 2, PushedOffset: OFFSET 1,")
-//    checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
-//
-//    val df2 = spark.read
-//      .option("pushDownOffset", "false")
-//      .table("h2.test.employee")
-//      .where($"dept" === 1)
-//      .offset(1)
-//      .limit(1)
-//    checkLimitRemoved(df2)
-//    checkOffsetRemoved(df2, false)
-//    checkPushedInfo(df2,
-//      "[DEPT IS NOT NULL, DEPT = 1], PushedLimit: LIMIT 2, ReadSchema:")
-//    checkAnswer(df2, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
+    val df1 = spark.read
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .offset(1)
+      .limit(1)
+    checkLimitRemoved(df1)
+    checkOffsetRemoved(df1)
+    checkPushedInfo(df1,
+      "[DEPT IS NOT NULL, DEPT = 1], PushedLimit: LIMIT 2, PushedOffset: OFFSET 1,")
+    checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
+
+    val df2 = spark.read
+      .option("pushDownOffset", "false")
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .offset(1)
+      .limit(1)
+    checkLimitRemoved(df2)
+    checkOffsetRemoved(df2, false)
+    checkPushedInfo(df2,
+      "[DEPT IS NOT NULL, DEPT = 1], PushedLimit: LIMIT 2, ReadSchema:")
+    checkAnswer(df2, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
     val df3 = spark.read
       .option("pushDownLimit", "false")

@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper with AliasHelper {
@@ -416,8 +416,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
         sHolder.pushedOffset = Some(offset)
       }
       isPushed
-    case p: Project =>
-      pushDownOffset(p.child, offset)
+    case Project(projectList, child) if projectList.forall(_.deterministic) =>
+      pushDownOffset(child, offset)
     case _ => false
   }
 
@@ -425,14 +425,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
     case offset @ LimitAndOffset(limit, offsetValue, child) =>
       val (newChild, canRemoveLimit) = pushDownLimit(child, limit)
       if (canRemoveLimit) {
-        // If we can remove limit, it indicates data source only have one partition.
-        // For `dataset.limit(m).offset(n)`, try to push down `limit(m).offset(n)`.
-        // For example, `dataset.limit(5).offset(3)`, we can push down `limit(5).offset(3)`.
+        // Try to push down OFFSET only if the LIMIT operator has been pushed and can be removed.
+        // For `df.limit(m).offset(n)`, try to push down `limit(m).offset(n)`.
+        // For example, `df.limit(5).offset(3)`, we can push down `limit(5).offset(3)`.
         val isPushed = pushDownOffset(newChild, offsetValue)
         if (isPushed) {
           newChild
         } else {
-          // For `dataset.limit(m).offset(n)`, only push down `limit(m)`.
+          // For `df.limit(m).offset(n)`, only push down `limit(m)`.
           // Keep the OFFSET operator if we failed to push down OFFSET to the data source.
           offset.withNewChildren(Seq(newChild))
         }
@@ -441,29 +441,30 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
         offset
       }
     case globalLimit @ OffsetAndLimit(offset, limit, child) =>
+      // For `df.offset(n).limit(m)`, we can push down `limit(m + n)` first.
       val (newChild, canRemoveLimit) = pushDownLimit(child, limit + offset)
       if (canRemoveLimit) {
-        // If we can remove limit, it indicates data source only have one partition.
-        // For `dataset.offset(n).limit(m)`, try to push down `limit(m + n).offset(n)`.
-        // For example, `dataset.offset(3).limit(5)`, we can push down `limit(8).offset(3)`.
+        // Try to push down OFFSET only if the LIMIT operator has been pushed and can be removed.
+        // For `df.offset(n).limit(m)`, try to push down `limit(m + n).offset(n)`.
+        // For example, `df.offset(3).limit(5)`, we can push down `limit(8).offset(3)`.
         val isPushed = pushDownOffset(newChild, offset)
         if (isPushed) {
           newChild
         } else {
-          // For `dataset.offset(n).limit(m)`, try to push down `limit(m + n)`.
-          // Spark still do `offset(n)`.
-          // For example, `dataset.offset(3).limit(5)`, we can push down `limit(8)`.
-          // Spark still do `offset(3)`.
+          // Still keep the OFFSET operator if we can't push it down.
+          // For example, `df.offset(3).limit(5)`, `limit(8)` has been pushed
+          // and can be removed, Spark still do `offset(3)`.
           Offset(Literal(offset), newChild)
         }
       } else {
-        // For `dataset.offset(n).limit(m)`, try to push down `offset(n)`.
-        // Spark still do `limit(m)`.
+        // For `df.offset(n).limit(m)`, since we can't push down `limit(m + n)`,
+        // try to push down `offset(n)` here.
         val isPushed = pushDownOffset(child, offset)
         if (isPushed) {
-          globalLimit.withNewChildren(Seq(child))
+          // Keep the LIMIT operator if we can't push it down.
+          Limit(Literal(limit, IntegerType), child)
         } else {
-          // If we can't push down limit and offset, return `GlobalLimit`.
+          // Keep the origin plan if we can't push OFFSET operator and LIMIT operator.
           globalLimit
         }
       }
