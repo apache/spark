@@ -598,14 +598,14 @@ abstract class Catalog {
   def currentCatalog(): String
 
   /**
-   * Sets the current default catalog in this session.
+   * Sets the current catalog in this session.
    *
    * @since 3.4.0
    */
   def setCurrentCatalog(catalogName: String): Unit
 
   /**
-   * Returns a list of catalogs in this session.
+   * Returns a list of catalogs available in this session.
    *
    * @since 3.4.0
    */

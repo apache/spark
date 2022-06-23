@@ -723,7 +723,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(!spark.catalog.databaseExists(Array(catalogName2, dbName).mkString(".")))
   }
 
-  test("three layer namespace compatibility - cache table, isCached and uncacheTable") {
+  test("SPARK-39506: three layer namespace compatibility - cache table, isCached and" +
+    "uncacheTable") {
     val tableSchema = new StructType().add("i", "int")
     createTable("my_table", "my_db", "testcat", classOf[FakeV2Provider].getName,
       tableSchema, Map.empty[String, String], "")
@@ -741,7 +742,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(!spark.catalog.isCached("testcat.my_db.my_table"))
   }
 
-  test("test setCurrentCatalog, currentCatalog and listCatalogs") {
+  test("SPARK-39506: test setCurrentCatalog, currentCatalog and listCatalogs") {
     spark.catalog.setCurrentCatalog("testcat")
     assert(spark.catalog.currentCatalog().equals("testcat"))
     spark.catalog.setCurrentCatalog("spark_catalog")

@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
  * A catalog in Spark, as returned by the `listCatalogs` method defined in [[Catalog]].
  *
  * @param name name of the catalog
+ * @param description description of the catalog
  * @since 3.4.0
  */
 class CatalogMetadata(
