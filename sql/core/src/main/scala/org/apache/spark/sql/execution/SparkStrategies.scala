@@ -650,17 +650,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object StreamingRelationStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case s: StreamingRelation =>
-        val tableQualifier = s.dataSource.catalogTable.map(_.identifier.unquotedString)
-        StreamingRelationExec(s.sourceName, s.output, tableQualifier) :: Nil
+        val qualifiedTableName = s.dataSource.catalogTable.map(_.identifier.unquotedString)
+        StreamingRelationExec(s.sourceName, s.output, qualifiedTableName) :: Nil
       case s: StreamingExecutionRelation =>
-        val tableQualifier = s.catalogTable.map(_.identifier.unquotedString)
-        StreamingRelationExec(s.toString, s.output, tableQualifier) :: Nil
+        val qualifiedTableName = s.catalogTable.map(_.identifier.unquotedString)
+        StreamingRelationExec(s.toString, s.output, qualifiedTableName) :: Nil
       case s: StreamingRelationV2 =>
-        val tableQualifier = (s.catalog, s.identifier) match {
+        val qualifiedTableName = (s.catalog, s.identifier) match {
           case (Some(catalog), Some(identifier)) => Some(s"${catalog.name}.${identifier}")
           case _ => None
         }
-        StreamingRelationExec(s.sourceName, s.output, tableQualifier) :: Nil
+        StreamingRelationExec(s.sourceName, s.output, qualifiedTableName) :: Nil
       case _ => Nil
     }
   }
