@@ -135,6 +135,9 @@ class Catalog:
 
         If no database is specified, the current database is used.
         This includes all temporary views.
+
+        .. versionchanged:: 3.4
+           Allowed ``dbName`` to be qualified with catalog name.
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -359,7 +362,7 @@ class Catalog:
            Added the ``description`` parameter.
 
         .. versionchanged:: 3.4
-           Made ``tableName`` support 3-layer namespace.
+           Allowed ``tableName`` to be qualified with catalog name.
         """
         if path is not None:
             options["path"] = path
