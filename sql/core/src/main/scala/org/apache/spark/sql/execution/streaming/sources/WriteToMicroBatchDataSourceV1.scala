@@ -23,6 +23,15 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.OutputMode
 
+/**
+ * Marker node to represent a DSv1 sink on streaming query.
+ *
+ * Despite this is expected to be the top node, this node should behave like "pass-through"
+ * since the DSv1 codepath on microbatch execution handles sink operation separately.
+ *
+ * This node is eliminated in streaming specific optimization phase, which means there is no
+ * matching physical node.
+ */
 case class WriteToMicroBatchDataSourceV1(
     catalogTable: Option[CatalogTable],
     sink: Sink,
@@ -35,10 +44,6 @@ case class WriteToMicroBatchDataSourceV1(
 
   override def child: LogicalPlan = query
 
-  // Despite this is logically the top node, this node should behave like "pass-through"
-  // since the DSv1 codepath on microbatch execution handles sink operation separately.
-  // We will eliminate this node in optimization phase, which shouldn't make difference as
-  // this node is pass-through.
   override def output: Seq[Attribute] = query.output
 
   def withNewBatchId(batchId: Long): WriteToMicroBatchDataSourceV1 = {
