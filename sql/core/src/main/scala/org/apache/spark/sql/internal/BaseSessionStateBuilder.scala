@@ -104,7 +104,7 @@ abstract class BaseSessionStateBuilder(
    *
    * This either gets cloned from a pre-existing version or cloned from the built-in registry.
    */
-  protected lazy val functionRegistry: FunctionRegistry = {
+  protected lazy val functionRegistry: FunctionRegistry = SQLConf.withExistingConf(conf) {
     parentState.map(_.functionRegistry.clone())
       .getOrElse(extensions.registerFunctions(FunctionRegistry.builtin.clone()))
   }
@@ -114,7 +114,7 @@ abstract class BaseSessionStateBuilder(
    *
    * This either gets cloned from a pre-existing version or cloned from the built-in registry.
    */
-  protected lazy val tableFunctionRegistry: TableFunctionRegistry = {
+  protected lazy val tableFunctionRegistry: TableFunctionRegistry = SQLConf.withExistingConf(conf) {
     parentState.map(_.tableFunctionRegistry.clone())
       .getOrElse(extensions.registerTableFunctions(TableFunctionRegistry.builtin.clone()))
   }
@@ -125,7 +125,7 @@ abstract class BaseSessionStateBuilder(
    *
    * This either gets cloned from a pre-existing version or newly created.
    */
-  protected lazy val experimentalMethods: ExperimentalMethods = {
+  protected lazy val experimentalMethods: ExperimentalMethods = SQLConf.withExistingConf(conf) {
     parentState.map(_.experimentalMethods.clone()).getOrElse(new ExperimentalMethods)
   }
 
@@ -134,7 +134,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` field.
    */
-  protected lazy val sqlParser: ParserInterface = {
+  protected lazy val sqlParser: ParserInterface = SQLConf.withExistingConf(conf) {
     extensions.buildParser(session, new SparkSqlParser())
   }
 
