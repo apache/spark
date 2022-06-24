@@ -32,11 +32,23 @@ import org.apache.spark.rdd.RDD
  *
  * Java users should use `RankingMetrics$.of` to create a [[RankingMetrics]] instance.
  *
- * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
+ * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pair
+ *                            or (predicted ranking, ground truth set,
+ * .                          relevance value of ground truth set).
+ *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
  */
 @Since("1.2.0")
-class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])
-  extends Logging with Serializable {
+class RankingMetrics[T: ClassTag] @Since("3.4.0") (
+    predictionAndLabels: RDD[(Array[T], Array[T], Array[Double])])
+    extends Logging
+    with Serializable {
+
+  @Since("1.2.0")
+  def this(predictionAndLabelsWithoutRelevance: => RDD[(Array[T], Array[T])]) = {
+    this(predictionAndLabelsWithoutRelevance.map {
+      case (pred, lab) => (pred, lab, Array.empty[Double])
+    })
+  }
 
   /**
    * Compute the average precision of all the queries, truncated at ranking position k.
@@ -58,7 +70,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   @Since("1.2.0")
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab) =>
+    predictionAndLabels.map { case (pred, lab, _) =>
       countRelevantItemRatio(pred, lab, k, k)
     }.mean()
   }
@@ -70,7 +82,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    */
   @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
-    predictionAndLabels.map { case (pred, lab) =>
+    predictionAndLabels.map { case (pred, lab, _) =>
       val labSet = lab.toSet
       val k = math.max(pred.length, labSet.size)
       averagePrecision(pred, labSet, k)
@@ -87,7 +99,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   @Since("3.0.0")
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab) =>
+    predictionAndLabels.map { case (pred, lab, _) =>
       averagePrecision(pred, lab.toSet, k)
     }.mean()
   }
@@ -127,7 +139,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * The discounted cumulative gain at position k is computed as:
    *    sum,,i=1,,^k^ (2^{relevance of ''i''th item}^ - 1) / log(i + 1),
    * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
-   * implementation, the relevance value is binary.
+   * implementation, the relevance value is binary if the relevance value is empty.
 
    * If a query has an empty ground truth set, zero will be used as ndcg together with
    * a log warning.
@@ -142,8 +154,15 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   @Since("1.2.0")
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab) =>
+    predictionAndLabels.map { case (pred, lab, rel) =>
+      val useBinary = rel.isEmpty
       val labSet = lab.toSet
+      val relMap = lab.zip(rel).toMap
+      if (useBinary && lab.size != rel.size) {
+        logWarning(
+          "# of ground truth set and # of relevance value set should be equal, " +
+            "check input data")
+      }
 
       if (labSet.nonEmpty) {
         val labSetSize = labSet.size
@@ -152,18 +171,32 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         var dcg = 0.0
         var i = 0
         while (i < n) {
-          // Base of the log doesn't matter for calculating NDCG,
-          // if the relevance value is binary.
-          val gain = 1.0 / math.log(i + 2)
-          if (i < pred.length && labSet.contains(pred(i))) {
-            dcg += gain
-          }
-          if (i < labSetSize) {
-            maxDcg += gain
+          if (useBinary) {
+            // Base of the log doesn't matter for calculating NDCG,
+            // if the relevance value is binary.
+            val gain = 1.0 / math.log(i + 2)
+            if (i < pred.length && labSet.contains(pred(i))) {
+              dcg += gain
+            }
+            if (i < labSetSize) {
+              maxDcg += gain
+            }
+          } else {
+            if (i < pred.length) {
+              dcg += (math.pow(2.0, relMap.getOrElse(pred(i), 0.0)) - 1) / math.log(i + 2)
+            }
+            if (i < labSetSize) {
+              maxDcg += (math.pow(2.0, relMap.getOrElse(lab(i), 0.0)) - 1) / math.log(i + 2)
+            }
           }
           i += 1
         }
-        dcg / maxDcg
+        if (maxDcg == 0.0) {
+          logWarning("Maximum of relevance of ground truth set is zero, check input data")
+          0.0
+        } else {
+          dcg / maxDcg
+        }
       } else {
         logWarning("Empty ground truth set, check input data")
         0.0
@@ -191,7 +224,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   @Since("3.0.0")
   def recallAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab) =>
+    predictionAndLabels.map { case (pred, lab, _) =>
       countRelevantItemRatio(pred, lab, k, lab.toSet.size)
     }.mean()
   }
@@ -207,10 +240,11 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * @param denominator the denominator of ratio
    * @return relevant item ratio at the first k ranking positions
    */
-  private def countRelevantItemRatio(pred: Array[T],
-                                     lab: Array[T],
-                                     k: Int,
-                                     denominator: Int): Double = {
+  private def countRelevantItemRatio(
+      pred: Array[T],
+      lab: Array[T],
+      k: Int,
+      denominator: Int): Double = {
     val labSet = lab.toSet
     if (labSet.nonEmpty) {
       val n = math.min(pred.length, k)

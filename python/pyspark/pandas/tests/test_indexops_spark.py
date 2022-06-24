@@ -39,7 +39,7 @@ class SparkIndexOpsMethodsTest(PandasOnSparkTestCase, SQLTestUtils):
         ):
             self.psser.spark.transform(lambda scol: 1)
 
-        with self.assertRaisesRegex(AnalysisException, "Column.*non-existent.*does not exist"):
+        with self.assertRaisesRegex(AnalysisException, ".*UNRESOLVED_COLUMN.*`non-existent`.*"):
             self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
     def test_multiindex_transform_negative(self):
@@ -59,7 +59,7 @@ class SparkIndexOpsMethodsTest(PandasOnSparkTestCase, SQLTestUtils):
         ):
             self.psser.spark.apply(lambda scol: 1)
 
-        with self.assertRaisesRegex(AnalysisException, "Column.*non-existent.*does not exist"):
+        with self.assertRaisesRegex(AnalysisException, ".*UNRESOLVED_COLUMN.*`non-existent`.*"):
             self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
 

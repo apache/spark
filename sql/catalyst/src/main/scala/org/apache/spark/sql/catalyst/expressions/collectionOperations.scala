@@ -3625,7 +3625,7 @@ case class ArrayDistinct(child: Expression)
       val array = data.toArray[AnyRef](elementType)
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[AnyRef]
       var alreadyStoredNull = false
-      for (i <- 0 until array.length) {
+      for (i <- array.indices) {
         if (array(i) != null) {
           var found = false
           var j = 0

@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
@@ -1230,6 +1230,7 @@ class JDBCSuite extends QueryTest
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
     assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
+    assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
   private def assertEmptyQuery(sqlString: String): Unit = {
@@ -1355,7 +1356,32 @@ class JDBCSuite extends QueryTest
       map(_.databaseTypeDefinition).get == "CHAR(1)")
   }
 
-  test("Checking metrics correctness with JDBC") {
+  test("SPARK-38846: TeradataDialect catalyst type mapping") {
+    val teradataDialect = JdbcDialects.get("jdbc:teradata")
+    val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", 0)
+    // When Number(*)/Number is specified, default DecimalType should be returned
+    val flexiblePrecision = 40
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      flexiblePrecision, metadata) == Some(DecimalType.SYSTEM_DEFAULT))
+    val specifiedScale = 10
+    val specifiedPrecision = 10
+    metadata.putLong("scale", specifiedScale)
+    // Both precision and scale is set explicitly
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      specifiedPrecision, metadata) == Some(DecimalType(specifiedPrecision, specifiedScale)))
+    // When precision is not specified, MAX_PRECISION should be used
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      flexiblePrecision, metadata) == Some(DecimalType(DecimalType.MAX_PRECISION, specifiedScale)))
+    // When precision and scale is set explicitly and scale is 0
+    metadata.putLong("scale", 0)
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      specifiedPrecision, metadata) == Some(DecimalType(specifiedPrecision, 0)))
+    // When MetadataBuilder is null, default DecimalType should be returned
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      specifiedPrecision, null) == Some(DecimalType.SYSTEM_DEFAULT))
+  }
+
+    test("Checking metrics correctness with JDBC") {
     val foobarCnt = spark.table("foobar").count()
     val res = InputOutputMetricsHelper.run(sql("SELECT * FROM foobar").toDF())
     assert(res === (foobarCnt, 0L, foobarCnt) :: Nil)
@@ -1879,5 +1905,53 @@ class JDBCSuite extends QueryTest
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)
-   }
+  }
+
+  test("SPARK-39339: Handle TimestampNTZType null values") {
+    val tableName = "timestamp_ntz_null_table"
+
+    val df = Seq(null.asInstanceOf[LocalDateTime]).toDF("col1")
+
+    df.write.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName).save()
+
+    val res = spark.read.format("jdbc")
+      .option("inferTimestampNTZType", "true")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName)
+      .load()
+
+    checkAnswer(res, Seq(Row(null)))
+  }
+
+  test("SPARK-39339: TimestampNTZType with different local time zones") {
+    val tableName = "timestamp_ntz_diff_tz_support_table"
+
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+        Seq(
+          "1972-07-04 03:30:00",
+          "2019-01-20 12:00:00.502",
+          "2019-01-20T00:00:00.123456",
+          "1500-01-20T00:00:00.123456"
+        ).foreach { case datetime =>
+          val df = spark.sql(s"select timestamp_ntz '$datetime'")
+          df.write.format("jdbc")
+            .mode("overwrite")
+            .option("url", urlWithUserAndPass)
+            .option("dbtable", tableName)
+            .save()
+
+          val res = spark.read.format("jdbc")
+            .option("inferTimestampNTZType", "true")
+            .option("url", urlWithUserAndPass)
+            .option("dbtable", tableName)
+            .load()
+
+          checkAnswer(res, df)
+        }
+      }
+    }
+  }
 }

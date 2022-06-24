@@ -803,6 +803,18 @@ class EncryptionArrowTests(ArrowTests):
         return super(EncryptionArrowTests, cls).conf().set("spark.io.encryption.enabled", "true")
 
 
+class RDDBasedArrowTests(ArrowTests):
+    @classmethod
+    def conf(cls):
+        return (
+            super(RDDBasedArrowTests, cls)
+            .conf()
+            .set("spark.sql.execution.arrow.localRelationThreshold", "0")
+            # to test multiple partitions
+            .set("spark.sql.execution.arrow.maxRecordsPerBatch", "2")
+        )
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.test_arrow import *  # noqa: F401
 

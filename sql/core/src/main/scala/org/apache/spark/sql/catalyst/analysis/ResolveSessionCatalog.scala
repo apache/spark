@@ -161,11 +161,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case c @ CreateTableAsSelect(ResolvedDBObjectName(catalog, name), _, _, _, _, _)
+    case c @ CreateTableAsSelect(ResolvedDBObjectName(catalog, name), _, _, _, writeOptions, _)
         if isSessionCatalog(catalog) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
+        c.tableSpec.provider,
+        c.tableSpec.options ++ writeOptions,
+        c.tableSpec.location,
+        c.tableSpec.serde,
         ctas = true)
+
       if (!isV2Provider(provider)) {
         constructV1TableCmd(Some(c.query), c.tableSpec, name, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)

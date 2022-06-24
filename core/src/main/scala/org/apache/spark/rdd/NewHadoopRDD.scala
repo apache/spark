@@ -156,7 +156,7 @@ class NewHadoopRDD[K, V](
       }
 
       val result = new Array[Partition](rawSplits.size)
-      for (i <- 0 until rawSplits.size) {
+      for (i <- rawSplits.indices) {
         result(i) =
             new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
       }

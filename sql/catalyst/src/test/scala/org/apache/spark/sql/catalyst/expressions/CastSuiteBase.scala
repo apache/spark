@@ -1272,4 +1272,37 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "to restore the behavior before Spark 3.0."))
       }
   }
+
+  test("cast ANSI intervals to decimals") {
+    Seq(
+      (Duration.ZERO, DayTimeIntervalType(DAY), DecimalType(10, 3)) -> Decimal(0, 10, 3),
+      (Duration.ofHours(-1), DayTimeIntervalType(HOUR), DecimalType(10, 1)) -> Decimal(-10, 10, 1),
+      (Duration.ofMinutes(1), DayTimeIntervalType(MINUTE), DecimalType(8, 2)) -> Decimal(100, 8, 2),
+      (Duration.ofSeconds(59), DayTimeIntervalType(SECOND), DecimalType(6, 0)) -> Decimal(59, 6, 0),
+      (Duration.ofSeconds(-60).minusMillis(1), DayTimeIntervalType(SECOND),
+        DecimalType(10, 3)) -> Decimal(-60.001, 10, 3),
+      (Duration.ZERO, DayTimeIntervalType(DAY, SECOND), DecimalType(10, 6)) -> Decimal(0, 10, 6),
+      (Duration.ofHours(-23).minusMinutes(59).minusSeconds(59).minusNanos(123456000),
+        DayTimeIntervalType(HOUR, SECOND), DecimalType(18, 6)) -> Decimal(-86399.123456, 18, 6),
+      (Period.ZERO, YearMonthIntervalType(YEAR), DecimalType(5, 2)) -> Decimal(0, 5, 2),
+      (Period.ofMonths(-1), YearMonthIntervalType(MONTH),
+        DecimalType(8, 0)) -> Decimal(-1, 8, 0),
+      (Period.ofYears(-1).minusMonths(1), YearMonthIntervalType(YEAR, MONTH),
+        DecimalType(8, 3)) -> Decimal(-13000, 8, 3)
+    ).foreach { case ((duration, intervalType, targetType), expected) =>
+      checkEvaluation(
+        Cast(Literal.create(duration, intervalType), targetType),
+        expected)
+    }
+
+    dayTimeIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, DecimalType.USER_DEFAULT), it)
+    }
+
+    yearMonthIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, DecimalType.USER_DEFAULT), it)
+    }
+  }
 }

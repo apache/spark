@@ -2619,8 +2619,8 @@ abstract class CSVSuite
             val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
             }
-            assert(ex.getErrorClass == "MISSING_COLUMN")
-            assert(ex.messageParameters.head == "AAA")
+            assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
+            assert(ex.messageParameters.head == "`AAA`")
           }
         }
       }
