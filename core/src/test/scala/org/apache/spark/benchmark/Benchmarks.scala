@@ -68,6 +68,9 @@ import com.google.common.reflect.ClassPath
  *     "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
  *     "org.apache.spark.sql.execution.datasources.*"
  * }}}
+ *
+ * if you define TPC_DS_DATA_LOC environment variable with a proper TPC-DS data location,
+ * TPCDSQueryBenchmark is triggered as well.
  */
 
 object Benchmarks {
@@ -80,6 +83,8 @@ object Benchmarks {
       "SPARK_BENCHMARK_NUM_SPLITS").map(_.toLowerCase(Locale.ROOT).trim.toInt).getOrElse(1)
     val currentSplit = sys.env.get(
       "SPARK_BENCHMARK_CUR_SPLIT").map(_.toLowerCase(Locale.ROOT).trim.toInt - 1).getOrElse(0)
+    val TPCDSDataLoc = sys.env.get(
+      "TPC_DS_DATA_LOC").map(_.toLowerCase(Locale.ROOT).trim).getOrElse("")
     var numBenchmark = 0
 
     var isBenchmarkFound = false
@@ -96,8 +101,11 @@ object Benchmarks {
       require(args.length > 0, "Benchmark class to run should be specified.")
       if (
           info.getName.endsWith("Benchmark") &&
-          // TODO(SPARK-34927): Support TPCDSQueryBenchmark in Benchmarks
-          !info.getName.endsWith("TPCDSQueryBenchmark") &&
+          (
+            !info.getName.endsWith("TPCDSQueryBenchmark") ||
+            // Is TPCDS Datset provided?
+            (info.getName.endsWith("TPCDSQueryBenchmark") && TPCDSDataLoc.nonEmpty)
+          ) &&
           matcher.matches(Paths.get(info.getName)) &&
           Try(runBenchmark).isSuccess && // Does this has a main method?
           !Modifier.isAbstract(clazz.getModifiers) // Is this a regular class?
