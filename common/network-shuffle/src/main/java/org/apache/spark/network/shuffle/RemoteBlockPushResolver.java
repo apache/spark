@@ -360,7 +360,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AtomicReference<AppShuffleInfo> ref = new AtomicReference<>(null);
     appsShuffleInfo.compute(appId, (id, info) -> {
       if (null != info) {
-        removeAppAttemptPathInfoFromDB(new AppAttemptId(info.appId, info.attemptId));
+        try{
+          removeAppAttemptPathInfoFromDB(info.appId, info.attemptId);
+        } catch (Exception e) {
+          logger.error("Error deleting {} from application paths info in DB",
+              new AppAttemptId(info.appId, info.attemptId), e);
+        }
         ref.set(info);
       }
       // Return null to remove the entry
@@ -400,15 +405,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   /**
    * Remove the application attempt local paths information from the DB.
-   * @param appAttemptId
    */
-  private void removeAppAttemptPathInfoFromDB(AppAttemptId appAttemptId) {
+  private void removeAppAttemptPathInfoFromDB(String appId, int attemptId) throws Exception{
+    AppAttemptId appAttemptId = new AppAttemptId(appId, attemptId);
     if (db != null) {
-      try {
-        db.delete(getDbAppAttemptPathsKey(appAttemptId));
-      } catch (Exception e) {
-        logger.error("Error deleting {} from application paths info in DB", appAttemptId, e);
-      }
+      db.delete(getDbAppAttemptPathsKey(appAttemptId));
     }
   }
 
@@ -639,6 +640,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           shuffleMergePartitionsRef.set(mergePartitionsInfo.shuffleMergePartitions);
         }
       }
+      // Update the DB for the finalized shuffle
+      writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
       // Even when the mergePartitionsInfo is null, we mark the shuffle as finalized but the results
       // sent to the driver will be empty. This can happen when the service didn't receive any
       // blocks for the shuffle yet and the driver didn't wait for enough time to finalize the
@@ -686,7 +689,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         bitmaps.toArray(new RoaringBitmap[bitmaps.size()]), Ints.toArray(reduceIds),
         Longs.toArray(sizes));
     }
-    writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
     logger.info("{} attempt {} shuffle {} shuffleMerge {}: finalization of shuffle merge completed",
         msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId);
     return mergeStatuses;
@@ -741,10 +743,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                   mergeDir, executorInfo.subDirsPerLocalDir);
               // Clean up the outdated App Attempt local path info in the DB and
               // put the newly registered local path info from newer attempt into the DB.
-              if (appShuffleInfo != null) {
-                removeAppAttemptPathInfoFromDB(new AppAttemptId(appId, appShuffleInfo.attemptId));
-              }
-              writeAppPathsInfoToDb(appId, attemptId, appPathsInfo);
+              writeNewAppAttemptPathInfoToDBAndRemoveOutdated(
+                  appId, attemptId, appShuffleInfo, appPathsInfo);
               appShuffleInfo =
                 new AppShuffleInfo(
                   appId, attemptId,
@@ -768,6 +768,27 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
     } else {
       logger.warn("ExecutorShuffleInfo does not have the expected merge directory information");
+    }
+  }
+
+  /**
+   * Remove the former application attempt local paths information from the DB and insert the
+   * local paths information from the newer application attempt. If the deletion fails, the
+   * insertion will also be skipped. This ensures that there will always be a single application
+   * attempt local path information in the DB.
+   */
+  private void writeNewAppAttemptPathInfoToDBAndRemoveOutdated(
+      String appId,
+      int newAttemptId,
+      AppShuffleInfo appShuffleInfo,
+      AppPathsInfo appPathsInfo) {
+    try{
+      if (appShuffleInfo != null) {
+        removeAppAttemptPathInfoFromDB(appId, appShuffleInfo.attemptId);
+      }
+      writeAppPathsInfoToDb(appId, newAttemptId, appPathsInfo);
+    } catch (Exception e) {
+      logger.error("Error deleting {} from application paths info in DB", appId, e);
     }
   }
 
@@ -945,7 +966,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 }
               });
         } else {
-          logger.info("Adding dangling key {} in DB to clean up list", key);
           dbKeysToBeRemoved.add(entry.getKey());
         }
       }
@@ -955,9 +975,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         dbKeysToBeRemoved.forEach(
             (key) -> {
               try {
+                if (logger.isDebugEnabled()) {
+                  logger.debug("Removing dangling key {} in DB",
+                      parseDbAppAttemptShufflePartitionKey(
+                          new String(key, StandardCharsets.UTF_8)));
+                }
                 db.delete(key);
               } catch (Exception e) {
-                logger.error("Error deleting data in DB", e);
+                logger.error("Error deleting dangling key {} in DB", key, e);
               }
             }
         )
@@ -1312,7 +1337,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   /**
-   * Simply encodes an application attempt ID.
+   * Encodes an application attempt ID.
    */
   public static class AppAttemptId {
     public final String appId;
@@ -1376,7 +1401,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   /**
-   * Simply encodes an application attempt shuffle merge ID.
+   * Encodes an application attempt shuffle merge ID.
    */
   public static class AppAttemptShuffleMergeId {
     public final String appId;
@@ -1456,9 +1481,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.appAttemptShuffleMergeId = appAttemptShuffleMergeId;
       this.reduceId = reduceId;
       // Create FileOutputStream with append mode set to false by default.
-      // This will make sure later write will start from the beginning of the file.
-      // This is required as non-finalized merged shuffle blocks will be discarded
-      // during service restart.
+      // This ensures that the file is always overwritten and not appended to even after the
+      // service is restarted. This is required as non-finalized merged shuffle blocks will be
+      // discarded during service restart.
       this.dataChannel = new FileOutputStream(dataFile).getChannel();
       this.dataFile = dataFile;
       this.indexFile = indexFile;
