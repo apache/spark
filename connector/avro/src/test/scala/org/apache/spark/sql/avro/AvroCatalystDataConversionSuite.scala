@@ -366,14 +366,12 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
   test("AvroDeserializer with binary type") {
     val jsonFormatSchema =
       """
-        |{ "type": "record",
+        |{
+        |  "type": "record",
         |  "name": "record",
-        |  "fields" : [{
-        |    "name": "a",
-        |    "type": {
-        |      "type": "bytes"
-        |    }
-        |  }]
+        |  "fields" : [
+        |    {"name": "a", "type": "bytes"}
+        |  ]
         |}
       """.stripMargin
     val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
