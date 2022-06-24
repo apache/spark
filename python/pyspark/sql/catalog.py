@@ -67,6 +67,8 @@ class Column(NamedTuple):
 
 class Function(NamedTuple):
     name: str
+    catalog: Optional[str]
+    namespace: Optional[List[str]]
     description: Optional[str]
     className: str
     isTemporary: bool
@@ -257,6 +259,9 @@ class Catalog:
 
         If no database is specified, the current database is used.
         This includes all temporary functions.
+
+        .. versionchanged:: 3.4
+           Allowed ``dbName`` to be qualified with catalog name.
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -264,9 +269,17 @@ class Catalog:
         functions = []
         while iter.hasNext():
             jfunction = iter.next()
+            jnamespace = jfunction.namespace()
+            if jnamespace is not None:
+                namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
+            else:
+                namespace = None
+
             functions.append(
                 Function(
                     name=jfunction.name(),
+                    catalog=jfunction.catalog(),
+                    namespace=namespace,
                     description=jfunction.description(),
                     className=jfunction.className(),
                     isTemporary=jfunction.isTemporary(),
@@ -288,19 +301,75 @@ class Catalog:
             name of the database to check function existence in.
             If no database is specified, the current database is used
 
+           .. deprecated:: 3.4.0
+
+
         Returns
         -------
         bool
             Indicating whether the function exists
 
+        .. versionchanged:: 3.4
+           Allowed ``functionName`` to be qualified with catalog name
+
         Examples
         --------
         >>> spark.catalog.functionExists("unexisting_function")
         False
+        >>> spark.catalog.functionExists("default.unexisting_function")
+        False
+        >>> spark.catalog.functionExists("spark_catalog.default.unexisting_function")
+        False
         """
         if dbName is None:
-            dbName = self.currentDatabase()
-        return self._jcatalog.functionExists(dbName, functionName)
+            return self._jcatalog.functionExists(functionName)
+        else:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use tableExists(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
+            return self._jcatalog.functionExists(self.currentDatabase(), functionName)
+
+    def getFunction(self, functionName: str) -> Function:
+        """Get the function with the specified name. This function can be a temporary function or a
+        function. This throws an AnalysisException when the function cannot be found.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        tableName : str
+                    name of the function to check existence.
+
+        Examples
+        --------
+        >>> func = spark.sql("CREATE FUNCTION my_func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+        >>> spark.catalog.getFunction("my_func1")
+        Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
+        >>> spark.catalog.getFunction("default.my_func1")
+        Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
+        >>> spark.catalog.getFunction("spark_catalog.default.my_func1")
+        Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
+        >>> spark.catalog.getFunction("my_func2")
+        Traceback (most recent call last):
+            ...
+        pyspark.sql.utils.AnalysisException: ...
+        """
+        jfunction = self._jcatalog.getFunction(functionName)
+        jnamespace = jfunction.namespace()
+        if jnamespace is not None:
+            namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
+        else:
+            namespace = None
+        return Function(
+            name=jfunction.name(),
+            catalog=jfunction.catalog(),
+            namespace=namespace,
+            description=jfunction.description(),
+            className=jfunction.className(),
+            isTemporary=jfunction.isTemporary(),
+        )
 
     def listColumns(self, tableName: str, dbName: Optional[str] = None) -> List[Column]:
         """Returns a list of columns for the given table/view in the specified database.

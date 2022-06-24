@@ -195,6 +195,8 @@ class CatalogTests(ReusedSQLTestCase):
                 functions["+"],
                 Function(
                     name="+",
+                    catalog="spark_catalog",
+                    namespace=None,
                     description=None,
                     className="org.apache.spark.sql.catalyst.expressions.Add",
                     isTemporary=True,
@@ -229,10 +231,25 @@ class CatalogTests(ReusedSQLTestCase):
         spark = self.spark
         with self.function("func1"):
             self.assertFalse(spark.catalog.functionExists("func1"))
+            self.assertFalse(spark.catalog.functionExists("default.func1"))
+            self.assertFalse(spark.catalog.functionExists("spark_catalog.default.func1"))
             self.assertFalse(spark.catalog.functionExists("func1", "default"))
             spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
             self.assertTrue(spark.catalog.functionExists("func1"))
+            self.assertTrue(spark.catalog.functionExists("default.func1"))
+            self.assertTrue(spark.catalog.functionExists("spark_catalog.default.func1"))
             self.assertTrue(spark.catalog.functionExists("func1", "default"))
+
+    def test_get_function(self):
+        spark = self.spark
+        with self.function("func1"):
+            spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
+            func1 = spark.catalog.getFunction("spark_catalog.default.func1")
+            self.assertTrue(func1.name == "func1")
+            self.assertTrue(func1.namespace == ["default"])
+            self.assertTrue(func1.catalog == "spark_catalog")
+            self.assertTrue(func1.className == "org.apache.spark.data.bricks")
+            self.assertFalse(func1.isTemporary)
 
     def test_list_columns(self):
         from pyspark.sql.catalog import Column

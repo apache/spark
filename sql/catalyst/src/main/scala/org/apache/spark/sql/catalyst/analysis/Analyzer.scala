@@ -2080,7 +2080,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             throw QueryCompilationErrors.expectPersistentFuncError(
               nameParts.head, cmd, mismatchHint, u)
           } else {
-            ResolvedNonPersistentFunc(nameParts.head, V1Function(info))
+            ResolvedNonPersistentFunc(nameParts.last, V1Function(info))
           }
         }.getOrElse {
           val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
@@ -2139,16 +2139,16 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def lookupBuiltinOrTempFunction(name: Seq[String]): Option[ExpressionInfo] = {
-      if (name.length == 1) {
-        v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
+      if (name.length == 1 || name.length == 3) {
+        v1SessionCatalog.lookupBuiltinOrTempFunction(name.last)
       } else {
         None
       }
     }
 
     def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
-      if (name.length == 1) {
-        v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
+      if (name.length == 1 || name.length == 3) {
+        v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.last)
       } else {
         None
       }
