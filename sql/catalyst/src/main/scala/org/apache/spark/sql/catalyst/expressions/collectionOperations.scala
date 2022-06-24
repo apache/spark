@@ -2187,8 +2187,7 @@ case class ElementAt(
           }
         } else {
           val idx = if (index == 0) {
-            throw QueryExecutionErrors.invalidElementAtIndexError(
-              index, array.numElements(), queryContext)
+            throw QueryExecutionErrors.elementAtByIndexZeroError()
           } else if (index > 0) {
             index - 1
           } else {
@@ -2244,8 +2243,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw QueryExecutionErrors.invalidElementAtIndexError($index,
-             |      $eval1.numElements(), ${ctx.addReferenceObj("errCtx", queryContext)});
+             |    throw QueryExecutionErrors.elementAtByIndexZeroError();
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {

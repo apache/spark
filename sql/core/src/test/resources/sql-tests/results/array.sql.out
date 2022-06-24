@@ -180,8 +180,8 @@ select element_at(array(1, 2, 3), 0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX_IN_ELEMENT_AT] The index 0 is out of bounds. The array has 3 elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+org.apache.spark.SparkRuntimeException
+[ELEMENT_AT_BY_INDEX_ZERO] The index 0 is invalid. The indexes can be < 0 and > 0 (the first element has index 1).
 
 
 -- !query
