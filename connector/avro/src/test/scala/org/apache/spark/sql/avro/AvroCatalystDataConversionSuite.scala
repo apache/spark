@@ -36,6 +36,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+import java.nio.ByteBuffer
+
 class AvroCatalystDataConversionSuite extends SparkFunSuite
   with SharedSparkSession
   with ExpressionEvalHelper {
@@ -359,5 +361,28 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       data,
       None,
       new OrderedFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
+  }
+
+  test("AvroDeserializer with binary type") {
+    val jsonFormatSchema =
+      """
+        |{ "type": "record",
+        |  "name": "record",
+        |  "fields" : [{
+        |    "name": "a",
+        |    "type": {
+        |      "type": "bytes"
+        |    }
+        |  }]
+        |}
+      """.stripMargin
+    val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
+    val avroRecord = new GenericData.Record(avroSchema)
+    val bb = ByteBuffer.wrap(Array[Byte](97, 48, 53))
+    avroRecord.put("a", bb)
+
+    val expected = InternalRow(Array[Byte](97, 48, 53))
+    checkDeserialization(avroSchema, avroRecord, Some(expected))
+    checkDeserialization(avroSchema, avroRecord, Some(expected))
   }
 }
