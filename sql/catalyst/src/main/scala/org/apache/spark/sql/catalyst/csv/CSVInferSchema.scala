@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{FAST_DATE_FORMAT, LENIENT_SIMPLE_DATE_FORMAT}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{FAST_DATE_FORMAT}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -49,7 +49,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
     options.locale,
-    legacyFormat = LENIENT_SIMPLE_DATE_FORMAT,
+    legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
   private val decimalParser = if (options.locale == Locale.US) {
