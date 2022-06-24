@@ -591,7 +591,7 @@ abstract class Catalog {
   def refreshByPath(path: String): Unit
 
   /**
-   * Returns the current default catalog in this session.
+   * Returns the current catalog in this session.
    *
    * @since 3.4.0
    */
