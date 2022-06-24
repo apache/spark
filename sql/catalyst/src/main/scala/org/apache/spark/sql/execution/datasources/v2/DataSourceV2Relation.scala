@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
@@ -115,12 +115,14 @@ case class DataSourceV2Relation(
  * @param output the output attributes of this relation
  * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
  *                               rows in the scan across different partitions
+ * @param ordering if set, the ordering provided by the scan
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
     scan: Scan,
     output: Seq[AttributeReference],
-    keyGroupedPartitioning: Option[Seq[Expression]] = None) extends LeafNode with NamedRelation {
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
 
   override def name: String = relation.table.name()
 

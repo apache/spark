@@ -80,7 +80,7 @@ object PushDownUtils extends PredicateHelper {
         for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr), nestedPredicatePushdownEnabled = true)
+              filterExpr, Some(translatedFilterToExpr))
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {

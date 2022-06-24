@@ -67,7 +67,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
     // Transport creation logic below mimics HiveConnection.createBinaryTransport
-    val rawTransport = new TSocket("localhost", serverPort)
+    val rawTransport = new TSocket(localhost, serverPort)
     val user = System.getProperty("user.name")
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val protocol = new TBinaryProtocol(transport)
@@ -1189,6 +1189,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   protected val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
   protected val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
 
+  val localhost = Utils.localHostNameForURI()
   private var listeningPort: Int = _
   protected def serverPort: Int = listeningPort
 
@@ -1240,7 +1241,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
        |  --master local
        |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
        |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-       |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
+       |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
        |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
@@ -1423,14 +1424,14 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
   protected def jdbcUri(database: String = "default"): String = if (mode == ServerMode.http) {
-    s"""jdbc:hive2://localhost:$serverPort/
+    s"""jdbc:hive2://$localhost:$serverPort/
        |$database?
        |hive.server2.transport.mode=http;
        |hive.server2.thrift.http.path=cliservice;
        |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
   } else {
-    s"jdbc:hive2://localhost:$serverPort/$database?${hiveConfList}#${hiveVarList}"
+    s"jdbc:hive2://$localhost:$serverPort/$database?${hiveConfList}#${hiveVarList}"
   }
 
   private def tryCaptureSysLog(f: => Unit): Unit = {

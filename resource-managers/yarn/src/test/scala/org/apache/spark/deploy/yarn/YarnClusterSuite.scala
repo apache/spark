@@ -262,6 +262,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   test("monitor app using launcher library") {
     val env = new JHashMap[String, String]()
     env.put("YARN_CONF_DIR", hadoopConfDir.getAbsolutePath())
+    env.put("SPARK_PREFER_IPV6", Utils.preferIPv6.toString)
 
     val propsFile = createConfFile()
     val handle = new SparkLauncher(env)

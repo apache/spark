@@ -50,9 +50,10 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  * The reason to put Kafka test utility class in src is to test Python related Kafka APIs.
  */
 private[kafka010] class KafkaTestUtils extends Logging {
+  private val localHostNameForURI = Utils.localHostNameForURI()
 
   // Zookeeper related configurations
-  private val zkHost = "127.0.0.1"
+  private val zkHost = localHostNameForURI
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 10000
@@ -63,7 +64,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private var admClient: AdminZkClient = _
 
   // Kafka broker related configurations
-  private val brokerHost = "127.0.0.1"
+  private val brokerHost = localHostNameForURI
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
@@ -239,8 +240,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
-    props.put("host.name", "127.0.0.1")
-    props.put("advertised.host.name", "127.0.0.1")
+    props.put("host.name", localHostNameForURI)
+    props.put("advertised.host.name", localHostNameForURI)
     props.put("port", brokerPort.toString)
     props.put("log.dir", brokerLogDir)
     props.put("zookeeper.connect", zkAddress)
@@ -319,7 +320,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
     val zookeeper = new ZooKeeperServer(snapshotDir, logDir, 500)
     val (ip, port) = {
       val splits = zkConnect.split(":")
-      (splits(0), splits(1).toInt)
+      val port = splits(splits.length - 1)
+      (zkConnect.substring(0, zkConnect.length - port.length - 1), port.toInt)
     }
     val factory = new NIOServerCnxnFactory()
     factory.configure(new InetSocketAddress(ip, port), 16)

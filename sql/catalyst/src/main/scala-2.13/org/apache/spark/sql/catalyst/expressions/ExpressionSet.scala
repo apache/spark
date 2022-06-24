@@ -132,6 +132,18 @@ class ExpressionSet protected(
     newSet
   }
 
+  override def concat(that: IterableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    that.iterator.foreach(newSet.add)
+    newSet
+  }
+
+  override def --(that: IterableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    that.iterator.foreach(newSet.remove)
+    newSet
+  }
+
   def map(f: Expression => Expression): ExpressionSet = {
     val newSet = new ExpressionSet()
     this.iterator.foreach(elem => newSet.add(f(elem)))

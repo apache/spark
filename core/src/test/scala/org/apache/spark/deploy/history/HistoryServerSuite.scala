@@ -74,7 +74,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
-  private val localhost: String = Utils.localCanonicalHostName()
+  private val localhost: String = Utils.localHostNameForURI()
   private var port: Int = -1
 
   protected def diskBackend: HybridStoreDiskBackend.Value
