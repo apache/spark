@@ -121,6 +121,6 @@ jobs:
     - name: Upload benchmark results
       uses: actions/upload-artifact@v2
       with:
-        name: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }-${{ matrix.split }}
-        path: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }.tar
+        name: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}-${{ matrix.split }}
+        path: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar
 
