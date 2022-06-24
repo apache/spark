@@ -30,7 +30,9 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
@@ -2359,6 +2361,29 @@ class DataSourceV2SQLSuite
         spark.table(t1).select("id", "data").select("index", "_partition")
       }
     }
+  }
+
+  test("SPARK-39362: scan not pruned in subquery") {
+    val t1 = s"${catalogAndNamespace}t1"
+    val t2 = s"${catalogAndNamespace}t2"
+    withTable(t1) {
+      withTable(t2) {
+        sql(s"create table $t1 (id INT, dep STRING) using $v2Format")
+        sql(s"create table $t2 (id INT, c1 STRING, c2 STRING, " +
+          s"c3 STRING, c4 STRING, c5 STRING) using $v2Format")
+
+        val df = sql(s"select dep from $t1 t1 where id > 1 and exists " +
+          s"(select * from $t2 t2  where t1.id = t2.id)")
+        val leaf = df.queryExecution.executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec]
+          .executedPlan.collectLeaves()
+          .last
+        val scan = leaf.asInstanceOf[BatchScanExec]
+
+        assert(scan.output.length == 1)
+      }
+    }
+
   }
 
   test("SPARK-34923: do not propagate metadata columns through View") {
