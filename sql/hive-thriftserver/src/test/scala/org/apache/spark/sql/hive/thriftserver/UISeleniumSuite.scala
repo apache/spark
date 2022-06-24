@@ -92,7 +92,7 @@ class UISeleniumSuite
         |  --master local
         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
+        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
         |  --hiveconf $portConf=0
         |  --driver-class-path $driverClassPath
@@ -103,7 +103,7 @@ class UISeleniumSuite
 
   test("thrift server ui test") {
     withJdbcStatement("test_map") { statement =>
-      val baseURL = s"http://localhost:$uiPort"
+      val baseURL = s"http://$localhost:$uiPort"
 
       val queries = Seq(
         "CREATE TABLE test_map(key INT, value STRING)",
@@ -131,11 +131,11 @@ class UISeleniumSuite
 
   test("SPARK-36400: Redact sensitive information in UI by config") {
     withJdbcStatement("test_tbl1", "test_tbl2") { statement =>
-      val baseURL = s"http://localhost:$uiPort"
+      val baseURL = s"http://$localhost:$uiPort"
 
       val Seq(nonMaskedQuery, maskedQuery) = Seq("test_tbl1", "test_tbl2").map (tblName =>
         s"CREATE TABLE $tblName(a int) " +
-          s"OPTIONS(url='jdbc:postgresql://localhost:5432/$tblName', " +
+          s"OPTIONS(url='jdbc:postgresql://$localhost:5432/$tblName', " +
           "user='test_user', password='abcde')")
       statement.execute(nonMaskedQuery)
 

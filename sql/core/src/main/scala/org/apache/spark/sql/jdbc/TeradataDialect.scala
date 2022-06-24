@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.Types
 import java.util.Locale
 
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
@@ -95,5 +96,32 @@ private case object TeradataDialect extends JdbcDialect {
 
   override def getLimitClause(limit: Integer): String = {
     ""
+  }
+
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    sqlType match {
+      case Types.NUMERIC =>
+        if (md == null) {
+          Some(DecimalType.SYSTEM_DEFAULT)
+        } else {
+          val scale = md.build().getLong("scale")
+          // In Teradata, define Number without parameter means precision and scale is flexible.
+          // However, in this case, the scale returned from JDBC is 0, which will lead to
+          // fractional part loss. And the precision returned from JDBC is 40, which conflicts to
+          // DecimalType.MAX_PRECISION.
+          // Handle this special case by adding explicit conversion to system default decimal type.
+          if (size == 40) {
+            if (scale == 0) Some(DecimalType.SYSTEM_DEFAULT)
+            // In Teradata, Number(*, scale) is valid but in this case, the precision
+            // returned from JDBC is also 40, which conflicts to DecimalType.MAX_PRECISION.
+            else Some(DecimalType(DecimalType.MAX_PRECISION, scale.toInt))
+          } else {
+            // Normal case, Number(precision, scale) is explicitly set in Teradata
+            Some(DecimalType(size, scale.toInt))
+          }
+        }
+        case _ => None
+    }
   }
 }

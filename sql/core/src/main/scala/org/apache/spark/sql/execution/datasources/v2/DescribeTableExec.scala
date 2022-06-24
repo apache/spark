@@ -21,8 +21,11 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table, TableCatalog}
+import org.apache.spark.sql.connector.expressions.IdentityTransform
 
 case class DescribeTableExec(
     output: Seq[Attribute],
@@ -45,11 +48,19 @@ case class DescribeTableExec(
     rows += toCatalystRow("# Detailed Table Information", "", "")
     rows += toCatalystRow("Name", table.name(), "")
 
-    CatalogV2Util.TABLE_RESERVED_PROPERTIES.foreach(propKey => {
-      if (table.properties.containsKey(propKey)) {
-        rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
-      }
-    })
+    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
+      CatalogTableType.EXTERNAL.name
+    } else {
+      CatalogTableType.MANAGED.name
+    }
+    rows += toCatalystRow("Type", tableType, "")
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES
+      .filterNot(_ == TableCatalog.PROP_EXTERNAL)
+      .foreach(propKey => {
+        if (table.properties.containsKey(propKey)) {
+          rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
+        }
+      })
     val properties =
       conf.redactOptions(table.properties.asScala.toMap).toList
         .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
@@ -62,7 +73,7 @@ case class DescribeTableExec(
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
     rows ++= table.schema.map{ column =>
       toCatalystRow(
-        column.name, column.dataType.simpleString, column.getComment().getOrElse(""))
+        column.name, column.dataType.simpleString, column.getComment().orNull)
     }
   }
 
@@ -80,13 +91,31 @@ case class DescribeTableExec(
   }
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows += emptyRow()
-    rows += toCatalystRow("# Partitioning", "", "")
-    if (table.partitioning.isEmpty) {
-      rows += toCatalystRow("Not partitioned", "", "")
-    } else {
-      rows ++= table.partitioning.zipWithIndex.map {
-        case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+    if (table.partitioning.nonEmpty) {
+      val partitionColumnsOnly = table.partitioning.forall(t => t.isInstanceOf[IdentityTransform])
+      if (partitionColumnsOnly) {
+        rows += toCatalystRow("# Partition Information", "", "")
+        rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
+        rows ++= table.partitioning
+          .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
+          .map { fieldNames =>
+            val nestedField = table.schema.findNestedField(fieldNames)
+            assert(nestedField.isDefined,
+              s"Not found the partition column ${fieldNames.map(quoteIfNeeded).mkString(".")} " +
+              s"in the table schema ${table.schema().catalogString}.")
+            nestedField.get
+          }.map { case (path, field) =>
+            toCatalystRow(
+              (path :+ field.name).map(quoteIfNeeded(_)).mkString("."),
+              field.dataType.simpleString,
+              field.getComment().orNull)
+          }
+      } else {
+        rows += emptyRow()
+        rows += toCatalystRow("# Partitioning", "", "")
+        rows ++= table.partitioning.zipWithIndex.map {
+          case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+        }
       }
     }
   }
