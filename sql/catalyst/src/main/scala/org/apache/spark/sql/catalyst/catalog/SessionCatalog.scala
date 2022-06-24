@@ -966,7 +966,7 @@ class SessionCatalog(
   }
 
   def isGlobalTempViewDB(dbName: String): Boolean = {
-    globalTempViewManager.database.equals(dbName)
+    globalTempViewManager.database.equalsIgnoreCase(dbName)
   }
 
   def lookupTempView(name: TableIdentifier): Option[View] = {
