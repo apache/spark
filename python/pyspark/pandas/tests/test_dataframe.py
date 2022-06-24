@@ -96,6 +96,13 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         index_cols = pdf.columns[column_mask]
         self.assert_eq(psdf[index_cols], pdf[index_cols])
 
+    def test_creation_index(self):
+        with self.assertRaisesRegex(
+            TypeError,
+            "The given index cannot be a pandas-on-Spark index. Try pandas.Index or array-like.",
+        ):
+            ps.DataFrame([1, 2], index=ps.Index([1, 2]))
+
     def _check_extension(self, psdf, pdf):
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
             self.assert_eq(psdf, pdf, check_exact=False)
