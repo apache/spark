@@ -1565,45 +1565,27 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // state and all the input rows processed before. In another word, the order of input rows
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
     // This also applies to Aggregate.
-    case f @ Filter(condition, project @ Project(fields, grandChild))
+    case Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
       if (doNotPushComplexPredicate(grandChild)) {
-        val complexExpsKeys = AttributeSet(
-          aliasMap.filter { case (_, alias) =>
-            alias.child match {
-              case _: CreateNamedStruct => false // special case, filters may push through it.
-              case e => !e.foldable && e.children.nonEmpty
-            }
-          }.keys)
-        // Complex expression keys used by filter
-        val complexFilterExpsKeys = complexExpsKeys.filter(condition.references.contains)
-
-        val (remainingPredicates, pushedPredicates) =
-          splitConjunctivePredicates(condition)
-            .partition(_.references.exists(complexFilterExpsKeys.contains))
-
-        if (pushedPredicates.nonEmpty ||
-          (remainingPredicates.nonEmpty && !complexExpsKeys.subsetOf(complexFilterExpsKeys))) {
-          // The list includes complex expressions used by filter and other expressions's references
-          val complexExpsProjectList = ExpressionSet(fields.flatMap { ne =>
-            if (complexFilterExpsKeys.contains(ne)) ne :: Nil else ne.references
-          }).toSeq.map(_.asInstanceOf[NamedExpression])
-          val newProjectList = fields.map { ne =>
-            // toAttribute to avoid re-evaluating complex expressions used by filters
-            if (complexFilterExpsKeys.contains(ne)) ne.toAttribute else ne
-          }
-
-          val pushedFilter = pushedPredicates.map(replaceAlias(_, aliasMap))
-            .reduceLeftOption(And).map(c => Project(complexExpsProjectList, Filter(c, grandChild)))
-            .getOrElse(Project(complexExpsProjectList, grandChild))
-
-          val remainingFilter =
-            remainingPredicates.reduceLeftOption(And).map(Filter(_, pushedFilter))
-              .getOrElse(pushedFilter)
-          Project(newProjectList, remainingFilter)
+        val complexExpKeys = AttributeSet(aliasMap.filter(_._2.child match {
+          case _: CreateNamedStruct => false // special case, filters may push through it.
+          case e => !e.foldable && e.children.nonEmpty
+        }).keys)
+        val filterUsedComplexExpKeys = complexExpKeys.filter(condition.references.contains)
+        // Also push down if current project contains other complex expressions.
+        if (filterUsedComplexExpKeys.nonEmpty &&
+          (complexExpKeys -- filterUsedComplexExpKeys).isEmpty) {
+          val (remainingPredicates, pushedPredicates) = splitConjunctivePredicates(condition)
+            .partition(_.references.exists(filterUsedComplexExpKeys.contains))
+          val pushedFilter = pushedPredicates.map(replaceAlias(_, aliasMap)).reduceLeftOption(And)
+            .map(e => project.copy(child = Filter(e, grandChild)))
+            .getOrElse(project)
+          remainingPredicates.reduceLeftOption(And).map(Filter(_, pushedFilter))
+            .getOrElse(pushedFilter)
         } else {
-          f
+          project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
         }
       } else {
         project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))

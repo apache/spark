@@ -1432,7 +1432,7 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery =
       testRelation.select(('a + 1).as("na"), 'a).where('na > 1 && 'a.in(1, 2, 3))
     val correctAnswer = testRelation.where('a.in(1, 2, 3)).select(('a + 1).as("na"), 'a)
-      .where('na > 1).select('na, 'a)
+      .where('na > 1)
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -1440,17 +1440,8 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-39481: Push down if current project contains other complex expression") {
     val originalQuery = testRelation.select(('a + 1).as("na1"), ('a + 2).as("na2"), 'b)
       .where('na1 > 1)
-    val correctAnswer = testRelation.select(('a + 1).as("na1"), 'a, 'b)
-      .where('na1 > 1).select('na1, ('a + 2).as("na2"), 'b)
-
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
-  }
-
-  test("SPARK-39481: Mixed case: Push down non-complex filter and other complex expression") {
-    val originalQuery = testRelation.select(('a + 1).as("na1"), ('a + 2).as("na2"), 'b)
-      .where('na1 > 1 && 'a.in(1, 2, 3))
-    val correctAnswer = testRelation.where('a.in(1, 2, 3)).select(('a + 1).as("na1"), 'a, 'b)
-      .where('na1 > 1).select('na1, ('a + 2).as("na2"), 'b)
+    val correctAnswer = testRelation
+      .where(('a + 1) > 1).select(('a + 1).as("na1"), ('a + 2).as("na2"), 'b)
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -1478,18 +1469,6 @@ class FilterPushdownSuite extends PlanTest {
       testRelation.select(CreateNamedStruct(Seq("na", 'a)).as("col1"), 'a).where($"col1.na" > 1)
     val correctAnswer = testRelation.where('a > 1)
       .select(CreateNamedStruct(Seq("na", 'a)).as("col1"), 'a)
-
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
-  }
-
-  test("SPARK-39481: Mixed case: Push down if current project contains other complex expressions") {
-    val originalQuery =
-      testRelation.select(CreateNamedStruct(Seq("na", 'a)).as("col1"), ('a + 1).as("na1"),
-        ('a + 2).as("na2"), 'a)
-        .where($"col1.na" > 1 && 'na1 > 1)
-    val correctAnswer = testRelation.where('a > 1)
-      .select('a, ('a + 1).as("na1")).where('na1 > 1)
-      .select(CreateNamedStruct(Seq("na", 'a)).as("col1"), 'na1, ('a + 2).as("na2"), 'a)
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
