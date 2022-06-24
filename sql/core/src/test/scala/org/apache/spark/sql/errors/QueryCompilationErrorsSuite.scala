@@ -477,18 +477,18 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("AMBIGUOUS_FIELD_NAME: alter column matching multi fields in the struct") {
+  test("AMBIGUOUS_COLUMN_OR_FIELD: alter column matching multi fields in the struct") {
     withTable("t") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         sql("CREATE TABLE t(c struct<X:String, x:String>) USING parquet")
       }
 
-      checkErrorClass(
+      checkError(
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'")
         },
-        errorClass = "AMBIGUOUS_FIELD_NAME",
-        msg = "Field name c.X is ambiguous and has 2 matching fields in the struct.; line 1 pos 0")
+        errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+        parameters = Map("name" -> "`c`.`X`", "n" -> "2"))
     }
   }
 

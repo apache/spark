@@ -156,6 +156,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       origin = origin)
   }
 
+  def unresolvedColumnError(
+      columnName: String,
+      proposal: Seq[String]): Throwable = {
+    val proposalStr = proposal.map(toSQLId).mkString(", ")
+    new AnalysisException(
+      errorClass = "UNRESOLVED_COLUMN",
+      messageParameters = Array(toSQLId(columnName), proposalStr))
+  }
+
+  def unresolvedFieldError(
+      fieldName: String,
+      columnPath: Seq[String],
+      proposal: Seq[String]): Throwable = {
+    val proposalStr = proposal.map(toSQLId).mkString(", ")
+    new AnalysisException(
+      errorClass = "UNRESOLVED_FIELD",
+      messageParameters = Array(toSQLId(fieldName), toSQLId(columnPath), proposalStr))
+  }
+
   def dataTypeMismatchForDeserializerError(
       dataType: DataType, desiredType: String): Throwable = {
     new AnalysisException(
@@ -1395,12 +1414,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def ambiguousFieldNameError(
-      fieldName: Seq[String], numMatches: Int, context: Origin): Throwable = {
+  def ambiguousColumnOrFieldError(
+      name: Seq[String], numMatches: Int, context: Origin): Throwable = {
     new AnalysisException(
-      errorClass = "AMBIGUOUS_FIELD_NAME",
-      messageParameters = Array(fieldName.quoted, numMatches.toString),
+      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      messageParameters = Array(toSQLId(name), numMatches.toString),
       origin = context)
+  }
+
+  def ambiguousColumnOrFieldError(
+      name: Seq[String], numMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      messageParameters = Array(toSQLId(name), numMatches.toString))
   }
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
@@ -2480,5 +2506,26 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
     new AnalysisException(
       "Failed to execute command because subquery expressions are not allowed in DEFAULT values")
+  }
+
+  def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NULLABLE_COLUMN_OR_FIELD",
+      messageParameters = Array(toSQLId(name)))
+  }
+
+  def nullableArrayOrMapElementError(path: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NULLABLE_ARRAY_OR_MAP_ELEMENT",
+      messageParameters = Array(toSQLId(path)))
+  }
+
+  def invalidColumnOrFieldDataTypeError(
+      name: Seq[String],
+      dt: DataType,
+      expected: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
+      messageParameters = Array(toSQLId(name), toSQLType(dt), toSQLType(expected)))
   }
 }

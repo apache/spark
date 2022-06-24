@@ -465,6 +465,29 @@ class Dataset[T] private[sql](
   def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
 
   /**
+   * Returns a new DataFrame where each row is reconciled to match the specified schema. Spark will:
+   * <ul>
+   *   <li>Reorder columns and/or inner fields by name to match the specified schema.</li>
+   *   <li>Project away columns and/or inner fields that are not needed by the specified schema.
+   *   Missing columns and/or inner fields (present in the specified schema but not input DataFrame)
+   *   lead to failures.</li>
+   *   <li>Cast the columns and/or inner fields to match the data types in the specified schema, if
+   *   the types are compatible, e.g., numeric to numeric (error if overflows), but not string to
+   *   int.</li>
+   *   <li>Carry over the metadata from the specified schema, while the columns and/or inner fields
+   *   still keep their own metadata if not overwritten by the specified schema.</li>
+   *   <li>Fail if the nullability are not compatible. For example, the column and/or inner field is
+   *   nullable but the specified schema requires them to be not nullable.</li>
+   * </ul>
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def as(schema: StructType): DataFrame = withPlan {
+    Project.matchSchema(logicalPlan, schema, sparkSession.sessionState.conf)
+  }
+
+  /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
    * This can be quite convenient in conversion from an RDD of tuples into a `DataFrame` with
    * meaningful names. For example:
