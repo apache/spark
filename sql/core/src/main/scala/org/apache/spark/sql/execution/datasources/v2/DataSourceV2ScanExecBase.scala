@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -49,6 +49,10 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   /** Optional partitioning expressions provided by the V2 data sources, through
    * `SupportsReportPartitioning` */
   def keyGroupedPartitioning: Option[Seq[Expression]]
+
+  /** Optional ordering expressions provided by the V2 data sources, through
+   * `SupportsReportOrdering` */
+  def ordering: Option[Seq[SortOrder]]
 
   protected def inputPartitions: Seq[InputPartition]
 
@@ -136,6 +140,12 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
         Some(groupedPartitions.sorted(keyOrdering))
       }
     }
+  }
+
+  override def outputOrdering: Seq[SortOrder] = {
+    // when multiple partitions are grouped together, ordering inside partitions is not preserved
+    val partitioningPreservesOrdering = groupedPartitions.forall(_.forall(_._2.length <= 1))
+    ordering.filter(_ => partitioningPreservesOrdering).getOrElse(super.outputOrdering)
   }
 
   override def supportsColumnar: Boolean = {

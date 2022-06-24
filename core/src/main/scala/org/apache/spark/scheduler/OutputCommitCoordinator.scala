@@ -44,7 +44,10 @@ private case class AskPermissionToCommitOutput(
  * This class was introduced in SPARK-4879; see that JIRA issue (and the associated pull requests)
  * for an extensive design discussion.
  */
-private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean) extends Logging {
+private[spark] class OutputCommitCoordinator(
+    conf: SparkConf,
+    isDriver: Boolean,
+    sc: Option[SparkContext] = None) extends Logging {
 
   // Initialized by SparkEnv
   var coordinatorRef: Option[RpcEndpointRef] = None
@@ -155,9 +158,9 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
         val taskId = TaskIdentifier(stageAttempt, attemptNumber)
         stageState.failures.getOrElseUpdate(partition, mutable.Set()) += taskId
         if (stageState.authorizedCommitters(partition) == taskId) {
-          logDebug(s"Authorized committer (attemptNumber=$attemptNumber, stage=$stage, " +
-            s"partition=$partition) failed; clearing lock")
-          stageState.authorizedCommitters(partition) = null
+          sc.foreach(_.dagScheduler.stageFailed(stage, s"Authorized committer " +
+            s"(attemptNumber=$attemptNumber, stage=$stage, partition=$partition) failed; " +
+            s"but task commit success, data duplication may happen."))
         }
     }
   }

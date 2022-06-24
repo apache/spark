@@ -352,6 +352,12 @@
     ],
     "sqlState" : "42000"
   },
+  "UNRESOLVED_MAP_KEY" : {
+    "message" : [
+      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it. Otherwise, did you mean one of the following column(s)? [<proposal>]"
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>"

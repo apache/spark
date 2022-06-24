@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.io.{File, IOException}
-import java.net.{InetAddress, InetSocketAddress}
+import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
 import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
@@ -68,13 +68,13 @@ class KafkaTestUtils(
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
 
-  private val localCanonicalHostName = InetAddress.getLoopbackAddress().getCanonicalHostName()
-  logInfo(s"Local host name is $localCanonicalHostName")
+  private val localHostNameForURI = Utils.localHostNameForURI()
+  logInfo(s"Local host name is $localHostNameForURI")
 
   private var kdc: MiniKdc = _
 
   // Zookeeper related configurations
-  private val zkHost = localCanonicalHostName
+  private val zkHost = localHostNameForURI
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 10000
@@ -83,12 +83,12 @@ class KafkaTestUtils(
   private var zkClient: KafkaZkClient = _
 
   // Kafka broker related configurations
-  private val brokerHost = localCanonicalHostName
+  private val brokerHost = localHostNameForURI
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
   private val brokerServiceName = "kafka"
-  private val clientUser = s"client/$localCanonicalHostName"
+  private val clientUser = s"client/$localHostNameForURI"
   private var clientKeytabFile: File = _
 
   // Kafka broker server
@@ -202,17 +202,17 @@ class KafkaTestUtils(
     assert(kdcReady, "KDC should be set up beforehand")
     val baseDir = Utils.createTempDir()
 
-    val zkServerUser = s"zookeeper/$localCanonicalHostName"
+    val zkServerUser = s"zookeeper/$localHostNameForURI"
     val zkServerKeytabFile = new File(baseDir, "zookeeper.keytab")
     kdc.createPrincipal(zkServerKeytabFile, zkServerUser)
     logDebug(s"Created keytab file: ${zkServerKeytabFile.getAbsolutePath()}")
 
-    val zkClientUser = s"zkclient/$localCanonicalHostName"
+    val zkClientUser = s"zkclient/$localHostNameForURI"
     val zkClientKeytabFile = new File(baseDir, "zkclient.keytab")
     kdc.createPrincipal(zkClientKeytabFile, zkClientUser)
     logDebug(s"Created keytab file: ${zkClientKeytabFile.getAbsolutePath()}")
 
-    val kafkaServerUser = s"kafka/$localCanonicalHostName"
+    val kafkaServerUser = s"kafka/$localHostNameForURI"
     val kafkaServerKeytabFile = new File(baseDir, "kafka.keytab")
     kdc.createPrincipal(kafkaServerKeytabFile, kafkaServerUser)
     logDebug(s"Created keytab file: ${kafkaServerKeytabFile.getAbsolutePath()}")
@@ -489,7 +489,7 @@ class KafkaTestUtils(
   protected def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
-    props.put("listeners", s"PLAINTEXT://127.0.0.1:$brokerPort")
+    props.put("listeners", s"PLAINTEXT://$localHostNameForURI:$brokerPort")
     props.put("log.dir", Utils.createTempDir().getAbsolutePath)
     props.put("zookeeper.connect", zkAddress)
     props.put("zookeeper.connection.timeout.ms", "60000")
@@ -505,8 +505,8 @@ class KafkaTestUtils(
     props.put("transaction.state.log.min.isr", "1")
 
     if (secure) {
-      props.put("listeners", "SASL_PLAINTEXT://127.0.0.1:0")
-      props.put("advertised.listeners", "SASL_PLAINTEXT://127.0.0.1:0")
+      props.put("listeners", s"SASL_PLAINTEXT://$localHostNameForURI:0")
+      props.put("advertised.listeners", s"SASL_PLAINTEXT://$localHostNameForURI:0")
       props.put("inter.broker.listener.name", "SASL_PLAINTEXT")
       props.put("delegation.token.master.key", UUID.randomUUID().toString)
       props.put("sasl.enabled.mechanisms", "GSSAPI,SCRAM-SHA-512")
@@ -648,7 +648,8 @@ class KafkaTestUtils(
     val zookeeper = new ZooKeeperServer(snapshotDir, logDir, 500)
     val (ip, port) = {
       val splits = zkConnect.split(":")
-      (splits(0), splits(1).toInt)
+      val port = splits(splits.length - 1)
+      (zkConnect.substring(0, zkConnect.length - port.length - 1), port.toInt)
     }
     val factory = new NIOServerCnxnFactory()
     factory.configure(new InetSocketAddress(ip, port), 16)

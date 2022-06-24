@@ -59,5 +59,6 @@ trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase
  * table catalog.
  */
 class DescribeNamespaceSuite extends DescribeNamespaceSuiteBase with CommandSuiteBase {
+  override def notFoundMsgPrefix: String = if (conf.useV1Command) "Database" else "Namespace"
   override def commandVersion: String = super[DescribeNamespaceSuiteBase].commandVersion
 }
