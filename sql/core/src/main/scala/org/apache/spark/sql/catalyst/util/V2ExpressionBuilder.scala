@@ -17,19 +17,15 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Abs, Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, Ceil, Coalesce, Contains, Divide, EndsWith, EqualTo, Exp, Expression, Floor, In, InSet, IsNotNull, IsNull, Literal, Log, Lower, Multiply, Not, Or, Overlay, Pow, Predicate, Remainder, Sqrt, StartsWith, StringPredicate, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, Substring, Subtract, UnaryMinus, Upper, WidthBucket}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
-import org.apache.spark.sql.execution.datasources.PushableColumn
 import org.apache.spark.sql.types.BooleanType
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
-class V2ExpressionBuilder(
-  e: Expression, nestedPredicatePushdownEnabled: Boolean = false, isPredicate: Boolean = false) {
-
-  val pushableColumn = PushableColumn(nestedPredicatePushdownEnabled)
+class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
 
   def build(): Option[V2Expression] = generateExpression(e, isPredicate)
 
@@ -49,12 +45,8 @@ class V2ExpressionBuilder(
     case Literal(true, BooleanType) => Some(new AlwaysTrue())
     case Literal(false, BooleanType) => Some(new AlwaysFalse())
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))
-    case col @ pushableColumn(name) =>
-      val ref = if (nestedPredicatePushdownEnabled) {
-        FieldReference(name)
-      } else {
-        FieldReference.column(name)
-      }
+    case col @ ColumnOrField(nameParts) =>
+      val ref = FieldReference(nameParts)
       if (isPredicate && col.dataType.isInstanceOf[BooleanType]) {
         Some(new V2Predicate("=", Array(ref, LiteralValue(true, BooleanType))))
       } else {
@@ -263,6 +255,15 @@ class V2ExpressionBuilder(
         None
       }
     // TODO supports other expressions
+    case _ => None
+  }
+}
+
+object ColumnOrField {
+  def unapply(e: Expression): Option[Seq[String]] = e match {
+    case a: Attribute => Some(Seq(a.name))
+    case s: GetStructField =>
+      unapply(s.child).map(_ :+ s.childSchema(s.ordinal).name)
     case _ => None
   }
 }

@@ -119,7 +119,8 @@ case class AddColumns(
         col.dataType,
         col.nullable,
         col.comment.orNull,
-        col.position.map(_.position).orNull)
+        col.position.map(_.position).orNull,
+        col.default.orNull)
     }
   }
 
@@ -154,7 +155,8 @@ case class ReplaceColumns(
         col.dataType,
         col.nullable,
         col.comment.orNull,
-        null)
+        null,
+        col.default.orNull)
     }
     deleteChanges ++ addChanges
   }
@@ -225,7 +227,10 @@ case class AlterColumn(
         "FieldPosition should be resolved before it's converted to TableChange.")
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
-    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
+    val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
+      TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
+    }
+    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =

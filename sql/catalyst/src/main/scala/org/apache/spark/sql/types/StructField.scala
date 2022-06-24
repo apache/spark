@@ -119,6 +119,17 @@ case class StructField(
   }
 
   /**
+   * Updates the StructField with a new existence default value.
+   */
+  def withExistenceDefaultValue(value: String): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, value)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
    * Return the existence default value of this StructField.
    */
   private[sql] def getExistenceDefaultValue(): Option[String] = {
