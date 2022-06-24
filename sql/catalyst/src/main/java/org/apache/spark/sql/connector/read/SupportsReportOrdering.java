@@ -15,15 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution.command
+package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 
 /**
- * The class contains tests for the `DESCRIBE NAMESPACE` command to check V1 Hive external
- * table catalog.
+ * A mix in interface for {@link Scan}. Data sources can implement this interface to
+ * report the order of data in each partition to Spark.
+ * Global order is part of the partitioning, see {@link SupportsReportPartitioning}.
+ * <p>
+ * Spark uses ordering information to exploit existing order to avoid sorting required by
+ * subsequent operations.
+ *
+ * @since 3.4.0
  */
-class DescribeNamespaceSuite extends v1.DescribeNamespaceSuiteBase with CommandSuiteBase {
-  override def notFoundMsgPrefix: String = if (conf.useV1Command) "Database" else "Namespace"
-  override def commandVersion: String = super[DescribeNamespaceSuiteBase].commandVersion
+@Evolving
+public interface SupportsReportOrdering extends Scan {
+
+  /**
+   * Returns the order in each partition of this data source scan.
+   */
+  SortOrder[] outputOrdering();
 }

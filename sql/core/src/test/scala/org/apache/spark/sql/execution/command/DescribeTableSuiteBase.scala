@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 
 /**
@@ -41,6 +41,42 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"DESCRIBE TABLE ${tbl}_non_existence")
       }
       assert(e.getMessage.contains(s"Table or view not found: ${tbl}_non_existence"))
+    }
+  }
+
+  test("DESCRIBE TABLE of a non-partitioned table") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+        Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("data", "string", null),
+          Row("id", "bigint", null)))
+    }
+  }
+
+  test("DESCRIBE TABLE of a partitioned table") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf.filter("col_name != 'Created Time'"),
+        Seq(
+          Row("data", "string", null),
+          Row("id", "bigint", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null)))
     }
   }
 

@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution.command
+package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 
 /**
- * The class contains tests for the `DESCRIBE NAMESPACE` command to check V1 Hive external
- * table catalog.
+ * Exception thrown when an invalid query plan is detected in AQE replanning,
+ * in which case AQE will stop the current replanning process and keep using the latest valid plan.
+ *
+ * @param message The reason why the plan is considered invalid.
+ * @param plan The invalid plan/sub-plan.
  */
-class DescribeNamespaceSuite extends v1.DescribeNamespaceSuiteBase with CommandSuiteBase {
-  override def notFoundMsgPrefix: String = if (conf.useV1Command) "Database" else "Namespace"
-  override def commandVersion: String = super[DescribeNamespaceSuiteBase].commandVersion
-}
+case class InvalidAQEPlanException[QueryType <: QueryPlan[_]](message: String, plan: QueryType)
+  extends Exception(message)
