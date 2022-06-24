@@ -17,18 +17,26 @@
 # under the License.
 #
 
-name: "Build and test (ANSI)"
+name: "Build (master, Scala 2.12, Hadoop 2, JDK 8)"
 
 on:
-  push:
-    branches:
-      - '**'
+  schedule:
+    - cron: '0 13 * * *'
 
 jobs:
-  call-build-and-test:
-    name: Call main build
+  run-build:
+    name: Run
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      ansi_enabled: true
-
+      java: 8
+      branch: master
+      hadoop: hadoop2
+      jobs: >-
+        {
+          "build": "true",
+          "pyspark": "true",
+          "sparkr": "true",
+          "tpcds-1g": "true",
+          "docker-integration-tests": "true"
+        }

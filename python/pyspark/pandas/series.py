@@ -6301,22 +6301,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         scol = scol_for(sdf, self._internal.data_spark_column_names[0])
 
         if skipna:
-            sdf = sdf.orderBy(scol.desc_nulls_last(), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.desc_nulls_last(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
         else:
-            sdf = sdf.orderBy(scol.desc_nulls_first(), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.desc_nulls_first(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
 
-        max_value = sdf.select(
-            F.first(scol),
-            F.first(NATURAL_ORDER_COLUMN_NAME),
-        ).head()
+        results = sdf.select(scol, seq_col_name).take(1)
 
-        if max_value[1] is None:
+        if len(results) == 0:
             raise ValueError("attempt to get argmax of an empty sequence")
-        elif max_value[0] is None:
-            return -1
-
-        # If the maximum is achieved in multiple locations, the first row position is returned.
-        return sdf.filter(scol == max_value[0]).head()[0]
+        else:
+            max_value = results[0]
+            # If the maximum is achieved in multiple locations, the first row position is returned.
+            return -1 if max_value[0] is None else max_value[1]
 
     def argmin(self) -> int:
         """
