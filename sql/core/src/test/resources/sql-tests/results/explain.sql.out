@@ -853,19 +853,7 @@ Output: []
 Arguments: `default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView, true
 
 (3) LogicalRelation
-Arguments: parquet, [key#x, val#x], CatalogTable(
-Database: default
-Table: explain_temp1
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type: MANAGED
-Provider: PARQUET
-Location [not included in comparison]/{warehouse_dir}/explain_temp1
-Schema: root
--- key: integer (nullable = true)
--- val: integer (nullable = true)
-), false
+Arguments: parquet, [key#x, val#x], `default`.`explain_temp1`, false
 
 (4) SubqueryAlias
 Arguments: spark_catalog.default.explain_temp1
