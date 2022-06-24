@@ -645,14 +645,14 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         """
           |(2) Filter [codegen id : 2]
           |Input [1]: [id#xL]
-          |Condition : ((id#xL > Subquery subquery#x, [id=#x]) AND isnotnull((id#xL % 10)))
+          |Condition : (id#xL > Subquery subquery#x, [id=#x])
           |""".stripMargin,
         """
-          |(6) BroadcastQueryStage
+          |(7) BroadcastQueryStage
           |Output [1]: [id#xL]
           |Arguments: 0""".stripMargin,
         """
-          |(12) AdaptiveSparkPlan
+          |(13) AdaptiveSparkPlan
           |Output [2]: [key#xL, value#xL]
           |Arguments: isFinalPlan=true
           |""".stripMargin,
@@ -660,11 +660,11 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
           |""".stripMargin,
         """
-          |(16) ShuffleQueryStage
+          |(17) ShuffleQueryStage
           |Output [1]: [max#xL]
           |Arguments: 0""".stripMargin,
         """
-          |(20) AdaptiveSparkPlan
+          |(21) AdaptiveSparkPlan
           |Output [1]: [max(id)#xL]
           |Arguments: isFinalPlan=true
           |""".stripMargin
