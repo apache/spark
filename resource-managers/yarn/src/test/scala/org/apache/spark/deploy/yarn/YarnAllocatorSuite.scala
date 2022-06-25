@@ -657,7 +657,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     }
   }
 
-  test("SPARK-26269: YarnAllocator excludeOnFailure behaviour") {
+  test("SPARK-26269 SPARK-39601: YarnAllocator excludeOnFailure behaviour") {
     val sc = SparkContext.getOrCreate(
       sparkConf.clone.setAppName("YarnAllocator excludeOnFailure behaviour"))
     try {
