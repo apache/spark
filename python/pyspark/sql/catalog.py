@@ -193,13 +193,13 @@ class Catalog:
         --------
         >>> df = spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
         >>> spark.catalog.getTable("tab1")
-        Table(name='tab1', catalog='spark_catalog', namespace=['default'], description=None, tableType='MANAGED', isTemporary=False)
+        Table(name='tab1', catalog='spark_catalog', namespace=['default'], ...
         >>> spark.catalog.getTable("default.tab1")
-        Table(name='tab1', catalog='spark_catalog', namespace=['default'], description=None, tableType='MANAGED', isTemporary=False)
+        Table(name='tab1', catalog='spark_catalog', namespace=['default'], ...
         >>> spark.catalog.getTable("spark_catalog.default.tab1")
-        Table(name='tab1', catalog='spark_catalog', namespace=['default'], description=None, tableType='MANAGED', isTemporary=False)
+        Table(name='tab1', catalog='spark_catalog', namespace=['default'], ...
         >>> spark.catalog.getTable("tab1", "default")
-        Table(name='tab1', catalog='spark_catalog', namespace=['default'], description=None, tableType='MANAGED', isTemporary=False)
+        Table(name='tab1', catalog='spark_catalog', namespace=['default'], ...
         >>> df = spark.sql("DROP TABLE tab1")
         >>> spark.catalog.getTable("tab1")
         Traceback (most recent call last):
