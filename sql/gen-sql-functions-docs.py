@@ -116,7 +116,7 @@ def _make_pretty_usage(infos):
         func_name = info.name
         if (info.name == "*" or info.name == "+"):
             func_name = "\\" + func_name
-        splits = re.split(r"(%s.*) - " % func_name, info.usage.strip())
+        splits = re.split(r"(.*%s.*) - " % func_name, info.usage.strip())
         if (len(splits) > 1):
             usages = iter(splits[1:])
             for (sig, description) in zip(usages, usages):
