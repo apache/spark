@@ -29,6 +29,11 @@ if TYPE_CHECKING:
     from pyspark.sql.types import DataType
 
 
+class CatalogMetadata(NamedTuple):
+    name: str
+    description: Optional[str]
+
+
 class Database(NamedTuple):
     name: str
     description: Optional[str]
@@ -78,6 +83,42 @@ class Catalog:
         self._sparkSession = sparkSession
         self._jsparkSession = sparkSession._jsparkSession
         self._jcatalog = sparkSession._jsparkSession.catalog()
+
+    def currentCatalog(self) -> str:
+        """Returns the current default catalog in this session.
+
+        .. versionadded:: 3.4.0
+
+        Examples
+        --------
+        >>> spark.catalog.currentCatalog()
+        'spark_catalog'
+        """
+        return self._jcatalog.currentCatalog()
+
+    def setCurrentCatalog(self, catalogName: str) -> None:
+        """Sets the current default catalog in this session.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        catalogName : str
+            name of the catalog to set
+        """
+        return self._jcatalog.setCurrentCatalog(catalogName)
+
+    def listCatalogs(self) -> List[CatalogMetadata]:
+        """Returns a list of catalogs in this session.
+
+        .. versionadded:: 3.4.0
+        """
+        iter = self._jcatalog.listCatalogs().toLocalIterator()
+        catalogs = []
+        while iter.hasNext():
+            jcatalog = iter.next()
+            catalogs.append(CatalogMetadata(name=jcatalog.name, description=jcatalog.description))
+        return catalogs
 
     @since(2.0)
     def currentDatabase(self) -> str:
@@ -517,17 +558,29 @@ class Catalog:
 
     @since(2.0)
     def isCached(self, tableName: str) -> bool:
-        """Returns true if the table is currently cached in-memory."""
+        """Returns true if the table is currently cached in-memory.
+
+        .. versionchanged:: 3.4
+           Allowed ``tableName`` to be qualified with catalog name.
+        """
         return self._jcatalog.isCached(tableName)
 
     @since(2.0)
     def cacheTable(self, tableName: str) -> None:
-        """Caches the specified table in-memory."""
+        """Caches the specified table in-memory.
+
+        .. versionchanged:: 3.4
+           Allowed ``tableName`` to be qualified with catalog name.
+        """
         self._jcatalog.cacheTable(tableName)
 
     @since(2.0)
     def uncacheTable(self, tableName: str) -> None:
-        """Removes the specified table from the in-memory cache."""
+        """Removes the specified table from the in-memory cache.
+
+        .. versionchanged:: 3.4
+           Allowed ``tableName`` to be qualified with catalog name.
+        """
         self._jcatalog.uncacheTable(tableName)
 
     @since(2.0)
