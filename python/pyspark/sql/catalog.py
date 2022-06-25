@@ -118,12 +118,17 @@ class Catalog:
         bool
             Indicating whether the database exists
 
+        .. versionchanged:: 3.4
+           Allowed ``dbName`` to be qualified with catalog name.
+
         Examples
         --------
         >>> spark.catalog.databaseExists("test_new_database")
         False
         >>> df = spark.sql("CREATE DATABASE test_new_database")
         >>> spark.catalog.databaseExists("test_new_database")
+        True
+        >>> spark.catalog.databaseExists("spark_catalog.test_new_database")
         True
         >>> df = spark.sql("DROP DATABASE test_new_database")
         """
@@ -163,6 +168,65 @@ class Catalog:
                 )
             )
         return tables
+
+    def getTable(self, tableName: str, dbName: Optional[str] = None) -> Table:
+        """Get the table or view with the specified name. This table can be a temporary view or a
+        table/view. This throws an AnalysisException when no Table can be found.
+
+        .. versionadded:: 3.4.0
+
+        Notes
+        -----
+        ``tableName`` is allowed to be qualified with catalog name when ``dbName`` is None.
+
+        Parameters
+        ----------
+        tableName : str
+                    name of the table to check existence
+                    If no database is specified, first try to treat ``tableName`` as a
+                    multi-layer-namespace identifier, then try to ``tableName`` as a normal table
+                    name in current database if necessary.
+        dbName : str, optional
+                 name of the database to check table existence in.
+
+        Examples
+        --------
+        >>> df = spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+        >>> spark.catalog.getTable("tab1")
+        Table(name='tab1', catalog='spark_catalog', namespace=['default'], description=None, tableType='MANAGED', isTemporary=False)
+        >>> spark.catalog.getTable("default.tab1")
+        Table(name='tab1', catalog='spark_catalog', namespace=['default'], description=None, tableType='MANAGED', isTemporary=False)
+        >>> spark.catalog.getTable("spark_catalog.default.tab1")
+        Table(name='tab1', catalog='spark_catalog', namespace=['default'], description=None, tableType='MANAGED', isTemporary=False)
+        >>> spark.catalog.getTable("tab1", "default")
+        Table(name='tab1', catalog='spark_catalog', namespace=['default'], description=None, tableType='MANAGED', isTemporary=False)
+        >>> df = spark.sql("DROP TABLE tab1")
+        >>> spark.catalog.getTable("tab1")
+        Traceback (most recent call last):
+            ...
+        pyspark.sql.utils.AnalysisException: ...
+        """
+        if dbName is None:
+            try:
+                jtable = self._jcatalog.getTable(tableName)
+            except Exception:
+                jtable = self._jcatalog.getTable(self.currentDatabase(), tableName)
+        else:
+            jtable = self._jcatalog.getTable(dbName, tableName)
+
+        jnamespace = jtable.namespace()
+        if jnamespace is not None:
+            namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
+        else:
+            namespace = None
+        return Table(
+            name=jtable.name(),
+            catalog=jtable.catalog(),
+            namespace=namespace,
+            description=jtable.description(),
+            tableType=jtable.tableType(),
+            isTemporary=jtable.isTemporary(),
+        )
 
     @since(2.0)
     def listFunctions(self, dbName: Optional[str] = None) -> List[Function]:
@@ -255,14 +319,20 @@ class Catalog:
         ----------
         tableName : str
                     name of the table to check existence
+                    If no database is specified, first try to treat ``tableName`` as a
+                    multi-layer-namespace identifier, then try to ``tableName`` as a normal table
+                    name in current database if necessary.
         dbName : str, optional
                  name of the database to check table existence in.
-                 If no database is specified, the current database is used
+
 
         Returns
         -------
         bool
             Indicating whether the table/view exists
+
+        .. versionchanged:: 3.4
+           Allowed ``tableName`` to be qualified with catalog name when ``dbName`` is None.
 
         Examples
         --------
@@ -274,6 +344,12 @@ class Catalog:
         >>> df = spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
         >>> spark.catalog.tableExists("tab1")
         True
+        >>> spark.catalog.tableExists("default.tab1")
+        True
+        >>> spark.catalog.tableExists("spark_catalog.default.tab1")
+        True
+        >>> spark.catalog.tableExists("tab1", "default")
+        True
         >>> df = spark.sql("DROP TABLE tab1")
         >>> spark.catalog.tableExists("unexisting_table")
         False
@@ -284,6 +360,12 @@ class Catalog:
         False
         >>> df = spark.sql("CREATE VIEW view1 AS SELECT 1")
         >>> spark.catalog.tableExists("view1")
+        True
+        >>> spark.catalog.tableExists("default.view1")
+        True
+        >>> spark.catalog.tableExists("spark_catalog.default.view1")
+        True
+        >>> spark.catalog.tableExists("view1", "default")
         True
         >>> df = spark.sql("DROP VIEW view1")
         >>> spark.catalog.tableExists("view1")
@@ -298,7 +380,12 @@ class Catalog:
         >>> spark.catalog.tableExists("view1")
         False
         """
-        return self._jcatalog.tableExists(dbName, tableName)
+        if dbName is None:
+            return self._jcatalog.tableExists(tableName) or self._jcatalog.tableExists(
+                self.currentDatabase(), tableName
+            )
+        else:
+            return self._jcatalog.tableExists(dbName, tableName)
 
     def createExternalTable(
         self,
