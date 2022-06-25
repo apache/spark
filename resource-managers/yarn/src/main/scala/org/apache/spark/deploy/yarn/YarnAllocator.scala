@@ -34,7 +34,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
@@ -859,7 +859,8 @@ private[yarn] class YarnAllocator(
             // .com/apache/hadoop/blob/228156cfd1b474988bc4fedfbf7edddc87db41e3/had
             // oop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/ap
             // ache/hadoop/yarn/util/Apps.java#L273 for details)
-            if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status)) {
+            if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status) ||
+                SparkContext.getActive.forall(_.isStopped)) {
               (false, s"Container marked as failed: $containerId$onHostStr" +
                 s". Exit status: ${completedContainer.getExitStatus}" +
                 s". Diagnostics: ${completedContainer.getDiagnostics}.")

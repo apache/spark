@@ -37,7 +37,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
@@ -63,7 +63,7 @@ class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
 class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   val conf = new YarnConfiguration()
-  val sparkConf = new SparkConf()
+  val sparkConf = new SparkConf().setMaster("local")
   sparkConf.set(DRIVER_HOST_ADDRESS, "localhost")
   sparkConf.set(DRIVER_PORT, 4040)
   sparkConf.set(SPARK_JARS, Seq("notarealjar.jar"))
@@ -547,30 +547,37 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("lost executor removed from backend") {
-    val (handler, _) = createAllocator(4)
-    handler.updateResourceRequests()
-    handler.getNumExecutorsRunning should be (0)
-    handler.getNumContainersPendingAllocate should be (4)
+    val sc = SparkContext.getOrCreate(
+      sparkConf.clone.setAppName("lost executor removed from backend"))
+    try {
+      val (handler, _) = createAllocator(4)
+      handler.updateResourceRequests()
+      handler.getNumExecutorsRunning should be(0)
+      handler.getNumContainersPendingAllocate should be(4)
 
-    val container1 = createContainer("host1")
-    val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+      val container1 = createContainer("host1")
+      val container2 = createContainer("host2")
+      handler.handleAllocatedContainers(Array(container1, container2))
 
-    val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 2)
-    val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(defaultRPId -> 0)
-    handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
-      numLocalityAwareTasksPerResourceProfileId.toMap, Map(), Set.empty)
+      val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 2)
+      val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(defaultRPId -> 0)
+      handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
+        numLocalityAwareTasksPerResourceProfileId.toMap, Map(), Set.empty)
 
-    val statuses = Seq(container1, container2).map { c =>
-      ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Failed", -1)
+      val statuses = Seq(container1, container2).map { c =>
+        ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Failed", -1)
+      }
+      handler.updateResourceRequests()
+      handler.processCompletedContainers(statuses)
+      handler.updateResourceRequests()
+      handler.getNumExecutorsRunning should be(0)
+      handler.getNumContainersPendingAllocate should be(2)
+      handler.getNumExecutorsFailed should be(2)
+      handler.getNumUnexpectedContainerRelease should be(2)
+    } finally {
+      sc.stop()
+      SparkContext.clearActiveContext()
     }
-    handler.updateResourceRequests()
-    handler.processCompletedContainers(statuses)
-    handler.updateResourceRequests()
-    handler.getNumExecutorsRunning should be (0)
-    handler.getNumContainersPendingAllocate should be (2)
-    handler.getNumExecutorsFailed should be (2)
-    handler.getNumUnexpectedContainerRelease should be (2)
   }
 
   test("excluded nodes reflected in amClient requests") {
@@ -602,96 +609,122 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   test("window based failure executor counting") {
     sparkConf.set(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS, 100 * 1000L)
-    val (handler, _) = createAllocator(4)
+    val sc = SparkContext.getOrCreate(
+      sparkConf.clone.setAppName("lost executor removed from backend"))
+    try {
+      val (handler, _) = createAllocator(4)
 
-    handler.updateResourceRequests()
-    handler.getNumExecutorsRunning should be (0)
-    handler.getNumContainersPendingAllocate should be (4)
+      handler.updateResourceRequests()
+      handler.getNumExecutorsRunning should be(0)
+      handler.getNumContainersPendingAllocate should be(4)
 
-    val containers = Seq(
-      createContainer("host1"),
-      createContainer("host2"),
-      createContainer("host3"),
-      createContainer("host4")
-    )
-    handler.handleAllocatedContainers(containers)
+      val containers = Seq(
+        createContainer("host1"),
+        createContainer("host2"),
+        createContainer("host3"),
+        createContainer("host4")
+      )
+      handler.handleAllocatedContainers(containers)
 
-    val failedStatuses = containers.map { c =>
-      ContainerStatus.newInstance(c.getId, ContainerState.COMPLETE, "Failed", -1)
+      val failedStatuses = containers.map { c =>
+        ContainerStatus.newInstance(c.getId, ContainerState.COMPLETE, "Failed", -1)
+      }
+
+      handler.getNumExecutorsFailed should be(0)
+
+      clock.advance(100 * 1000L)
+      handler.processCompletedContainers(failedStatuses.slice(0, 1))
+      handler.getNumExecutorsFailed should be(1)
+
+      clock.advance(101 * 1000L)
+      handler.getNumExecutorsFailed should be(0)
+
+      handler.processCompletedContainers(failedStatuses.slice(1, 3))
+      handler.getNumExecutorsFailed should be(2)
+
+      clock.advance(50 * 1000L)
+      handler.processCompletedContainers(failedStatuses.slice(3, 4))
+      handler.getNumExecutorsFailed should be(3)
+
+      clock.advance(51 * 1000L)
+      handler.getNumExecutorsFailed should be(1)
+
+      clock.advance(50 * 1000L)
+      handler.getNumExecutorsFailed should be(0)
+    } finally {
+      sc.stop()
+      SparkContext.clearActiveContext()
     }
-
-    handler.getNumExecutorsFailed should be (0)
-
-    clock.advance(100 * 1000L)
-    handler.processCompletedContainers(failedStatuses.slice(0, 1))
-    handler.getNumExecutorsFailed should be (1)
-
-    clock.advance(101 * 1000L)
-    handler.getNumExecutorsFailed should be (0)
-
-    handler.processCompletedContainers(failedStatuses.slice(1, 3))
-    handler.getNumExecutorsFailed should be (2)
-
-    clock.advance(50 * 1000L)
-    handler.processCompletedContainers(failedStatuses.slice(3, 4))
-    handler.getNumExecutorsFailed should be (3)
-
-    clock.advance(51 * 1000L)
-    handler.getNumExecutorsFailed should be (1)
-
-    clock.advance(50 * 1000L)
-    handler.getNumExecutorsFailed should be (0)
   }
 
-  test("SPARK-26269: YarnAllocator should have same excludeOnFailure behaviour with YARN") {
-    val rmClientSpy = spy(rmClient)
-    val maxExecutors = 11
+  test("SPARK-26269: YarnAllocator excludeOnFailure behaviour") {
+    val sc = SparkContext.getOrCreate(
+      sparkConf.clone.setAppName("YarnAllocator excludeOnFailure behaviour"))
+    try {
+      val rmClientSpy = spy(rmClient)
+      val maxExecutors = 13
 
-    val (handler, _) = createAllocator(
-      maxExecutors,
-      rmClientSpy,
-      Map(
-        YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
-        MAX_FAILED_EXEC_PER_NODE.key -> "0"))
-    handler.updateResourceRequests()
+      val (handler, _) = createAllocator(
+        maxExecutors,
+        rmClientSpy,
+        Map(
+          YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
+          MAX_FAILED_EXEC_PER_NODE.key -> "0"))
+      handler.updateResourceRequests()
 
-    val hosts = (0 until maxExecutors).map(i => s"host$i")
-    val ids = 0 to maxExecutors
-    val containers = createContainers(hosts, ids)
+      val hosts = (0 until maxExecutors).map(i => s"host$i")
+      val ids = 0 to maxExecutors
+      val containers = createContainers(hosts, ids)
 
-    val nonExcludedStatuses = Seq(
-      ContainerExitStatus.SUCCESS,
-      ContainerExitStatus.PREEMPTED,
-      ContainerExitStatus.KILLED_EXCEEDED_VMEM,
-      ContainerExitStatus.KILLED_EXCEEDED_PMEM,
-      ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,
-      ContainerExitStatus.KILLED_BY_APPMASTER,
-      ContainerExitStatus.KILLED_AFTER_APP_COMPLETION,
-      ContainerExitStatus.ABORTED,
-      ContainerExitStatus.DISKS_FAILED)
+      val nonExcludedStatuses = Seq(
+        ContainerExitStatus.SUCCESS,
+        ContainerExitStatus.PREEMPTED,
+        ContainerExitStatus.KILLED_EXCEEDED_VMEM,
+        ContainerExitStatus.KILLED_EXCEEDED_PMEM,
+        ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,
+        ContainerExitStatus.KILLED_BY_APPMASTER,
+        ContainerExitStatus.KILLED_AFTER_APP_COMPLETION,
+        ContainerExitStatus.ABORTED,
+        ContainerExitStatus.DISKS_FAILED)
 
-    val nonExcludedContainerStatuses = nonExcludedStatuses.zipWithIndex.map {
-      case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
+      val nonExcludedContainerStatuses = nonExcludedStatuses.zipWithIndex.map {
+        case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
+      }
+
+      val EXCLUDED_EXIT_CODE = 1
+      val excludedStatuses = Seq(ContainerExitStatus.INVALID, EXCLUDED_EXIT_CODE)
+
+      val preStopExcludedContainerStatuses = excludedStatuses.zip(9 until 12).map {
+        case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
+      }
+
+      val afterStopExcludedContainerStatuses = excludedStatuses.zip(12 until maxExecutors).map {
+        case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
+      }
+
+      handler.handleAllocatedContainers(containers.slice(0, 9))
+      handler.processCompletedContainers(nonExcludedContainerStatuses)
+      verify(rmClientSpy, never())
+        .updateBlacklist(hosts.slice(0, 9).asJava, Collections.emptyList())
+
+      handler.handleAllocatedContainers(containers.slice(9, 11))
+      handler.processCompletedContainers(preStopExcludedContainerStatuses)
+      verify(rmClientSpy)
+        .updateBlacklist(hosts.slice(9, 10).asJava, Collections.emptyList())
+      verify(rmClientSpy)
+        .updateBlacklist(hosts.slice(10, 11).asJava, Collections.emptyList())
+
+      sc.stop()
+      handler.handleAllocatedContainers(containers.slice(11, 13))
+      handler.processCompletedContainers(afterStopExcludedContainerStatuses)
+      verify(rmClientSpy, never())
+        .updateBlacklist(hosts.slice(11, 12).asJava, Collections.emptyList())
+      verify(rmClientSpy, never())
+        .updateBlacklist(hosts.slice(12, 13).asJava, Collections.emptyList())
+    } finally {
+      sc.stop()
+      SparkContext.clearActiveContext()
     }
-
-    val EXCLUDED_EXIT_CODE = 1
-    val excludedStatuses = Seq(ContainerExitStatus.INVALID, EXCLUDED_EXIT_CODE)
-
-    val excludedContainerStatuses = excludedStatuses.zip(9 until maxExecutors).map {
-      case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
-    }
-
-    handler.handleAllocatedContainers(containers.slice(0, 9))
-    handler.processCompletedContainers(nonExcludedContainerStatuses)
-    verify(rmClientSpy, never())
-      .updateBlacklist(hosts.slice(0, 9).asJava, Collections.emptyList())
-
-    handler.handleAllocatedContainers(containers.slice(9, 11))
-    handler.processCompletedContainers(excludedContainerStatuses)
-    verify(rmClientSpy)
-      .updateBlacklist(hosts.slice(9, 10).asJava, Collections.emptyList())
-    verify(rmClientSpy)
-      .updateBlacklist(hosts.slice(10, 11).asJava, Collections.emptyList())
   }
 
   test("SPARK-28577#YarnAllocator.resource.memory should include offHeapSize " +
