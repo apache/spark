@@ -37,10 +37,18 @@ class Database(NamedTuple):
 
 class Table(NamedTuple):
     name: str
-    database: Optional[str]
+    catalog: Optional[str]
+    namespace: Optional[List[str]]
     description: Optional[str]
     tableType: str
     isTemporary: bool
+
+    @property
+    def database(self) -> Optional[str]:
+        if self.namespace is not None and len(self.namespace) == 1:
+            return self.namespace[0]
+        else:
+            return None
 
 
 class Column(NamedTuple):
@@ -127,6 +135,9 @@ class Catalog:
 
         If no database is specified, the current database is used.
         This includes all temporary views.
+
+        .. versionchanged:: 3.4
+           Allowed ``dbName`` to be qualified with catalog name.
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -134,10 +145,18 @@ class Catalog:
         tables = []
         while iter.hasNext():
             jtable = iter.next()
+
+            jnamespace = jtable.namespace()
+            if jnamespace is not None:
+                namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
+            else:
+                namespace = None
+
             tables.append(
                 Table(
                     name=jtable.name(),
-                    database=jtable.database(),
+                    catalog=jtable.catalog(),
+                    namespace=namespace,
                     description=jtable.description(),
                     tableType=jtable.tableType(),
                     isTemporary=jtable.isTemporary(),
@@ -341,6 +360,9 @@ class Catalog:
 
         .. versionchanged:: 3.1
            Added the ``description`` parameter.
+
+        .. versionchanged:: 3.4
+           Allowed ``tableName`` to be qualified with catalog name.
         """
         if path is not None:
             options["path"] = path
