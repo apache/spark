@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
 import org.apache.spark.util.collection.OpenHashMap
 
 abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]]
@@ -57,7 +58,6 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
-  // The result type is the same as the input type.
   override lazy val dataType: DataType = {
     val resultType = child.dataType match {
       case it: AnsiIntervalType => it
@@ -71,10 +71,7 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(
-      TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType),
-      percentageExpType,
-      IntegralType)
+    Seq(NumericAndAnsiInterval, percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
