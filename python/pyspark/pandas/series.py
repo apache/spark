@@ -410,7 +410,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 if isinstance(index, Index):
                     raise TypeError(
                         "The given index cannot be a pandas-on-Spark index. "
-                        "Try pandas.Index or array-like."
+                        "Try pandas index or array-like."
                     )
 
                 s = pd.Series(

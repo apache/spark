@@ -457,7 +457,7 @@ class DataFrame(Frame, Generic[T]):
                 if isinstance(index, Index):
                     raise TypeError(
                         "The given index cannot be a pandas-on-Spark index. "
-                        "Try pandas.Index or array-like."
+                        "Try pandas index or array-like."
                     )
                 pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
             internal = InternalFrame.from_pandas(pdf)
