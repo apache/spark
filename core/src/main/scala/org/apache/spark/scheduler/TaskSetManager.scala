@@ -1108,14 +1108,10 @@ private[spark] class TaskSetManager(
         }
 
         def taskProcessRateIsInefficient(): Boolean = {
-          if (taskProcessRateCalculator.isDefined) {
-            val calculator = taskProcessRateCalculator.get
-            val avgTaskProcessRate = calculator.getAvgTaskProcessRate()
-            avgTaskProcessRate <= 0.0 || calculator.getRunningTasksProcessRate(tid) <
-              avgTaskProcessRate * efficientTaskProcessMultiplier
-          } else {
-            true
-          }
+          taskProcessRateCalculator.forall(calculator => {
+            calculator.getRunningTasksProcessRate(tid) <
+              calculator.getAvgTaskProcessRate() * efficientTaskProcessMultiplier
+          })
         }
 
         def shouldSpeculateForExecutorDecommissioning(): Boolean = {
@@ -1271,7 +1267,7 @@ private[spark] class TaskSetManager(
   private[TaskSetManager] class TaskProcessRateCalculator {
     private var totalRecordsRead = 0L
     private var totalExecutorRunTime = 0L
-    private var avgTaskProcessRate = 0.0D
+    private var avgTaskProcessRate = Double.MaxValue
     private val runningTasksProcessRate = new ConcurrentHashMap[Long, Double]()
 
     private[TaskSetManager] def getAvgTaskProcessRate(): Double = {
@@ -1299,7 +1295,9 @@ private[spark] class TaskSetManager(
       }
       totalRecordsRead += recordsRead
       totalExecutorRunTime += executorRunTime
-      avgTaskProcessRate = sched.getTaskProcessRate(totalRecordsRead, totalExecutorRunTime)
+      if (totalRecordsRead > 0 && totalExecutorRunTime > 0) {
+        avgTaskProcessRate = sched.getTaskProcessRate(totalRecordsRead, totalExecutorRunTime)
+      }
       runningTasksProcessRate.remove(taskId)
     }
 
