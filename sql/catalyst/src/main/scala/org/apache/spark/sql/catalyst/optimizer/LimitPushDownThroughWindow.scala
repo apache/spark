@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, WINDOW}
  */
 object LimitPushDownThroughWindow extends Rule[LogicalPlan] with AliasHelper {
   // The window frame can only be UNBOUNDED PRECEDING to CURRENT ROW.
-  private def supportsPushdown(
+  private def supportsPushDown(
       windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
     case Alias(WindowExpression(_: Rank | _: DenseRank | _: NTile | _: RowNumber,
         WindowSpecDefinition(_, _,
@@ -53,12 +53,14 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with AliasHelper {
     case _ => false
   }
 
-  private def supportsPushdownWithFilter(
-      filterAttr: Attribute, order: Seq[SortOrder], window: Window): Boolean = {
+  // Check if it is safe to push down limit. A supported case must meet the following criteria:
+  // - It only has one pushable window function.
+  // - It only has one filter condition on this window function.
+  // - Window function's partition specification is the prefix of sort expressions.
+  private def supportsPushDownWithFilter(
+      attr: Attribute, order: Seq[SortOrder], window: Window): Boolean = {
     window.windowExpressions.size == 1 &&
-      getAliasMap(window.windowExpressions).get(filterAttr)
-        .exists(a => supportsPushdown(a :: Nil)) &&
-      (window.partitionSpec.size <= order.size || order.isEmpty) &&
+      getAliasMap(window.windowExpressions).get(attr).exists(a => supportsPushDown(a :: Nil)) &&
       window.partitionSpec.zip(order)
         .forall { case (e: Expression, s: SortOrder) => s.child.semanticEquals(e) }
   }
@@ -68,12 +70,18 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with AliasHelper {
     partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec
   }
 
+  private def pushedOrder(order: Seq[SortOrder], window: Window): Seq[SortOrder] = {
+    val windowSize = window.partitionSpec.size
+    order.take(windowSize) ++
+      sortPartitionSpec(window.partitionSpec.takeRight(windowSize - order.size), window.orderSpec)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAllPatterns(WINDOW, LIMIT), ruleId) {
     // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
     case Limit(limitExpr @ IntegerLiteral(limit),
         window @ Window(windowExpressions, partitionSpec, orderSpec, child))
-      if supportsPushdown(windowExpressions) && child.maxRows.forall(_ > limit) &&
+      if supportsPushDown(windowExpressions) && child.maxRows.forall(_ > limit) &&
         limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.
       window.copy(child = Limit(limitExpr,
@@ -81,7 +89,7 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with AliasHelper {
     // There is a Project between LocalLimit and Window if they do not have the same output.
     case Limit(limitExpr @ IntegerLiteral(limit), project @ Project(_,
         window @ Window(windowExpressions, partitionSpec, orderSpec, child)))
-      if supportsPushdown(windowExpressions) && child.maxRows.forall(_ > limit) &&
+      if supportsPushDown(windowExpressions) && child.maxRows.forall(_ > limit) &&
         limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.
       project.copy(child = window.copy(child = Limit(limitExpr,
@@ -90,18 +98,16 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with AliasHelper {
     case Limit(limitExpr @ IntegerLiteral(limit),
         f @ Filter(ExtractFilterCondition(attr, filterVal), window: Window))
       if limit < filterVal && window.maxRows.forall(_ > limit) &&
-        limit < conf.topKSortFallbackThreshold && supportsPushdownWithFilter(attr, Nil, window) =>
+        limit < conf.topKSortFallbackThreshold && supportsPushDownWithFilter(attr, Nil, window) =>
       val newWindow =
-        window.copy(child = Limit(limitExpr,
-          Sort(sortPartitionSpec(window.partitionSpec, window.orderSpec), true, window.child)))
+        window.copy(child = Limit(limitExpr, Sort(pushedOrder(Nil, window), true, window.child)))
       f.copy(child = newWindow)
     case Limit(limitExpr @ IntegerLiteral(limit), s @ Sort(order, _,
         f @ Filter(ExtractFilterCondition(attr, filterVal), window: Window)))
       if limit < filterVal && window.maxRows.forall(_ > limit) &&
-        limit < conf.topKSortFallbackThreshold && supportsPushdownWithFilter(attr, order, window) =>
+        limit < conf.topKSortFallbackThreshold && supportsPushDownWithFilter(attr, order, window) =>
       val newWindow =
-        window.copy(child = Limit(limitExpr,
-          Sort(sortPartitionSpec(window.partitionSpec, window.orderSpec), true, window.child)))
+        window.copy(child = Limit(limitExpr, Sort(pushedOrder(order, window), true, window.child)))
       s.copy(child = f.copy(child = newWindow))
   }
 

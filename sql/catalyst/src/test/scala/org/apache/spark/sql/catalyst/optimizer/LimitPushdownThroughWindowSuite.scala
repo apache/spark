@@ -352,12 +352,93 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(correctAnswer.analyze))
   }
 
+  test("SPARK-39600: Push down should keep the origin order") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .where('rn <= Literal(5))
+      .orderBy(b.desc, c.asc, a.desc)
+      .limit(5)
+    val correctAnswer = testRelation
+      .orderBy(b.desc, c.desc)
+      .limit(5)
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .where('rn <= Literal(5))
+      .orderBy(b.desc, c.asc, a.desc)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("SPARK-39600: Order exprs is subset of partitionSpec") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .where('rn <= Literal(5))
+      .orderBy(a.desc)
+      .limit(5)
+    val correctAnswer = testRelation
+      .orderBy(a.desc, b.asc, c.desc)
+      .limit(5)
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .where('rn <= Literal(5))
+      .orderBy(a.desc)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
   test("SPARK-39600: Unsupported case: partitionSpec is not the prefix of sort exprs") {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(RowNumber(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
       .where('rn <= Literal(5))
-      .orderBy('c.asc)
+      .orderBy(c.asc)
+      .limit(5)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(originalQuery.analyze))
+  }
+
+  test("SPARK-39600: Unsupported case: partitionSpec contains complex expression") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec((b + 1) :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .where('rn <= Literal(5))
+      .orderBy((b + 1).asc)
+      .limit(5)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(originalQuery.analyze))
+  }
+
+  test("SPARK-39600: Unsupported case: more than one window") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rk"))
+      .where('rn <= Literal(5))
+      .orderBy(b.asc)
+      .limit(5)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(originalQuery.analyze))
+  }
+
+  test("SPARK-39600: Unsupported case: filter on non-window attribute") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rk"))
+      .where(a <= Literal(5))
+      .orderBy(b.asc)
       .limit(5)
 
     comparePlans(
