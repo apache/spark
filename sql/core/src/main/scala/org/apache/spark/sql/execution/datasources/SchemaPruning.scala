@@ -41,7 +41,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
       l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
-          if containsNestedColumn(hadoopFsRelation) =>
+          if containsNestedColumn(l) =>
         prunePhysicalColumns(l, projects, filters, hadoopFsRelation,
           (prunedDataSchema, prunedMetadataSchema) => {
             val prunedHadoopRelation =
@@ -104,14 +104,15 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
   }
 
-  private def containsNestedColumn(fsRelation: HadoopFsRelation): Boolean =
-    fsRelation.schema.exists { _.dataType match {
+  private def containsNestedColumn(relation: LogicalRelation): Boolean = {
+    relation.output.exists { _.dataType match {
       case _: StructType | _: ArrayType |  _: MapType => true
       case _ => false
     }}
+  }
 
   /**
-   * Checks to see if the given relation can be pruned. Currently we support Parquet and ORC.
+   * Checks to see if the given relation can be pruned. Currently we support Parquet and ORC v1.
    */
   private def canPruneDataSchema(fsRelation: HadoopFsRelation): Boolean =
     conf.nestedSchemaPruningEnabled && (

@@ -564,4 +564,16 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+
+  test("SPARK-39535: HadoopFsRelation does not contain nested columns and query file metadata") {
+    withTable("t1") {
+      spark.range(2).write.saveAsTable("t1")
+      val df = spark.sql(s"SELECT *, $METADATA_FILE_NAME FROM t1")
+      val fileSourceScanMetaCols = df.queryExecution.sparkPlan.collectFirst {
+        case p: FileSourceScanExec => p.metadataColumns
+      }.get
+      assert(fileSourceScanMetaCols.size === 1)
+      assert(fileSourceScanMetaCols.map(_.name).toSet == Set("file_name"))
+    }
+  }
 }
