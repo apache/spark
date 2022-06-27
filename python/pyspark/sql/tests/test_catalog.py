@@ -333,11 +333,9 @@ class CatalogTests(ReusedSQLTestCase):
             spark.sql("CREATE DATABASE some_db")
             with self.table("tab1"):
                 spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
-                self.assertEqual(spark.catalog.getTable("tab1").name, "tab1")
-                self.assertEqual(
-                    spark.catalog.getTable("spark_catalog.default.tab1").catalog, "spark_catalog"
-                )
-                self.assertEqual(spark.catalog.getTable("tab1", "default").database, "default")
+                self.assertEqual(spark.catalog.getTable("tab1").database, "default")
+                self.assertEqual(spark.catalog.getTable("default.tab1").catalog, "spark_catalog")
+                self.assertEqual(spark.catalog.getTable("spark_catalog.default.tab1").name, "tab1")
 
 
 if __name__ == "__main__":
