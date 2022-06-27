@@ -456,6 +456,7 @@ class DataFrameReader(OptionUtils):
         modifiedBefore: Optional[Union[bool, str]] = None,
         modifiedAfter: Optional[Union[bool, str]] = None,
         unescapedQuoteHandling: Optional[str] = None,
+        naFilter: Optional[bool] = None,
     ) -> "DataFrame":
         r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
@@ -527,6 +528,7 @@ class DataFrameReader(OptionUtils):
             modifiedBefore=modifiedBefore,
             modifiedAfter=modifiedAfter,
             unescapedQuoteHandling=unescapedQuoteHandling,
+            naFilter=naFilter,
         )
         if isinstance(path, str):
             path = [path]
@@ -550,6 +552,7 @@ class DataFrameReader(OptionUtils):
             # There aren't any jvm api for creating a dataframe from rdd storing csv.
             # We can do it through creating a jvm dataset firstly and using the jvm api
             # for creating a dataframe from dataset storing csv.
+
             jdataset = self._spark._jsparkSession.createDataset(
                 jrdd.rdd(), self._spark._jvm.Encoders.STRING()
             )

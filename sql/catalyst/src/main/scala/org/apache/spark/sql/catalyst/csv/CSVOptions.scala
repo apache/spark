@@ -132,6 +132,7 @@ class CSVOptions(
   val nullValue = parameters.getOrElse("nullValue", "")
 
   val nanValue = parameters.getOrElse("nanValue", "NaN")
+  val naFilter = getBool("naFilter", true)
 
   val positiveInf = parameters.getOrElse("positiveInf", "Inf")
   val negativeInf = parameters.getOrElse("negativeInf", "-Inf")

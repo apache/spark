@@ -229,6 +229,7 @@ def read_csv(
     escapechar: Optional[str] = None,
     comment: Optional[str] = None,
     encoding: Optional[str] = None,
+    na_filter: bool = True,
     **options: Any,
 ) -> Union[DataFrame, Series]:
     """Read CSV (comma-separated) file into DataFrame or Series.
@@ -285,6 +286,9 @@ def read_csv(
         Indicates the encoding to read file
     options : dict
         All other options passed directly into Spark's data source.
+    na_filter : bool
+        If na_filter is false missing values will remain as is otherwise it
+        will be converted to None. By default it will True
 
     Returns
     -------
@@ -336,6 +340,7 @@ def read_csv(
                 raise ValueError("Only length-1 comment characters supported")
             reader.option("comment", comment)
 
+        reader.option("naFilter", na_filter)
         reader.options(**options)
 
         if encoding is not None:

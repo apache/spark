@@ -766,6 +766,41 @@ abstract class CSVSuite
     assert(results(2).toSeq === Array(2015, "Chevy", "Volt", null, "empty"))
   }
 
+  // SPARK-38292 : Support `na_filter` in csv.
+  test("test na_filter") {
+    val dataSchema = StructType(List(
+      StructField("year", IntegerType, nullable = true),
+      StructField("make", StringType, nullable = false),
+      StructField("model", StringType, nullable = false),
+      StructField("comment", StringType, nullable = true),
+      StructField("blank", StringType, nullable = true)))
+    var cars = spark.read
+      .format("csv")
+      .schema(dataSchema)
+      .options(Map("header" -> "true", "naFilter" -> "true"))
+      .load(testFile(carsNullFile))
+
+    verifyCars(cars, withHeader = true, checkValues = false)
+    var results = cars.collect()
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", null))
+    assert(results(1).toSeq === Array(1997, "Ford", "E350", "Go get " +
+      "one now they are going fast", null))
+    assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
+   cars = spark.read
+      .format("csv")
+      .schema(dataSchema)
+      .options(Map("header" -> "true", "naFilter" -> "false"))
+      .load(testFile(carsNullFile))
+
+    verifyCars(cars, withHeader = true, checkValues = false)
+   results = cars.collect()
+    print(results(2).toSeq)
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", ""))
+    assert(results(1).toSeq === Array(1997, "Ford", "E350", "Go get " +
+      "one now they are going fast", ""))
+    assert(results(2).toSeq === Array(null, "Chevy", "Volt", "", ""))
+  }
+
   test("save csv with empty fields with user defined empty values") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath

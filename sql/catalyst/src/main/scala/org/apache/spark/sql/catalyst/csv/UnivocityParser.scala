@@ -258,7 +258,7 @@ class UnivocityParser(
        name: String,
        nullable: Boolean,
        options: CSVOptions)(converter: ValueConverter): Any = {
-    if (datum == options.nullValue || datum == null) {
+    if ((options.naFilter && datum == options.nullValue) || datum == null) {
       if (!nullable) {
         throw QueryExecutionErrors.foundNullValueForNotNullableFieldError(name)
       }
@@ -317,7 +317,15 @@ class UnivocityParser(
         if (skipRow) {
           row.setNullAt(i)
         } else {
-          row(i) = valueConverters(i).apply(getToken(tokens, i))
+          // This is required to not set value as null ,
+          // 1. If its missing value at the end of line.
+          // 2. If the missing value at the beginning of line.
+          if (!options.naFilter && (i>=tokens.length ||
+            (i==0 && getToken(tokens, i).length == 0))) {
+            row(i) = valueConverters(i).apply("")
+          } else {
+            row(i) = valueConverters(i).apply(getToken(tokens, i))
+          }
           if (csvFilters.skipRow(row, i)) {
             skipRow = true
           }

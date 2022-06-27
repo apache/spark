@@ -118,6 +118,17 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             """
         )
 
+    @property
+    def csv_text_with_na(self):
+        return normalize_text(
+            """
+            A,B,C
+            item1,3,1
+            item2,,1
+            ,item3
+            """
+        )
+
     @contextmanager
     def csv_file(self, csv):
         with self.temp_file() as tmp:
@@ -427,6 +438,16 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             output_path = "%s/%s/%s" % (self.tmp_dir, partition_path, output_paths[0])
             with open(output_path) as f:
                 self.assertEqual(f.read(), expected)
+
+    def test_read_with_na_filter(self):
+        # SPARK-38292: Support `na_filter` for pyspark.pandas.read_csv
+        with self.csv_file(self.csv_text_with_na) as fn:
+            actual = ps.read_csv(fn, names="A string, B string, C string", na_filter=True)
+            expected = pd.read_csv(fn, names=["A", "B", "C"], na_filter=True)
+            self.assert_eq(expected, actual)
+            actual = ps.read_csv(fn, names="A string, B string, C string", na_filter=False)
+            expected = pd.read_csv(fn, names=["A", "B", "C"], na_filter=False)
+            self.assert_eq(expected, actual)
 
 
 if __name__ == "__main__":
