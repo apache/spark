@@ -21,7 +21,7 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
@@ -61,6 +61,12 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
   private def createTable(name: String, db: Option[String] = None): Unit = {
     sessionCatalog.createTable(utils.newTable(name, db), ignoreIfExists = false)
+  }
+
+  private def createTable(name: String, db: String, catalog: String, source: String,
+    schema: StructType, option: Map[String, String], description: String): DataFrame = {
+    spark.catalog.createTable(Array(catalog, db, name).mkString("."), source,
+      schema, description, option)
   }
 
   private def createTempTable(name: String): Unit = {
@@ -579,12 +585,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val tableSchema = new StructType().add("i", "int")
     val description = "this is a test table"
 
-    val df = spark.catalog.createTable(
-      tableName = Array(catalogName, dbName, tableName).mkString("."),
-      source = classOf[FakeV2Provider].getName,
-      schema = tableSchema,
-      description = description,
-      options = Map.empty[String, String])
+    val df = createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName,
+      tableSchema, Map.empty[String, String], description)
     assert(df.schema.equals(tableSchema))
 
     val testCatalog =
@@ -603,12 +605,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       val tableSchema = new StructType().add("i", "int")
       val description = "this is a test table"
 
-      val df = spark.catalog.createTable(
-        tableName = Array(catalogName, dbName, tableName).mkString("."),
-        source = classOf[FakeV2Provider].getName,
-        schema = tableSchema,
-        description = description,
-        options = Map("path" -> dir.getAbsolutePath))
+      val df = createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName,
+        tableSchema, Map("path" -> dir.getAbsolutePath), description)
       assert(df.schema.equals(tableSchema))
 
       val testCatalog =
@@ -630,23 +628,13 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       val tableName = "my_table"
       val tableSchema = new StructType().add("i", "int")
       val description = "this is a test managed table"
-
-      spark.catalog.createTable(
-        tableName = Array(catalogName, dbName, tableName).mkString("."),
-        source = classOf[FakeV2Provider].getName,
-        schema = tableSchema,
-        description = description,
-        options = Map.empty[String, String])
+      createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+        Map.empty[String, String], description)
 
       val tableName2 = "my_table2"
       val description2 = "this is a test external table"
-
-      spark.catalog.createTable(
-        tableName = Array(catalogName, dbName, tableName2).mkString("."),
-        source = classOf[FakeV2Provider].getName,
-        schema = tableSchema,
-        description = description2,
-        options = Map("path" -> dir.getAbsolutePath))
+      createTable(tableName2, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+        Map("path" -> dir.getAbsolutePath), description2)
 
       val tables = spark.catalog.listTables("testcat.my_db").collect()
       assert(tables.size == 2)
@@ -689,12 +677,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val tableSchema = new StructType().add("i", "int")
     val description = "this is a test table"
 
-    spark.catalog.createTable(
-      tableName = Array(catalogName, dbName, tableName).mkString("."),
-      source = classOf[FakeV2Provider].getName,
-      schema = tableSchema,
-      description = description,
-      options = Map.empty[String, String])
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], description)
 
     val t = spark.catalog.getTable(Array(catalogName, dbName, tableName).mkString("."))
     val expectedTable =
@@ -721,13 +705,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val tableSchema = new StructType().add("i", "int")
 
     assert(!spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
-
-    spark.catalog.createTable(
-      tableName = Array(catalogName, dbName, tableName).mkString("."),
-      source = classOf[FakeV2Provider].getName,
-      schema = tableSchema,
-      description = "",
-      options = Map.empty[String, String])
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], "")
 
     assert(spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
   }
@@ -742,5 +721,32 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
     val catalogName2 = "catalog_not_exists"
     assert(!spark.catalog.databaseExists(Array(catalogName2, dbName).mkString(".")))
+  }
+
+  test("SPARK-39506: three layer namespace compatibility - cache table, isCached and" +
+    "uncacheTable") {
+    val tableSchema = new StructType().add("i", "int")
+    createTable("my_table", "my_db", "testcat", classOf[FakeV2Provider].getName,
+      tableSchema, Map.empty[String, String], "")
+    createTable("my_table2", "my_db", "testcat", classOf[FakeV2Provider].getName,
+      tableSchema, Map.empty[String, String], "")
+
+    spark.catalog.cacheTable("testcat.my_db.my_table", StorageLevel.DISK_ONLY)
+    assert(spark.table("testcat.my_db.my_table").storageLevel == StorageLevel.DISK_ONLY)
+    assert(spark.catalog.isCached("testcat.my_db.my_table"))
+
+    spark.catalog.cacheTable("testcat.my_db.my_table2")
+    assert(spark.catalog.isCached("testcat.my_db.my_table2"))
+
+    spark.catalog.uncacheTable("testcat.my_db.my_table")
+    assert(!spark.catalog.isCached("testcat.my_db.my_table"))
+  }
+
+  test("SPARK-39506: test setCurrentCatalog, currentCatalog and listCatalogs") {
+    spark.catalog.setCurrentCatalog("testcat")
+    assert(spark.catalog.currentCatalog().equals("testcat"))
+    spark.catalog.setCurrentCatalog("spark_catalog")
+    assert(spark.catalog.currentCatalog().equals("spark_catalog"))
+    assert(spark.catalog.listCatalogs().collect().map(c => c.name).toSet == Set("testcat"))
   }
 }
