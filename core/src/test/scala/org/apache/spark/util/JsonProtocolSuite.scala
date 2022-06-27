@@ -296,6 +296,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson.removeField("Input Metrics")
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.inputMetrics.recordsRead == 0)
+    assert(newMetrics.inputMetrics.bytesRead == 0)
   }
 
   test("Input/Output records backwards compatibility") {
