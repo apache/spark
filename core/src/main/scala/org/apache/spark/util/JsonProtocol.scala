@@ -1409,21 +1409,26 @@ private[spark] object JsonProtocol {
     val executorHost = json.get("Host").textValue
     val totalCores = json.get("Total Cores").intValue
     val logUrls = mapFromJson(json.get("Log Urls")).toMap
+    // The "Attributes" field was added in Spark 3.0.0:
     val attributes = jsonOption(json.get("Attributes")) match {
       case Some(attr) => mapFromJson(attr).toMap
       case None => Map.empty[String, String]
     }
+    // The "Resources" field was added in Spark 3.0.0:
     val resources = jsonOption(json.get("Resources")) match {
       case Some(resources) => resourcesMapFromJson(resources).toMap
       case None => Map.empty[String, ResourceInformation]
     }
+    // The "Resource Profile Id" field was added in Spark 3.4.0
     val resourceProfileId = jsonOption(json.get("Resource Profile Id")) match {
       case Some(id) => id.intValue
       case None => ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     }
+    // The "Registration Time" field was added in Spark 3.4.0
     val registrationTs = jsonOption(json.get("Registration Time")) map { ts =>
       ts.longValue
     }
+    // The "Request Time" field was added in Spark 3.4.0
     val requestTs = jsonOption(json.get("Request Time")) map { ts =>
       ts.longValue
     }

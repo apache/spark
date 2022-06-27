@@ -36,6 +36,7 @@ import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource._
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.shuffle.MetadataFetchFailedException
@@ -577,6 +578,37 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldEnvironmentUpdateJson = environmentUpdateJsonString
       .removeField("Metrics Properties")
     assertEquals(expectedEvent, JsonProtocol.environmentUpdateFromJson(oldEnvironmentUpdateJson))
+  }
+
+  test("ExecutorInfo backward compatibility") {
+    // The "Attributes" and "Resources" fields were added in Spark 3.0.0
+    // The "Resource Profile Id", "Registration Time", and "Request Time"
+    // fields were added in Spark 3.4.0
+    val resourcesInfo = Map(ResourceUtils.GPU ->
+      new ResourceInformation(ResourceUtils.GPU, Array("0", "1"))).toMap
+    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
+    val executorInfo =
+      new ExecutorInfo(
+        "Hostee.awesome.com",
+        11,
+        logUrlMap = Map.empty,
+        attributes = attributes,
+        resourcesInfo = resourcesInfo,
+        resourceProfileId = 123,
+        registrationTime = Some(2L),
+        requestTime = Some(1L))
+    val oldExecutorInfoJson = toJsonString(JsonProtocol.executorInfoToJson(executorInfo, _))
+      .removeField("Attributes")
+      .removeField("Resources")
+      .removeField("Resource Profile Id")
+      .removeField("Registration Time")
+      .removeField("Request Time")
+    val oldEvent = JsonProtocol.executorInfoFromJson(oldExecutorInfoJson)
+    assert(oldEvent.attributes.isEmpty)
+    assert(oldEvent.resourcesInfo.isEmpty)
+    assert(oldEvent.resourceProfileId == DEFAULT_RESOURCE_PROFILE_ID)
+    assert(oldEvent.registrationTime.isEmpty)
+    assert(oldEvent.requestTime.isEmpty)
   }
 
   test("TaskInfo backward compatibility: handle missing partition ID field") {
