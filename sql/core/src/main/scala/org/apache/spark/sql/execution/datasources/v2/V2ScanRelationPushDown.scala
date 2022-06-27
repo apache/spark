@@ -44,6 +44,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       pushDownFilters,
       pushDownAggregates,
       pushDownLimitAndOffset,
+      pushDownAggregatesCompletely,
       pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
@@ -165,6 +166,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                 val pushedAggregates = finalTranslatedAggregates.filter(r.pushAggregation)
                 if (pushedAggregates.isEmpty) {
                   aggNode // return original plan node
+                } else if (r.supportCompletePushDown(pushedAggregates.get)) {
+                  sHolder.pushedAggregation =
+                    Some(PushedAggregation(
+                      pushedAggregates,
+                      finalResultExpressions,
+                      finalAggregates,
+                      normalizedGroupingExpressions,
+                      aggExprToOutputOrdinal))
+                  child
                 } else {
                   // No need to do column pruning because only the aggregate columns are used as
                   // DataSourceV2ScanRelation output columns. All the other columns are not
@@ -208,63 +218,47 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                   val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregates)
                   val scanRelation =
                     DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
-                  if (r.supportCompletePushDown(pushedAggregates.get)) {
-                    val projectExpressions = finalResultExpressions.map { expr =>
-                      expr.transformDown {
-                        case agg: AggregateExpression =>
-                          val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-                          val child =
-                            addCastIfNeeded(aggOutput(ordinal), agg.resultAttribute.dataType)
-                          Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
-                        case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
-                          val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
-                          addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
-                      }
-                    }.asInstanceOf[Seq[NamedExpression]]
-                    Project(projectExpressions, scanRelation)
-                  } else {
-                    val plan = Aggregate(output.take(groupingExpressions.length),
-                      finalResultExpressions, scanRelation)
+                  val plan = Aggregate(output.take(groupingExpressions.length),
+                    finalResultExpressions, scanRelation)
 
-                    // scalastyle:off
-                    // Change the optimized logical plan to reflect the pushed down aggregate
-                    // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
-                    // SELECT min(c1), max(c1) FROM t GROUP BY c2;
-                    // The original logical plan is
-                    // Aggregate [c2#10],[min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
-                    // +- RelationV2[c1#9, c2#10] ...
-                    //
-                    // After change the V2ScanRelation output to [c2#10, min(c1)#21, max(c1)#22]
-                    // we have the following
-                    // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
-                    // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
-                    //
-                    // We want to change it to
-                    // == Optimized Logical Plan ==
-                    // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
-                    // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
-                    // scalastyle:on
-                    plan.transformExpressions {
-                      case agg: AggregateExpression =>
-                        val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-                        val aggAttribute = aggOutput(ordinal)
-                        val aggFunction: aggregate.AggregateFunction =
-                          agg.aggregateFunction match {
-                            case max: aggregate.Max =>
-                              max.copy(child = addCastIfNeeded(aggAttribute, max.child.dataType))
-                            case min: aggregate.Min =>
-                              min.copy(child = addCastIfNeeded(aggAttribute, min.child.dataType))
-                            case sum: aggregate.Sum =>
-                              sum.copy(child = addCastIfNeeded(aggAttribute, sum.child.dataType))
-                            case _: aggregate.Count =>
-                              aggregate.Sum(addCastIfNeeded(aggAttribute, LongType))
-                            case other => other
-                          }
-                        agg.copy(aggregateFunction = aggFunction)
-                      case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
-                        val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
-                        addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
-                    }
+                  // scalastyle:off
+                  // Change the optimized logical plan to reflect the pushed down aggregate
+                  // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
+                  // SELECT min(c1), max(c1) FROM t GROUP BY c2;
+                  // The original logical plan is
+                  // Aggregate [c2#10],[min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
+                  // +- RelationV2[c1#9, c2#10] ...
+                  //
+                  // After change the V2ScanRelation output to [c2#10, min(c1)#21, max(c1)#22]
+                  // we have the following
+                  // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
+                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
+                  //
+                  // We want to change it to
+                  // == Optimized Logical Plan ==
+                  // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
+                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
+                  // scalastyle:on
+                  plan.transformExpressions {
+                    case agg: AggregateExpression =>
+                      val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
+                      val aggAttribute = aggOutput(ordinal)
+                      val aggFunction: aggregate.AggregateFunction =
+                        agg.aggregateFunction match {
+                          case max: aggregate.Max =>
+                            max.copy(child = addCastIfNeeded(aggAttribute, max.child.dataType))
+                          case min: aggregate.Min =>
+                            min.copy(child = addCastIfNeeded(aggAttribute, min.child.dataType))
+                          case sum: aggregate.Sum =>
+                            sum.copy(child = addCastIfNeeded(aggAttribute, sum.child.dataType))
+                          case _: aggregate.Count =>
+                            aggregate.Sum(addCastIfNeeded(aggAttribute, LongType))
+                          case other => other
+                        }
+                      agg.copy(aggregateFunction = aggFunction)
+                    case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
+                      val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
+                      addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
                   }
                 }
               }
@@ -272,6 +266,74 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           }
         case _ => aggNode
       }
+  }
+
+  def pushDownAggregatesCompletely(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case Project(_, sHolder: ScanBuilderHolder) if sHolder.pushedAggregation.isDefined =>
+      parsePushedAggregation(sHolder)
+    case sHolder: ScanBuilderHolder if sHolder.pushedAggregation.isDefined =>
+      parsePushedAggregation(sHolder)
+  }
+
+  private def parsePushedAggregation(sHolder: ScanBuilderHolder): LogicalPlan = {
+    val pushedAggregation = sHolder.pushedAggregation.get
+    // No need to do column pruning because only the aggregate columns are used as
+    // DataSourceV2ScanRelation output columns. All the other columns are not
+    // included in the output.
+    val scan = sHolder.builder.build()
+
+    // scalastyle:off
+    // use the group by columns and aggregate columns as the output columns
+    // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
+    // SELECT min(c1), max(c1) FROM t GROUP BY c2;
+    // Use c2, min(c1), max(c1) as output for DataSourceV2ScanRelation
+    // We want to have the following logical plan:
+    // == Optimized Logical Plan ==
+    // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
+    // +- RelationV2[c2#10, min(c1)#21, max(c1)#22]
+    // scalastyle:on
+    val newOutput = scan.readSchema().toAttributes
+    assert(newOutput.length == pushedAggregation.normalizedGroupingExpressions.length +
+      pushedAggregation.aggregates.length)
+    val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
+    val groupAttrs =
+      pushedAggregation.normalizedGroupingExpressions.zip(newOutput).zipWithIndex.map {
+        case ((a: Attribute, b: Attribute), _) => b.withExprId(a.exprId)
+        case ((expr, attr), ordinal) =>
+          if (!groupByExprToOutputOrdinal.contains(expr.canonicalized)) {
+            groupByExprToOutputOrdinal(expr.canonicalized) = ordinal
+          }
+          attr
+      }
+    val aggOutput = newOutput.drop(groupAttrs.length)
+    val output = groupAttrs ++ aggOutput
+
+    logInfo(
+      s"""
+         |Pushing operators to ${sHolder.relation.name}
+         |Pushed Aggregate Functions:
+         | ${pushedAggregation.pushedAggregates.get.aggregateExpressions.mkString(", ")}
+         |Pushed Group by:
+         | ${pushedAggregation.pushedAggregates.get.groupByExpressions.mkString(", ")}
+         |Output: ${output.mkString(", ")}
+                      """.stripMargin)
+
+    val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregation.pushedAggregates)
+    val scanRelation =
+      DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
+    val projectExpressions = pushedAggregation.resultExpressions.map { expr =>
+      expr.transformDown {
+        case agg: AggregateExpression =>
+          val ordinal = pushedAggregation.aggExprToOutputOrdinal(agg.canonicalized)
+          val child =
+            addCastIfNeeded(aggOutput(ordinal), agg.resultAttribute.dataType)
+          Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
+        case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
+          val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
+          addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
+      }
+    }.asInstanceOf[Seq[NamedExpression]]
+    Project(projectExpressions, scanRelation)
   }
 
   private def collectAggregates(resultExpressions: Seq[NamedExpression],
@@ -511,6 +573,8 @@ case class ScanBuilderHolder(
   var pushedSample: Option[TableSampleInfo] = None
 
   var pushedPredicates: Seq[Predicate] = Seq.empty[Predicate]
+
+  var pushedAggregation: Option[PushedAggregation] = None
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with
