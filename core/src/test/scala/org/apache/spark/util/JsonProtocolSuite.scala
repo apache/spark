@@ -332,6 +332,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson.removeField("Output Metrics")
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.outputMetrics.recordsWritten == 0)
+    assert(newMetrics.outputMetrics.bytesWritten == 0)
   }
 
   test("BlockManager events backward compatibility") {
