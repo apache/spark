@@ -1368,6 +1368,7 @@ private[spark] object JsonProtocol {
       .map { l => l.elements.asScala.map(_.intValue).toArray.toSeq }
       .getOrElse(Seq.empty)
     val storageLevel = storageLevelFromJson(json.get("Storage Level"))
+    // The "Barrier" field was added in Spark 3.0.0:
     val isBarrier = jsonOption(json.get("Barrier")).map(_.booleanValue).getOrElse(false)
     val numPartitions = json.get("Number of Partitions").intValue
     val numCachedPartitions = json.get("Number of Cached Partitions").intValue

@@ -439,16 +439,18 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedJobEnd, JsonProtocol.jobEndFromJson(oldEndEvent))
   }
 
-  test("RDDInfo backward compatibility (scope, parent IDs, callsite, DeterministicLevel)") {
+  test("RDDInfo backward compatibility") {
     // "Scope" and "Parent IDs" were introduced in Spark 1.4.0
     // "Callsite" was introduced in Spark 1.6.0
+    // "Barrier" was introduced in Spark 3.0.0
     // "DeterministicLevel" was introduced in Spark 3.2.0
-    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, false, Seq(1, 6, 8),
+    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, true, Seq(1, 6, 8),
       "callsite", Some(new RDDOperationScope("fable")), DeterministicLevel.INDETERMINATE)
     val oldRddInfoJson = toJsonString(JsonProtocol.rddInfoToJson(rddInfo, _))
       .removeField("Parent IDs")
       .removeField("Scope")
       .removeField("Callsite")
+      .removeField("Barrier")
       .removeField("DeterministicLevel")
     val expectedRddInfo = new RDDInfo(
       1, "one", 100, StorageLevel.NONE, false, Seq.empty, "", scope = None,
