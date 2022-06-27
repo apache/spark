@@ -848,7 +848,6 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val db = spark.catalog.getDatabase(dbName)
     assert(db.name === dbName)
     assert(db.description === "hive database")
-    // TODO catalog check API?
   }
 
   test("get database when there is `default` catalog") {
