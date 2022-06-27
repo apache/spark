@@ -27,6 +27,25 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 // DefinedByConstructorParams for the catalog to be able to create encoders for them.
 
 /**
+ * A catalog in Spark, as returned by the `listCatalogs` method defined in [[Catalog]].
+ *
+ * @param name name of the catalog
+ * @param description description of the catalog
+ * @since 3.4.0
+ */
+class CatalogMetadata(
+    val name: String,
+    @Nullable val description: String)
+  extends DefinedByConstructorParams {
+
+  override def toString: String = {
+    "Catalog[" +
+      s"name='$name', " +
+      Option(description).map { d => s"description='$d'] " }.getOrElse("]")
+  }
+}
+
+/**
  * A database in Spark, as returned by the `listDatabases` method defined in [[Catalog]].
  *
  * @param name name of the database.

@@ -97,6 +97,9 @@ public class V2ExpressionSQLBuilder {
           return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
         case "ABS":
         case "COALESCE":
+        case "GREATEST":
+        case "LEAST":
+        case "RAND":
         case "LN":
         case "EXP":
         case "POWER":
