@@ -552,6 +552,40 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedEvent, JsonProtocol.environmentUpdateFromJson(oldEnvironmentUpdateJson))
   }
 
+  test("TaskInfo backward compatibility: handle missing partition ID field") {
+    // The "Partition ID" field was added in Spark 3.3.0:
+    val newJson =
+      """
+        |{
+        |  "Task ID": 222,
+        |  "Index": 333,
+        |  "Attempt": 1,
+        |  "Partition ID": 333,
+        |  "Launch Time": 444,
+        |  "Executor ID": "executor",
+        |  "Host": "your kind sir",
+        |  "Locality": "NODE_LOCAL",
+        |  "Speculative": false,
+        |  "Getting Result Time": 0,
+        |  "Finish Time": 0,
+        |  "Failed": false,
+        |  "Killed": false,
+        |  "Accumulables": [
+        |    {
+        |      "ID": 1,
+        |      "Name": "Accumulable1",
+        |      "Update": "delta1",
+        |      "Value": "val1",
+        |      "Internal": false,
+        |      "Count Failed Values": false
+        |    }
+        |  ]
+        |}
+    """.stripMargin
+    val oldJson = newJson.removeField("Partition ID")
+    assert(JsonProtocol.taskInfoFromJson(oldJson).partitionId === -1)
+  }
+
   test("AccumulableInfo value de/serialization") {
     import InternalAccumulator._
     val blocks = Seq[(BlockId, BlockStatus)](

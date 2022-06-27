@@ -1117,6 +1117,7 @@ private[spark] object JsonProtocol {
     val taskId = json.get("Task ID").longValue
     val index = json.get("Index").intValue
     val attempt = jsonOption(json.get("Attempt")).map(_.intValue).getOrElse(1)
+    // The "Partition ID" field was added in Spark 3.3.0:
     val partitionId = jsonOption(json.get("Partition ID")).map(_.intValue).getOrElse(-1)
     val launchTime = json.get("Launch Time").longValue
     val executorId = weakIntern(json.get("Executor ID").textValue)
