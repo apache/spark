@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowNamespaces, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, TransformHelper}
@@ -74,7 +74,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of databases available across all sessions.
    */
   override def listDatabases(): Dataset[Database] = {
-    val databases = sessionCatalog.listDatabases().map(makeDatabase)
+    val catalog = currentCatalog()
+    val plan = ShowNamespaces(UnresolvedNamespace(Seq(catalog)), None)
+    val databases = sparkSession.sessionState.executePlan(plan).toRdd.collect()
+      .map(row => catalog + "." + row.getString(0))
+      .map(getDatabase)
     CatalogImpl.makeDataset(databases, sparkSession)
   }
 
@@ -309,16 +313,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val plan = UnresolvedNamespace(ident)
       val resolved = sparkSession.sessionState.executePlan(plan).analyzed
       val db = ident.tail
-      val metadata = resolved match {
+      resolved match {
         case ResolvedNamespace(catalog: SupportsNamespaces, _) =>
-          catalog.loadNamespaceMetadata(db.toArray)
-        // TODO what to do if it doesn't support namespaces
-        case _ => throw new RuntimeException(s"unexpected catalog resolved: $resolved")
+          val metadata = catalog.loadNamespaceMetadata(db.toArray)
+          new Database(
+            name = db.mkString("."),
+            description = metadata.get(SupportsNamespaces.PROP_COMMENT),
+            locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION))
+        // similar to databaseExists: if the catalog doesn't support namespaces, we assume it's an
+        // implicit namespace, which exists but has no metadata.
+        case _ => new Database(name = db.mkString("."), description = null, locationUri = null)
       }
-      new Database(
-        name = db.mkString("."),
-        description = metadata.get("comment"),
-        locationUri = metadata.get("location"))
     }
   }
 

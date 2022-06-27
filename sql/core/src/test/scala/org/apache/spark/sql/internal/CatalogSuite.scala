@@ -159,6 +159,13 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       Set("default", "my_db2"))
   }
 
+  test("list databases with current catalog") {
+    spark.catalog.setCurrentCatalog("testcat")
+    sql(s"CREATE NAMESPACE testcat.my_db")
+    sql(s"CREATE NAMESPACE testcat.my_db2")
+    assert(spark.catalog.listDatabases().collect().map(_.name).toSet == Set("my_db", "my_db2"))
+  }
+
   test("list tables") {
     assert(spark.catalog.listTables().collect().isEmpty)
     createTable("my_table1")
@@ -818,9 +825,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("three layer namespace compatibility - get database") {
-    Seq(("testcat", "somedb"), ("testcat", "ns.somedb")).foreach { case (catalog, dbName) =>
+    val catalogsAndDatabases =
+      Seq(("testcat", "somedb"), ("testcat", "ns.somedb"), ("spark_catalog", "somedb"))
+    catalogsAndDatabases.foreach { case (catalog, dbName) =>
       val qualifiedDb = s"$catalog.$dbName"
-      // TODO test properties? WITH DBPROPERTIES (prop='val')
       sql(s"CREATE NAMESPACE $qualifiedDb COMMENT 'test comment' LOCATION '/test/location'")
       val db = spark.catalog.getDatabase(qualifiedDb)
       assert(db.name === dbName)
@@ -828,6 +836,19 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       assert(db.locationUri === "file:/test/location")
     }
     intercept[AnalysisException](spark.catalog.getDatabase("randomcat.db10"))
+  }
+
+  test("three layer namespace compatibility - get database, same in hive and testcat") {
+    // create 'testdb' in hive and testcat
+    val dbName = "testdb"
+    sql(s"CREATE NAMESPACE spark_catalog.$dbName COMMENT 'hive database'")
+    sql(s"CREATE NAMESPACE testcat.$dbName COMMENT 'testcat namespace'")
+    sql("SET CATALOG testcat")
+    // should still return the database in Hive
+    val db = spark.catalog.getDatabase(dbName)
+    assert(db.name === dbName)
+    assert(db.description === "hive database")
+    // TODO catalog check API?
   }
 
   test("get database when there is `default` catalog") {
