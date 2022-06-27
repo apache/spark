@@ -256,7 +256,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val iter = sparkSession.sessionState.executePlan(plan).toRdd.collect().iterator
 
     // CREATE TABLE student (id INT, name STRING, age INT, city INT, area INT)
-    // PARTITIONED BY (age, city) CLUSTERED BY (Id, area) INTO 4 buckets;
+    // PARTITIONED BY (age, city)
+    // CLUSTERED BY (Id, area) INTO 4 buckets;
     //
     // DESCRIBE TABLE EXTENDED student;
     //  +--------------------+--------------------+-------+
@@ -300,14 +301,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     while (iter.hasNext) {
       val row = iter.next()
       row.getString(0) match {
-        case "# Partition Information" =>
-          state = "partition"
-        case "# Detailed Table Information" =>
-          state = "detailed"
-        case c if state == "normal" =>
-          colNames += c
-        case c if state == "partition" && c != "# col_name" && c != "" =>
-          partitionColNames.add(c)
+        case "" =>
+        case "# Partition Information" => state = "partition"
+        case "# col_name" if state == "partition" =>
+        case "# Detailed Table Information" => state = "detailed"
+        case c if c.startsWith("# ") => state = "other" // like '# Metadata Columns'
+        case c if state == "normal" => colNames += c
+        case c if state == "partition" && c != "# col_name" => partitionColNames.add(c)
         case "Bucket Columns" if state == "detailed" =>
           val rowStr = row.getString(1)
           rowStr.slice(1, rowStr.length - 1).split(", ").foreach { col =>
@@ -322,14 +322,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       makeColumn(ident, colName, partitionColNames.toSet, bucketColNames.toSet)
     }
 
-    //    val plan = ShowColumns(UnresolvedTableOrView(ident, "Catalog.listColumns", true), None)
-    //    val exec = sparkSession.sessionState.executePlan(plan).executedPlan
-    //    System.err.println(s"listColumns: exec.output = ${exec.output.mkString(", ")}")
-    //    val results = sparkSession.sessionState.executePlan(plan).toRdd.collect()
-    //    val names = results.map(row => ident ++ Seq(row.getString(0)))
-    //    System.err.println(s"listColumns: columnNames = ${names.mkString(", ")}")
-    //    results.map { row => makeColumn(ident, row.getString(0)) }
-
     CatalogImpl.makeDataset(columns, sparkSession)
   }
 
@@ -337,20 +329,23 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       partitionColNames: Set[String], bucketColNames: Set[String]): Column = {
 
     // This is just a no-op Alter Command, dedicated to get the resolved column.
-    val plan = AlterColumn(UnresolvedTableOrView(ident, "", true),
+    val plan = AlterColumn(UnresolvedTableOrView(ident, "NO-OP Alter", true),
       UnresolvedFieldName(Seq(colName)), None, None, None, None, None)
 
-    sparkSession.sessionState.executePlan(plan).analyzed match {
-      case AlterTableChangeColumnCommand(_, _, c) =>
-        new Column(
-          name = c.name,
-          description = c.getComment().orNull,
-          dataType = CharVarcharUtils.getRawType(c.metadata).getOrElse(c.dataType).catalogString,
-          nullable = c.nullable,
-          isPartition = partitionColNames.contains(c.name),
-          isBucket = bucketColNames.contains(c.name))
+    val resolvedCol = sparkSession.sessionState.executePlan(plan).analyzed match {
+      case AlterTableChangeColumnCommand(_, _, c) => c
+      case AlterColumn(_, ResolvedFieldName(_, c), _, _, _, _, _) => c
       case _ => throw QueryCompilationErrors.columnDoesNotExistError(colName)
     }
+
+    new Column(
+      name = resolvedCol.name,
+      description = resolvedCol.getComment().orNull,
+      dataType = CharVarcharUtils.getRawType(resolvedCol.metadata)
+        .getOrElse(resolvedCol.dataType).catalogString,
+      nullable = resolvedCol.nullable,
+      isPartition = partitionColNames.contains(resolvedCol.name),
+      isBucket = bucketColNames.contains(resolvedCol.name))
   }
 
   /**
