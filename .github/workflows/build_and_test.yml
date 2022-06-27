@@ -258,7 +258,9 @@ jobs:
 
   infra-image:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).pyspark == 'true'
+    if: >-
+      fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
+      fromJson(needs.precondition.outputs.required).sparkr == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Login to GitHub Container Registry
@@ -297,6 +299,7 @@ jobs:
           # TODO: Cleanup the latest image
           tags: |
             ghcr.io/${{ needs.precondition.outputs.user }}/apache-spark-github-action-image:pyspark-${{ needs.precondition.outputs.img_tag }}
+            ghcr.io/${{ needs.precondition.outputs.user }}/apache-spark-github-action-image:sparkr-${{ needs.precondition.outputs.img_tag }}
           # TODO: Change yikun cache to apache cache
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/yikun/apache-spark-github-action-image-cache:${{ inputs.branch }}
@@ -407,12 +410,12 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: precondition
+    needs: [precondition, infra-image]
     if: fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20220207
+      image: ghcr.io/${{ needs.precondition.outputs.user }}/apache-spark-github-action-image:sparkr-${{ needs.precondition.outputs.img_tag }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -427,6 +430,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
