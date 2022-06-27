@@ -21,7 +21,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
+import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
@@ -589,10 +589,20 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    sessionCatalog.lookupTempView(tableIdent).map(uncacheView).getOrElse {
-      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName),
-        cascade = true)
+    // We first try to parse `tableName` to see if it is 2 part name. If so, then in HMS we check
+    // if it is a temp view and uncache the temp view from HMS, otherwise we uncache it from the
+    // cache manager.
+    // if `tableName` is not 2 part name, then we directly uncache it from the cache manager.
+    try {
+      val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+      sessionCatalog.lookupTempView(tableIdent).map(uncacheView).getOrElse {
+        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName),
+          cascade = true)
+      }
+    } catch {
+      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName),
+          cascade = true)
     }
   }
 
@@ -670,6 +680,40 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def refreshByPath(resourcePath: String): Unit = {
     sparkSession.sharedState.cacheManager.recacheByPath(sparkSession, resourcePath)
+  }
+
+  /**
+   * Returns the current default catalog in this session.
+   *
+   * @since 3.4.0
+   */
+  override def currentCatalog(): String = {
+    sparkSession.sessionState.catalogManager.currentCatalog.name()
+  }
+
+  /**
+   * Sets the current default catalog in this session.
+   *
+   * @since 3.4.0
+   */
+  override def setCurrentCatalog(catalogName: String): Unit = {
+    sparkSession.sessionState.catalogManager.setCurrentCatalog(catalogName)
+  }
+
+  /**
+   * Returns a list of catalogs in this session.
+   *
+   * @since 3.4.0
+   */
+  override def listCatalogs(): Dataset[CatalogMetadata] = {
+    val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(None)
+    CatalogImpl.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
+  }
+
+  private def makeCatalog(name: String): CatalogMetadata = {
+    new CatalogMetadata(
+      name = name,
+      description = null)
   }
 }
 
