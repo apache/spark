@@ -545,6 +545,24 @@ class JsonProtocolSuite extends SparkFunSuite {
       exceptionFailure.accumUpdates, oldExceptionFailure.accumUpdates, (x, y) => x == y)
   }
 
+  test("TaskKilled backward compatibility") {
+    // The "Kill Reason" field was added in Spark 2.2.0
+    // The "Accumulator Updates" field was added in Spark 2.4.0
+    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = true)
+    val accumUpdates = tm.accumulators().map(AccumulatorSuite.makeInfo)
+    val taskKilled = TaskKilled(reason = "test", accumUpdates)
+    val taskKilledJson = toJsonString(JsonProtocol.taskEndReasonToJson(taskKilled, _))
+    val oldExceptionFailureJson =
+      taskKilledJson
+        .removeField("Kill Reason")
+        .removeField("Accumulator Updates")
+    val oldTaskKilled =
+      JsonProtocol.taskEndReasonFromJson(oldExceptionFailureJson).asInstanceOf[TaskKilled]
+    assert(oldTaskKilled.reason === "unknown reason")
+    assert(oldTaskKilled.accums.isEmpty)
+    assert(oldTaskKilled.accumUpdates.isEmpty)
+  }
+
   test("ExecutorMetricsUpdate backward compatibility: executor metrics update") {
     // executorMetricsUpdate was added in 2.4.0.
     val executorMetricsUpdate = makeExecutorMetricsUpdate("1", true, true)

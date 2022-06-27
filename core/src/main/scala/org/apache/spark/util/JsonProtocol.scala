@@ -1307,8 +1307,10 @@ private[spark] object JsonProtocol {
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` =>
+      // The "Kill Reason" field was added in Spark 2.2.0:
         val killReason = jsonOption(json.get("Kill Reason"))
           .map(_.asText).getOrElse("unknown reason")
+        // The "Accumulator Updates" field was added in Spark 2.4.0:
         val accumUpdates = jsonOption(json.get("Accumulator Updates"))
           .map(_.elements.asScala.map(accumulableInfoFromJson).toArray.toSeq)
           .getOrElse(Seq[AccumulableInfo]())
