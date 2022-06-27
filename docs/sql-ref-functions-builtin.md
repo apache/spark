@@ -138,16 +138,6 @@ license: |
 {% endfor %}
 
 {% for static_file in site.static_files %}
-    {% if static_file.name == 'generated-generator-funcs-table.html' %}
-### Generator Functions
-{% include_relative generated-generator-funcs-table.html %}
-#### Examples
-{% include_relative generated-generator-funcs-examples.html %}
-        {% break %}
-    {% endif %}
-{% endfor %}
-
-{% for static_file in site.static_files %}
     {% if static_file.name == 'generated-csv-funcs-table.html' %}
 ### Csv Functions
 {% include_relative generated-csv-funcs-table.html %}
@@ -167,3 +157,12 @@ license: |
     {% endif %}
 {% endfor %}
 
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'generated-generator-funcs-table.html' %}
+### Generator Functions
+{% include_relative generated-generator-funcs-table.html %}
+#### Examples
+{% include_relative generated-generator-funcs-examples.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
