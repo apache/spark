@@ -1190,11 +1190,14 @@ private[spark] object JsonProtocol {
       return metrics
     }
     metrics.setExecutorDeserializeTime(json.get("Executor Deserialize Time").longValue)
+    // The "Executor Deserialize CPU Time" field was added in Spark 2.1.0:
     metrics.setExecutorDeserializeCpuTime(
       jsonOption(json.get("Executor Deserialize CPU Time")).map(_.longValue).getOrElse(0))
     metrics.setExecutorRunTime(json.get("Executor Run Time").longValue)
+    // The "Executor CPU Time" field was added in Spark 2.1.0:
     metrics.setExecutorCpuTime(
       jsonOption(json.get("Executor CPU Time")).map(_.longValue).getOrElse(0))
+    // The "Peak Execution Memory" field was added in Spark 3.0.0:
     metrics.setPeakExecutionMemory(
       jsonOption(json.get("Peak Execution Memory")).map(_.longValue).getOrElse(0))
     metrics.setResultSize(json.get("Result Size").longValue)

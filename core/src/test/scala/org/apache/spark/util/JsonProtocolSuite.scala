@@ -336,6 +336,24 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(newMetrics.outputMetrics.bytesWritten == 0)
   }
 
+  test("TaskMetrics backward compatibility") {
+    // "Executor Deserialize CPU Time" and "Executor CPU Time" were introduced in Spark 2.1.0
+    // "Peak Execution Memory" was introduced in Spark 3.0.0
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
+    metrics.setExecutorDeserializeCpuTime(100L)
+    metrics.setExecutorCpuTime(100L)
+    metrics.setPeakExecutionMemory(100L)
+    val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
+    val oldJson = newJson
+      .removeField("Executor Deserialize CPU Time")
+      .removeField("Executor CPU Time")
+      .removeField("Peak Execution Memory")
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.executorDeserializeCpuTime == 0)
+    assert(newMetrics.executorCpuTime == 0)
+    assert(newMetrics.peakExecutionMemory == 0)
+  }
+
   test("BlockManager events backward compatibility") {
     // SparkListenerBlockManagerAdded/Removed in Spark 1.0.0 do not have a "time" property.
     val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
