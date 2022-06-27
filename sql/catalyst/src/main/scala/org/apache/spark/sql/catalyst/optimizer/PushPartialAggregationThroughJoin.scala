@@ -208,7 +208,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
           case ae @ AggregateExpression(af, _, _, _, _) => af match {
             case avg @ Average(e, useAnsiAdd) if e.references.nonEmpty =>
               val sum = Sum(e, useAnsiAdd, Some(avg.sumDataType)).toAggregateExpression()
-              val count = Count(Seq(Literal(1))).toAggregateExpression()
+              val count = Count(e).toAggregateExpression()
               e.dataType match {
                 case _: DecimalType =>
                   Divide(

@@ -11,11 +11,11 @@ WholeStageCodegen (54)
                     InputAdapter
                       Exchange [item_sk,store_name,store_zip] #2
                         WholeStageCodegen (25)
-                          HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,cnt,cnt,_pushed_sum_ss_wholesale_cost,_pushed_sum_ss_list_price,_pushed_sum_ss_coupon_amt] [sum((cntL * cntL)),sum((_pushed_sum_ss_wholesale_costL * cntL)),sum((_pushed_sum_ss_list_priceL * cntL)),sum((_pushed_sum_ss_coupon_amtL * cntL)),product_name,item_sk,store_name,store_zip,b_street_number,b_streen_name,b_city,b_zip,c_street_number,c_street_name,c_city,c_zip,syear,cnt,s1,s2,s3,sum,sum,sum,sum]
-                            Project [_pushed_sum_ss_coupon_amt,_pushed_sum_ss_list_price,_pushed_sum_ss_wholesale_cost,ca_city,ca_city,ca_street_name,ca_street_name,ca_street_number,ca_street_number,ca_zip,ca_zip,cnt,d_year,d_year,d_year,s_store_name,s_zip,cnt,i_item_sk,i_product_name]
-                              BroadcastHashJoin [ss_item_sk,i_item_sk]
-                                HashAggregate [ss_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,ss_coupon_amt,ss_list_price,ss_wholesale_cost] [sum(UnscaledValue(ss_coupon_amt)),sum(UnscaledValue(ss_list_price)),sum(UnscaledValue(ss_wholesale_cost)),count(1),_pushed_sum_ss_coupon_amt,_pushed_sum_ss_list_price,_pushed_sum_ss_wholesale_cost,cnt,sum,sum,sum,count]
-                                  Project [ss_wholesale_cost,ss_list_price,ss_coupon_amt,d_year,d_year,d_year,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ss_item_sk]
+                          HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,count,sum,sum,sum] [count(1),sum(UnscaledValue(ss_wholesale_cost)),sum(UnscaledValue(ss_list_price)),sum(UnscaledValue(ss_coupon_amt)),product_name,item_sk,store_name,store_zip,b_street_number,b_streen_name,b_city,b_zip,c_street_number,c_street_name,c_city,c_zip,syear,cnt,s1,s2,s3,count,sum,sum,sum]
+                            HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,ss_wholesale_cost,ss_list_price,ss_coupon_amt] [count,sum,sum,sum,count,sum,sum,sum]
+                              Project [ss_wholesale_cost,ss_list_price,ss_coupon_amt,d_year,d_year,d_year,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,i_item_sk,i_product_name]
+                                BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                  Project [ss_item_sk,ss_wholesale_cost,ss_list_price,ss_coupon_amt,d_year,s_store_name,s_zip,d_year,d_year,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip]
                                     BroadcastHashJoin [hd_income_band_sk,ib_income_band_sk]
                                       Project [ss_item_sk,ss_wholesale_cost,ss_list_price,ss_coupon_amt,d_year,s_store_name,s_zip,d_year,d_year,hd_income_band_sk,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip]
                                         BroadcastHashJoin [hd_income_band_sk,ib_income_band_sk]
@@ -174,10 +174,9 @@ WholeStageCodegen (54)
                                                       Scan parquet spark_catalog.default.income_band [ib_income_band_sk]
                                       InputAdapter
                                         ReusedExchange [ib_income_band_sk] #16
-                                InputAdapter
-                                  BroadcastExchange #17
-                                    WholeStageCodegen (24)
-                                      HashAggregate [i_item_sk,i_product_name] [count(1),cnt,count]
+                                  InputAdapter
+                                    BroadcastExchange #17
+                                      WholeStageCodegen (24)
                                         Project [i_item_sk,i_product_name]
                                           Filter [i_current_price,i_color,i_item_sk]
                                             ColumnarToRow
@@ -189,11 +188,11 @@ WholeStageCodegen (54)
                     InputAdapter
                       Exchange [item_sk,store_name,store_zip] #18
                         WholeStageCodegen (51)
-                          HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,cnt,cnt,_pushed_sum_ss_wholesale_cost,_pushed_sum_ss_list_price,_pushed_sum_ss_coupon_amt] [sum((cntL * cntL)),sum((_pushed_sum_ss_wholesale_costL * cntL)),sum((_pushed_sum_ss_list_priceL * cntL)),sum((_pushed_sum_ss_coupon_amtL * cntL)),item_sk,store_name,store_zip,syear,cnt,s1,s2,s3,sum,sum,sum,sum]
-                            Project [_pushed_sum_ss_coupon_amt,_pushed_sum_ss_list_price,_pushed_sum_ss_wholesale_cost,ca_city,ca_city,ca_street_name,ca_street_name,ca_street_number,ca_street_number,ca_zip,ca_zip,cnt,d_year,d_year,d_year,s_store_name,s_zip,cnt,i_item_sk,i_product_name]
-                              BroadcastHashJoin [ss_item_sk,i_item_sk]
-                                HashAggregate [ss_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,ss_coupon_amt,ss_list_price,ss_wholesale_cost] [sum(UnscaledValue(ss_coupon_amt)),sum(UnscaledValue(ss_list_price)),sum(UnscaledValue(ss_wholesale_cost)),count(1),_pushed_sum_ss_coupon_amt,_pushed_sum_ss_list_price,_pushed_sum_ss_wholesale_cost,cnt,sum,sum,sum,count]
-                                  Project [ss_wholesale_cost,ss_list_price,ss_coupon_amt,d_year,d_year,d_year,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ss_item_sk]
+                          HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,count,sum,sum,sum] [count(1),sum(UnscaledValue(ss_wholesale_cost)),sum(UnscaledValue(ss_list_price)),sum(UnscaledValue(ss_coupon_amt)),item_sk,store_name,store_zip,syear,cnt,s1,s2,s3,count,sum,sum,sum]
+                            HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,ss_wholesale_cost,ss_list_price,ss_coupon_amt] [count,sum,sum,sum,count,sum,sum,sum]
+                              Project [ss_wholesale_cost,ss_list_price,ss_coupon_amt,d_year,d_year,d_year,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,i_item_sk,i_product_name]
+                                BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                  Project [ss_item_sk,ss_wholesale_cost,ss_list_price,ss_coupon_amt,d_year,s_store_name,s_zip,d_year,d_year,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip]
                                     BroadcastHashJoin [hd_income_band_sk,ib_income_band_sk]
                                       Project [ss_item_sk,ss_wholesale_cost,ss_list_price,ss_coupon_amt,d_year,s_store_name,s_zip,d_year,d_year,hd_income_band_sk,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip]
                                         BroadcastHashJoin [hd_income_band_sk,ib_income_band_sk]
@@ -286,5 +285,5 @@ WholeStageCodegen (54)
                                             ReusedExchange [ib_income_band_sk] #16
                                       InputAdapter
                                         ReusedExchange [ib_income_band_sk] #16
-                                InputAdapter
-                                  ReusedExchange [cnt,i_item_sk,i_product_name] #17
+                                  InputAdapter
+                                    ReusedExchange [i_item_sk,i_product_name] #17

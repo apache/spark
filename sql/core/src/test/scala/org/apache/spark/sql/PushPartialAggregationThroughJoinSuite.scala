@@ -54,6 +54,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
         |  (2, 2828.9223),
         |  (2, 6067.6034),
         |  (2, 6067.6034),
+        |  (2, null),
         |  (3, 999999999999999999999999999999999.2812),
         |  (3, 999999999999999999999999999999999.2823)
       """.stripMargin)
@@ -148,7 +149,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
             checkAnswer(
               df,
               Row(10002004, 8, 8, 8, 8) ::
-              Row(10002003, 12, 12, 12, 12) ::
+              Row(10002003, 12, 15, 15, 15) ::
               Row(7003002, 6, 6, 6, 6) :: Nil)
           }
         }
@@ -182,7 +183,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
               df,
               Row(10002004, BigDecimal("999999999999999999999999999999999.2812"),
                 BigDecimal("999999999999999999999999999999999.2823")) ::
-              Row(10002003, BigDecimal("6874.6012"), BigDecimal("6067.6034")) ::
+              Row(10002003, BigDecimal("6874.6012"), null) ::
               Row(7003002, BigDecimal("9999999999999999999999999999999999.6012"),
                 BigDecimal("9999999999999999999999999999999999.2856")) :: Nil)
           }
@@ -305,7 +306,7 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
             checkAnswer(
               df,
               Row(10002004, 8, 8, 0, 8, 16, 20.0, 28.0, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) ::
-              Row(10002003, 12, 12, 0, 12, 24, 30.0, 42.0, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) ::
+              Row(10002003, 15, 15, 0, 15, 30, 37.5, 52.5, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) ::
               Row(7003002, 6, 6, 0, 6, 12, 15.0, 21.0, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) :: Nil)
           }
         }
