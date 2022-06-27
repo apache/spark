@@ -975,6 +975,7 @@ private[spark] object JsonProtocol {
     // For compatible with previous event logs
     val hadoopProperties = jsonOption(json.get("Hadoop Properties")).map(mapFromJson(_).toSeq)
       .getOrElse(Seq.empty)
+    // The "Metrics Properties" field was added in Spark 3.4.0:
     val metricsProperties = jsonOption(json.get("Metrics Properties")).map(mapFromJson(_).toSeq)
       .getOrElse(Seq.empty)
     val environmentDetails = Map[String, Seq[(String, String)]](

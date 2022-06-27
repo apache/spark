@@ -541,6 +541,17 @@ class JsonProtocolSuite extends SparkFunSuite {
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
   }
 
+  test("EnvironmentUpdate backward compatibility: handle missing metrics properties") {
+    // The "Metrics Properties" field was added in Spark 3.4.0:
+    val expectedEvent: SparkListenerEnvironmentUpdate = {
+      val e = JsonProtocol.environmentUpdateFromJson(environmentUpdateJsonString)
+      e.copy(environmentDetails = e.environmentDetails.updated("Metrics Properties", Seq.empty))
+    }
+    val oldEnvironmentUpdateJson = environmentUpdateJsonString
+      .removeField("Metrics Properties")
+    assertEquals(expectedEvent, JsonProtocol.environmentUpdateFromJson(oldEnvironmentUpdateJson))
+  }
+
   test("AccumulableInfo value de/serialization") {
     import InternalAccumulator._
     val blocks = Seq[(BlockId, BlockStatus)](
