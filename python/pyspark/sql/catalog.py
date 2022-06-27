@@ -365,9 +365,7 @@ class Catalog:
         False
         """
         if dbName is None:
-            return self._jcatalog.tableExists(tableName) or self._jcatalog.tableExists(
-                self.currentDatabase(), tableName
-            )
+            return self._jcatalog.tableExists(tableName)
         else:
             warnings.warn(
                 "`dbName` has been deprecated since Spark 3.4 and might be removed in "
