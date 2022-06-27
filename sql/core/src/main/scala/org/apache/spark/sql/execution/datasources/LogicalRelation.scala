@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReferen
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.sources.BaseRelation
 
 /**
@@ -64,7 +65,8 @@ case class LogicalRelation(
   }
 
   override def simpleString(maxFields: Int): String = {
-    s"Relation ${catalogTable.map(_.identifier.unquotedString).getOrElse("")}" +
+    s"Relation " +
+      s"${catalogTable.map(_.identifier.unquotedString(SESSION_CATALOG_NAME)).getOrElse("")}" +
       s"[${truncatedString(output, ",", maxFields)}] $relation"
   }
 

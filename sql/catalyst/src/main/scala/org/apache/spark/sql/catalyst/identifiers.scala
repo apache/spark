@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_IDENTIFIER_OUTPUT_CATALOG_NAME
+import org.apache.spark.sql.internal.SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME
 
 /**
- * An identifier that optionally specifies a database.
+ * An identifier that optionally specifies a database and catalog.
  *
- * Format (unquoted): "name" or "SESSION_CATALOG_NAME.db.name"
- * Format (quoted): "`name`" or "`SESSION_CATALOG_NAME`.`db`.`name`"
+ * Format (unquoted): "name" or "catalog.db.name"
+ * Format (quoted): "`name`" or "`catalog`.`db`.`name`"
  */
 sealed trait IdentifierWithDatabase {
   val identifier: String
@@ -37,37 +36,34 @@ sealed trait IdentifierWithDatabase {
    */
   private def quoteIdentifier(name: String): String = name.replace("`", "``")
 
-  def quotedString: String = {
-    if (SQLConf.get.getConf(LEGACY_IDENTIFIER_OUTPUT_CATALOG_NAME) && database.isDefined) {
-      val replacedId = quoteIdentifier(identifier)
-      val replacedDb = database.map(quoteIdentifier(_))
-      s"`$SESSION_CATALOG_NAME`.`${replacedDb.get}`.`$replacedId`"
-    } else {
-      quotedStringWithoutCatalog
-    }
-  }
+  def quotedString: String = quotedString(None)
+  def quotedString(catalog: String): String = quotedString(Some(catalog))
 
-  def quotedStringWithoutCatalog: String = {
+  def quotedString(catalog: Option[String]): String = {
     val replacedId = quoteIdentifier(identifier)
-    val replacedDb = database.map(quoteIdentifier(_))
-
-    if (replacedDb.isDefined) {
+    val replacedDb = database.map(quoteIdentifier)
+    if (!SQLConf.get.getConf(LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
+      catalog.isDefined && replacedDb.isDefined) {
+      s"`${catalog.get}`.`${replacedDb.get}`.`$replacedId`"
+    } else if (replacedDb.isDefined) {
       s"`${replacedDb.get}`.`$replacedId`"
     } else {
       s"`$replacedId`"
     }
   }
 
-  def unquotedString: String = {
-    if (SQLConf.get.getConf(LEGACY_IDENTIFIER_OUTPUT_CATALOG_NAME) && database.isDefined) {
-      s"$SESSION_CATALOG_NAME.${database.get}.$identifier"
-    } else {
-      unquotedStringWithoutCatalog
-    }
-  }
+  def unquotedString: String = unquotedString(None)
+  def unquotedString(catalog: String): String = unquotedString(Some(catalog))
 
-  def unquotedStringWithoutCatalog: String = {
-    if (database.isDefined) s"${database.get}.$identifier" else identifier
+  def unquotedString(catalog: Option[String]): String = {
+    if (!SQLConf.get.getConf(LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
+      catalog.isDefined && database.isDefined) {
+      s"${catalog.get}.${database.get}.$identifier"
+    } else if (database.isDefined) {
+      s"${database.get}.$identifier"
+    } else {
+      s"$identifier"
+    }
   }
 
   override def toString: String = quotedString

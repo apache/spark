@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -55,7 +56,6 @@ import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapTyp
  */
 private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configuration)
   extends ExternalCatalog with Logging {
-
   import CatalogTypes.TablePartitionSpec
   import HiveExternalCatalog._
   import CatalogTableType._
@@ -355,7 +355,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         properties = table.properties ++ tableProperties)
     }
 
-    val qualifiedTableName = table.identifier.quotedString
+    val qualifiedTableName = table.identifier.quotedString(SESSION_CATALOG_NAME)
     val maybeSerde = HiveSerDe.sourceToSerDe(provider)
     val incompatibleTypes =
       table.schema.filter(f => !isHiveCompatibleDataType(f.dataType)).map(_.dataType.simpleString)
@@ -405,9 +405,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           saveTableIntoHive(table, ignoreIfExists)
         } catch {
           case NonFatal(e) =>
-            val warningMessage =
-              s"Could not persist ${table.identifier.quotedString} in a Hive " +
-                "compatible way. Persisting it into Hive metastore in Spark SQL specific format."
+            val warningMessage = s"Could not persist " +
+              s"${table.identifier.quotedString(SESSION_CATALOG_NAME)} in a Hive " +
+              "compatible way. Persisting it into Hive metastore in Spark SQL specific format."
             logWarning(warningMessage, e)
             saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
         }
@@ -694,9 +694,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         client.alterTableDataSchema(db, table, newDataSchema, schemaProps)
       } catch {
         case NonFatal(e) =>
-          val warningMessage =
-            s"Could not alter schema of table ${oldTable.identifier.quotedString} in a Hive " +
-              "compatible way. Updating Hive metastore in Spark SQL specific format."
+          val warningMessage = s"Could not alter schema of table " +
+            s"${oldTable.identifier.quotedString(SESSION_CATALOG_NAME)} in a Hive " +
+            "compatible way. Updating Hive metastore in Spark SQL specific format."
           logWarning(warningMessage, e)
           client.alterTableDataSchema(db, table, EMPTY_DATA_SCHEMA, schemaProps)
       }

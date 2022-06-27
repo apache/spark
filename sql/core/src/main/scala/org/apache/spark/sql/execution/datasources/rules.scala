@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -116,7 +117,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
       val db = tableDesc.identifier.database.getOrElse(catalog.getCurrentDatabase)
       val tableIdentWithDB = tableDesc.identifier.copy(database = Some(db))
-      val tableName = tableIdentWithDB.unquotedString
+      val tableName = tableIdentWithDB.unquotedString(SESSION_CATALOG_NAME)
       val existingTable = catalog.getTableMetadata(tableIdentWithDB)
 
       if (existingTable.tableType == CatalogTableType.VIEW) {
@@ -308,7 +309,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
     val normalizedPartitionCols = CatalogUtils.normalizePartCols(
-      tableName = table.identifier.unquotedString,
+      tableName = table.identifier.unquotedString(SESSION_CATALOG_NAME),
       tableCols = schema.map(_.name),
       partCols = table.partitionColumnNames,
       resolver = conf.resolver)
@@ -334,7 +335,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     table.bucketSpec match {
       case Some(bucketSpec) =>
         val normalizedBucketSpec = CatalogUtils.normalizeBucketSpec(
-          tableName = table.identifier.unquotedString,
+          tableName = table.identifier.unquotedString(SESSION_CATALOG_NAME),
           tableCols = schema.map(_.name),
           bucketSpec = bucketSpec,
           resolver = conf.resolver)
@@ -419,13 +420,15 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
-          preprocess(i, metadata.identifier.quotedString, metadata.partitionSchema,
-            Some(metadata))
+          preprocess(i, metadata.identifier.quotedString(SESSION_CATALOG_NAME),
+            metadata.partitionSchema, Some(metadata))
         case LogicalRelation(h: HadoopFsRelation, _, catalogTable, _) =>
-          val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
+          val tblName = catalogTable.map(_.identifier.quotedString(SESSION_CATALOG_NAME))
+            .getOrElse("unknown")
           preprocess(i, tblName, h.partitionSchema, catalogTable)
         case LogicalRelation(_: InsertableRelation, _, catalogTable, _) =>
-          val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
+          val tblName = catalogTable.map(_.identifier.quotedString(SESSION_CATALOG_NAME))
+            .getOrElse("unknown")
           preprocess(i, tblName, new StructType(), catalogTable)
         case _ => i
       }

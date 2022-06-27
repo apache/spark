@@ -894,13 +894,13 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("SPARK-17832 function identifier contains backtick") {
     val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
-    assertEqual(complexName.quotedString,
+    assertEqual(complexName.quotedString(SESSION_CATALOG_NAME),
       UnresolvedAttribute(Seq(SESSION_CATALOG_NAME, "`fo`o", "`ba`r")))
-    intercept(complexName.unquotedString, Some("PARSE_SYNTAX_ERROR"),
+    intercept(complexName.unquotedString(SESSION_CATALOG_NAME), Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near")
     // Function identifier contains continuous backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
-    assertEqual(complexName2.quotedString,
+    assertEqual(complexName2.quotedString(SESSION_CATALOG_NAME),
       UnresolvedAttribute(Seq(SESSION_CATALOG_NAME, "fo``o", "ba``r")))
   }
 

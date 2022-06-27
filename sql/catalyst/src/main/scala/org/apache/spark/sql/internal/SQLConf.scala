@@ -3848,14 +3848,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_IDENTIFIER_OUTPUT_CATALOG_NAME =
-    buildConf("spark.sql.legacy.identifierOutputCatalogName")
+  val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
+    buildConf("spark.sql.legacy.nonIdentifierOutputCatalogName")
       .internal()
-      .doc("When set to true, the identifier will output catalog name if database is defined. " +
-        "When set to false, it restores the legacy behavior that does not output catalog name.")
+      .doc("When set to false, the identifier will output catalog name if database is defined. " +
+        "When set to true, it restores the legacy behavior that does not output catalog name.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.

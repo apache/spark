@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -642,7 +643,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val tableExists = catalog.tableExists(tableIdent)
     val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
     val tableIdentWithDB = tableIdent.copy(database = Some(db))
-    val tableName = tableIdentWithDB.unquotedString
+    val tableName = tableIdentWithDB.unquotedString(SESSION_CATALOG_NAME)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>

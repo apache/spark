@@ -482,7 +482,7 @@ case class AlterTableAddPartitionCommand(
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
         spec,
         table.partitionSchema,
-        table.identifier.quotedString,
+        table.identifier.quotedString(SESSION_CATALOG_NAME),
         sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(normalizedSpec, table.storage.copy(
@@ -497,7 +497,7 @@ case class AlterTableAddPartitionCommand(
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
 
-    sparkSession.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
     if (table.stats.nonEmpty && sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       // Updating table stats only if new partition is not empty
       val addedSize = CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
@@ -538,18 +538,18 @@ case class AlterTableRenamePartitionCommand(
     val normalizedOldPartition = PartitioningUtils.normalizePartitionSpec(
       oldPartition,
       table.partitionSchema,
-      table.identifier.quotedString,
+      table.identifier.quotedString(SESSION_CATALOG_NAME),
       sparkSession.sessionState.conf.resolver)
 
     val normalizedNewPartition = PartitioningUtils.normalizePartitionSpec(
       newPartition,
       table.partitionSchema,
-      table.identifier.quotedString,
+      table.identifier.quotedString(SESSION_CATALOG_NAME),
       sparkSession.sessionState.conf.resolver)
 
     catalog.renamePartitions(
       tableName, Seq(normalizedOldPartition), Seq(normalizedNewPartition))
-    sparkSession.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
     Seq.empty[Row]
   }
 
@@ -586,7 +586,7 @@ case class AlterTableDropPartitionCommand(
       PartitioningUtils.normalizePartitionSpec(
         spec,
         table.partitionSchema,
-        table.identifier.quotedString,
+        table.identifier.quotedString(SESSION_CATALOG_NAME),
         sparkSession.sessionState.conf.resolver)
     }
 
@@ -594,7 +594,7 @@ case class AlterTableDropPartitionCommand(
       table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
       retainData = retainData)
 
-    sparkSession.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
     CommandUtils.updateTableStats(sparkSession, table)
 
     Seq.empty[Row]
@@ -646,7 +646,7 @@ case class RepairTableCommand(
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    val tableIdentWithDB = table.identifier.quotedString
+    val tableIdentWithDB = table.identifier.quotedString(SESSION_CATALOG_NAME)
     if (table.partitionColumnNames.isEmpty) {
       throw QueryCompilationErrors.cmdOnlyWorksOnPartitionedTablesError(cmd, tableIdentWithDB)
     }
@@ -693,7 +693,7 @@ case class RepairTableCommand(
     // before Spark 2.1 unless they are converted via `msck repair table`.
     spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
     try {
-      spark.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
+      spark.catalog.refreshTable(table.identifier.quotedString)
     } catch {
       case NonFatal(e) =>
         logError(s"Cannot refresh the table '$tableIdentWithDB'. A query of the table " +
@@ -872,7 +872,7 @@ case class AlterTableSetLocationCommand(
         val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
           spec,
           table.partitionSchema,
-          table.identifier.quotedString,
+          table.identifier.quotedString(SESSION_CATALOG_NAME),
           sparkSession.sessionState.conf.resolver)
         val part = catalog.getPartition(table.identifier, normalizedSpec)
         val newPart = part.copy(storage = part.storage.copy(locationUri = Some(locUri)))
@@ -881,7 +881,7 @@ case class AlterTableSetLocationCommand(
         // No partition spec is specified, so we set the location for the table itself
         catalog.alterTable(table.withNewStorage(locationUri = Some(locUri)))
     }
-    sparkSession.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
     CommandUtils.updateTableStats(sparkSession, table)
     Seq.empty[Row]
   }

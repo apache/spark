@@ -23,6 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{CommandExecutionMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources._
@@ -54,7 +55,8 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
-        throw QueryCompilationErrors.tableAlreadyExistsError(table.identifier.unquotedString)
+        throw QueryCompilationErrors.tableAlreadyExistsError(
+          table.identifier.unquotedString(SESSION_CATALOG_NAME))
       }
     }
 
@@ -150,7 +152,7 @@ case class CreateDataSourceTableAsSelectCommand(
     val sessionState = sparkSession.sessionState
     val db = table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = table.identifier.copy(database = Some(db))
-    val tableName = tableIdentWithDB.unquotedString
+    val tableName = tableIdentWithDB.unquotedString(SESSION_CATALOG_NAME)
 
     if (sessionState.catalog.tableExists(tableIdentWithDB)) {
       assert(mode != SaveMode.Overwrite,
@@ -228,7 +230,8 @@ case class CreateDataSourceTableAsSelectCommand(
       dataSource.writeAndRead(mode, query, outputColumnNames, physicalPlan, metrics)
     } catch {
       case ex: AnalysisException =>
-        logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)
+        logError(s"Failed to write to table " +
+          s"${table.identifier.unquotedString(SESSION_CATALOG_NAME)}", ex)
         throw ex
     }
   }

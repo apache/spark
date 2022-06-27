@@ -30,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.internal.SQLConf
@@ -325,7 +326,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       fileIndexOpt: Option[FileIndex] = None): CatalogTable = {
     val inferenceMode = sparkSession.sessionState.conf.caseSensitiveInferenceMode
     val shouldInfer = (inferenceMode != NEVER_INFER) && !relation.tableMeta.schemaPreservesCase
-    val tableName = relation.tableMeta.identifier.unquotedString
+    val tableName = relation.tableMeta.identifier.unquotedString(SESSION_CATALOG_NAME)
     if (shouldInfer) {
       logInfo(s"Inferring case-sensitive schema for table $tableName (inference mode: " +
         s"$inferenceMode)")
@@ -359,11 +360,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   private def updateDataSchema(identifier: TableIdentifier, newDataSchema: StructType): Unit = try {
-    logInfo(s"Saving case-sensitive schema for table ${identifier.unquotedString}")
+    logInfo(s"Saving case-sensitive schema for table " +
+      s"${identifier.unquotedString(SESSION_CATALOG_NAME)}")
     sparkSession.sessionState.catalog.alterTableDataSchema(identifier, newDataSchema)
   } catch {
     case NonFatal(ex) =>
-      logWarning(s"Unable to save case-sensitive schema for table ${identifier.unquotedString}", ex)
+      logWarning(s"Unable to save case-sensitive schema for table " +
+        s"${identifier.unquotedString(SESSION_CATALOG_NAME)}", ex)
   }
 }
 

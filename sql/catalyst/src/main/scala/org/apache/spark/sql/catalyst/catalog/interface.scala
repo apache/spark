@@ -286,9 +286,9 @@ case class CatalogTable(
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = if (tableType == CatalogTableType.VIEW) {
-    identifier.unquotedStringWithoutCatalog
-  } else {
     identifier.unquotedString
+  } else {
+    identifier.unquotedString(SESSION_CATALOG_NAME)
   }
 
   /**

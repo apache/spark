@@ -199,17 +199,17 @@ case class AlterTableRenameCommand(
       DDLUtils.verifyAlterTableType(catalog, table, isView)
       // If `optStorageLevel` is defined, the old table was cached.
       val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
-        sparkSession.table(oldName.unquotedString))
+        sparkSession.table(oldName.unquotedString(SESSION_CATALOG_NAME)))
       val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
       if (optStorageLevel.isDefined) {
-        CommandUtils.uncacheTableOrView(sparkSession, oldName.unquotedString)
+        CommandUtils.uncacheTableOrView(sparkSession, oldName.unquotedString(SESSION_CATALOG_NAME))
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
       optStorageLevel.foreach { storageLevel =>
-        sparkSession.catalog.cacheTable(newName.unquotedString, storageLevel)
+        sparkSession.catalog.cacheTable(newName.unquotedString(SESSION_CATALOG_NAME), storageLevel)
       }
     }
     Seq.empty[Row]
@@ -234,7 +234,7 @@ case class AlterTableAddColumnsCommand(
     val colsWithProcessedDefaults =
       constantFoldCurrentDefaultsToExistDefaults(sparkSession, catalogTable.provider)
 
-    CommandUtils.uncacheTableOrView(sparkSession, table.quotedString)
+    CommandUtils.uncacheTableOrView(sparkSession, table.quotedString(SESSION_CATALOG_NAME))
     catalog.refreshTable(table)
 
     SchemaUtils.checkColumnNameDuplication(
@@ -320,7 +320,7 @@ case class LoadDataCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val targetTable = catalog.getTableMetadata(table)
-    val tableIdentWithDB = targetTable.identifier.quotedString
+    val tableIdentWithDB = targetTable.identifier.quotedString(SESSION_CATALOG_NAME)
     val normalizedSpec = partition.map { spec =>
       PartitioningUtils.normalizePartitionSpec(
         spec,
@@ -402,7 +402,7 @@ case class LoadDataCommand(
     }
 
     // Refresh the data and metadata cache to ensure the data visible to the users
-    sparkSession.catalog.refreshTable(targetTable.identifier.quotedStringWithoutCatalog)
+    sparkSession.catalog.refreshTable(targetTable.identifier.quotedString)
 
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
@@ -457,7 +457,7 @@ case class TruncateTableCommand(
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    val tableIdentWithDB = table.identifier.quotedString
+    val tableIdentWithDB = table.identifier.quotedString(SESSION_CATALOG_NAME)
 
     if (table.tableType == CatalogTableType.EXTERNAL) {
       throw QueryCompilationErrors.truncateTableOnExternalTablesError(tableIdentWithDB)
@@ -479,7 +479,7 @@ case class TruncateTableCommand(
           PartitioningUtils.normalizePartitionSpec(
             spec,
             table.partitionSchema,
-            table.identifier.quotedString,
+            table.identifier.quotedString(SESSION_CATALOG_NAME),
             spark.sessionState.conf.resolver)
         }
         val partLocations =
@@ -570,7 +570,7 @@ case class TruncateTableCommand(
     }
     // After deleting the data, refresh the table to make sure we don't keep around a stale
     // file relation in the metastore cache and cached table data in the cache manager.
-    spark.catalog.refreshTable(table.identifier.quotedStringWithoutCatalog)
+    spark.catalog.refreshTable(table.identifier.quotedString)
 
     CommandUtils.updateTableStats(spark, table)
     Seq.empty[Row]
@@ -684,7 +684,7 @@ case class DescribeTableCommand(
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
       partitionSpec,
       metadata.partitionSchema,
-      table.quotedString,
+      table.quotedString(SESSION_CATALOG_NAME),
       spark.sessionState.conf.resolver)
     val partition = catalog.getPartition(table, normalizedPartSpec)
     if (isExtended) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
@@ -709,6 +709,10 @@ case class DescribeTableCommand(
       case _ =>
     }
     table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+  }
+
+  override protected def stringArgs: Iterator[Any] = {
+    (Seq(table.quotedString(SESSION_CATALOG_NAME)) ++ productIterator.drop(1)).toIterator
   }
 }
 
@@ -845,6 +849,10 @@ case class DescribeColumnCommand(
     }
     header +: bins
   }
+
+  override protected def stringArgs: Iterator[Any] = {
+    (Seq(table.quotedString(SESSION_CATALOG_NAME)) ++ productIterator.drop(1)).toIterator
+  }
 }
 
 /**
@@ -897,7 +905,7 @@ case class ShowTablesCommand(
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
         partitionSpec.get,
         table.partitionSchema,
-        tableIdent.quotedString,
+        tableIdent.quotedString(SESSION_CATALOG_NAME),
         sparkSession.sessionState.conf.resolver)
       val partition = catalog.getPartition(tableIdent, normalizedSpec)
       val database = tableIdent.database.getOrElse("")
@@ -995,7 +1003,7 @@ case class ShowPartitionsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    val tableIdentWithDB = table.identifier.quotedString
+    val tableIdentWithDB = table.identifier.quotedString(SESSION_CATALOG_NAME)
 
     /**
      * Validate and throws an [[AnalysisException]] exception under the following conditions:
@@ -1019,7 +1027,7 @@ case class ShowPartitionsCommand(
     val normalizedSpec = spec.map(partitionSpec => PartitioningUtils.normalizePartitionSpec(
       partitionSpec,
       table.partitionSchema,
-      table.identifier.quotedString,
+      table.identifier.quotedString(SESSION_CATALOG_NAME),
       sparkSession.sessionState.conf.resolver))
 
     val partNames = catalog.listPartitionNames(tableName, normalizedSpec)
@@ -1380,7 +1388,7 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
     // drop the original cached version and make the new version cached lazily.
-    sparkSession.catalog.refreshTable(tableIdent.quotedStringWithoutCatalog)
+    sparkSession.catalog.refreshTable(tableIdent.quotedString)
     Seq.empty[Row]
   }
 }

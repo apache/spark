@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Subque
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -849,7 +850,7 @@ class SessionCatalog(
     if (isTempView) {
       None
     } else {
-      val viewName = metadata.identifier.unquotedStringWithoutCatalog
+      val viewName = metadata.identifier.unquotedString
       val viewText = metadata.viewText.get
       val userSpecifiedColumns =
         if (metadata.schema.fieldNames.toSeq == metadata.viewQueryColumnNames) {
@@ -1301,7 +1302,7 @@ class SessionCatalog(
       table: CatalogTable): Unit = {
     specs.foreach { spec =>
       PartitioningUtils.requireExactMatchedPartitionSpec(
-        table.identifier.toString,
+        table.identifier.quotedString(SESSION_CATALOG_NAME),
         spec,
         table.partitionColumnNames)
     }
@@ -1370,7 +1371,8 @@ class SessionCatalog(
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
     } else if (!ignoreIfExists) {
-      throw new FunctionAlreadyExistsException(db = db, func = identifier.toString)
+      throw new FunctionAlreadyExistsException(db = db,
+        func = identifier.unquotedString(SESSION_CATALOG_NAME))
     }
   }
 
@@ -1392,7 +1394,8 @@ class SessionCatalog(
       }
       externalCatalog.dropFunction(db, name.funcName)
     } else if (!ignoreIfNotExists) {
-      throw new NoSuchPermanentFunctionException(db = db, func = identifier.toString)
+      throw new NoSuchPermanentFunctionException(db = db,
+        func = identifier.unquotedString(SESSION_CATALOG_NAME))
     }
   }
 
@@ -1415,7 +1418,8 @@ class SessionCatalog(
       }
       externalCatalog.alterFunction(db, newFuncDefinition)
     } else {
-      throw new NoSuchPermanentFunctionException(db = db, func = identifier.toString)
+      throw new NoSuchPermanentFunctionException(db = db,
+        func = identifier.unquotedString(SESSION_CATALOG_NAME))
     }
   }
 
@@ -1458,7 +1462,7 @@ class SessionCatalog(
     val clazz = Utils.classForName(className)
     // do not add session catalog in function builder because we need use the name to lookup in
     // external catalog
-    val name = func.identifier.unquotedStringWithoutCatalog
+    val name = func.identifier.unquotedString
     (input: Seq[Expression]) => functionExpressionBuilder.makeExpression(name, clazz, input)
   }
 
@@ -1765,7 +1769,7 @@ class SessionCatalog(
   private def listRegisteredFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(_.database.forall(_ == db))
-    StringUtils.filterPattern(functions.map(_.unquotedStringWithoutCatalog), pattern).map { f =>
+    StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
       // In functionRegistry, function names are stored as an unquoted format.
       Try(parser.parseFunctionIdentifier(f)) match {
         case Success(e) => e

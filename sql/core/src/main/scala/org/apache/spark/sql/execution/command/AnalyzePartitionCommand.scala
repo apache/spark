@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Column, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.util.PartitioningUtils
 
@@ -49,7 +50,7 @@ case class AnalyzePartitionCommand(
   private def getPartitionSpec(table: CatalogTable): Option[TablePartitionSpec] = {
     val normalizedPartitionSpec =
       PartitioningUtils.normalizePartitionSpec(partitionSpec, table.partitionSchema,
-        table.identifier.quotedString, conf.resolver)
+        table.identifier.quotedString(SESSION_CATALOG_NAME), conf.resolver)
 
     // Report an error if partition columns in partition specification do not form
     // a prefix of the list of partition columns defined in the table schema

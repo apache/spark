@@ -197,7 +197,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("show functions") {
-    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().map(_.unquotedString)
+    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction()
+      .map(_.unquotedString(SESSION_CATALOG_NAME))
     val allFunctions = sql("SHOW functions").collect().map(r => r(0))
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))

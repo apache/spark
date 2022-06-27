@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -234,7 +235,7 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 
-  override def prettyName: String = name.unquotedString
+  override def prettyName: String = name.unquotedString(SESSION_CATALOG_NAME)
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
   override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =

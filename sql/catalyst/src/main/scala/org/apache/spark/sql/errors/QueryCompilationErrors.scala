@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, L
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.NamedReference
@@ -246,26 +247,26 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def viewDepthExceedsMaxResolutionDepthError(
       identifier: TableIdentifier, maxNestedViewDepth: Int, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"The depth of view ${identifier.quotedStringWithoutCatalog} " +
-      s"exceeds the maximum view resolution depth ($maxNestedViewDepth). Analysis is aborted to " +
+    new AnalysisException(s"The depth of view $identifier exceeds the maximum " +
+      s"view resolution depth ($maxNestedViewDepth). Analysis is aborted to " +
       s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
       "around this.", t.origin.line, t.origin.startPosition)
   }
 
   def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
-    new AnalysisException(
-      s"Inserting into a view is not allowed. View: ${identifier.quotedStringWithoutCatalog}.",
+    new AnalysisException(s"Inserting into a view is not allowed. View: $identifier.",
       t.origin.line, t.origin.startPosition)
   }
 
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      s"Writing into a view is not allowed. View: ${identifier.quotedStringWithoutCatalog}.",
+      s"Writing into a view is not allowed. View: ${identifier.quotedString}.",
       t.origin.line, t.origin.startPosition)
   }
 
   def writeIntoV1TableNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Cannot write into v1 table: $identifier.",
+    new AnalysisException(
+      s"Cannot write into v1 table: ${identifier.quotedString(SESSION_CATALOG_NAME)}.",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -343,7 +344,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
     new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = "NOT_GENERATOR",
-      messageParameters = Array(toSQLId(name.toString), classCanonicalName))
+      messageParameters = Array(toSQLId(name.unquotedString(SESSION_CATALOG_NAME)),
+        classCanonicalName))
   }
 
   def functionWithUnsupportedSyntaxError(prettyName: String, syntax: String): Throwable = {
@@ -454,7 +456,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {
-    new AnalysisException(s"undefined function $name")
+    new AnalysisException(s"undefined function ${name.unquotedString(SESSION_CATALOG_NAME)}")
   }
 
   def invalidFunctionArgumentsError(
@@ -610,7 +612,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotOperateManagedTableWithExistingLocationError(
       methodName: String, tableIdentifier: TableIdentifier, tableLocation: Path): Throwable = {
-    new AnalysisException(s"Can not $methodName the managed table('$tableIdentifier')" +
+    new AnalysisException(s"Can not $methodName the managed table" +
+      s"('${tableIdentifier.quotedString(SESSION_CATALOG_NAME)}')" +
       s". The associated location('${tableLocation.toString}') already exists.")
   }
 
@@ -636,15 +639,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotRenameTempViewWithDatabaseSpecifiedError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
-    new AnalysisException(s"RENAME TEMPORARY VIEW from '${oldName.quotedStringWithoutCatalog}' " +
-      s"to '${newName.quotedStringWithoutCatalog}': cannot " +
+    new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': cannot " +
       s"specify database name '${newName.database.get}' in the destination table")
   }
 
   def cannotRenameTempViewToExistingTableError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
-    new AnalysisException(s"RENAME TEMPORARY VIEW from '${oldName.quotedStringWithoutCatalog}' " +
-      s"to '${newName.quotedStringWithoutCatalog}': destination table already exists")
+    new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': " +
+      "destination table already exists")
   }
 
   def invalidPartitionSpecError(details: String): Throwable = {
@@ -652,13 +654,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def functionAlreadyExistsError(func: FunctionIdentifier): Throwable = {
-    new AnalysisException(s"Function $func already exists")
+    new AnalysisException(s"Function ${func.unquotedString(SESSION_CATALOG_NAME)} already exists")
   }
 
   def cannotLoadClassWhenRegisteringFunctionError(
       className: String, func: FunctionIdentifier): Throwable = {
     new AnalysisException(s"Can not load class '$className' when registering " +
-      s"the function '$func', please make sure it is on the classpath")
+      s"the function '${func.unquotedString(SESSION_CATALOG_NAME)}', " +
+      s"please make sure it is on the classpath")
   }
 
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
@@ -666,11 +669,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableNotSpecifyDatabaseError(identifier: TableIdentifier): Throwable = {
-    new AnalysisException(s"table $identifier did not specify database")
+    new AnalysisException(s"table ${identifier.quotedString(SESSION_CATALOG_NAME)} did not " +
+      s"specify database")
   }
 
   def tableNotSpecifyLocationUriError(identifier: TableIdentifier): Throwable = {
-    new AnalysisException(s"table $identifier did not specify locationUri")
+    new AnalysisException(s"table ${identifier.quotedString(SESSION_CATALOG_NAME)} did not " +
+      s"specify locationUri")
   }
 
   def partitionNotSpecifyLocationUriError(specString: String): Throwable = {
@@ -1233,7 +1238,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       tableDesc: CatalogTable): Throwable = {
     new AnalysisException(
       s"""
-         |The location of the existing table ${identifier.quotedString} is
+         |The location of the existing table ${identifier.quotedString(SESSION_CATALOG_NAME)} is
          |`${existingTable.location}`. It doesn't match the specified location
          |`${tableDesc.location}`.
        """.stripMargin)
@@ -1638,12 +1643,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
-    new AnalysisException(s"$tableIdentifier already exists.")
+    new AnalysisException(s"${tableIdentifier.quotedString(SESSION_CATALOG_NAME)} already exists.")
   }
 
   def tableIdentifierNotConvertedToHadoopFsRelationError(
       tableIdentifier: TableIdentifier): Throwable = {
-    new AnalysisException(s"$tableIdentifier should be converted to HadoopFsRelation.")
+    new AnalysisException(s"${tableIdentifier.quotedString(SESSION_CATALOG_NAME)} should be " +
+      "converted to HadoopFsRelation.")
   }
 
   def alterDatabaseLocationUnsupportedError(): Throwable = {
@@ -1737,15 +1743,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
-    new AnalysisException(s"Temporary view ${tableIdent.quotedStringWithoutCatalog} " +
-      "is not cached for analyzing columns.")
+    new AnalysisException(s"Temporary view $tableIdent is not cached for analyzing columns.")
   }
 
   def columnTypeNotSupportStatisticsCollectionError(
       name: String,
       tableIdent: TableIdentifier,
       dataType: DataType): Throwable = {
-    new AnalysisException(s"Column $name in table $tableIdent is of type $dataType, " +
+    new AnalysisException(s"Column $name in table " +
+      s"${tableIdent.quotedString(SESSION_CATALOG_NAME)} is of type $dataType, " +
       "and Spark does not support statistics collection on this column type.")
   }
 
@@ -1813,7 +1819,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
-    new AnalysisException(s"Attempted to unset non-existent property '$property' in table '$table'")
+    new AnalysisException(s"Attempted to unset non-existent property '$property' in table " +
+      s"'${table.quotedString(SESSION_CATALOG_NAME)}'")
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(
@@ -1898,23 +1905,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def alterAddColNotSupportViewError(table: TableIdentifier): Throwable = {
-    // scalastyle:off
     new AnalysisException(
       s"""
          |ALTER ADD COLUMNS does not support views.
-         |You must drop and re-create the views for adding the new columns. Views: ${table.quotedStringWithoutCatalog}
+         |You must drop and re-create the views for adding the new columns. Views: $table
        """.stripMargin)
-    // scalastyle:on
   }
 
   def alterAddColNotSupportDatasourceTableError(
       tableType: Any,
       table: TableIdentifier): Throwable = {
+    // scalastyle:off
     new AnalysisException(
       s"""
          |ALTER ADD COLUMNS does not support datasource table with type $tableType.
-         |You must drop and re-create the table for adding the new columns. Tables: $table
+         |You must drop and re-create the table for adding the new columns. Tables: ${table.quotedString(SESSION_CATALOG_NAME)}
        """.stripMargin)
+    // scalastyle:on
   }
 
   def loadDataNotSupportedForDatasourceTablesError(tableIdentWithDB: String): Throwable = {
@@ -2018,7 +2025,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(
       table: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"$table is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead.")
+      s"${table.quotedString(SESSION_CATALOG_NAME)} is a Spark data source table. Use " +
+        "`SHOW CREATE TABLE` without `AS SERDE` instead.")
   }
 
   def showCreateTableOrViewFailToExecuteUnsupportedFeatureError(
@@ -2043,13 +2051,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableIsNotViewError(name: TableIdentifier): Throwable = {
-    new AnalysisException(s"$name is not a view")
+    new AnalysisException(s"${name.quotedString(SESSION_CATALOG_NAME)} is not a view")
   }
 
   def viewAlreadyExistsError(name: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"View ${name.quotedStringWithoutCatalog} already exists. If you want to update " +
-        "the view definition, please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
+      s"View $name already exists. If you want to update the view definition, " +
+        "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
   }
 
   def createPersistedViewFromDatasetAPINotAllowedError(): Throwable = {
@@ -2059,23 +2067,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def recursiveViewDetectedError(
       viewIdent: TableIdentifier,
       newPath: Seq[TableIdentifier]): Throwable = {
-    new AnalysisException(s"Recursive view ${viewIdent.quotedStringWithoutCatalog} detected " +
-      s"(cycle: ${newPath.map(_.quotedStringWithoutCatalog).mkString(" -> ")})")
+    new AnalysisException(s"Recursive view $viewIdent detected " +
+      s"(cycle: ${newPath.mkString(" -> ")})")
   }
 
   def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
       name: TableIdentifier,
       attrName: String): Throwable = {
-    new AnalysisException(
-      s"Not allowed to create a permanent view ${name.quotedStringWithoutCatalog} without " +
+    new AnalysisException(s"Not allowed to create a permanent view $name without " +
       s"explicitly assigning an alias for expression $attrName")
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempViewError(
       name: TableIdentifier,
       nameParts: String): Throwable = {
-    new AnalysisException(
-      s"Not allowed to create a permanent view ${name.quotedStringWithoutCatalog} by " +
+    new AnalysisException(s"Not allowed to create a permanent view $name by " +
       s"referencing a temporary view $nameParts. " +
       "Please create a temp view instead by CREATE TEMP VIEW")
   }
@@ -2083,8 +2089,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def notAllowedToCreatePermanentViewByReferencingTempFuncError(
       name: TableIdentifier,
       funcName: String): Throwable = {
-    new AnalysisException(
-      s"Not allowed to create a permanent view ${name.quotedStringWithoutCatalog} by " +
+    new AnalysisException(s"Not allowed to create a permanent view $name by " +
       s"referencing a temporary function `$funcName`")
   }
 
@@ -2143,8 +2148,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotSpecifyDatabaseForTempViewError(tableIdent: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"Temporary view '${tableIdent.quotedStringWithoutCatalog}' should not have specified a " +
-        "database")
+      s"Temporary view '$tableIdent' should not have specified a database")
   }
 
   def cannotCreateTempViewUsingHiveDataSourceError(): Throwable = {
@@ -2274,7 +2278,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableAlreadyExistsError(tableIdent: TableIdentifier): Throwable = {
-    new AnalysisException(s"Table $tableIdent already exists.")
+    new AnalysisException(s"Table ${tableIdent.quotedString(SESSION_CATALOG_NAME)} already exists.")
   }
 
   def cannotOverwriteTableThatIsBeingReadFromError(tableName: String): Throwable = {

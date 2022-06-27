@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
@@ -100,7 +101,8 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val name = FunctionIdentifier(info.getName, Option(info.getDb)).unquotedString
+    val name = FunctionIdentifier(info.getName, Option(info.getDb))
+      .unquotedString(SESSION_CATALOG_NAME)
 
     val result = if (info.getClassName != null) {
       Row(s"Function: $name") ::
@@ -171,8 +173,8 @@ case class ShowFunctionsCommand(
       sparkSession.sessionState.catalog
         .listFunctions(db, pattern.getOrElse("*"))
         .collect {
-          case (f, "USER") if showUserFunctions => f.unquotedString
-          case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
+          case (f, "USER") if showUserFunctions => f.unquotedString(SESSION_CATALOG_NAME)
+          case (f, "SYSTEM") if showSystemFunctions => f.unquotedString(SESSION_CATALOG_NAME)
         }
     // Hard code "<>", "!=", "between", "case", and "||"
     // for now as there is no corresponding functions.
