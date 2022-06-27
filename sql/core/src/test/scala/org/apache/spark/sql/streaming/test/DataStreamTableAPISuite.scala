@@ -328,8 +328,6 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     val tblSourceName = "tbl_src"
     val tblTargetName = "tbl_target"
     val tblSourceQualified = s"default.$tblSourceName"
-    // FIXME: default implementation of TreeNode stringArgs does not unquote from table identifier
-    //   check whether it is intended, and if it is intended, suggest to make it consistent
     val tblTargetQualified = s"`default`.`$tblTargetName`"
 
     withTable(tblSourceQualified, tblTargetQualified) {
