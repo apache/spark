@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper with AliasHelper {
@@ -43,7 +43,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       pushDownSample,
       pushDownFilters,
       pushDownAggregates,
-      pushDownLimits,
+      pushDownLimitAndOffset,
       pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
@@ -407,7 +407,60 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
     case other => (other, false)
   }
 
-  def pushDownLimits(plan: LogicalPlan): LogicalPlan = plan.transform {
+  private def pushDownOffset(
+      plan: LogicalPlan,
+      offset: Int): Boolean = plan match {
+    case sHolder: ScanBuilderHolder =>
+      val isPushed = PushDownUtils.pushOffset(sHolder.builder, offset)
+      if (isPushed) {
+        sHolder.pushedOffset = Some(offset)
+      }
+      isPushed
+    case Project(projectList, child) if projectList.forall(_.deterministic) =>
+      pushDownOffset(child, offset)
+    case _ => false
+  }
+
+  def pushDownLimitAndOffset(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case offset @ LimitAndOffset(limit, offsetValue, child) =>
+      val (newChild, canRemoveLimit) = pushDownLimit(child, limit)
+      if (canRemoveLimit) {
+        // Try to push down OFFSET only if the LIMIT operator has been pushed and can be removed.
+        val isPushed = pushDownOffset(newChild, offsetValue)
+        if (isPushed) {
+          newChild
+        } else {
+          // Keep the OFFSET operator if we failed to push down OFFSET to the data source.
+          offset.withNewChildren(Seq(newChild))
+        }
+      } else {
+        // Keep the OFFSET operator if we can't remove LIMIT operator.
+        offset
+      }
+    case globalLimit @ OffsetAndLimit(offset, limit, child) =>
+      // For `df.offset(n).limit(m)`, we can push down `limit(m + n)` first.
+      val (newChild, canRemoveLimit) = pushDownLimit(child, limit + offset)
+      if (canRemoveLimit) {
+        // Try to push down OFFSET only if the LIMIT operator has been pushed and can be removed.
+        val isPushed = pushDownOffset(newChild, offset)
+        if (isPushed) {
+          newChild
+        } else {
+          // Still keep the OFFSET operator if we can't push it down.
+          Offset(Literal(offset), newChild)
+        }
+      } else {
+        // For `df.offset(n).limit(m)`, since we can't push down `limit(m + n)`,
+        // try to push down `offset(n)` here.
+        val isPushed = pushDownOffset(child, offset)
+        if (isPushed) {
+          // Keep the LIMIT operator if we can't push it down.
+          Limit(Literal(limit, IntegerType), child)
+        } else {
+          // Keep the origin plan if we can't push OFFSET operator and LIMIT operator.
+          globalLimit
+        }
+      }
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
       val (newChild, canRemoveLimit) = pushDownLimit(child, limitValue)
       if (canRemoveLimit) {
@@ -416,6 +469,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
         val newLocalLimit =
           globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
         globalLimit.withNewChildren(Seq(newLocalLimit))
+      }
+    case offset @ Offset(IntegerLiteral(n), child) =>
+      val isPushed = pushDownOffset(child, n)
+      if (isPushed) {
+        child
+      } else {
+        offset
       }
   }
 
@@ -431,7 +491,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           case _ => Array.empty[sources.Filter]
         }
         val pushedDownOperators = PushedDownOperators(aggregation, sHolder.pushedSample,
-          sHolder.pushedLimit, sHolder.sortOrders, sHolder.pushedPredicates)
+          sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates)
         V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
       case _ => scan
     }
@@ -444,13 +504,14 @@ case class ScanBuilderHolder(
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
 
+  var pushedOffset: Option[Int] = None
+
   var sortOrders: Seq[V2SortOrder] = Seq.empty[V2SortOrder]
 
   var pushedSample: Option[TableSampleInfo] = None
 
   var pushedPredicates: Seq[Predicate] = Seq.empty[Predicate]
 }
-
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with
 // other pushed down operators. This is required by the physical v1 scan node.

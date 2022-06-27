@@ -21,8 +21,8 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down LIMIT. Please note that the combination of LIMIT with other operations
- * such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
+ * push down LIMIT. We can push down LIMIT with many other operations if they follow the
+ * operator order we defined in {@link ScanBuilder}'s class doc.
  *
  * @since 3.3.0
  */

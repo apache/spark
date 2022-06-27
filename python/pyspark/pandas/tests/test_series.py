@@ -54,6 +54,16 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def psser(self):
         return ps.from_pandas(self.pser)
 
+    def test_creation_index(self):
+        err_msg = (
+            "The given index cannot be a pandas-on-Spark index. Try pandas index or array-like."
+        )
+        with self.assertRaisesRegex(TypeError, err_msg):
+            ps.Series([1, 2], index=ps.Index([1, 2]))
+
+        with self.assertRaisesRegex(TypeError, err_msg):
+            ps.Series([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+
     def test_series_ops(self):
         pser = self.pser
         psser = self.psser

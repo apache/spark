@@ -35,8 +35,8 @@ private[sql] object H2Dialect extends JdbcDialect {
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
   private val supportedFunctions =
-    Set("ABS", "COALESCE", "LN", "EXP", "POWER", "SQRT", "FLOOR", "CEIL",
-      "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM")
+    Set("ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LN", "EXP", "POWER", "SQRT", "FLOOR",
+      "CEIL", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)

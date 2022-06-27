@@ -99,6 +99,27 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       } else {
         None
       }
+    case Greatest(children) =>
+      val childrenExpressions = children.flatMap(generateExpression(_))
+      if (children.length == childrenExpressions.length) {
+        Some(new GeneralScalarExpression("GREATEST", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case Least(children) =>
+      val childrenExpressions = children.flatMap(generateExpression(_))
+      if (children.length == childrenExpressions.length) {
+        Some(new GeneralScalarExpression("LEAST", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case Rand(child, hideSeed) =>
+      if (hideSeed) {
+        Some(new GeneralScalarExpression("RAND", Array.empty[V2Expression]))
+      } else {
+        generateExpression(child)
+          .map(v => new GeneralScalarExpression("RAND", Array[V2Expression](v)))
+      }
     case Log(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("LN", Array[V2Expression](v)))
     case Exp(child) => generateExpression(child)
@@ -192,6 +213,13 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
           // The children looks like [condition1, value1, ..., conditionN, valueN]
           Some(new V2Predicate("CASE_WHEN", branchExpressions.toArray[V2Expression]))
         }
+      } else {
+        None
+      }
+    case iff: If =>
+      val childrenExpressions = iff.children.flatMap(generateExpression(_))
+      if (iff.children.length == childrenExpressions.length) {
+        Some(new GeneralScalarExpression("CASE_WHEN", childrenExpressions.toArray[V2Expression]))
       } else {
         None
       }
