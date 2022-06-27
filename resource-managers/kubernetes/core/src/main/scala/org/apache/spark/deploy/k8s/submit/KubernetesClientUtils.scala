@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 
 private[spark] object KubernetesClientUtils extends Logging {
 
-  // Config map name can be 63 chars at max.
+  // Config map name can be KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH chars at max.
   def configMapName(prefix: String): String = {
     val suffix = "-conf-map"
     s"${prefix.take(KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - suffix.length)}$suffix"
