@@ -1006,7 +1006,7 @@ case class RegExpCount(left: Expression, right: Expression, replacement: Express
   extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, Size(RegExpExtractAll(left, right, Literal(0))))
+    this(left, right, Size(RegExpExtractAll(left, right, Literal(0)), legacySizeOfNull = false))
 
   override def prettyName: String = "regexp_count"
 
