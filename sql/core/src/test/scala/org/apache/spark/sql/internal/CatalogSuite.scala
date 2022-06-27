@@ -273,6 +273,47 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     testListColumns("tab1", dbName = Some("db1"))
   }
 
+  test("SPARK-XXXXX: three layer namespace compatibility - listColumns") {
+    def testListColumns(tableNames: Seq[String]): Unit = {
+      def compareColumns(col1: Column, col2: Column): Boolean = {
+        col1.name == col2.name && col1.description == col2.description &&
+          col1.dataType == col2.dataType && col1.nullable == col2.nullable &&
+          col1.isPartition == col2.isPartition && col1.isBucket == col2.isBucket
+      }
+
+      val columns = tableNames.map(tableName => spark.catalog.listColumns(tableName).collect())
+      assert(columns.map(_.length).distinct.length === 1)
+      Seq.range(0, columns.head.length).foreach { i =>
+        val col: Column = columns.head(i)
+        columns.tail.foreach { cols =>
+          assert(compareColumns(col, cols(i)))
+        }
+      }
+    }
+
+    assert(spark.catalog.currentCatalog() === "spark_catalog")
+    createTable("my_table1")
+    // [name='col1', dataType='int', nullable='true', isPartition='false', isBucket='true']
+    // [name='col2', dataType='string', nullable='true', isPartition='false', isBucket='false']
+    // [name='a', dataType='int', nullable='true', isPartition='true', isBucket='false']
+    // [name='b', dataType='string', nullable='true', isPartition='true', isBucket='false']
+    testListColumns(Seq("my_table1", "default.my_table1", "spark_catalog.default.my_table1"))
+
+    createDatabase("my_db1")
+    createTable("my_table2", Some("my_db1"))
+    testListColumns(Seq("my_db1.my_table2", "spark_catalog.my_db1.my_table2"))
+
+    val catalogName = "testcat"
+    val dbName = "my_db2"
+    val tableName = "my_table2"
+    val tableSchema = new StructType().add("i", "int").add("j", "string")
+    val description = "this is a test managed table"
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], description)
+
+    testListColumns(Seq("my_db.my_table2", "testcat.my_db.my_table2"))
+  }
+
   test("Database.toString") {
     assert(new Database("cool_db", "cool_desc", "cool_path").toString ==
       "Database[name='cool_db', description='cool_desc', path='cool_path']")

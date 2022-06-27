@@ -23,14 +23,15 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.command.AlterTableChangeColumnCommand
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -208,8 +209,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    listColumns(tableIdent)
+    // calling `sqlParser.parseTableIdentifier` to parse tableName. If it contains only table name
+    // and optionally contains a database name(thus a TableIdentifier), then we look up the table in
+    // sessionCatalog. Otherwise we try `sqlParser.parseMultipartIdentifier` to have a sequence of
+    // string as the qualified identifier and resolve the table through SQL analyzer.
+    try {
+      val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+      listColumns(tableIdent)
+    } catch {
+      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+        // val table = getTable(tableName)
+        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+        listColumns(ident)
+    }
   }
 
   /**
@@ -236,6 +248,109 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         isBucket = bucketColumnNames.contains(c.name))
     }
     CatalogImpl.makeDataset(columns, sparkSession)
+  }
+
+  private def listColumns(ident: Seq[String]): Dataset[Column] = {
+    val plan = DescribeRelation(
+      UnresolvedTableOrView(ident, "DESCRIBE TABLE", true), Map.empty, isExtended = true)
+    val iter = sparkSession.sessionState.executePlan(plan).toRdd.collect().iterator
+
+    // CREATE TABLE student (id INT, name STRING, age INT, city INT, area INT)
+    // PARTITIONED BY (age, city) CLUSTERED BY (Id, area) INTO 4 buckets;
+    //
+    // DESCRIBE TABLE EXTENDED student;
+    //  +--------------------+--------------------+-------+
+    //  |            col_name|           data_type|comment|
+    //  +--------------------+--------------------+-------+
+    //  |                  id|                 int|   null|
+    //  |                name|              string|   null|
+    //  |                area|                 int|   null|
+    //  |                 age|                 int|   null|
+    //  |                city|                 int|   null|
+    //  |# Partition Infor...|                    |       |
+    //  |          # col_name|           data_type|comment|
+    //  |                 age|                 int|   null|
+    //  |                city|                 int|   null|
+    //  |                    |                    |       |
+    //  |# Detailed Table ...|                    |       |
+    //  |            Database|             default|       |
+    //  |               Table|             student|       |
+    //  |               Owner|                 zrf|       |
+    //  |        Created Time|Sat Jun 25 22:15:...|       |
+    //  |         Last Access|             UNKNOWN|       |
+    //  |          Created By|         Spark 3.3.0|       |
+    //  |                Type|             MANAGED|       |
+    //  |            Provider|                hive|       |
+    //  |         Num Buckets|                   4|       |
+    //  |      Bucket Columns|      [`id`, `area`]|       |
+    //  |        Sort Columns|                  []|       |
+    //  |    Table Properties|[transient_lastDd...|       |
+    //  |            Location|file:/home/zrf/sp...|       |
+    //  |       Serde Library|org.apache.hadoop...|       |
+    //  |         InputFormat|org.apache.hadoop...|       |
+    //  |        OutputFormat|org.apache.hadoop...|       |
+    //  |  Storage Properties|[serialization.fo...|       |
+    //  |  Partition Provider|             Catalog|       |
+    //  +--------------------+--------------------+-------+
+
+    val colNames = collection.mutable.ArrayBuilder.make[String]
+    val partitionColNames = collection.mutable.Set.empty[String]
+    val bucketColNames = collection.mutable.Set.empty[String]
+    var state = "normal"
+    while (iter.hasNext) {
+      val row = iter.next()
+      row.getString(0) match {
+        case "# Partition Information" =>
+          state = "partition"
+        case "# Detailed Table Information" =>
+          state = "detailed"
+        case c if state == "normal" =>
+          colNames += c
+        case c if state == "partition" && c != "# col_name" && c != "" =>
+          partitionColNames.add(c)
+        case "Bucket Columns" if state == "detailed" =>
+          val rowStr = row.getString(1)
+          rowStr.slice(1, rowStr.length - 1).split(", ").foreach { col =>
+            assert(col.startsWith("`") && col.endsWith("`"))
+            bucketColNames.add(col.slice(1, col.length - 1))
+          }
+        case _ =>
+      }
+    }
+
+    val columns = colNames.result().map { colName =>
+      makeColumn(ident, colName, partitionColNames.toSet, bucketColNames.toSet)
+    }
+
+    //    val plan = ShowColumns(UnresolvedTableOrView(ident, "Catalog.listColumns", true), None)
+    //    val exec = sparkSession.sessionState.executePlan(plan).executedPlan
+    //    System.err.println(s"listColumns: exec.output = ${exec.output.mkString(", ")}")
+    //    val results = sparkSession.sessionState.executePlan(plan).toRdd.collect()
+    //    val names = results.map(row => ident ++ Seq(row.getString(0)))
+    //    System.err.println(s"listColumns: columnNames = ${names.mkString(", ")}")
+    //    results.map { row => makeColumn(ident, row.getString(0)) }
+
+    CatalogImpl.makeDataset(columns, sparkSession)
+  }
+
+  private def makeColumn(ident: Seq[String], colName: String,
+      partitionColNames: Set[String], bucketColNames: Set[String]): Column = {
+
+    // This is just a no-op Alter Command, dedicated to get the resolved column.
+    val plan = AlterColumn(UnresolvedTableOrView(ident, "", true),
+      UnresolvedFieldName(Seq(colName)), None, None, None, None, None)
+
+    sparkSession.sessionState.executePlan(plan).analyzed match {
+      case AlterTableChangeColumnCommand(_, _, c) =>
+        new Column(
+          name = c.name,
+          description = c.getComment().orNull,
+          dataType = CharVarcharUtils.getRawType(c.metadata).getOrElse(c.dataType).catalogString,
+          nullable = c.nullable,
+          isPartition = partitionColNames.contains(c.name),
+          isBucket = bucketColNames.contains(c.name))
+      case _ => throw QueryCompilationErrors.columnDoesNotExistError(colName)
+    }
   }
 
   /**
