@@ -218,7 +218,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       listColumns(tableIdent)
     } catch {
       case e: org.apache.spark.sql.catalyst.parser.ParseException =>
-        // val table = getTable(tableName)
         val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
         listColumns(ident)
     }
