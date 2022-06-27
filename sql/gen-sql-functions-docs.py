@@ -118,14 +118,12 @@ def _make_pretty_usage(infos):
             func_name = "\\" + func_name
         elif (info.name == "when"):
             func_name = "CASE WHEN"
-        splits = re.split(r"(.*%s.*) - " % func_name, info.usage.strip())
-        if (len(splits) > 1):
-            usages = iter(splits[1:])
-            for (sig, description) in zip(usages, usages):
-                result.append("    <tr>")
-                result.append("      <td>%s</td>" % sig)
-                result.append("      <td>%s</td>" % description.strip())
-                result.append("    </tr>")
+        usages = iter(re.split(r"(.*%s.*) - " % func_name, info.usage.strip())[1:])
+        for (sig, description) in zip(usages, usages):
+            result.append("    <tr>")
+            result.append("      <td>%s</td>" % sig)
+            result.append("      <td>%s</td>" % description.strip())
+            result.append("    </tr>")
 
     result.append("  </tbody>")
     result.append("</table>\n")
