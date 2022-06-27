@@ -316,14 +316,17 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("Shuffle Read/Write records backwards compatibility") {
     // records read were added after 1.2
+    // "Remote Bytes Read To Disk" was added in 2.3.0
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson
       .removeField("Total Records Read")
       .removeField("Shuffle Records Written")
+      .removeField("Remote Bytes Read To Disk")
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.shuffleReadMetrics.recordsRead == 0)
+    assert(newMetrics.shuffleReadMetrics.remoteBytesReadToDisk == 0)
     assert(newMetrics.shuffleWriteMetrics.recordsWritten == 0)
   }
 
