@@ -68,11 +68,11 @@ case class DataSourceV2Relation(
   override def skipSchemaResolution: Boolean = table.supports(TableCapability.ACCEPT_ANY_SCHEMA)
 
   override def simpleString(maxFields: Int): String = {
-    val tableQualifier = (catalog, identifier) match {
+    val qualifiedTableName = (catalog, identifier) match {
       case (Some(cat), Some(ident)) => s"${cat.name()}.${ident.toString}"
       case _ => ""
     }
-    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $tableQualifier $name"
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $qualifiedTableName $name"
   }
 
   override def computeStats(): Statistics = {
@@ -175,12 +175,12 @@ case class StreamingDataSourceV2Relation(
   }
 
   private val stringArgsVal: Seq[Any] = {
-    val tableQualifier = (catalog, identifier) match {
+    val qualifiedTableName = (catalog, identifier) match {
       case (Some(cat), Some(ident)) => Some(s"${cat.name()}.${ident.toString}")
       case _ => None
     }
 
-    Seq(output, tableQualifier, scan, stream, startOffset, endOffset)
+    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset)
   }
 
   override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
