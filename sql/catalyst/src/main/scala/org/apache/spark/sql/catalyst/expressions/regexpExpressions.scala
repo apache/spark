@@ -980,3 +980,38 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
       newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpExtractAll =
     copy(subject = newFirst, regexp = newSecond, idx = newThird)
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str, regexp) - Returns a count of the number of times that the regular expression pattern `regexp` is matched in the string `str`.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression.
+      * regexp - a string representing a regular expression. The regex string should be a
+          Java regular expression.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en');
+       2
+      > SELECT _FUNC_('abcdefghijklmnopqrstuvwxyz', '[a-z]{3}');
+       8
+  """,
+  since = "3.4.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class RegExpCount(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, Size(RegExpExtractAll(left, right, Literal(0))))
+
+  override def prettyName: String = "regexp_count"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): RegExpCount =
+    this.copy(replacement = newChild)
+}
