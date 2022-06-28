@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeConstants, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
@@ -473,11 +473,22 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
 
-    case TimestampType | TimestampNTZType =>
+    case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
           row.setLong(pos, DateTimeUtils.fromJavaTimestamp(t))
+        } else {
+          row.update(pos, null)
+        }
+
+    case TimestampNTZType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val t = rs.getTimestamp(pos + 1)
+        if (t != null) {
+          val micros = DateTimeUtils.millisToMicros(t.getTime) +
+            (t.getNanos / DateTimeConstants.NANOS_PER_MICROS) % DateTimeConstants.MICROS_PER_MILLIS
+          row.setLong(pos, micros)
         } else {
           row.update(pos, null)
         }
@@ -599,10 +610,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
       } else {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(
-            pos + 1,
-            toJavaTimestamp(localDateTimeToMicros(row.getAs[java.time.LocalDateTime](pos)))
-          )
+          val micros = localDateTimeToMicros(row.getAs[java.time.LocalDateTime](pos))
+          val seconds = Math.floorDiv(micros, DateTimeConstants.MICROS_PER_SECOND)
+          val nanos = (micros - seconds * DateTimeConstants.MICROS_PER_SECOND) *
+            DateTimeConstants.NANOS_PER_MICROS
+          val result = new java.sql.Timestamp(seconds * DateTimeConstants.MILLIS_PER_SECOND)
+          result.setNanos(nanos.toInt)
+          stmt.setTimestamp(pos + 1, result)
       }
 
     case DateType =>
