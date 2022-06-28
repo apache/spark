@@ -250,11 +250,6 @@ public class GeneralScalarExpression implements Expression, Serializable {
   @Override
   public String toString() {
     ToStringSQLBuilder builder = new ToStringSQLBuilder();
-    try {
-      return builder.build(this);
-    } catch (Throwable e) {
-      return name + "(" +
-        Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
-    }
+    return builder.build(this);
   }
 }
