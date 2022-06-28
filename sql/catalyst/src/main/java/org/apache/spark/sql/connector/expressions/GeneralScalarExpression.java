@@ -124,6 +124,24 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>LOG</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LOG(base, expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LOG10</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LOG10(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LOG2</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LOG2(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
  *  <li>Name: <code>LN</code>
  *   <ul>
  *    <li>SQL semantic: <code>LN(expr)</code></li>
@@ -158,6 +176,120 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <ul>
  *    <li>SQL semantic: <code>CEIL(expr)</code></li>
  *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ROUND</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ROUND(expr, [scale])</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SIN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SIN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SINH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SINH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>COS</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>COS(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>COSH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>COSH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>TAN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>TAN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>TANH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>TANH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>COT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>COT(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ASIN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ASIN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ASINH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ASINH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ACOS</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ACOS(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ACOSH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ACOSH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ATAN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ATAN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ATANH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ATANH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ATAN2</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ATAN2(exprY, exprX)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>CBRT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CBRT(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>DEGREES</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>DEGREES(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>RADIANS</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>RADIANS(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SIGN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SIGN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
  *  <li>Name: <code>WIDTH_BUCKET</code>

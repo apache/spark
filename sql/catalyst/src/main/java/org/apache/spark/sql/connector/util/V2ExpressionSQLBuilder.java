@@ -100,12 +100,34 @@ public class V2ExpressionSQLBuilder {
         case "GREATEST":
         case "LEAST":
         case "RAND":
+        case "LOG":
+        case "LOG10":
+        case "LOG2":
         case "LN":
         case "EXP":
         case "POWER":
         case "SQRT":
         case "FLOOR":
         case "CEIL":
+        case "ROUND":
+        case "SIN":
+        case "SINH":
+        case "COS":
+        case "COSH":
+        case "TAN":
+        case "TANH":
+        case "COT":
+        case "ASIN":
+        case "ASINH":
+        case "ACOS":
+        case "ACOSH":
+        case "ATAN":
+        case "ATANH":
+        case "ATAN2":
+        case "CBRT":
+        case "DEGREES":
+        case "RADIANS":
+        case "SIGN":
         case "WIDTH_BUCKET":
         case "SUBSTRING":
         case "UPPER":
