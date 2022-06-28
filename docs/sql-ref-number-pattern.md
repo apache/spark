@@ -29,7 +29,7 @@ Decimal type. Such functions accept format strings indicating how to map between
 Number format strings support the following syntax:
 
 ```
-  { ' [ S ] [ $ ] 
+  { ' [ MI | S ] [ $ ] 
       [ 0 | 9 | G | , ] [...] 
       [ . | D ] 
       [ 0 | 9 ] [...] 
@@ -74,7 +74,7 @@ Each number format string can contain the following elements (case insensitive):
 
 - **`MI`**
 
-  Specifies an optional `-` sign at the end, but no `+`.
+  Specifies an optional `-` sign at the beginning or end, but no `+`.
 
 - **`PR`**
 
@@ -129,7 +129,7 @@ Note that the format string used in most of these examples expects:
 > SELECT to_number('$045', 'S$999,099.99');
  45.00
  
--- MI indicates an optional minus sign at the end of the input string.
+-- MI indicates an optional minus sign at the beginning or end of the input string.
 > SELECT to_number('1234-', '999999MI');
  -1234
 ```
