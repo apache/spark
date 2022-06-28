@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Generic, List, Optional, Tuple, TypeVar
+from typing import Generic, List, Optional, Tuple, TypeVar, Union
 
 import sys
 
@@ -451,7 +451,12 @@ class RankingMetrics(JavaModelWrapper, Generic[T]):
     0.66...
     """
 
-    def __init__(self, predictionAndLabels: RDD[Tuple[List[T], List[T]]]):
+    def __init__(
+        self,
+        predictionAndLabels: Union[
+            RDD[Tuple[List[T], List[T]]], RDD[Tuple[List[T], List[T], List[float]]]
+        ],
+    ):
         sc = predictionAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(
