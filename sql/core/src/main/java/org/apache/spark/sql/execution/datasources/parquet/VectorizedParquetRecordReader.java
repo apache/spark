@@ -252,7 +252,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     }
 
     ColumnVector[] vectors = ColumnVectorUtils.allocateColumns(
-      capacity, batchSchema, memMode == MemoryMode.OFF_HEAP /* useOffHeap */, constantColumnLength);
+      capacity, batchSchema, memMode == MemoryMode.OFF_HEAP, constantColumnLength);
 
     columnarBatch = new ColumnarBatch(vectors);
 

@@ -148,7 +148,7 @@ public class ColumnVectorUtils {
         }
       } else if (t instanceof CalendarIntervalType) {
         // The value of `numRows` is irrelevant.
-        col.setCalendarInterval((CalendarInterval)row.get(fieldIdx, t));
+        col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
       } else if (t instanceof DateType || t instanceof YearMonthIntervalType) {
         col.setInt(row.getInt(fieldIdx));
       } else if (t instanceof TimestampType || t instanceof TimestampNTZType ||
