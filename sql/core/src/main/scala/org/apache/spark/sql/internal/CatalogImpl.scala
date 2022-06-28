@@ -213,8 +213,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // sessionCatalog. Otherwise we try `sqlParser.parseMultipartIdentifier` to have a sequence of
     // string as the qualified identifier and resolve the table through SQL analyzer.
     try {
-      val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-      listColumns(tableIdent)
+      val ident = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+      if (tableExists(ident.database.orNull, ident.table)) {
+        listColumns(ident)
+      } else {
+        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+        listColumns(ident)
+      }
     } catch {
       case e: org.apache.spark.sql.catalyst.parser.ParseException =>
         val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
@@ -252,9 +257,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val plan = UnresolvedTableOrView(ident, "Catalog.listColumns", true)
 
     val columns = sparkSession.sessionState.executePlan(plan).analyzed match {
-      case ResolvedTable(_, _, table @ V1Table(meta), _) =>
-        val partitionColumnNames = meta.partitionColumnNames
-        val bucketColumnNames = meta.bucketSpec.map(_.bucketColumnNames).getOrElse(Seq.empty)
+      case ResolvedTable(_, _, table, _) =>
+        var partitionColumnNames = Seq.empty[String]
+        var bucketColumnNames = Seq.empty[String]
+        table match {
+          case t: V1Table =>
+            partitionColumnNames = t.catalogTable.partitionColumnNames
+            bucketColumnNames = t.catalogTable.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil)
+          case t: SupportsPartitionManagement =>
+            partitionColumnNames = t.partitionSchema().map(_.name)
+          case _ =>
+        }
+
         table.schema.map { field =>
           new Column(
             name = field.name,
@@ -263,29 +277,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
             nullable = field.nullable,
             isPartition = partitionColumnNames.contains(field.name),
             isBucket = bucketColumnNames.contains(field.name))
-        }
-
-      case ResolvedTable(_, _, table: SupportsPartitionManagement, _) =>
-        val partitionColumnNames = table.partitionSchema().map(_.name)
-        table.schema.map { field =>
-          new Column(
-            name = field.name,
-            description = field.getComment().orNull,
-            dataType = field.dataType.simpleString,
-            nullable = field.nullable,
-            isPartition = partitionColumnNames.contains(field.name),
-            isBucket = false)
-        }
-
-      case ResolvedTable(_, _, table, _) =>
-        table.schema.map { field =>
-          new Column(
-            name = field.name,
-            description = field.getComment().orNull,
-            dataType = field.dataType.simpleString,
-            nullable = field.nullable,
-            isPartition = false,
-            isBucket = false)
         }
 
       case ResolvedView(identifier, _) =>
