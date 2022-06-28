@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{daysToMicros, TimeZoneUTC}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -237,7 +237,7 @@ class UnivocityParser(
           timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         } catch {
           case NonFatal(e) if (options.inferDate) =>
-            daysToMicros(dateFormatter.parse(datum), options.zoneId)
+            daysToMicros(dateFormatter.parse(datum), TimeZoneUTC.toZoneId)
         }
       }
 

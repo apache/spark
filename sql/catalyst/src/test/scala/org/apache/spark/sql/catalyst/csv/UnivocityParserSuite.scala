@@ -365,10 +365,13 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       val timestampsOptions =
         new CSVOptions(Map("inferDate" -> "true", "timestampFormat" -> "dd/MM/yyyy HH:mm",
           "timestampNTZFormat" -> "dd-MM-yyyy HH:mm", "dateFormat" -> "dd_MM_yyyy"),
-          false, "UTC")
+          false, DateTimeUtils.getZoneId("-08:00").toString)
+      // Use CSVOption ZoneId="-08:00" (PST) to test that Dates in TimestampNTZ column are always
+      // converted to their equivalent UTC timestamp
       val dateString = "08_09_2001"
       val expected = dataType match {
-        case TimestampType | TimestampNTZType => date(2001, 9, 8, 0, 0, 0, 0, ZoneOffset.UTC)
+        case TimestampType => date(2001, 9, 8, 0, 0, 0, 0, ZoneOffset.of("-08:00"))
+        case TimestampNTZType => date(2001, 9, 8, 0, 0, 0, 0, ZoneOffset.UTC)
         case DateType => days(2001, 9, 8)
       }
       val parser = new UnivocityParser(new StructType(), timestampsOptions)
