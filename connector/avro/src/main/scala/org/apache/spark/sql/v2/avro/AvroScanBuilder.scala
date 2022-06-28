@@ -30,6 +30,7 @@ class AvroScanBuilder (
     fileIndex: PartitioningAwareFileIndex,
     schema: StructType,
     dataSchema: StructType,
+    inferredAvroSchemaStr: Option[String],
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
 
@@ -40,6 +41,7 @@ class AvroScanBuilder (
       dataSchema,
       readDataSchema(),
       readPartitionSchema(),
+      inferredAvroSchemaStr,
       options,
       pushedDataFilters,
       partitionFilters,

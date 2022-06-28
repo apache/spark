@@ -22,6 +22,7 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
+import org.apache.avro.Schema
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
@@ -42,6 +43,8 @@ import org.apache.spark.util.SerializableConfiguration
 private[sql] class AvroFileFormat extends FileFormat
   with DataSourceRegister with Logging with Serializable {
 
+  private var inferredAvroSchemaStr: Option[String] = None
+
   override def equals(other: Any): Boolean = other match {
     case _: AvroFileFormat => true
     case _ => false
@@ -54,7 +57,9 @@ private[sql] class AvroFileFormat extends FileFormat
       spark: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    AvroUtils.inferSchema(spark, options, files)
+    val avroSchema = AvroUtils.inferSchema(spark, options, files)
+    this.inferredAvroSchemaStr = avroSchema.map(_.toString)
+    avroSchema.flatMap(AvroUtils.convertSchema)
   }
 
   override def shortName(): String = "avro"
@@ -91,6 +96,7 @@ private[sql] class AvroFileFormat extends FileFormat
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
       val userProvidedSchema = parsedOptions.schema
+      val inferredReadSchema = inferredAvroSchemaStr.map(new Schema.Parser().parse)
 
       // TODO Removes this check once `FileFormat` gets a general file filtering interface method.
       // Doing input file filtering is improper because we may generate empty tasks that process no
@@ -100,9 +106,10 @@ private[sql] class AvroFileFormat extends FileFormat
         val reader = {
           val in = new FsInput(new Path(new URI(file.filePath)), conf)
           try {
-            val datumReader = userProvidedSchema match {
-              case Some(userSchema) => new GenericDatumReader[GenericRecord](userSchema)
-              case _ => new GenericDatumReader[GenericRecord]()
+            val datumReader = userProvidedSchema.orElse(inferredReadSchema).map{ schema =>
+              new GenericDatumReader[GenericRecord](schema)
+            }.getOrElse{
+              new GenericDatumReader[GenericRecord]()
             }
             DataFileReader.openReader(in, datumReader)
           } catch {
@@ -136,7 +143,7 @@ private[sql] class AvroFileFormat extends FileFormat
         new Iterator[InternalRow] with AvroUtils.RowReader {
           override val fileReader = reader
           override val deserializer = new AvroDeserializer(
-            userProvidedSchema.getOrElse(reader.getSchema),
+            userProvidedSchema.orElse(inferredReadSchema).getOrElse(reader.getSchema),
             requiredSchema,
             parsedOptions.positionalFieldMatching,
             datetimeRebaseMode,

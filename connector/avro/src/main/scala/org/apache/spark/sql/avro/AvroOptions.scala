@@ -128,6 +128,11 @@ private[sql] class AvroOptions(
   val datetimeRebaseModeInRead: String = parameters
     .get(AvroOptions.DATETIME_REBASE_MODE)
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
+
+  val schemaEvolution: Boolean =
+    parameters.get("schemaEvolution")
+      .map(_.toBoolean)
+      .getOrElse(false)
 }
 
 private[sql] object AvroOptions {

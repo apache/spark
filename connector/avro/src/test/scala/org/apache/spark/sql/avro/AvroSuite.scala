@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
@@ -1790,6 +1790,54 @@ abstract class AvroSuite
     """.stripMargin)
   }
 
+  test("support merging avro schemas") {
+    withTempPath { tempDir =>
+      val person1 = Person1("mary", Some(33), Address1("1616 Camden Rd", Some("305")))
+      Seq(person1).toDS.write.format("avro").save(s"${tempDir}/x=1")
+
+      val person2 = Person2("bob", 21, Some(Address2("175 Varick St", "New York")))
+      Seq(person2).toDS.write.format("avro").save(s"${tempDir}/x=2")
+
+      val merged = spark.read.format("avro").option("schemaEvolution", true).load(tempDir.toString)
+        .withColumn("address", struct("address.street", "address.apt", "address.city"))
+      assert(merged.schema === StructType(Seq(
+        StructField("name", StringType, true),
+        StructField("age", LongType, true),
+        StructField("address", StructType(Seq(
+          StructField("street", StringType, true),
+          StructField("apt", StringType, true),
+          StructField("city", StringType, true)
+        )), false),
+        StructField("x", IntegerType, true)
+      )))
+      // seems order is not consistent, makes me wonder how other tests deal with this
+      assert(merged.collect.sortBy(_.getString(0)).sameElements(Seq(
+        Row("bob", 21L, Row("175 Varick St", null, "New York"), 2),
+        Row("mary", 33L, Row("1616 Camden Rd", "305", null), 1)
+      )))
+    }
+
+    withTempPath { tempDir =>
+      Seq("1").toDS.write.format("avro").save(s"${tempDir}/y=1")
+      Seq(2).toDS.write.format("avro").save(s"${tempDir}/y=2")
+
+      val merged = spark.read.format("avro").option("schemaEvolution", true).load(tempDir.toString)
+
+      assert(merged.schema === StructType(Seq(
+        StructField("value", StructType(Seq(
+          StructField("member0", StringType, true),
+          StructField("member1", IntegerType, true)
+        ))),
+        StructField("y", IntegerType, true)
+      )))
+
+      assert(merged.collect.sortBy(x => Option(x(0)).map(_.toString)).sameElements(Seq(
+        Row(Row("1", null), 1),
+        Row(Row(null, 2), 2)
+      )))
+    }
+  }
+
   test("log a warning of ignoreExtension deprecation") {
     val logAppender = new LogAppender("deprecated Avro option 'ignoreExtension'")
     withTempPath { dir =>
@@ -2272,6 +2320,12 @@ abstract class AvroSuite
     }
   }
 }
+
+case class Address1(street: String, apt: Option[String])
+case class Person1(name: String, age: Option[Int], address: Address1)
+
+case class Address2(street: String, city: String)
+case class Person2(name: String, age: Long, address: Option[Address2])
 
 class AvroV1Suite extends AvroSuite {
   override protected def sparkConf: SparkConf =

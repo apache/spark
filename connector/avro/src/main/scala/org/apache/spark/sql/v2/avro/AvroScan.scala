@@ -37,6 +37,7 @@ case class AvroScan(
     dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,
+    inferredAvroSchemaStr: Option[String],
     options: CaseInsensitiveStringMap,
     pushedFilters: Array[Filter],
     partitionFilters: Seq[Expression] = Seq.empty,
@@ -58,6 +59,7 @@ case class AvroScan(
       dataSchema,
       readDataSchema,
       readPartitionSchema,
+      inferredAvroSchemaStr,
       parsedOptions,
       pushedFilters)
   }

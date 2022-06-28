@@ -20,6 +20,7 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
+import org.apache.avro.Schema
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
@@ -54,6 +55,7 @@ case class AvroPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
+    inferredAvroSchemaStr: Option[String],
     options: AvroOptions,
     filters: Seq[Filter]) extends FilePartitionReaderFactory with Logging {
   private val datetimeRebaseModeInRead = options.datetimeRebaseModeInRead
@@ -61,14 +63,16 @@ case class AvroPartitionReaderFactory(
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
     val userProvidedSchema = options.schema
+    val inferredReadSchema = inferredAvroSchemaStr.map(new Schema.Parser().parse)
 
     if (options.ignoreExtension || partitionedFile.filePath.endsWith(".avro")) {
       val reader = {
         val in = new FsInput(new Path(new URI(partitionedFile.filePath)), conf)
         try {
-          val datumReader = userProvidedSchema match {
-            case Some(userSchema) => new GenericDatumReader[GenericRecord](userSchema)
-            case _ => new GenericDatumReader[GenericRecord]()
+          val datumReader = userProvidedSchema.orElse(inferredReadSchema).map{ schema =>
+            new GenericDatumReader[GenericRecord](schema)
+          }.getOrElse{
+            new GenericDatumReader[GenericRecord]()
           }
           DataFileReader.openReader(in, datumReader)
         } catch {
@@ -102,7 +106,7 @@ case class AvroPartitionReaderFactory(
       val fileReader = new PartitionReader[InternalRow] with AvroUtils.RowReader {
         override val fileReader = reader
         override val deserializer = new AvroDeserializer(
-          userProvidedSchema.getOrElse(reader.getSchema),
+          userProvidedSchema.orElse(inferredReadSchema).getOrElse(reader.getSchema),
           readDataSchema,
           options.positionalFieldMatching,
           datetimeRebaseMode,

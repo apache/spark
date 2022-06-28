@@ -23,7 +23,7 @@ import org.apache.spark.sql.v2.avro.AvroScan
 class AvroScanSuite extends FileScanSuiteBase {
   val scanBuilders = Seq[(String, ScanBuilder, Seq[String])](
     ("AvroScan",
-      (s, fi, ds, rds, rps, f, o, pf, df) => AvroScan(s, fi, ds, rds, rps, o, f, pf, df),
+      (s, fi, ds, rds, rps, f, o, pf, df) => AvroScan(s, fi, ds, rds, rps, None, o, f, pf, df),
       Seq.empty))
 
   run(scanBuilders)

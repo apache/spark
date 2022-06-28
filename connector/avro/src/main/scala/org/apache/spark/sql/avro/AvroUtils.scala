@@ -28,7 +28,7 @@ import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.SparkException
@@ -40,13 +40,13 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[sql] object AvroUtils extends Logging {
   def inferSchema(
       spark: SparkSession,
       options: Map[String, String],
-      files: Seq[FileStatus]): Option[StructType] = {
+      files: Seq[FileStatus]): Option[Schema] = {
     val conf = spark.sessionState.newHadoopConfWithOptions(options)
     val parsedOptions = new AvroOptions(options, conf)
 
@@ -57,10 +57,15 @@ private[sql] object AvroUtils extends Logging {
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
       .getOrElse {
-        inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
-          new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
+        inferAvroSchemaFromFiles(spark, files, conf, parsedOptions.ignoreExtension,
+          new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles,
+          parsedOptions.schemaEvolution)
       }
 
+    Some(avroSchema)
+  }
+
+  def convertSchema(avroSchema: Schema): Option[StructType] =
     SchemaConverters.toSqlType(avroSchema).dataType match {
       case t: StructType => Some(t)
       case _ => throw new RuntimeException(
@@ -69,7 +74,6 @@ private[sql] object AvroUtils extends Logging {
            |${avroSchema.toString(true)}
            |""".stripMargin)
     }
-  }
 
   def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: AtomicType => true
@@ -123,47 +127,107 @@ private[sql] object AvroUtils extends Logging {
   }
 
   private def inferAvroSchemaFromFiles(
+      spark: SparkSession,
       files: Seq[FileStatus],
       conf: Configuration,
       ignoreExtension: Boolean,
-      ignoreCorruptFiles: Boolean): Schema = {
-    // Schema evolution is not supported yet. Here we only pick first random readable sample file to
-    // figure out the schema of the whole dataset.
-    val avroReader = files.iterator.map { f =>
-      val path = f.getPath
-      if (!ignoreExtension && !path.getName.endsWith(".avro")) {
-        None
-      } else {
-        Utils.tryWithResource {
-          new FsInput(path, conf)
-        } { in =>
-          try {
-            Some(DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]()))
-          } catch {
-            case e: IOException =>
-              if (ignoreCorruptFiles) {
-                logWarning(s"Skipped the footer in the corrupted file: $path", e)
-                None
-              } else {
-                throw new SparkException(s"Could not read file: $path", e)
+      ignoreCorruptFiles: Boolean,
+      schemaEvolution: Boolean): Schema = {
+
+    if (schemaEvolution) {
+      val serializedConf = new SerializableConfiguration(conf)
+      val parallelism = Math.min(Math.max(files.size, 1), spark.sparkContext.defaultParallelism)
+
+      val mergedSchema = spark.sparkContext.parallelize(files.map(_.getPath.toString), parallelism)
+        .flatMap{ pathString =>
+          val path = new Path(pathString)
+          if (!ignoreExtension && !path.getName.endsWith(".avro")) {
+            None
+          } else {
+            Utils.tryWithResource {
+              new FsInput(path, serializedConf.value)
+            } { in =>
+              try {
+                val reader = DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]())
+                val schema = try {
+                  reader.getSchema
+                } finally {
+                  reader.close()
+                }
+                Some(schema)
+              } catch {
+                case e: IOException =>
+                  if (ignoreCorruptFiles) {
+                    logWarning(s"Skipped the footer in the corrupted file: $path", e)
+                    None
+                  } else {
+                    throw new SparkException(s"Could not read file: $path", e)
+                  }
               }
+            }
           }
         }
-      }
-    }.collectFirst {
-      case Some(reader) => reader
-    }
-
-    avroReader match {
-      case Some(reader) =>
-        try {
-          reader.getSchema
-        } finally {
-          reader.close()
+        .mapPartitions{ schemaIter =>
+          schemaIter.reduceOption(SchemaMerge.mergeSchemas).map(_.toString).iterator
         }
-      case None =>
-        throw new FileNotFoundException(
-          "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
+        .collect
+        .map{ x =>
+          // somehow if this is not synchronized we end up with
+          // org.apache.avro.SchemaParseException: Can't redefine: topLevelRecord
+          val parser = this.synchronized {
+            new Schema.Parser()
+          }
+          parser.parse(x)
+        }
+        .reduceOption(SchemaMerge.mergeSchemas)
+
+      mergedSchema match {
+        case Some(s) =>
+          logInfo(s"merged schema ${s}")
+          s
+        case None =>
+          throw new FileNotFoundException(
+            "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
+      }
+    } else {
+      // Schema evolution is not supported yet. Here we only pick first random readable sample file
+      // to figure out the schema of the whole dataset.
+      val avroReader = files.iterator.map { f =>
+        val path = f.getPath
+        if (!ignoreExtension && !path.getName.endsWith(".avro")) {
+          None
+        } else {
+          Utils.tryWithResource {
+            new FsInput(path, conf)
+          } { in =>
+            try {
+              Some(DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]()))
+            } catch {
+              case e: IOException =>
+                if (ignoreCorruptFiles) {
+                  logWarning(s"Skipped the footer in the corrupted file: $path", e)
+                  None
+                } else {
+                  throw new SparkException(s"Could not read file: $path", e)
+                }
+            }
+          }
+        }
+      }.collectFirst {
+        case Some(reader) => reader
+      }
+
+      avroReader match {
+        case Some(reader) =>
+          try {
+            reader.getSchema
+          } finally {
+            reader.close()
+          }
+        case None =>
+          throw new FileNotFoundException(
+            "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
+      }
     }
   }
 
