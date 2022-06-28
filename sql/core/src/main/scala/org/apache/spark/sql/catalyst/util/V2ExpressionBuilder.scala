@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.Locale
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, UserDefinedScalarFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
@@ -289,9 +287,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       val childrenExpressions = children.flatMap(generateExpression(_))
       if (childrenExpressions.length == children.length) {
         Some(new UserDefinedScalarFunc(
-          function.name().toUpperCase(Locale.ROOT),
-          function.canonicalName().toUpperCase(Locale.ROOT),
-          childrenExpressions.toArray[V2Expression]))
+          function.name(), function.canonicalName(), childrenExpressions.toArray[V2Expression]))
       } else {
         None
       }

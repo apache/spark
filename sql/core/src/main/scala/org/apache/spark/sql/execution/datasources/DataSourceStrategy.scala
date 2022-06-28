@@ -753,7 +753,7 @@ object DataSourceStrategy
         case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
           val translatedExprs = children.flatMap(PushableExpression.unapply(_))
           if (translatedExprs.length == children.length) {
-            Some(new UserDefinedAggregateFunc(aggrFunc.name().toUpperCase(Locale.ROOT),
+            Some(new UserDefinedAggregateFunc(aggrFunc.name(),
               aggrFunc.canonicalName(), agg.isDistinct, translatedExprs.toArray[V2Expression]))
           } else {
             None
