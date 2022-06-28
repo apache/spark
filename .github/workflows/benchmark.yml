@@ -42,10 +42,6 @@ on:
         description: 'Number of job splits'
         required: true
         default: '1'
-      run-tcp-ds-query-benchmark:
-        description: 'Run TPCDSQueryBenchmark: true or false'
-        required: false
-        default: 'false'
 
 jobs:
   matrix-gen:
@@ -61,14 +57,11 @@ jobs:
       run: echo "::set-output name=matrix::["`seq -s, 1 $SPARK_BENCHMARK_NUM_SPLITS`"]"
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
-  generate-tpc-ds-dataset:
-    name: "Generate an input dataset for TPCDSQueryBenchmark"
-    if: github.event.inputs.run-tcp-ds-query-benchmark == 'true'
+  tpcds-1g-gen:
+    name: "Generate an input dataset for TPCDSQueryBenchmark with SF=1"
     runs-on: ubuntu-20.04
     env:
-      SPARK_GENERATE_BENCHMARK_FILES: 1
       SPARK_LOCAL_IP: localhost
-      TPC_DS_DATA_LOC: "--data-location tpcds-sf-1"
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v2
@@ -119,8 +112,7 @@ jobs:
 
   benchmark:
     name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, Scala ${{ github.event.inputs.scala }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
-    if: always()
-    needs: [matrix-gen, generate-tpc-ds-dataset]
+    needs: [matrix-gen, tpcds-1g-gen]
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
@@ -130,6 +122,8 @@ jobs:
     env:
       SPARK_BENCHMARK_FAILFAST: ${{ github.event.inputs.failfast }}
       SPARK_BENCHMARK_NUM_SPLITS: ${{ github.event.inputs.num-splits }}
+      SPARK_BENCHMARK_CUR_SPLIT: ${{ matrix.split }}
+      SPARK_TPCDS_DATA: $HOME/tpcds-kit
       SPARK_GENERATE_BENCHMARK_FILES: 1
       SPARK_LOCAL_IP: localhost
       # To prevent spark.test.home not being set. See more detail in SPARK-36007.
@@ -180,8 +174,7 @@ jobs:
           --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \
           --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`" \
           "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
-          "${{ github.event.inputs.class }}" \
-          $SPARK_BENCHMARK_ARG
+          "${{ github.event.inputs.class }}"
         # Revert to default Scala version to clean up unnecessary git diff
         dev/change-scala-version.sh 2.12
         # To keep the directory structure and file permissions, tar them
