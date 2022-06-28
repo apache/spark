@@ -59,17 +59,12 @@ public class UserDefinedScalarFunc implements Expression, Serializable {
 
   @Override
   public int hashCode() {
-        return Objects.hash(name, canonicalName, children);
-    }
+    return Objects.hash(name, canonicalName, children);
+  }
 
   @Override
   public String toString() {
     ToStringSQLBuilder builder = new ToStringSQLBuilder();
-    try {
-      return builder.build(this);
-    } catch (Throwable e) {
-      return name + "(" + Arrays.stream(children)
-        .map(child -> child.toString()).reduce((a,b) -> a + "," + b + ")").get();
-    }
+    return builder.build(this);
   }
 }

@@ -253,8 +253,8 @@ public class GeneralScalarExpression implements Expression, Serializable {
     try {
       return builder.build(this);
     } catch (Throwable e) {
-      return name + "(" + Arrays.stream(children)
-        .map(child -> child.toString()).reduce((a,b) -> a + "," + b + ")").get();
+      return name + "(" +
+        Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
     }
   }
 }
