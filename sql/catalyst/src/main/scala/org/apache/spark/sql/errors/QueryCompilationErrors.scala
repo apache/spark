@@ -260,7 +260,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"Writing into a view is not allowed. View: $identifier.",
-
       t.origin.line, t.origin.startPosition)
   }
 
