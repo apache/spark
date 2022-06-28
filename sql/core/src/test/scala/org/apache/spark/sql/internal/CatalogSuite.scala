@@ -869,32 +869,48 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
   test("three layer namespace compatibility - current database") {
     sql("CREATE NAMESPACE testcat.my_db")
+    // current catalog is spark_catalog, setting current databse to one in testcat will fail
+    val hiveErr = intercept[AnalysisException] {
+      spark.catalog.setCurrentDatabase("testcat.my_db")
+    }.getMessage
+    assert(hiveErr.contains("Namespace 'testcat.my_db' not found"))
+
+    // now switch catalogs and try again
+    // TODO? sql("USE CATALOG testcat")
+    spark.catalog.setCurrentCatalog("testcat")
     spark.catalog.setCurrentDatabase("testcat.my_db")
+    assert(spark.catalog.currentDatabase == "my_db")
+    spark.catalog.setCurrentDatabase("my_db")
+    assert(spark.catalog.currentDatabase == "my_db")
     // sessionCatalog still reports 'default' as current database
     assert(sessionCatalog.getCurrentDatabase == "default")
-    assert(spark.catalog.currentDatabase == "testcat.my_db")
     val e = intercept[AnalysisException] {
       spark.catalog.setCurrentDatabase("testcat.unknown_db")
-    }
-    assert(e.getMessage.contains("testcat.unknown_db"))
+    }.getMessage
+    assert(e.contains("unknown_db"))
 
     // add namespace layer
     sql("CREATE NAMESPACE testcat.ns1.my_db")
     spark.catalog.setCurrentDatabase("testcat.ns1.my_db")
-    assert(spark.catalog.currentDatabase == "testcat.ns1.my_db")
+    assert(spark.catalog.currentDatabase == "ns1.my_db")
     val e2 = intercept[AnalysisException] {
       spark.catalog.setCurrentDatabase("testcat.ns1.unknown_db")
-    }
-    assert(e2.getMessage.contains("testcat.ns1.unknown_db"))
+    }.getMessage
+    assert(e2.contains("ns1.unknown_db"))
 
     // check that we can fall back to old sessionCatalog
-    createDatabase("my_db")
-    spark.catalog.setCurrentDatabase("my_db")
-    assert(spark.catalog.currentDatabase == "my_db")
-    assert(sessionCatalog.getCurrentDatabase == "my_db")
+    createDatabase("hive_db")
+    val err = intercept[AnalysisException] {
+      spark.catalog.setCurrentDatabase("hive_db")
+    }.getMessage
+    assert(err.contains("hive_db"))
+    spark.catalog.setCurrentCatalog("spark_catalog")
+    spark.catalog.setCurrentDatabase("hive_db")
+    assert(spark.catalog.currentDatabase == "hive_db")
+    assert(sessionCatalog.getCurrentDatabase == "hive_db")
     val e3 = intercept[AnalysisException] {
       spark.catalog.setCurrentDatabase("unknown_db")
-    }
-    assert(e3.getMessage.contains("unknown_db"))
+    }.getMessage
+    assert(e3.contains("unknown_db"))
   }
 }

@@ -50,41 +50,27 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  // FIXME
-  private var currentDatabaseV2: Option[String] = None
-
   /**
    * Returns the current default database in this session.
    */
   override def currentDatabase: String =
-    currentDatabaseV2.getOrElse(sessionCatalog.getCurrentDatabase)
+    sparkSession.sessionState.catalogManager.currentNamespace.mkString(".")
 
   /**
    * Sets the current default database in this session.
    */
   @throws[AnalysisException]("database does not exist")
   override def setCurrentDatabase(dbName: String): Unit = {
-    // `dbName` could be either a single database name (behavior in Spark 3.3 and prior) or
-    // a qualified namespace with catalog name. We assume it's a single database name
-    // and check if we can find the dbName in sessionCatalog. If so, we set the use old
-    // sessionCatalog APIs to set current database. Otherwise, we try 3-part name parsing and
-    // check if the database exists with catalogV2 APIs
-    if (sessionCatalog.databaseExists(dbName)) {
-      currentDatabaseV2 = None
-      sessionCatalog.setCurrentDatabase(dbName)
-    } else {
-      val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
-      val plan = UnresolvedNamespace(ident)
-      sparkSession.sessionState.executePlan(plan).analyzed match {
-        case ResolvedNamespace(catalog: SupportsNamespaces, name) =>
-          if (catalog.namespaceExists(ident.tail.toArray)) {
-            currentDatabaseV2 = Some(dbName)
-          } else {
-            throw QueryCompilationErrors.databaseDoesNotExistError(dbName)
-          }
-        // TODO what to do if it doesn't support namespaces
-      }
+    val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+    // ident may or may not include catalog prefix
+    // if it includes the current catalog, strip it. otherwise consider it all to be namespace
+    val catalog = currentCatalog()
+    val ns = ident.headOption match {
+      // TODO case-sensitivity?
+      case Some(catalogName) if catalogName == catalog && ident.length > 1 => ident.tail
+      case _ => ident
     }
+    sparkSession.sessionState.catalogManager.setCurrentNamespace(ns.toArray)
   }
 
   /**
