@@ -711,6 +711,10 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-37753: Inhibit broadcast in left outer join when there are many empty" +
     " partitions on outer/left side") {
+    // if the right side is completed first and the left side is still being executed,
+    // the right side does not know whether there are many empty partitions on the left side,
+    // so there is no demote, and then the right side is broadcast in the planning stage.
+    // so retry several times here to avoid unit test failure.
     eventually(timeout(15.seconds), interval(500.milliseconds)) {
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
