@@ -31,7 +31,8 @@ import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatal
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder}
+import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
@@ -320,6 +321,127 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       }
       assert(exc.getMessage.contains("The input source(parquet) is different from the table " +
         s"$tableName's data source provider(json)"))
+    }
+  }
+
+  test("explain with table on DSv1 data source") {
+    val tblSourceName = "tbl_src"
+    val tblTargetName = "tbl_target"
+    val tblSourceQualified = s"default.$tblSourceName"
+    val tblTargetQualified = s"`default`.`$tblTargetName`"
+
+    withTable(tblSourceQualified, tblTargetQualified) {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE $tblSourceQualified (col1 string, col2 integer) USING parquet")
+        sql(s"CREATE TABLE $tblTargetQualified (col1 string, col2 integer) USING parquet")
+
+        sql(s"INSERT INTO $tblSourceQualified VALUES ('a', 1)")
+        sql(s"INSERT INTO $tblSourceQualified VALUES ('b', 2)")
+        sql(s"INSERT INTO $tblSourceQualified VALUES ('c', 3)")
+
+        val df = spark.readStream.table(tblSourceQualified)
+        val sq = df.writeStream
+          .format("parquet")
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .toTable(tblTargetQualified)
+          .asInstanceOf[StreamingQueryWrapper].streamingQuery
+
+        try {
+          sq.processAllAvailable()
+
+          val explainWithoutExtended = sq.explainInternal(false)
+          // `extended = false` only displays the physical plan.
+          assert("FileScan".r
+            .findAllMatchIn(explainWithoutExtended).size === 1)
+          assert(tblSourceName.r
+            .findAllMatchIn(explainWithoutExtended).size === 1)
+
+          // We have marker node for DSv1 sink only in logical node. In physical plan, there is no
+          // information for DSv1 sink.
+
+          val explainWithExtended = sq.explainInternal(true)
+          // `extended = true` displays 3 logical plans (Parsed/Analyzed/Optimized) and 1 physical
+          // plan.
+          assert("Relation".r
+            .findAllMatchIn(explainWithExtended).size === 3)
+          assert("FileScan".r
+            .findAllMatchIn(explainWithExtended).size === 1)
+          // we don't compare with exact number since the number is also affected by SubqueryAlias
+          assert(tblSourceQualified.r
+            .findAllMatchIn(explainWithExtended).size >= 4)
+
+          assert("WriteToMicroBatchDataSourceV1".r
+            .findAllMatchIn(explainWithExtended).size === 2)
+          assert(tblTargetQualified.r
+            .findAllMatchIn(explainWithExtended).size >= 2)
+        } finally {
+          sq.stop()
+        }
+      }
+    }
+  }
+
+  test("explain with table on DSv2 data source") {
+    val tblSourceName = "tbl_src"
+    val tblTargetName = "tbl_target"
+    val tblSourceQualified = s"teststream.ns.$tblSourceName"
+    val tblTargetQualified = s"testcat.ns.$tblTargetName"
+
+    spark.sql("CREATE NAMESPACE teststream.ns")
+    spark.sql("CREATE NAMESPACE testcat.ns")
+
+    withTable(tblSourceQualified, tblTargetQualified) {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE $tblSourceQualified (value int) USING foo")
+        sql(s"CREATE TABLE $tblTargetQualified (col1 string, col2 integer) USING foo")
+
+        val stream = MemoryStream[Int]
+        val testCatalog = spark.sessionState.catalogManager.catalog("teststream").asTableCatalog
+        val table = testCatalog.loadTable(Identifier.of(Array("ns"), tblSourceName))
+        table.asInstanceOf[InMemoryStreamTable].setStream(stream)
+
+        val df = spark.readStream.table(tblSourceQualified)
+          .select(lit('a'), $"value")
+        val sq = df.writeStream
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .toTable(tblTargetQualified)
+          .asInstanceOf[StreamingQueryWrapper].streamingQuery
+
+        try {
+          stream.addData(1, 2, 3)
+
+          sq.processAllAvailable()
+
+          val explainWithoutExtended = sq.explainInternal(false)
+          // `extended = false` only displays the physical plan.
+          // we don't guarantee the table information is available in physical plan.
+          assert("MicroBatchScan".r
+            .findAllMatchIn(explainWithoutExtended).size === 1)
+          assert("WriteToDataSourceV2".r
+            .findAllMatchIn(explainWithoutExtended).size === 1)
+
+          val explainWithExtended = sq.explainInternal(true)
+          // `extended = true` displays 3 logical plans (Parsed/Analyzed/Optimized) and 1 physical
+          // plan.
+          assert("StreamingDataSourceV2Relation".r
+            .findAllMatchIn(explainWithExtended).size === 3)
+          // WriteToMicroBatchDataSource is used for both parsed and analyzed logical plan
+          assert("WriteToMicroBatchDataSource".r
+            .findAllMatchIn(explainWithExtended).size === 2)
+          // optimizer replaces WriteToMicroBatchDataSource to WriteToDataSourceV2
+          assert("WriteToDataSourceV2".r
+            .findAllMatchIn(explainWithExtended).size === 2)
+          assert("MicroBatchScan".r
+            .findAllMatchIn(explainWithExtended).size === 1)
+
+          assert(tblSourceQualified.r
+            .findAllMatchIn(explainWithExtended).size >= 3)
+          assert(tblTargetQualified.r
+            .findAllMatchIn(explainWithExtended).size >= 3)
+        } finally {
+          sq.stop()
+        }
+      }
     }
   }
 

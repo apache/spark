@@ -50,6 +50,7 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import (
     AtomicType,
     DataType,
+    StructField,
     StructType,
     _make_type_verifier,
     _infer_schema,
@@ -57,6 +58,7 @@ from pyspark.sql.types import (
     _merge_type,
     _create_converter,
     _parse_datatype_string,
+    _from_numpy_type,
 )
 from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
 
@@ -975,6 +977,15 @@ class SparkSession(SparkConversionMixin):
             if data.ndim not in [1, 2]:
                 raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
             column_names = ["value"] if data.ndim == 1 else ["_1", "_2"]
+            if schema is None and not self._jconf.arrowPySparkEnabled():
+                # Construct `schema` from `np.dtype` of the input NumPy array
+                # TODO: Apply the logic below when self._jconf.arrowPySparkEnabled() is True
+                spark_type = _from_numpy_type(data.dtype)
+                if spark_type is not None:
+                    schema = StructType(
+                        [StructField(name, spark_type, nullable=True) for name in column_names]
+                    )
+
             data = pd.DataFrame(data, columns=column_names)
 
         if has_pandas and isinstance(data, pd.DataFrame):

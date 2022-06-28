@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLim
 import org.apache.spark.sql.connector.IntegralAverage
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{abs, avg, ceil, coalesce, count, count_distinct, exp, floor, lit, log => ln, not, pow, sqrt, sum, udf, when}
+import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -795,6 +795,75 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df12, "PushedFilters: " +
       "[(CASE WHEN SALARY > 10000.00 THEN SALARY ELSE LEAST(SALARY, 1000.00) END) > 1200.00]")
     checkAnswer(df12, Seq(Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+
+    val df13 = spark.table("h2.test.employee")
+      .filter(logarithm($"bonus") > 7)
+      .filter(exp($"bonus") > 0)
+      .filter(pow($"bonus", 2) === 1440000)
+      .filter(sqrt($"bonus") > 34)
+      .filter(floor($"bonus") === 1200)
+      .filter(ceil($"bonus") === 1200)
+    checkFiltersRemoved(df13)
+    checkPushedInfo(df13, "PushedFilters: [BONUS IS NOT NULL, LN(BONUS) > 7.0, EXP(BONUS) > 0.0, " +
+      "(POWER(BONUS, 2.0)) = 1440000.0, SQRT(BONU...,")
+    checkAnswer(df13, Seq(Row(1, "cathy", 9000, 1200, false),
+      Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+
+    // H2 does not support width_bucket
+    val df14 = sql(
+      """
+        |SELECT * FROM h2.test.employee
+        |WHERE width_bucket(bonus, 1, 6, 3) > 4
+        |""".stripMargin)
+    checkFiltersRemoved(df14, false)
+    checkPushedInfo(df14, "PushedFilters: [BONUS IS NOT NULL]")
+    checkAnswer(df14, Seq.empty[Row])
+
+    val df15 = spark.table("h2.test.employee")
+      .filter(logarithm(2, $"bonus") > 10)
+      .filter(log10($"bonus") > 3)
+      .filter(round($"bonus") === 1200)
+      .filter(degrees($"bonus") > 68754)
+      .filter(radians($"bonus") > 20)
+      .filter(signum($"bonus") === 1)
+    checkFiltersRemoved(df15)
+    checkPushedInfo(df15, "PushedFilters: [BONUS IS NOT NULL, (LOG(2.0, BONUS)) > 10.0, " +
+      "LOG10(BONUS) > 3.0, (ROUND(BONUS, 0)) = 1200.0, DEG...,")
+    checkAnswer(df15, Seq(Row(1, "cathy", 9000, 1200, false),
+      Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+
+    val df16 = spark.table("h2.test.employee")
+      .filter(sin($"bonus") < -0.08)
+      .filter(sinh($"bonus") > 200)
+      .filter(cos($"bonus") > 0.9)
+      .filter(cosh($"bonus") > 200)
+      .filter(tan($"bonus") < -0.08)
+      .filter(tanh($"bonus") === 1)
+      .filter(cot($"bonus") < -11)
+      .filter(asin($"bonus") > 0.1)
+      .filter(acos($"bonus") > 1.4)
+      .filter(atan($"bonus") > 1.4)
+      .filter(atan2($"bonus", $"bonus") > 0.7)
+    checkFiltersRemoved(df16)
+    checkPushedInfo(df16, "PushedFilters: [BONUS IS NOT NULL, SIN(BONUS) < -0.08, " +
+      "SINH(BONUS) > 200.0, COS(BONUS) > 0.9, COSH(BONUS) > 200....,")
+    checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false),
+      Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+
+    // H2 does not support log2, asinh, acosh, atanh, cbrt
+    val df17 = sql(
+      """
+        |SELECT * FROM h2.test.employee
+        |WHERE log2(dept) > 2.5
+        |AND asinh(bonus / salary) > 0.09
+        |AND acosh(dept) > 2.4
+        |AND atanh(bonus / salary) > 0.1
+        |AND cbrt(dept) > 1.8
+        |""".stripMargin)
+    checkFiltersRemoved(df17, false)
+    checkPushedInfo(df17,
+      "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL]")
+    checkAnswer(df17, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
   test("scan with filter push-down with ansi mode") {
@@ -828,10 +897,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           checkAnswer(df2, Seq.empty)
         }
 
-        val df3 = sql("""
-                        |SELECT * FROM h2.test.employee
-                        |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
-                        |""".stripMargin)
+        val df3 = sql(
+          """
+            |SELECT * FROM h2.test.employee
+            |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
+            |""".stripMargin)
 
         checkFiltersRemoved(df3, ansiMode)
         val expectedPlanFragment3 = if (ansiMode) {
@@ -871,48 +941,22 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkAnswer(df5, Seq(Row(1, "amy", 10000, 1000, true),
           Row(1, "cathy", 9000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
-        val df6 = spark.table("h2.test.employee")
-          .filter(ln($"dept") > 1)
-          .filter(exp($"salary") > 2000)
-          .filter(pow($"dept", 2) > 4)
-          .filter(sqrt($"salary") > 100)
-          .filter(floor($"dept") > 1)
-          .filter(ceil($"dept") > 1)
-        checkFiltersRemoved(df6, ansiMode)
-        val expectedPlanFragment6 = if (ansiMode) {
-          "PushedFilters: [DEPT IS NOT NULL, SALARY IS NOT NULL, " +
-            "LN(CAST(DEPT AS double)) > 1.0, EXP(CAST(SALARY AS double)...,"
-        } else {
-          "PushedFilters: [DEPT IS NOT NULL, SALARY IS NOT NULL]"
-        }
-        checkPushedInfo(df6, expectedPlanFragment6)
-        checkAnswer(df6, Seq(Row(6, "jen", 12000, 1200, true)))
-
-        // H2 does not support width_bucket
-        val df7 = sql("""
-                        |SELECT * FROM h2.test.employee
-                        |WHERE width_bucket(dept, 1, 6, 3) > 1
-                        |""".stripMargin)
-        checkFiltersRemoved(df7, false)
-        checkPushedInfo(df7, "PushedFilters: [DEPT IS NOT NULL]")
-        checkAnswer(df7, Seq(Row(6, "jen", 12000, 1200, true)))
-
-        val df8 = sql(
+        val df6 = sql(
           """
             |SELECT * FROM h2.test.employee
             |WHERE cast(bonus as string) like '%30%'
             |AND cast(dept as byte) > 1
             |AND cast(dept as short) > 1
             |AND cast(bonus as decimal(20, 2)) > 1200""".stripMargin)
-        checkFiltersRemoved(df8, ansiMode)
+        checkFiltersRemoved(df6, ansiMode)
         val expectedPlanFragment8 = if (ansiMode) {
           "PushedFilters: [BONUS IS NOT NULL, DEPT IS NOT NULL, " +
             "CAST(BONUS AS string) LIKE '%30%', CAST(DEPT AS byte) > 1, ...,"
         } else {
           "PushedFilters: [BONUS IS NOT NULL, DEPT IS NOT NULL],"
         }
-        checkPushedInfo(df8, expectedPlanFragment8)
-        checkAnswer(df8, Seq(Row(2, "david", 10000, 1300, true)))
+        checkPushedInfo(df6, expectedPlanFragment8)
+        checkAnswer(df6, Seq(Row(2, "david", 10000, 1300, true)))
       }
     }
   }
