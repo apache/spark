@@ -487,7 +487,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.enableApiPolling")
       .doc("If Spark should poll Kubernetes for executor pod status. " +
         "You should leave this enabled unless you're encountering performance issues with your etcd.")
-      .version("3.3.0")
+      .version("3.4.0")
       .booleanConf
       .internal()
       .createWithDefault(true)
@@ -496,7 +496,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.enableApiWatcher")
       .doc("If Spark should create watchers for executor pod status. " +
         "You should leave this enabled unless you're encountering performance issues with your etcd.")
-      .version("3.3.0")
+      .version("3.4.0")
       .booleanConf
       .internal()
       .createWithDefault(true)
