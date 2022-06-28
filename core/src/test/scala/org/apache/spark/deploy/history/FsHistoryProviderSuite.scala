@@ -1729,8 +1729,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     val bstream = new BufferedOutputStream(cstream)
 
     val metadata = SparkListenerLogStart(org.apache.spark.SPARK_VERSION)
-    val eventJson = JsonProtocol.sparkEventToJsonString(metadata)
-    val metadataJson = eventJson + "\n"
+    val eventJsonString = JsonProtocol.sparkEventToJsonString(metadata)
+    val metadataJson = eventJsonString + "\n"
     bstream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
 
     val writer = new OutputStreamWriter(bstream, StandardCharsets.UTF_8)
