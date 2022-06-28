@@ -66,11 +66,11 @@ public final class GeneralAggregateFunc implements AggregateFunc {
       return builder.build(this);
     } catch (Throwable e) {
       if (isDistinct) {
-        return name + "(DISTINCT " + Arrays.stream(children)
-          .map(child -> child.toString()).reduce((a,b) -> a + "," + b + ")").get();
+        return name + "(DISTINCT" +
+          Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
       } else {
-        return name + "(" + Arrays.stream(children)
-          .map(child -> child.toString()).reduce((a,b) -> a + "," + b + ")").get();
+        return name + "(" +
+          Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
       }
     }
   }
