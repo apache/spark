@@ -1002,16 +1002,19 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   since = "3.4.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class RegExpCount(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+case class RegExpCount(left: Expression, right: Expression)
+  extends RuntimeReplaceable with ExpectsInputTypes {
 
-  def this(left: Expression, right: Expression) =
-    this(left, right, Size(RegExpExtractAll(left, right, Literal(0)), legacySizeOfNull = false))
+  override lazy val replacement: Expression =
+    Size(RegExpExtractAll(left, right, Literal(0)), legacySizeOfNull = false)
 
   override def prettyName: String = "regexp_count"
 
-  override def parameters: Seq[Expression] = Seq(left, right)
+  override def children: Seq[Expression] = Seq(left, right)
 
-  override protected def withNewChildInternal(newChild: Expression): RegExpCount =
-    this.copy(replacement = newChild)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): RegExpCount =
+    copy(left = newChildren(0), right = newChildren(1))
 }
