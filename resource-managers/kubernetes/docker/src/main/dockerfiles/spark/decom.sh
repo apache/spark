@@ -23,7 +23,7 @@ set -x
 echo "Asked to decommission"
 # Find the pid to signal
 date | tee -a ${LOG}
-WORKER_PID=$(ps x -o pid,cmd -C java |grep Executor \
+WORKER_PID=$(ps -o pid,cmd -C java |grep Executor \
 	       | tail -n 1| awk '{ sub(/^[ \t]+/, ""); print }' \
 	       | cut -f 1 -d " ")
 echo "Using worker pid $WORKER_PID"
