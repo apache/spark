@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Add
-import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
@@ -275,5 +275,27 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(
       Optimize.execute(testRelation.offset(2).limit(1).analyze),
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
+  }
+
+  test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      comparePlans(
+        Optimize.execute(x.join(y, joinType).analyze),
+        x.join(LocalLimit(1, y), joinType).analyze)
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      comparePlans(
+        Optimize.execute(x.join(y.limit(2), joinType).analyze),
+        x.join(LocalLimit(1, y), joinType).analyze)
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery1 = x.join(LocalLimit(1, y), joinType).analyze
+      val originalQuery2 = x.join(y.limit(1), joinType).analyze
+
+      comparePlans(Optimize.execute(originalQuery1), originalQuery1)
+      comparePlans(Optimize.execute(originalQuery2), originalQuery2)
+    }
   }
 }

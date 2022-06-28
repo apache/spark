@@ -47,12 +47,9 @@ import org.apache.spark.sql.types._
  * (1, 5)
  * (4, 6)
  *
- * @param analyzer analyzer to use for processing DEFAULT values stored as text.
  * @param catalog  the catalog to use for looking up the schema of INSERT INTO table objects.
  */
-case class ResolveDefaultColumns(
-    analyzer: Analyzer,
-    catalog: SessionCatalog) extends Rule[LogicalPlan] {
+case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -111,7 +108,7 @@ case class ResolveDefaultColumns(
       val expanded: UnresolvedInlineTable =
         addMissingDefaultValuesForInsertFromInlineTable(table, schema)
       val replaced: Option[LogicalPlan] =
-        replaceExplicitDefaultValuesForInputOfInsertInto(analyzer, schema, expanded)
+        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded)
       replaced.map { r: LogicalPlan =>
         node = r
         for (child <- children.reverse) {
@@ -135,7 +132,7 @@ case class ResolveDefaultColumns(
       val expanded: Project =
         addMissingDefaultValuesForInsertFromProject(project, schema)
       val replaced: Option[LogicalPlan] =
-        replaceExplicitDefaultValuesForInputOfInsertInto(analyzer, schema, expanded)
+        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded)
       replaced.map { r =>
         regenerated.copy(query = r)
       }.getOrElse(i)
@@ -156,8 +153,7 @@ case class ResolveDefaultColumns(
     val schemaForTargetTable: Option[StructType] = getSchemaForTargetTable(u.table)
     schemaForTargetTable.map { schema =>
       val defaultExpressions: Seq[Expression] = schema.fields.map {
-        case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
-          analyze(analyzer, f, "UPDATE")
+        case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "UPDATE")
         case _ => Literal(null)
       }
       // Create a map from each column name in the target table to its DEFAULT expression.
@@ -187,8 +183,7 @@ case class ResolveDefaultColumns(
       }
     }
     val defaultExpressions: Seq[Expression] = schema.fields.map {
-      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
-        analyze(analyzer, f, "MERGE")
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "MERGE")
       case _ => Literal(null)
     }
     val columnNamesToExpressions: Map[String, Expression] =
@@ -323,13 +318,11 @@ case class ResolveDefaultColumns(
    * command from a logical plan.
    */
   private def replaceExplicitDefaultValuesForInputOfInsertInto(
-      analyzer: Analyzer,
       insertTableSchemaWithoutPartitionColumns: StructType,
       input: LogicalPlan): Option[LogicalPlan] = {
     val schema = insertTableSchemaWithoutPartitionColumns
     val defaultExpressions: Seq[Expression] = schema.fields.map {
-      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
-        analyze(analyzer, f, "INSERT")
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "INSERT")
       case _ => Literal(null)
     }
     // Check the type of `input` and replace its expressions accordingly.

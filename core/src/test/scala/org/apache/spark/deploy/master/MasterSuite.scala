@@ -325,7 +325,7 @@ class MasterSuite extends SparkFunSuite
     val conf = new SparkConf()
     val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
-    val masterUrl = s"http://${Utils.localCanonicalHostName()}:${localCluster.masterWebUIPort}"
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(50.seconds), interval(100.milliseconds)) {
         val json = Utils
@@ -362,7 +362,7 @@ class MasterSuite extends SparkFunSuite
     conf.set(UI_REVERSE_PROXY, true)
     val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
-    val masterUrl = s"http://${Utils.localCanonicalHostName()}:${localCluster.masterWebUIPort}"
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(50.seconds), interval(100.milliseconds)) {
         val json = Utils
@@ -400,7 +400,7 @@ class MasterSuite extends SparkFunSuite
     conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
     val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
-    val masterUrl = s"http://${Utils.localCanonicalHostName()}:${localCluster.masterWebUIPort}"
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(50.seconds), interval(100.milliseconds)) {
         val json = Utils

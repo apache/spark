@@ -21,18 +21,26 @@ import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
-import org.apache.spark.sql.connector.read.SupportsReportPartitioning
+import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, UnknownPartitioning}
 import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
  * Extracts [[DataSourceV2ScanRelation]] from the input logical plan, converts any V2 partitioning
- * reported by data sources to their catalyst counterparts. Then, annotates the plan with the
- * result.
+ * and ordering reported by data sources to their catalyst counterparts. Then, annotates the plan
+ * with the partitioning and ordering result.
  */
-object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None) =>
+object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelper {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    val scanRules = Seq[LogicalPlan => LogicalPlan] (partitioning, ordering)
+
+    scanRules.foldLeft(plan) { (newPlan, scanRule) =>
+      scanRule(newPlan)
+    }
+  }
+
+  private def partitioning(plan: LogicalPlan) = plan.transformDown {
+    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None, _) =>
       val funCatalogOpt = relation.catalog.flatMap {
         case c: FunctionCatalog => Some(c)
         case _ => None
@@ -47,5 +55,11 @@ object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
       }
 
       d.copy(keyGroupedPartitioning = catalystPartitioning)
+  }
+
+  private def ordering(plan: LogicalPlan) = plan.transformDown {
+    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportOrdering, _, _, _) =>
+      val ordering = V2ExpressionUtils.toCatalystOrdering(scan.outputOrdering(), relation)
+      d.copy(ordering = Some(ordering))
   }
 }

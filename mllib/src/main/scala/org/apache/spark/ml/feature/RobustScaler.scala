@@ -145,7 +145,7 @@ class RobustScaler @Since("3.0.0") (@Since("3.0.0") override val uid: String)
   override def fit(dataset: Dataset[_]): RobustScalerModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(inputCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(inputCol))
     val vectors = dataset.select($(inputCol)).rdd.map {
       case Row(vec: Vector) =>
         require(vec.size == numFeatures,

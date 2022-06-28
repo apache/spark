@@ -33,7 +33,7 @@ SELECT `(a)?+.+` FROM testData2 WHERE a = 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column '`(a)?+.+`' does not exist. Did you mean one of the following? [testdata2.A, testdata2.B, testdata2.c, testdata2.d]; line 1 pos 7
+[UNRESOLVED_COLUMN] A column or function parameter with name `(a)?+.+` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 7
 
 
 -- !query
@@ -42,7 +42,7 @@ SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column 't.`(a)?+.+`' does not exist. Did you mean one of the following? [t.A, t.B, t.c, t.d]; line 1 pos 7
+[UNRESOLVED_COLUMN] A column or function parameter with name `t`.`(a)?+.+` cannot be resolved. Did you mean one of the following? [`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`]; line 1 pos 7
 
 
 -- !query
@@ -51,7 +51,7 @@ SELECT `(a|b)` FROM testData2 WHERE a = 2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column '`(a|b)`' does not exist. Did you mean one of the following? [testdata2.A, testdata2.B, testdata2.c, testdata2.d]; line 1 pos 7
+[UNRESOLVED_COLUMN] A column or function parameter with name `(a|b)` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 7
 
 
 -- !query
@@ -60,7 +60,7 @@ SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column '`(a|b)?+.+`' does not exist. Did you mean one of the following? [testdata2.A, testdata2.B, testdata2.c, testdata2.d]; line 1 pos 7
+[UNRESOLVED_COLUMN] A column or function parameter with name `(a|b)?+.+` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 7
 
 
 -- !query
@@ -69,7 +69,7 @@ SELECT SUM(`(a|b)?+.+`) FROM testData2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column '`(a|b)?+.+`' does not exist. Did you mean one of the following? [testdata2.A, testdata2.B, testdata2.c, testdata2.d]; line 1 pos 11
+[UNRESOLVED_COLUMN] A column or function parameter with name `(a|b)?+.+` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 11
 
 
 -- !query
@@ -78,7 +78,7 @@ SELECT SUM(`(a)`) FROM testData2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column '`(a)`' does not exist. Did you mean one of the following? [testdata2.A, testdata2.B, testdata2.c, testdata2.d]; line 1 pos 11
+[UNRESOLVED_COLUMN] A column or function parameter with name `(a)` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 11
 
 
 -- !query
@@ -298,7 +298,7 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column '`(a)`' does not exist. Did you mean one of the following? [testdata3.a, testdata3.b]; line 1 pos 38
+[UNRESOLVED_COLUMN] A column or function parameter with name `(a)` cannot be resolved. Did you mean one of the following? [`testdata3`.`a`, `testdata3`.`b`]; line 1 pos 38
 
 
 -- !query
@@ -307,4 +307,4 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)?+.+`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[MISSING_COLUMN] Column '`(a)?+.+`' does not exist. Did you mean one of the following? [testdata3.a, testdata3.b]; line 1 pos 38
+[UNRESOLVED_COLUMN] A column or function parameter with name `(a)?+.+` cannot be resolved. Did you mean one of the following? [`testdata3`.`a`, `testdata3`.`b`]; line 1 pos 38

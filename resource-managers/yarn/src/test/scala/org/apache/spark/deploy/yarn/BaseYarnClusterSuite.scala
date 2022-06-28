@@ -106,6 +106,9 @@ abstract class BaseYarnClusterSuite
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
     yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
 
+    // Support both IPv4 and IPv6
+    yarnConf.set("yarn.resourcemanager.hostname", Utils.localHostNameForURI())
+
     try {
       yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
       yarnCluster.init(yarnConf)
@@ -133,7 +136,7 @@ abstract class BaseYarnClusterSuite
     // done so in a timely manner (defined to be 10 seconds).
     val config = yarnCluster.getConfig()
     val startTimeNs = System.nanoTime()
-    while (config.get(YarnConfiguration.RM_ADDRESS).split(":")(1) == "0") {
+    while (config.get(YarnConfiguration.RM_ADDRESS).split(":").last == "0") {
       if (System.nanoTime() - startTimeNs > TimeUnit.SECONDS.toNanos(10)) {
         throw new IllegalStateException("Timed out waiting for RM to come up.")
       }
@@ -169,7 +172,9 @@ abstract class BaseYarnClusterSuite
       outFile: Option[File] = None): SparkAppHandle.State = {
     val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
-    val env = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv
+    val env = Map(
+      "YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath(),
+      "SPARK_PREFER_IPV6" -> Utils.preferIPv6.toString) ++ extraEnv
 
     val launcher = new SparkLauncher(env.asJava)
     if (klass.endsWith(".py")) {
@@ -182,6 +187,8 @@ abstract class BaseYarnClusterSuite
       .setMaster("yarn")
       .setDeployMode(deployMode)
       .setConf(EXECUTOR_INSTANCES.key, "1")
+      .setConf(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS,
+        s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}")
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)
 

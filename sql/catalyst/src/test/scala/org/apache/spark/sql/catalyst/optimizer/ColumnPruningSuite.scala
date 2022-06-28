@@ -495,4 +495,22 @@ class ColumnPruningSuite extends PlanTest {
       .analyze
     comparePlans(optimized, expected)
   }
+
+  test("SPARK-39445: Remove the window if windowExpressions is empty in column pruning") {
+    object CustomOptimize extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("Column pruning", FixedPoint(10),
+        ColumnPruning,
+        CollapseProject) :: Nil
+    }
+
+    val relation = LocalRelation($"a".int, $"b".string, $"c".double, $"d".int)
+    val winSpec = windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count($"b"), winSpec)
+
+    val originalQuery = relation.select($"a", $"b", $"c", $"d",
+      winExpr.as("window")).select($"a", $"c")
+    val correctAnswer = relation.select($"a", $"c")
+
+    comparePlans(CustomOptimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
 }

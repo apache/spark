@@ -2149,6 +2149,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         () => List(new Array[User](1)).iterator)
     }
     assert(kryoException.getMessage === "java.io.IOException: Input/output error")
+    assertUpdateBlockInfoReportedForRemovingBlock(store, "my-block-id",
+      removedFromMemory = false, removedFromDisk = true)
   }
 
   test("check KryoException when saving blocks into memory and 'Input/output error' is occurred") {

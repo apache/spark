@@ -360,4 +360,25 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       None,
       new OrderedFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
   }
+
+  test("AvroDeserializer with binary type") {
+    val jsonFormatSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "record",
+        |  "fields" : [
+        |    {"name": "a", "type": "bytes"}
+        |  ]
+        |}
+      """.stripMargin
+    val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
+    val avroRecord = new GenericData.Record(avroSchema)
+    val bb = java.nio.ByteBuffer.wrap(Array[Byte](97, 48, 53))
+    avroRecord.put("a", bb)
+
+    val expected = InternalRow(Array[Byte](97, 48, 53))
+    checkDeserialization(avroSchema, avroRecord, Some(expected))
+    checkDeserialization(avroSchema, avroRecord, Some(expected))
+  }
 }

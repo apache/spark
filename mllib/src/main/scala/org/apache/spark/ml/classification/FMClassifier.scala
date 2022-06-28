@@ -190,7 +190,7 @@ class FMClassifier @Since("3.0.0") (
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver, thresholds)
     instr.logNumClasses(numClasses)
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
