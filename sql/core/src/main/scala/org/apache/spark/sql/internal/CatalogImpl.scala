@@ -23,15 +23,14 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, SupportsPartitionManagement, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.AlterTableChangeColumnCommand
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -250,102 +249,65 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   private def listColumns(ident: Seq[String]): Dataset[Column] = {
-    val plan = DescribeRelation(
-      UnresolvedTableOrView(ident, "DESCRIBE TABLE", true), Map.empty, isExtended = true)
-    val iter = sparkSession.sessionState.executePlan(plan).toRdd.collect().iterator
+    val plan = UnresolvedTableOrView(ident, "Catalog.listColumns", true)
 
-    // CREATE TABLE student (id INT, name STRING, age INT, city INT, area INT)
-    // PARTITIONED BY (age, city)
-    // CLUSTERED BY (Id, area) INTO 4 buckets;
-    //
-    // DESCRIBE TABLE EXTENDED student;
-    //  +--------------------+--------------------+-------+
-    //  |            col_name|           data_type|comment|
-    //  +--------------------+--------------------+-------+
-    //  |                  id|                 int|   null|
-    //  |                name|              string|   null|
-    //  |                area|                 int|   null|
-    //  |                 age|                 int|   null|
-    //  |                city|                 int|   null|
-    //  |# Partition Infor...|                    |       |
-    //  |          # col_name|           data_type|comment|
-    //  |                 age|                 int|   null|
-    //  |                city|                 int|   null|
-    //  |                    |                    |       |
-    //  |# Detailed Table ...|                    |       |
-    //  |            Database|             default|       |
-    //  |               Table|             student|       |
-    //  |               Owner|                 zrf|       |
-    //  |        Created Time|Sat Jun 25 22:15:...|       |
-    //  |         Last Access|             UNKNOWN|       |
-    //  |          Created By|         Spark 3.3.0|       |
-    //  |                Type|             MANAGED|       |
-    //  |            Provider|                hive|       |
-    //  |         Num Buckets|                   4|       |
-    //  |      Bucket Columns|      [`id`, `area`]|       |
-    //  |        Sort Columns|                  []|       |
-    //  |    Table Properties|[transient_lastDd...|       |
-    //  |            Location|file:/home/zrf/sp...|       |
-    //  |       Serde Library|org.apache.hadoop...|       |
-    //  |         InputFormat|org.apache.hadoop...|       |
-    //  |        OutputFormat|org.apache.hadoop...|       |
-    //  |  Storage Properties|[serialization.fo...|       |
-    //  |  Partition Provider|             Catalog|       |
-    //  +--------------------+--------------------+-------+
+    val columns = sparkSession.sessionState.executePlan(plan).analyzed match {
+      case ResolvedTable(_, _, table @ V1Table(meta), _) =>
+        val partitionColumnNames = meta.partitionColumnNames
+        val bucketColumnNames = meta.bucketSpec.map(_.bucketColumnNames).getOrElse(Seq.empty)
+        table.schema.map { field =>
+          new Column(
+            name = field.name,
+            description = field.getComment().orNull,
+            dataType = field.dataType.simpleString,
+            nullable = field.nullable,
+            isPartition = partitionColumnNames.contains(field.name),
+            isBucket = bucketColumnNames.contains(field.name))
+        }
 
-    val colNames = collection.mutable.ArrayBuilder.make[String]
-    val partitionColNames = collection.mutable.Set.empty[String]
-    val bucketColNames = collection.mutable.Set.empty[String]
-    var state = "normal"
-    while (iter.hasNext) {
-      val row = iter.next()
-      row.getString(0) match {
-        case "" =>
-        case "# Partition Information" => state = "partition"
-        case "# col_name" if state == "partition" =>
-        case "# Detailed Table Information" => state = "detailed"
-        case c if c.startsWith("# ") => state = "other" // like '# Metadata Columns'
-        case c if state == "normal" => colNames += c
-        case c if state == "partition" && c != "# col_name" => partitionColNames.add(c)
-        case "Bucket Columns" if state == "detailed" =>
-          val rowStr = row.getString(1)
-          rowStr.slice(1, rowStr.length - 1).split(", ").foreach { col =>
-            assert(col.startsWith("`") && col.endsWith("`"))
-            bucketColNames.add(col.slice(1, col.length - 1))
-          }
-        case _ =>
-      }
-    }
+      case ResolvedTable(_, _, table: SupportsPartitionManagement, _) =>
+        val partitionColumnNames = table.partitionSchema().map(_.name)
+        table.schema.map { field =>
+          new Column(
+            name = field.name,
+            description = field.getComment().orNull,
+            dataType = field.dataType.simpleString,
+            nullable = field.nullable,
+            isPartition = partitionColumnNames.contains(field.name),
+            isBucket = false)
+        }
 
-    val columns = colNames.result().map { colName =>
-      makeColumn(ident, colName, partitionColNames.toSet, bucketColNames.toSet)
+      case ResolvedTable(_, _, table, _) =>
+        table.schema.map { field =>
+          new Column(
+            name = field.name,
+            description = field.getComment().orNull,
+            dataType = field.dataType.simpleString,
+            nullable = field.nullable,
+            isPartition = false,
+            isBucket = false)
+        }
+
+      case ResolvedView(identifier, _) =>
+        val catalog = sparkSession.sessionState.catalog
+        val table = identifier.asTableIdentifier
+        val schema = catalog.getTempViewOrPermanentTableMetadata(table).schema
+        schema.map { field =>
+          new Column(
+            name = field.name,
+            description = field.getComment().orNull,
+            dataType = field.dataType.simpleString,
+            nullable = field.nullable,
+            isPartition = false,
+            isBucket = false)
+        }
+
+      case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
     }
 
     CatalogImpl.makeDataset(columns, sparkSession)
   }
 
-  private def makeColumn(ident: Seq[String], colName: String,
-      partitionColNames: Set[String], bucketColNames: Set[String]): Column = {
-
-    // This is just a no-op Alter Command, dedicated to get the resolved column.
-    val plan = AlterColumn(UnresolvedTableOrView(ident, "NO-OP Alter", true),
-      UnresolvedFieldName(Seq(colName)), None, None, None, None, None)
-
-    val resolvedCol = sparkSession.sessionState.executePlan(plan).analyzed match {
-      case AlterTableChangeColumnCommand(_, _, c) => c
-      case AlterColumn(_, ResolvedFieldName(_, c), _, _, _, _, _) => c
-      case _ => throw QueryCompilationErrors.columnDoesNotExistError(colName)
-    }
-
-    new Column(
-      name = resolvedCol.name,
-      description = resolvedCol.getComment().orNull,
-      dataType = CharVarcharUtils.getRawType(resolvedCol.metadata)
-        .getOrElse(resolvedCol.dataType).catalogString,
-      nullable = resolvedCol.nullable,
-      isPartition = partitionColNames.contains(resolvedCol.name),
-      isBucket = bucketColNames.contains(resolvedCol.name))
-  }
 
   /**
    * Gets the database with the specified name. This throws an `AnalysisException` when no
