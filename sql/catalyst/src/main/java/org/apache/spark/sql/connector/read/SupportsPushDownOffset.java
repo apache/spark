@@ -15,21 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.annotation.Evolving;
 
 /**
- * Pushed down operators
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
+ * push down OFFSET. We can push down OFFSET with many other operations if they follow the
+ * operator order we defined in {@link ScanBuilder}'s class doc.
+ *
+ * @since 3.4.0
  */
-case class PushedDownOperators(
-    aggregation: Option[Aggregation],
-    sample: Option[TableSampleInfo],
-    limit: Option[Int],
-    offset: Option[Int],
-    sortValues: Seq[SortOrder],
-    pushedPredicates: Seq[Predicate]) {
-  assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
+@Evolving
+public interface SupportsPushDownOffset extends ScanBuilder {
+
+  /**
+   * Pushes down OFFSET to the data source.
+   */
+  boolean pushOffset(int offset);
 }

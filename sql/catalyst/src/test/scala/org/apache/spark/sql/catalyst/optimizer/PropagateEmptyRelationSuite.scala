@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Literal, UnspecifiedFrame}
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, LocalRelation, LogicalPlan, Project}
@@ -314,5 +314,17 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val plan2 = emptyRelation.rebalance($"a").where($"a" > 0).select($"a").analyze
     val optimized2 = Optimize.execute(plan2)
     comparePlans(optimized2, expected)
+  }
+
+  test("SPARK-39449: Propagate empty relation through Window") {
+    val relation = LocalRelation.fromExternalRows(Seq($"a".int, $"b".int), Nil)
+
+    val originalQuery = relation.select($"a", $"b",
+      windowExpr(count($"b"), windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+        .as("window"))
+
+    val expected = LocalRelation
+      .fromExternalRows(Seq($"a".int, $"b".int, $"window".long.withNullability(false)), Nil)
+    comparePlans(Optimize.execute(originalQuery.analyze), expected.analyze)
   }
 }

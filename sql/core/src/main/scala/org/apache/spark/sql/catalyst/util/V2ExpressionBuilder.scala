@@ -99,6 +99,39 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       } else {
         None
       }
+    case Greatest(children) =>
+      val childrenExpressions = children.flatMap(generateExpression(_))
+      if (children.length == childrenExpressions.length) {
+        Some(new GeneralScalarExpression("GREATEST", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case Least(children) =>
+      val childrenExpressions = children.flatMap(generateExpression(_))
+      if (children.length == childrenExpressions.length) {
+        Some(new GeneralScalarExpression("LEAST", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case Rand(child, hideSeed) =>
+      if (hideSeed) {
+        Some(new GeneralScalarExpression("RAND", Array.empty[V2Expression]))
+      } else {
+        generateExpression(child)
+          .map(v => new GeneralScalarExpression("RAND", Array[V2Expression](v)))
+      }
+    case log: Logarithm =>
+      val l = generateExpression(log.left)
+      val r = generateExpression(log.right)
+      if (l.isDefined && r.isDefined) {
+        Some(new GeneralScalarExpression("LOG", Array[V2Expression](l.get, r.get)))
+      } else {
+        None
+      }
+    case Log10(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("LOG10", Array[V2Expression](v)))
+    case Log2(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("LOG2", Array[V2Expression](v)))
     case Log(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("LN", Array[V2Expression](v)))
     case Exp(child) => generateExpression(child)
@@ -117,6 +150,56 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       .map(v => new GeneralScalarExpression("FLOOR", Array[V2Expression](v)))
     case Ceil(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("CEIL", Array[V2Expression](v)))
+    case round: Round =>
+      val l = generateExpression(round.left)
+      val r = generateExpression(round.right)
+      if (l.isDefined && r.isDefined) {
+        Some(new GeneralScalarExpression("ROUND", Array[V2Expression](l.get, r.get)))
+      } else {
+        None
+      }
+    case Sin(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("SIN", Array[V2Expression](v)))
+    case Sinh(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("SINH", Array[V2Expression](v)))
+    case Cos(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("COS", Array[V2Expression](v)))
+    case Cosh(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("COSH", Array[V2Expression](v)))
+    case Tan(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("TAN", Array[V2Expression](v)))
+    case Tanh(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("TANH", Array[V2Expression](v)))
+    case Cot(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("COT", Array[V2Expression](v)))
+    case Asin(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("ASIN", Array[V2Expression](v)))
+    case Asinh(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("ASINH", Array[V2Expression](v)))
+    case Acos(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("ACOS", Array[V2Expression](v)))
+    case Acosh(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("ACOSH", Array[V2Expression](v)))
+    case Atan(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("ATAN", Array[V2Expression](v)))
+    case Atanh(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("ATANH", Array[V2Expression](v)))
+    case atan2: Atan2 =>
+      val l = generateExpression(atan2.left)
+      val r = generateExpression(atan2.right)
+      if (l.isDefined && r.isDefined) {
+        Some(new GeneralScalarExpression("ATAN2", Array[V2Expression](l.get, r.get)))
+      } else {
+        None
+      }
+    case Cbrt(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("CBRT", Array[V2Expression](v)))
+    case ToDegrees(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("DEGREES", Array[V2Expression](v)))
+    case ToRadians(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("RADIANS", Array[V2Expression](v)))
+    case Signum(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("SIGN", Array[V2Expression](v)))
     case wb: WidthBucket =>
       val childrenExpressions = wb.children.flatMap(generateExpression(_))
       if (childrenExpressions.length == wb.children.length) {
@@ -192,6 +275,13 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
           // The children looks like [condition1, value1, ..., conditionN, valueN]
           Some(new V2Predicate("CASE_WHEN", branchExpressions.toArray[V2Expression]))
         }
+      } else {
+        None
+      }
+    case iff: If =>
+      val childrenExpressions = iff.children.flatMap(generateExpression(_))
+      if (iff.children.length == childrenExpressions.length) {
+        Some(new GeneralScalarExpression("CASE_WHEN", childrenExpressions.toArray[V2Expression]))
       } else {
         None
       }

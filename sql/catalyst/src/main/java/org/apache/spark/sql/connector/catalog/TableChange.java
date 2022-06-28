@@ -221,6 +221,21 @@ public interface TableChange {
   }
 
   /**
+   * Create a TableChange for updating the default value of a field.
+   * <p>
+   * The name is used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
+   *
+   * @param fieldNames field names of the column to update
+   * @param newDefaultValue the new default value
+   * @return a TableChange for the update
+   */
+  static TableChange updateColumnDefaultValue(String[] fieldNames, String newDefaultValue) {
+    return new UpdateColumnDefaultValue(fieldNames, newDefaultValue);
+  }
+
+  /**
    * Create a TableChange for deleting a field.
    * <p>
    * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
@@ -650,6 +665,46 @@ public interface TableChange {
     @Override
     public int hashCode() {
       int result = Objects.hash(position);
+      result = 31 * result + Arrays.hashCode(fieldNames);
+      return result;
+    }
+  }
+
+  /**
+   * A TableChange to update the default value of a field.
+   * <p>
+   * The field names are used to find the field to update.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   */
+  final class UpdateColumnDefaultValue implements ColumnChange {
+    private final String[] fieldNames;
+    private final String newDefaultValue;
+
+    private UpdateColumnDefaultValue(String[] fieldNames, String newDefaultValue) {
+      this.fieldNames = fieldNames;
+      this.newDefaultValue = newDefaultValue;
+    }
+
+    @Override
+    public String[] fieldNames() {
+      return fieldNames;
+    }
+
+    public String newDefaultValue() { return newDefaultValue; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      UpdateColumnDefaultValue that = (UpdateColumnDefaultValue) o;
+      return Arrays.equals(fieldNames, that.fieldNames) &&
+        newDefaultValue.equals(that.newDefaultValue());
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(newDefaultValue);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }

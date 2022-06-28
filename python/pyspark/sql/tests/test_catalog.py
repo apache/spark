@@ -79,55 +79,93 @@ class CatalogTests(ReusedSQLTestCase):
                     self.assertEqual(tables, tablesDefault)
                     self.assertEqual(len(tables), 3)
                     self.assertEqual(len(tablesSomeDb), 2)
-                    self.assertEqual(
-                        tables[0],
-                        Table(
-                            name="tab1",
-                            database="default",
-                            description=None,
-                            tableType="MANAGED",
-                            isTemporary=False,
-                        ),
-                    )
-                    self.assertEqual(
-                        tables[1],
-                        Table(
-                            name="tab3_via_catalog",
-                            database="default",
+
+                    # make table in old fashion
+                    def makeTable(
+                        name,
+                        database,
+                        description,
+                        tableType,
+                        isTemporary,
+                    ):
+                        return Table(
+                            name=name,
+                            catalog=None,
+                            namespace=[database] if database is not None else None,
                             description=description,
-                            tableType="MANAGED",
-                            isTemporary=False,
-                        ),
+                            tableType=tableType,
+                            isTemporary=isTemporary,
+                        )
+
+                    # compare tables in old fashion
+                    def compareTables(t1, t2):
+                        return (
+                            t1.name == t2.name
+                            and t1.database == t2.database
+                            and t1.description == t2.description
+                            and t1.tableType == t2.tableType
+                            and t1.isTemporary == t2.isTemporary
+                        )
+
+                    self.assertTrue(
+                        compareTables(
+                            tables[0],
+                            makeTable(
+                                name="tab1",
+                                database="default",
+                                description=None,
+                                tableType="MANAGED",
+                                isTemporary=False,
+                            ),
+                        )
                     )
-                    self.assertEqual(
-                        tables[2],
-                        Table(
-                            name="temp_tab",
-                            database=None,
-                            description=None,
-                            tableType="TEMPORARY",
-                            isTemporary=True,
-                        ),
+                    self.assertTrue(
+                        compareTables(
+                            tables[1],
+                            makeTable(
+                                name="tab3_via_catalog",
+                                database="default",
+                                description=description,
+                                tableType="MANAGED",
+                                isTemporary=False,
+                            ),
+                        )
                     )
-                    self.assertEqual(
-                        tablesSomeDb[0],
-                        Table(
-                            name="tab2",
-                            database="some_db",
-                            description=None,
-                            tableType="MANAGED",
-                            isTemporary=False,
-                        ),
+                    self.assertTrue(
+                        compareTables(
+                            tables[2],
+                            makeTable(
+                                name="temp_tab",
+                                database=None,
+                                description=None,
+                                tableType="TEMPORARY",
+                                isTemporary=True,
+                            ),
+                        )
                     )
-                    self.assertEqual(
-                        tablesSomeDb[1],
-                        Table(
-                            name="temp_tab",
-                            database=None,
-                            description=None,
-                            tableType="TEMPORARY",
-                            isTemporary=True,
-                        ),
+                    self.assertTrue(
+                        compareTables(
+                            tablesSomeDb[0],
+                            makeTable(
+                                name="tab2",
+                                database="some_db",
+                                description=None,
+                                tableType="MANAGED",
+                                isTemporary=False,
+                            ),
+                        )
+                    )
+                    self.assertTrue(
+                        compareTables(
+                            tablesSomeDb[1],
+                            makeTable(
+                                name="temp_tab",
+                                database=None,
+                                description=None,
+                                tableType="TEMPORARY",
+                                isTemporary=True,
+                            ),
+                        )
                     )
                     self.assertRaisesRegex(
                         AnalysisException,

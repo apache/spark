@@ -70,6 +70,11 @@
     ],
     "sqlState" : "23000"
   },
+  "ELEMENT_AT_BY_INDEX_ZERO" : {
+    "message" : [
+      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
+    ]
+  },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)"
