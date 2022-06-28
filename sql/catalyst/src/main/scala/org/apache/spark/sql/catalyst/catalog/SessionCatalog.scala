@@ -1321,7 +1321,7 @@ class SessionCatalog(
         throw QueryCompilationErrors.invalidPartitionSpecError(
           s"The spec (${s.keys.mkString(", ")}) must be contained " +
           s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
-          s"in table '${table.identifier}'")
+          s"in table '${table.identifier.quotedString(SESSION_CATALOG_NAME)}'")
       }
     }
   }

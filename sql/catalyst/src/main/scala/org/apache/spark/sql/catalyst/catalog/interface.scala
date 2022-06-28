@@ -857,7 +857,7 @@ case class HiveTableRelation(
 
   override def simpleString(maxFields: Int): String = {
     val catalogTable = tableMeta.storage.serde match {
-      case Some(serde) => tableMeta.identifier :: serde :: Nil
+      case Some(serde) => tableMeta.identifier.quotedString(SESSION_CATALOG_NAME) :: serde :: Nil
       case _ => tableMeta.identifier :: Nil
     }
 

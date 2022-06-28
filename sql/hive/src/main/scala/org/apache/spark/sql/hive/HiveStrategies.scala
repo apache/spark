@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, InsertIntoDataSourceDirCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy}
@@ -101,7 +102,8 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
         val inferred = HiveUtils.inferSchema(withStorage)
         if (inferred.schema.length <= 0) {
           throw new AnalysisException("Unable to infer the schema. " +
-            s"The schema specification is required to create the table ${inferred.identifier}.")
+            s"The schema specification is required to create the table " +
+            s"${inferred.identifier.quotedString(SESSION_CATALOG_NAME)}.")
         }
         inferred
       } else {
