@@ -1014,7 +1014,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
             |SELECT *
             |FROM h2.test.people
             |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
-      """.stripMargin)
+          """.stripMargin)
         checkFiltersRemoved(df3)
         checkPushedInfo(df3,
           "PushedFilters: [char_length(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 2],")
@@ -1025,7 +1025,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
             |SELECT *
             |FROM h2.test.people
             |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 3
-      """.stripMargin)
+          """.stripMargin)
         checkFiltersRemoved(df4)
         checkPushedInfo(df4,
           "PushedFilters: [char_length(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 3],")
