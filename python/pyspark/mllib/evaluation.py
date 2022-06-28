@@ -418,7 +418,10 @@ class RankingMetrics(JavaModelWrapper, Generic[T]):
     Parameters
     ----------
     predictionAndLabels : :py:class:`pyspark.RDD`
-        an RDD of (predicted ranking, ground truth set) pairs.
+        an RDD of (predicted ranking, ground truth set) pairs
+        or (predicted ranking, ground truth set,
+        relevance value of ground truth set).
+        Since 3.4.0, it supports ndcg evaluation with relevance value.
 
     Examples
     --------

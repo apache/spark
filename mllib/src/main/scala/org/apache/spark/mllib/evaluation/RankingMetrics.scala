@@ -267,6 +267,9 @@ object RankingMetrics {
   /**
    * Creates a [[RankingMetrics]] instance (for Java users).
    * @param predictionAndLabels a JavaRDD of (predicted ranking, ground truth set) pairs
+   *                            or (predicted ranking, ground truth set,
+   *                            relevance value of ground truth set).
+   *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
    */
   @Since("1.4.0")
   def of[E, T <: jl.Iterable[E], A <: jl.Iterable[Double]](
