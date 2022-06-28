@@ -246,6 +246,7 @@ private[spark] object JettyUtils extends Logging {
       serverName: String = "",
       poolSize: Int = 200): ServerInfo = {
 
+    logInfo(s"Start Jetty $hostName:$port for $serverName")
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool(poolSize)
     if (serverName.nonEmpty) {

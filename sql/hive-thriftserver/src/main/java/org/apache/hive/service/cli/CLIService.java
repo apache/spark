@@ -58,14 +58,14 @@ import org.slf4j.LoggerFactory;
  */
 public class CLIService extends CompositeService implements ICLIService {
 
+  private static final Logger LOG = LoggerFactory.getLogger(CLIService.class);
+
   public static final TProtocolVersion SERVER_VERSION;
 
   static {
     TProtocolVersion[] protocols = TProtocolVersion.values();
     SERVER_VERSION = protocols[protocols.length - 1];
   }
-
-  private final Logger LOG = LoggerFactory.getLogger(CLIService.class.getName());
 
   private HiveConf hiveConf;
   private SessionManager sessionManager;

@@ -132,6 +132,12 @@ class ExpressionSet protected(
     newSet
   }
 
+  override def concat(that: IterableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    that.iterator.foreach(newSet.add)
+    newSet
+  }
+
   override def --(that: IterableOnce[Expression]): ExpressionSet = {
     val newSet = clone()
     that.iterator.foreach(newSet.remove)

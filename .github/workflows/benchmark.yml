@@ -30,6 +30,10 @@ on:
         description: 'JDK version: 8, 11 or 17'
         required: true
         default: '8'
+      scala:
+        description: 'Scala version: 2.12 or 2.13'
+        required: true
+        default: '2.12'
       failfast:
         description: 'Failfast: true or false'
         required: true
@@ -53,7 +57,7 @@ jobs:
       run: echo "::set-output name=matrix::["`seq -s, 1 $SPARK_BENCHMARK_NUM_SPLITS`"]"
 
   benchmark:
-    name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
+    name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, Scala ${{ github.event.inputs.scala }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
     needs: matrix-gen
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
@@ -99,7 +103,8 @@ jobs:
         java-version: ${{ github.event.inputs.jdk }}
     - name: Run benchmarks
       run: |
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl test:package
+        dev/change-scala-version.sh ${{ github.event.inputs.scala }}
+        ./build/sbt -Pscala-${{ github.event.inputs.scala }} -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl test:package
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
         sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
@@ -109,13 +114,15 @@ jobs:
           --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`" \
           "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
           "${{ github.event.inputs.class }}"
+        # Revert to default Scala version to clean up unnecessary git diff
+        dev/change-scala-version.sh 2.12
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
         echo "Preparing the benchmark results:"
-        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}.tar `git diff --name-only` `git ls-files --others --exclude-standard`
+        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude-standard`
     - name: Upload benchmark results
       uses: actions/upload-artifact@v2
       with:
-        name: benchmark-results-${{ github.event.inputs.jdk }}-${{ matrix.split }}
-        path: benchmark-results-${{ github.event.inputs.jdk }}.tar
+        name: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}-${{ matrix.split }}
+        path: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar
 

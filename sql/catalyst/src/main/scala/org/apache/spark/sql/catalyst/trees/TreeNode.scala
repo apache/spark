@@ -868,6 +868,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case null => Nil
     case None => Nil
     case Some(null) => Nil
+    case Some(table: CatalogTable) =>
+      stringArgsForCatalogTable(table)
     case Some(any) => any :: Nil
     case map: CaseInsensitiveStringMap =>
       redactMapString(map.asCaseSensitiveMap().asScala, maxFields)
@@ -877,12 +879,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       t.copy(properties = Utils.redact(t.properties).toMap,
         options = Utils.redact(t.options).toMap) :: Nil
     case table: CatalogTable =>
-      table.storage.serde match {
-        case Some(serde) => table.identifier :: serde :: Nil
-        case _ => table.identifier :: Nil
-      }
+      stringArgsForCatalogTable(table)
+
     case other => other :: Nil
   }.mkString(", ")
+
+  private def stringArgsForCatalogTable(table: CatalogTable): Seq[Any] = {
+    table.storage.serde match {
+      case Some(serde) => table.identifier :: serde :: Nil
+      case _ => table.identifier :: Nil
+    }
+  }
 
   /**
    * ONE line description of this node.

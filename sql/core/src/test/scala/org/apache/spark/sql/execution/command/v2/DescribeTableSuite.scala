@@ -28,26 +28,6 @@ import org.apache.spark.util.Utils
  */
 class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuiteBase {
 
-  test("DESCRIBE TABLE with non-'partitioned-by' clause") {
-    withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
-      val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-        Seq(
-          ("col_name", StringType),
-          ("data_type", StringType),
-          ("comment", StringType)))
-      QueryTest.checkAnswer(
-        descriptionDf,
-        Seq(
-          Row("data", "string", ""),
-          Row("id", "bigint", ""),
-          Row("", "", ""),
-          Row("# Partitioning", "", ""),
-          Row("Not partitioned", "", "")))
-    }
-  }
-
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
@@ -56,6 +36,23 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
         sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
       }
       assert(e.message === "DESCRIBE does not support partition for v2 tables.")
+    }
+  }
+
+  test("DESCRIBE TABLE of a partitioned table by nested columns") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (s struct<id:INT, a:BIGINT>, data string) " +
+        s"$defaultUsing PARTITIONED BY (s.id, s.a)")
+      val descriptionDf = sql(s"DESCRIBE TABLE $tbl")
+      QueryTest.checkAnswer(
+        descriptionDf.filter("col_name != 'Created Time'"),
+        Seq(
+          Row("data", "string", null),
+          Row("s", "struct<id:int,a:bigint>", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("s.id", "int", null),
+          Row("s.a", "bigint", null)))
     }
   }
 
@@ -74,11 +71,11 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
       QueryTest.checkAnswer(
         descriptionDf,
         Seq(
-          Row("id", "bigint", ""),
-          Row("data", "string", ""),
-          Row("", "", ""),
-          Row("# Partitioning", "", ""),
-          Row("Part 0", "id", ""),
+          Row("id", "bigint", null),
+          Row("data", "string", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null),
           Row("", "", ""),
           Row("# Metadata Columns", "", ""),
           Row("index", "int", "Metadata column used to conflict with a data column"),
@@ -86,6 +83,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
           Row("Name", tbl, ""),
+          Row("Type", "MANAGED", ""),
           Row("Comment", "this is a test table", ""),
           Row("Location", "file:/tmp/testcat/table_name", ""),
           Row("Provider", "_", ""),

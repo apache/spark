@@ -32,4 +32,11 @@ jobs:
       java: 8
       branch: master
       hadoop: hadoop2
-      type: scheduled
+      jobs: >-
+        {
+          "build": "true",
+          "pyspark": "true",
+          "sparkr": "true",
+          "tpcds-1g": "true",
+          "docker-integration-tests": "true"
+        }

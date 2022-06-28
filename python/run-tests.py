@@ -20,6 +20,7 @@
 import logging
 from argparse import ArgumentParser
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -113,7 +114,12 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         retcode = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        # There exists a race condition in Python and it causes flakiness in MacOS
+        # https://github.com/python/cpython/issues/73885
+        if platform.system() == "Darwin":
+            os.system("rm -rf " + tmp_dir)
+        else:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     except BaseException:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if

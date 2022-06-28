@@ -272,7 +272,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       SparkSession.active,
       className = table.provider.get,
       userSpecifiedSchema = Some(table.schema),
-      options = dsOptions)
+      options = dsOptions,
+      catalogTable = Some(table))
     StreamingRelation(dataSource)
   }
 
@@ -346,7 +347,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        PushedDownOperators(None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -420,7 +421,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -443,7 +444,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
