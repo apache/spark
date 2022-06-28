@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.connector.expressions.aggregate;
 
-import java.util.Arrays;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.util.ToStringSQLBuilder;
+import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
 /**
  * The general implementation of {@link AggregateFunc}, which contains the upper-cased function
@@ -62,16 +60,6 @@ public final class GeneralAggregateFunc implements AggregateFunc {
   @Override
   public String toString() {
     ToStringSQLBuilder builder = new ToStringSQLBuilder();
-    try {
-      return builder.build(this);
-    } catch (Throwable e) {
-      if (isDistinct) {
-        return name + "(DISTINCT" +
-          Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
-      } else {
-        return name + "(" +
-          Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
-      }
-    }
+    return builder.build(this);
   }
 }

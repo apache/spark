@@ -22,7 +22,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.util.ToStringSQLBuilder;
+import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
 /**
  * The general representation of user defined scalar function, which contains the upper-cased

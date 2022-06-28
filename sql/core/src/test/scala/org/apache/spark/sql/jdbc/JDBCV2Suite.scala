@@ -20,13 +20,17 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
-import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
+import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, UserDefinedAggregateFunc}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, avg, ceil, coalesce, count, count_distinct, exp, floor, lit, log => ln, not, pow, sqrt, sum, udf, when}
@@ -41,6 +45,63 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   var conn: java.sql.Connection = null
+
+  val testH2Dialect = new JdbcDialect {
+    override def canHandle(url: String): Boolean = H2Dialect.canHandle(url)
+
+    class H2SQLBuilder extends JDBCSQLBuilder {
+      override def visitUserDefinedScalarFunction(
+          funcName: String, canonicalName: String, inputs: Array[String]): String = {
+        canonicalName match {
+          case "H2.CHAR_LENGTH" =>
+            s"$funcName(${inputs.mkString(", ")})"
+          case _ => super.visitUserDefinedScalarFunction(funcName, canonicalName, inputs)
+        }
+      }
+
+      override def visitUserDefinedAggregateFunction(
+          funcName: String,
+          canonicalName: String,
+          isDistinct: Boolean,
+          inputs: Array[String]): String = {
+        canonicalName match {
+          case "H2.IAVG" =>
+            if (isDistinct) {
+              s"$funcName(DISTINCT ${inputs.mkString(", ")})"
+            } else {
+              s"$funcName(${inputs.mkString(", ")})"
+            }
+          case _ =>
+            super.visitUserDefinedAggregateFunction(funcName, canonicalName, isDistinct, inputs)
+        }
+      }
+    }
+
+    override def compileExpression(expr: Expression): Option[String] = {
+      val h2SQLBuilder = new H2SQLBuilder()
+      try {
+        Some(h2SQLBuilder.build(expr))
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Error occurs while compiling V2 expression", e)
+          None
+      }
+    }
+
+    override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+      super.compileAggregate(aggFunction).orElse(
+        aggFunction match {
+          case f: UserDefinedAggregateFunc if f.name() == "IAVG" =>
+            assert(f.children().length == 1)
+            val distinct = if (f.isDistinct) "DISTINCT " else ""
+            compileExpression(f.children().head).map(v => s"AVG($distinct$v)")
+          case _ => None
+        }
+      )
+    }
+
+    override def functions: Seq[(String, UnboundFunction)] = H2Dialect.functions
+  }
 
   case object CharLength extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
@@ -934,38 +995,45 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with filter push-down with UDF") {
-    val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 2")
-    checkFiltersRemoved(df1)
-    checkPushedInfo(df1, "PushedFilters: [CHAR_LENGTH(NAME) > 2],")
-    checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 2")
+      checkFiltersRemoved(df1)
+      checkPushedInfo(df1, "PushedFilters: [CHAR_LENGTH(NAME) > 2],")
+      checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
 
-    val df2 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 4")
-    checkFiltersRemoved(df2)
-    checkPushedInfo(df2, "PushedFilters: [CHAR_LENGTH(NAME) > 4],")
-    checkAnswer(df2, Seq())
+      val df2 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 4")
+      checkFiltersRemoved(df2)
+      checkPushedInfo(df2, "PushedFilters: [CHAR_LENGTH(NAME) > 4],")
+      checkAnswer(df2, Seq())
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val df3 = sql(
-        """
-          |SELECT *
-          |FROM h2.test.people
-          |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df3 = sql(
+          """
+            |SELECT *
+            |FROM h2.test.people
+            |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
       """.stripMargin)
-      checkFiltersRemoved(df3)
-      checkPushedInfo(df3,
-        "PushedFilters: [CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 2],")
-      checkAnswer(df3, Seq(Row("fred", 1), Row("mary", 2)))
+        checkFiltersRemoved(df3)
+        checkPushedInfo(df3,
+          "PushedFilters: [CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 2],")
+        checkAnswer(df3, Seq(Row("fred", 1), Row("mary", 2)))
 
-      val df4 = sql(
-        """
-          |SELECT *
-          |FROM h2.test.people
-          |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 3
+        val df4 = sql(
+          """
+            |SELECT *
+            |FROM h2.test.people
+            |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 3
       """.stripMargin)
-      checkFiltersRemoved(df4)
-      checkPushedInfo(df4,
-        "PushedFilters: [CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 3],")
-      checkAnswer(df4, Seq(Row("fred", 1)))
+        checkFiltersRemoved(df4)
+        checkPushedInfo(df4,
+          "PushedFilters: [CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 3],")
+        checkAnswer(df4, Seq(Row("fred", 1)))
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
     }
   }
 
@@ -1892,57 +1960,71 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("register dialect specific functions") {
-    val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
-    checkAggregateRemoved(df)
-    checkAnswer(df, Row(1) :: Nil)
-    val e1 = intercept[AnalysisException] {
-      checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
+      checkAggregateRemoved(df)
+      checkAnswer(df, Row(1) :: Nil)
+      val e1 = intercept[AnalysisException] {
+        checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
+      }
+      assert(e1.getMessage.contains("Undefined function: h2.test.my_avg2"))
+      val e2 = intercept[AnalysisException] {
+        checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
+      }
+      assert(e2.getMessage.contains("Undefined function: h2.my_avg2"))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
     }
-    assert(e1.getMessage.contains("Undefined function: h2.test.my_avg2"))
-    val e2 = intercept[AnalysisException] {
-      checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
-    }
-    assert(e2.getMessage.contains("Undefined function: h2.my_avg2"))
   }
 
   test("scan with aggregate push-down: complete push-down UDAF") {
-    val df1 = sql("SELECT h2.my_avg(id) FROM h2.test.people")
-    checkAggregateRemoved(df1)
-    checkPushedInfo(df1,
-      "PushedAggregates: [IAVG(ID)], PushedFilters: [], PushedGroupByExpressions: []")
-    checkAnswer(df1, Seq(Row(1)))
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT h2.my_avg(id) FROM h2.test.people")
+      checkAggregateRemoved(df1)
+      checkPushedInfo(df1,
+        "PushedAggregates: [IAVG(ID)], PushedFilters: [], PushedGroupByExpressions: []")
+      checkAnswer(df1, Seq(Row(1)))
 
-    val df2 = sql("SELECT name, h2.my_avg(id) FROM h2.test.people group by name")
-    checkAggregateRemoved(df2)
-    checkPushedInfo(df2,
-      "PushedAggregates: [IAVG(ID)], PushedFilters: [], PushedGroupByExpressions: [NAME]")
-    checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val df3 = sql(
-        """
-          |SELECT
-          |  h2.my_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
-          |FROM h2.test.people
-      """.stripMargin)
-      checkAggregateRemoved(df3)
-      checkPushedInfo(df3,
-        "PushedAggregates: [IAVG(CASE WHEN NAME = 'fred' THEN ID + 1 ELSE ID END)]," +
-          " PushedFilters: [], PushedGroupByExpressions: []")
-      checkAnswer(df3, Seq(Row(2)))
+      val df2 = sql("SELECT name, h2.my_avg(id) FROM h2.test.people group by name")
+      checkAggregateRemoved(df2)
+      checkPushedInfo(df2,
+        "PushedAggregates: [IAVG(ID)], PushedFilters: [], PushedGroupByExpressions: [NAME]")
+      checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df3 = sql(
+          """
+            |SELECT
+            |  h2.my_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
+            |FROM h2.test.people
+          """.stripMargin)
+        checkAggregateRemoved(df3)
+        checkPushedInfo(df3,
+          "PushedAggregates: [IAVG(CASE WHEN NAME = 'fred' THEN ID + 1 ELSE ID END)]," +
+            " PushedFilters: [], PushedGroupByExpressions: []")
+        checkAnswer(df3, Seq(Row(2)))
 
-      val df4 = sql(
-        """
-          |SELECT
-          |  name,
-          |  h2.my_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
-          |FROM h2.test.people
-          |GROUP BY name
-      """.stripMargin)
-      checkAggregateRemoved(df4)
-      checkPushedInfo(df4,
-        "PushedAggregates: [IAVG(CASE WHEN NAME = 'fred' THEN ID + 1 ELSE ID END)]," +
-          " PushedFilters: [], PushedGroupByExpressions: [NAME]")
-      checkAnswer(df4, Seq(Row("fred", 2), Row("mary", 2)))
+        val df4 = sql(
+          """
+            |SELECT
+            |  name,
+            |  h2.my_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
+            |FROM h2.test.people
+            |GROUP BY name
+          """.stripMargin)
+        checkAggregateRemoved(df4)
+        checkPushedInfo(df4,
+          "PushedAggregates: [IAVG(CASE WHEN NAME = 'fred' THEN ID + 1 ELSE ID END)]," +
+            " PushedFilters: [], PushedGroupByExpressions: [NAME]")
+        checkAnswer(df4, Seq(Row("fred", 2), Row("mary", 2)))
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
     }
   }
 }

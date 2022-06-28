@@ -15,30 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.util;
+package org.apache.spark.sql.internal.connector
 
-import java.util.Arrays;
-import java.util.stream.Collectors;
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
 /**
  * The builder to generate `toString` information of V2 expressions.
  */
-public class ToStringSQLBuilder extends V2ExpressionSQLBuilder {
+class ToStringSQLBuilder extends V2ExpressionSQLBuilder {
+  override protected def visitUserDefinedScalarFunction(
+      funcName: String, canonicalName: String, inputs: Array[String]) =
+    s"""$funcName(${inputs.mkString(", ")})"""
 
-  @Override
-  protected String visitUserDefinedScalarFunction(
-      String funcName, String canonicalName, String[] inputs) {
-    return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
-  }
-
-  @Override
-  protected String visitUserDefinedAggregateFunction(
-      String funcName, String canonicalName, boolean isDistinct, String[] inputs) {
-    if (isDistinct) {
-      return funcName +
-        "(DISTINCT " + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
-    } else {
-      return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
-    }
+  override protected def visitUserDefinedAggregateFunction(
+      funcName: String,
+      canonicalName: String,
+      isDistinct: Boolean,
+      inputs: Array[String]): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"""$funcName($distinct${inputs.mkString(", ")})"""
   }
 }
