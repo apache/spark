@@ -2599,6 +2599,59 @@ class AdaptiveQueryExecSuite
       assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
     }
   }
+
+  test("SPARK-39624 Support coalesce partition through CartesianProduct") {
+    def checkResultPartition(df: Dataset[Row],
+                             numShuffleReader: Int,
+                             numPartition: Int): Unit = {
+      df.collect()
+      print(df.queryExecution.executedPlan)
+      assert(collect(df.queryExecution.executedPlan) {
+        case r: AQEShuffleReadExec => r
+      }.size === numShuffleReader)
+      assert(df.rdd.partitions.length === numPartition)
+    }
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      withTempView("t1", "t2", "t3") {
+        spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
+          .toDF().createOrReplaceTempView("t1")
+        spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)
+          .toDF().createOrReplaceTempView("t2")
+        spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)
+          .toDF().createOrReplaceTempView("t3")
+        // positive test that could be coalesced
+        checkResultPartition(
+          sql("""
+                |SELECT * FROM
+                |(SELECT * FROM t3) t3
+                |join (
+                |SELECT t1.key, t2.value FROM
+                |(SELECT * FROM t1 ) t1
+                |join (SELECT * FROM t2) t2
+                |on t1.value = t2.value) t
+                |on t3.key = t.key or t3.value=t.value
+            """.stripMargin),
+          numShuffleReader = 2,
+          numPartition = 4)
+        // negative test
+        checkResultPartition(
+          sql("""
+                |SELECT * FROM
+                |(SELECT * FROM t1)
+                |t1 join (SELECT * FROM t2)
+                |t2 on t1.key = t2.key
+                |or t1.value=t2.value
+                """.stripMargin),
+          numShuffleReader = 0,
+          numPartition = 8
+        )
+      }
+    }
+  }
 }
 
 /**

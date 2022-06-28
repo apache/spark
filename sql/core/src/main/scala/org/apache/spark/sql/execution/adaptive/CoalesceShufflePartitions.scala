@@ -23,6 +23,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.joins.CartesianProductExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -132,6 +133,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       Seq(collectShuffleStageInfos(r))
     case unary: UnaryExecNode => collectCoalesceGroups(unary.child)
     case union: UnionExec => union.children.flatMap(collectCoalesceGroups)
+    case cartesian: CartesianProductExec => cartesian.children.flatMap(collectCoalesceGroups)
     // If not all leaf nodes are query stages, it's not safe to reduce the number of shuffle
     // partitions, because we may break the assumption that all children of a spark plan have
     // same number of output partitions.
