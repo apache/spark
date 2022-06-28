@@ -1003,7 +1003,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class RegExpCount(left: Expression, right: Expression)
-  extends RuntimeReplaceable with ExpectsInputTypes {
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression =
     Size(RegExpExtractAll(left, right, Literal(0)), legacySizeOfNull = false)
