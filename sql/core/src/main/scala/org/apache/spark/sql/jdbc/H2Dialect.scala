@@ -46,8 +46,8 @@ private[sql] object H2Dialect extends JdbcDialect {
   class H2SQLBuilder extends JDBCSQLBuilder {
     override def visitUserDefinedScalarFunction(
         funcName: String, canonicalName: String, inputs: Array[String]): String = {
-      funcName match {
-        case "CHAR_LENGTH" =>
+      canonicalName match {
+        case "H2.CHAR_LENGTH" =>
           s"$funcName(${inputs.mkString(", ")})"
         case _ => super.visitUserDefinedScalarFunction(funcName, canonicalName, inputs)
       }
@@ -58,8 +58,8 @@ private[sql] object H2Dialect extends JdbcDialect {
         canonicalName: String,
         isDistinct: Boolean,
         inputs: Array[String]): String = {
-      funcName match {
-        case "IAVG" =>
+      canonicalName match {
+        case "H2.IAVG" =>
           if (isDistinct) {
             s"$funcName(DISTINCT ${inputs.mkString(", ")})"
           } else {

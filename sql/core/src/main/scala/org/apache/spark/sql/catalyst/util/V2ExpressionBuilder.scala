@@ -288,8 +288,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))
       if (childrenExpressions.length == children.length) {
-        Some(new UserDefinedScalarFunc(function.name().toUpperCase(Locale.ROOT),
-          function.canonicalName(), childrenExpressions.toArray[V2Expression]))
+        Some(new UserDefinedScalarFunc(
+          function.name().toUpperCase(Locale.ROOT),
+          function.canonicalName().toUpperCase(Locale.ROOT),
+          childrenExpressions.toArray[V2Expression]))
       } else {
         None
       }

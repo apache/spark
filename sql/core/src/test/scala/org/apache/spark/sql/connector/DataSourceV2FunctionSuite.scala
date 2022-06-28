@@ -37,6 +37,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object IntAverage extends AggregateFunction[(Int, Int), Int] {
   override def name(): String = "iavg"
+  override def canonicalName(): String = "h2.iavg"
   override def inputTypes(): Array[DataType] = Array(IntegerType)
   override def resultType(): DataType = IntegerType
 
@@ -65,6 +66,7 @@ object IntAverage extends AggregateFunction[(Int, Int), Int] {
 
 object LongAverage extends AggregateFunction[(Long, Long), Long] {
   override def name(): String = "iavg"
+  override def canonicalName(): String = "h2.iavg"
   override def inputTypes(): Array[DataType] = Array(LongType)
   override def resultType(): DataType = LongType
 
@@ -114,9 +116,6 @@ object IntegralAverage extends UnboundFunction {
 }
 
 case class StrLen(impl: BoundFunction) extends UnboundFunction {
-  override def description(): String =
-    """strlen: returns the length of the input string
-      |  strlen(string) -> int""".stripMargin
   override def name(): String = "strlen"
 
   override def bind(inputType: StructType): BoundFunction = {
@@ -129,6 +128,9 @@ case class StrLen(impl: BoundFunction) extends UnboundFunction {
         throw new UnsupportedOperationException("Expect StringType")
     }
   }
+
+  override def description(): String =
+    "strlen: returns the length of the input string  strlen(string) -> int"
 }
 
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {

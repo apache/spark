@@ -46,6 +46,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "char_length"
+    override def canonicalName(): String = "h2.char_length"
 
     override def produceResult(input: InternalRow): Int = {
       val s = input.getString(0)
