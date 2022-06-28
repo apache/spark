@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, SupportsPartitionManagement, TableCatalog, V1Table}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
@@ -258,17 +258,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     val columns = sparkSession.sessionState.executePlan(plan).analyzed match {
       case ResolvedTable(_, _, table, _) =>
-        var partitionColumnNames = Seq.empty[String]
-        var bucketColumnNames = Seq.empty[String]
-        table match {
-          case t: V1Table =>
-            partitionColumnNames = t.catalogTable.partitionColumnNames
-            bucketColumnNames = t.catalogTable.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil)
-          case t: SupportsPartitionManagement =>
-            partitionColumnNames = t.partitionSchema().map(_.name)
-          case _ =>
-        }
-
+        val (partitionColumnNames, bucketSpecOpt) = table.partitioning.toSeq.convertTransforms
+        val bucketColumnNames = bucketSpecOpt.map(_.bucketColumnNames).getOrElse(Nil)
         table.schema.map { field =>
           new Column(
             name = field.name,
