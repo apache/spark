@@ -314,26 +314,6 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(correctAnswer.analyze))
   }
 
-  test("SPARK-39600: Push down if partitionSpec empty") {
-    val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .where('rn <= Literal(5))
-      .orderBy(b.asc)
-      .limit(5)
-    val correctAnswer = testRelation
-      .orderBy(c.desc)
-      .limit(5)
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .where('rn <= Literal(5))
-      .orderBy(b.asc)
-
-    comparePlans(
-      Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(correctAnswer.analyze))
-  }
-
   test("SPARK-39600: Push down if sort exprs is not exist") {
     val originalQuery = testRelation
       .select(a, b, c,
@@ -390,6 +370,19 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
     comparePlans(
       Optimize.execute(originalQuery.analyze),
       WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("SPARK-39600: Unsupported case: do not push down if partitionSpec is empty") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .where('rn <= Literal(5))
+      .orderBy(b.asc)
+      .limit(5)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(originalQuery.analyze))
   }
 
   test("SPARK-39600: Unsupported case: partitionSpec is not the prefix of sort exprs") {
