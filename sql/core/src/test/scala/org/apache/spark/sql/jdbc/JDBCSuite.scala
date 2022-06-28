@@ -1946,17 +1946,22 @@ class JDBCSuite extends QueryTest
           val df = spark.sql(s"select timestamp_ntz '$datetime'")
           df.write.format("jdbc")
             .mode("overwrite")
+            .option("inferTimestampNTZType", "true")
             .option("url", urlWithUserAndPass)
             .option("dbtable", tableName)
             .save()
 
-          val res = spark.read.format("jdbc")
-            .option("inferTimestampNTZType", "true")
-            .option("url", urlWithUserAndPass)
-            .option("dbtable", tableName)
-            .load()
+          DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+            DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+              val res = spark.read.format("jdbc")
+                .option("inferTimestampNTZType", "true")
+                .option("url", urlWithUserAndPass)
+                .option("dbtable", tableName)
+                .load()
 
-          checkAnswer(res, df)
+              checkAnswer(res, df)
+            }
+          }
         }
       }
     }
