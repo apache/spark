@@ -34,7 +34,9 @@ import org.apache.spark.api.java.JavaRDD;
 
 public class JavaRankingMetricsSuite extends SharedSparkSession {
   private transient JavaRDD<Tuple2<List<Integer>, List<Integer>>> predictionAndLabels;
-  private transient JavaRDD<Tuple3<List<Integer>, List<Integer>, List<Double>>> predictionLabelsAndRelevance;
+  private transient JavaRDD<
+    Tuple3<List<Integer>, List<Integer>, List<Double>>
+  > predictionLabelsAndRelevance;
 
   @Override
   public void setUp() throws IOException {
