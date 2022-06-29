@@ -829,12 +829,21 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       Seq(("testcat", "somedb"), ("testcat", "ns.somedb"), ("spark_catalog", "somedb"))
     catalogsAndDatabases.foreach { case (catalog, dbName) =>
       val qualifiedDb = s"$catalog.$dbName"
-      sql(s"CREATE NAMESPACE $qualifiedDb COMMENT 'test comment' LOCATION '/test/location'")
+      sql(s"CREATE NAMESPACE $qualifiedDb COMMENT '$qualifiedDb' LOCATION '/test/location'")
       val db = spark.catalog.getDatabase(qualifiedDb)
       assert(db.name === dbName)
-      assert(db.description === "test comment")
+      assert(db.description === qualifiedDb)
       assert(db.locationUri === "file:/test/location")
     }
+
+    // test without qualifier
+    val name = "testns"
+    sql(s"CREATE NAMESPACE testcat.$name COMMENT '$name'")
+    spark.catalog.setCurrentCatalog("testcat")
+    val db = spark.catalog.getDatabase(name)
+    assert(db.name === name)
+    assert(db.description === name)
+
     intercept[AnalysisException](spark.catalog.getDatabase("randomcat.db10"))
   }
 

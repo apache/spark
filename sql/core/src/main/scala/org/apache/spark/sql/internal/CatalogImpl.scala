@@ -312,17 +312,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
       val plan = UnresolvedNamespace(ident)
       val resolved = sparkSession.sessionState.executePlan(plan).analyzed
-      val db = ident.tail
       resolved match {
-        case ResolvedNamespace(catalog: SupportsNamespaces, _) =>
-          val metadata = catalog.loadNamespaceMetadata(db.toArray)
+        case ResolvedNamespace(catalog: SupportsNamespaces, namespace) =>
+          val metadata = catalog.loadNamespaceMetadata(namespace.toArray)
           new Database(
-            name = db.mkString("."),
+            name = namespace.mkString("."),
             description = metadata.get(SupportsNamespaces.PROP_COMMENT),
             locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION))
         // similar to databaseExists: if the catalog doesn't support namespaces, we assume it's an
         // implicit namespace, which exists but has no metadata.
-        case _ => new Database(name = db.mkString("."), description = null, locationUri = null)
+        case _ => new Database(name = dbName, description = null, locationUri = null)
       }
     }
   }
