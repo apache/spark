@@ -72,10 +72,10 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   private def prepareTable(
       dir: File,
       df: DataFrame,
-      partitions: Seq[String] = Seq.empty[String],
+      partition: Option[String] = None,
       onlyParquetOrc: Boolean = false): Unit = {
-    val testDf = if (partitions.nonEmpty) {
-      df.write.partitionBy(partitions: _*)
+    val testDf = if (partition.isDefined) {
+      df.write.partitionBy(partition.get)
     } else {
       df.write
     }
@@ -504,7 +504,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Seq("p"))
+        prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
 
         benchmark.addCase("Data column - CSV") { _ =>
           spark.sql("select sum(id) from csvTable").noop()
@@ -600,38 +600,6 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT sum(p), sum(id) FROM orcTable").noop()
           }
-        }
-
-        benchmark.run()
-      }
-    }
-  }
-
-  def vectorizedScanPartitionColumnsBenchmark(values: Int, pColumns: Int): Unit = {
-    val benchmark =
-      new Benchmark(s"Vectorized Scan $pColumns partition columns", values, output = output)
-
-    withTempPath { dir =>
-      withTempTable("t1", "parquetV1Table", "parquetV2Table", "orcTable") {
-        import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
-
-        val sqlPart = (1 to pColumns).map(i => s"cast(value % ${i + 1} AS STRING) AS p${i + 1}")
-          .mkString(",")
-        val sqlText = s"SELECT $sqlPart, value AS id FROM t1"
-        val partitions = (1 to pColumns).map(i => s"p${i + 1}")
-        prepareTable(dir, spark.sql(sqlText), partitions, onlyParquetOrc = true)
-
-        val partitionsSqlPart = partitions.mkString(",")
-
-        withParquetVersions { version =>
-          benchmark.addCase(s"Parquet Vectorized: DataPage$version") { _ =>
-            spark.sql(s"select $partitionsSqlPart from parquet${version}Table").noop()
-          }
-        }
-
-        benchmark.addCase("ORC Vectorized") { _ =>
-          spark.sql(s"SELECT $partitionsSqlPart FROM orcTable").noop()
         }
 
         benchmark.run()
@@ -799,11 +767,6 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     }
     runBenchmark("Partitioned Table Scan") {
       partitionTableScanBenchmark(1024 * 1024 * 15)
-    }
-    runBenchmark("Vectorized Scan Multiple Partition Columns") {
-      for (pColumns <- List(1, 2, 3)) {
-        vectorizedScanPartitionColumnsBenchmark(1024 * 1024 * 15, pColumns)
-      }
     }
     runBenchmark("String with Nulls Scan") {
       for (fractionOfNulls <- List(0.0, 0.50, 0.95)) {
