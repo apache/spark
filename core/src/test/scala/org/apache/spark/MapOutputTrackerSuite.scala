@@ -938,4 +938,29 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       assert(worker.shufflePushMergerLocations.isEmpty)
     }
   }
+
+  test("SPARK-39553: Multi-thread unregister shuffle shouldn't throw NPE") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    val shuffleIdRange = 0 until 100
+    shuffleIdRange.foreach { shuffleId =>
+      tracker.registerShuffle(shuffleId, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    }
+    val threads = new Array[Thread](2)
+    threads.indices.foreach { i =>
+      threads(i) = new Thread() {
+        override def run(): Unit = {
+          shuffleIdRange.foreach { shuffleId =>
+            tracker.unregisterShuffle(shuffleId)
+          }
+        }
+      }
+    }
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
 }

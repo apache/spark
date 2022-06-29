@@ -879,8 +879,10 @@ private[spark] class MapOutputTrackerMaster(
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
-      shuffleStatus.invalidateSerializedMapOutputStatusCache()
-      shuffleStatus.invalidateSerializedMergeOutputStatusCache()
+      if (shuffleStatus != null) {
+        shuffleStatus.invalidateSerializedMapOutputStatusCache()
+        shuffleStatus.invalidateSerializedMergeOutputStatusCache()
+      }
     }
   }
 
