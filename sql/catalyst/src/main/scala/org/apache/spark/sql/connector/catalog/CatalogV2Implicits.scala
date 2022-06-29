@@ -19,14 +19,12 @@ package org.apache.spark.sql.connector.catalog
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -136,10 +134,7 @@ private[sql] object CatalogV2Implicits {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) =>
         val identifier = TableIdentifier(ident.name, Some(dbName))
-        if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
-          dbName != SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)) {
-          identifier.withCatalog(SESSION_CATALOG_NAME)
-        }
+        CatalystIdentifier.withSessionCatalog(identifier)
         identifier
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
@@ -150,9 +145,7 @@ private[sql] object CatalogV2Implicits {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) =>
         val identifier = FunctionIdentifier(ident.name(), Some(dbName))
-        if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME)) {
-          identifier.withCatalog(SESSION_CATALOG_NAME)
-        }
+        CatalystIdentifier.withSessionCatalog(identifier)
         identifier
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
@@ -171,10 +164,7 @@ private[sql] object CatalogV2Implicits {
       case Seq(tblName) => TableIdentifier(tblName)
       case Seq(dbName, tblName) =>
         val identifier = TableIdentifier(tblName, Some(dbName))
-        if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
-          dbName != SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)) {
-          identifier.withCatalog(SESSION_CATALOG_NAME)
-        }
+        CatalystIdentifier.withSessionCatalog(identifier)
         identifier
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
@@ -185,9 +175,7 @@ private[sql] object CatalogV2Implicits {
       case Seq(funcName) => FunctionIdentifier(funcName)
       case Seq(dbName, funcName) =>
         val identifier = FunctionIdentifier(funcName, Some(dbName))
-        if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME)) {
-          identifier.withCatalog(SESSION_CATALOG_NAME)
-        }
+        CatalystIdentifier.withSessionCatalog(identifier)
         identifier
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(

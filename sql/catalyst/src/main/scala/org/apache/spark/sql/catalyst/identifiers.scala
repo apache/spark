@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+
 /**
  * An identifier that optionally specifies a database.
  *
@@ -60,6 +63,15 @@ sealed trait CatalystIdentifier {
   }
 
   override def toString: String = quotedString
+}
+
+object CatalystIdentifier {
+  def withSessionCatalog(identifier: CatalystIdentifier): Unit = {
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
+      !identifier.database.contains(SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE))) {
+      identifier.withCatalog(SESSION_CATALOG_NAME)
+    }
+  }
 }
 
 /**

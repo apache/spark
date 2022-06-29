@@ -41,7 +41,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Subque
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -349,9 +348,7 @@ class SessionCatalog(
     val table = formatTableName(tableDefinition.identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
     validateName(table)
-    if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME)) {
-      tableIdentifier.withCatalog(SESSION_CATALOG_NAME)
-    }
+    CatalystIdentifier.withSessionCatalog(tableIdentifier)
 
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
@@ -517,9 +514,7 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
     val catalogTable = externalCatalog.getTable(db, table)
-    if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME)) {
-      catalogTable.identifier.withCatalog(SESSION_CATALOG_NAME)
-    }
+    CatalystIdentifier.withSessionCatalog(catalogTable.identifier)
     catalogTable
   }
 
@@ -1458,9 +1453,7 @@ class SessionCatalog(
    * Constructs a [[FunctionBuilder]] based on the provided function metadata.
    */
   private def makeFunctionBuilder(func: CatalogFunction): FunctionBuilder = {
-    if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME)) {
-      func.identifier.withCatalog(SESSION_CATALOG_NAME)
-    }
+    CatalystIdentifier.withSessionCatalog(func.identifier)
     val className = func.className
     if (!Utils.classIsLoadable(className)) {
       throw QueryCompilationErrors.cannotLoadClassWhenRegisteringFunctionError(
@@ -1811,9 +1804,7 @@ class SessionCatalog(
       case f if TableFunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
       case f => (f, "USER")
     }.distinct.map { f =>
-      if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME)) {
-        f._1.withCatalog(SESSION_CATALOG_NAME)
-      }
+      CatalystIdentifier.withSessionCatalog(f._1)
       f
     }
   }
