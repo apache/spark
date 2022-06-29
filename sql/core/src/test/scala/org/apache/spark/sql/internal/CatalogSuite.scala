@@ -273,6 +273,52 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     testListColumns("tab1", dbName = Some("db1"))
   }
 
+  test("SPARK-39615: three layer namespace compatibility - listColumns") {
+    val answers = Map(
+      "col1" -> ("int", true, false, true),
+      "col2" -> ("string", true, false, false),
+      "a" -> ("int", true, true, false),
+      "b" -> ("string", true, true, false)
+    )
+
+    assert(spark.catalog.currentCatalog() === "spark_catalog")
+    createTable("my_table1")
+
+    val columns1 = spark.catalog.listColumns("my_table1").collect()
+    assert(answers ===
+      columns1.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val columns2 = spark.catalog.listColumns("default.my_table1").collect()
+    assert(answers ===
+      columns2.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val columns3 = spark.catalog.listColumns("spark_catalog.default.my_table1").collect()
+    assert(answers ===
+      columns3.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    createDatabase("my_db1")
+    createTable("my_table2", Some("my_db1"))
+
+    val columns4 = spark.catalog.listColumns("my_db1.my_table2").collect()
+    assert(answers ===
+      columns4.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val columns5 = spark.catalog.listColumns("spark_catalog.my_db1.my_table2").collect()
+    assert(answers ===
+      columns5.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val catalogName = "testcat"
+    val dbName = "my_db2"
+    val tableName = "my_table2"
+    val tableSchema = new StructType().add("i", "int").add("j", "string")
+    val description = "this is a test managed table"
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], description)
+
+    val columns6 = spark.catalog.listColumns("testcat.my_db2.my_table2").collect()
+    assert(Map("i" -> "int", "j" -> "string") === columns6.map(c => c.name -> c.dataType).toMap)
+  }
+
   test("Database.toString") {
     assert(new Database("cool_db", "cool_desc", "cool_path").toString ==
       "Database[name='cool_db', description='cool_desc', path='cool_path']")

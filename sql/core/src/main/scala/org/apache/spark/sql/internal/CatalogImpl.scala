@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
@@ -208,8 +208,23 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    listColumns(tableIdent)
+    // calling `sqlParser.parseTableIdentifier` to parse tableName. If it contains only table name
+    // and optionally contains a database name(thus a TableIdentifier), then we look up the table in
+    // sessionCatalog. Otherwise we try `sqlParser.parseMultipartIdentifier` to have a sequence of
+    // string as the qualified identifier and resolve the table through SQL analyzer.
+    try {
+      val ident = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+      if (tableExists(ident.database.orNull, ident.table)) {
+        listColumns(ident)
+      } else {
+        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+        listColumns(ident)
+      }
+    } catch {
+      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+        listColumns(ident)
+    }
   }
 
   /**
@@ -237,6 +252,44 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
     CatalogImpl.makeDataset(columns, sparkSession)
   }
+
+  private def listColumns(ident: Seq[String]): Dataset[Column] = {
+    val plan = UnresolvedTableOrView(ident, "Catalog.listColumns", true)
+
+    val columns = sparkSession.sessionState.executePlan(plan).analyzed match {
+      case ResolvedTable(_, _, table, _) =>
+        val (partitionColumnNames, bucketSpecOpt) = table.partitioning.toSeq.convertTransforms
+        val bucketColumnNames = bucketSpecOpt.map(_.bucketColumnNames).getOrElse(Nil)
+        table.schema.map { field =>
+          new Column(
+            name = field.name,
+            description = field.getComment().orNull,
+            dataType = field.dataType.simpleString,
+            nullable = field.nullable,
+            isPartition = partitionColumnNames.contains(field.name),
+            isBucket = bucketColumnNames.contains(field.name))
+        }
+
+      case ResolvedView(identifier, _) =>
+        val catalog = sparkSession.sessionState.catalog
+        val table = identifier.asTableIdentifier
+        val schema = catalog.getTempViewOrPermanentTableMetadata(table).schema
+        schema.map { field =>
+          new Column(
+            name = field.name,
+            description = field.getComment().orNull,
+            dataType = field.dataType.simpleString,
+            nullable = field.nullable,
+            isPartition = false,
+            isBucket = false)
+        }
+
+      case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
+    }
+
+    CatalogImpl.makeDataset(columns, sparkSession)
+  }
+
 
   /**
    * Gets the database with the specified name. This throws an `AnalysisException` when no
