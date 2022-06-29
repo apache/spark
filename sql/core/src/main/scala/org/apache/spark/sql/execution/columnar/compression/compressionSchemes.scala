@@ -421,7 +421,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
 
     override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
       if (overflow) {
-        throw QueryExecutionErrors.useDictionaryEncodingWhenDictionaryOverflowError()
+        throw QueryExecutionErrors.dictionaryOverflowError()
       }
 
       to.putInt(DictionaryEncoding.typeId)

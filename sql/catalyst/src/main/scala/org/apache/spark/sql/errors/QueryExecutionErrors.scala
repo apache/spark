@@ -878,9 +878,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new Exception(s"Unsupported type: ${dataType.catalogString}")
   }
 
-  def useDictionaryEncodingWhenDictionaryOverflowError(): Throwable = {
-    new IllegalStateException(
-      "Dictionary encoding should not be used because of dictionary overflow.")
+  def dictionaryOverflowError(): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "DICTIONARY_OVERFLOW_ERROR",
+      messageParameters = Array.empty)
   }
 
   def endOfIteratorError(): Throwable = {
