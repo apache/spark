@@ -363,7 +363,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("catalog classes format in Dataset.show") {
-    val db = new Database("nama", "descripta", "locata")
+    val db = new Database("nama", "cataloa", "descripta", "locata")
     val table = new Table("nama", "cataloa", Array("databasa"), "descripta", "typa",
       isTemporary = false)
     val function = new Function("nama", "databasa", "descripta", "classa", isTemporary = false)
@@ -373,7 +373,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val tableFields = ScalaReflection.getConstructorParameterValues(table)
     val functionFields = ScalaReflection.getConstructorParameterValues(function)
     val columnFields = ScalaReflection.getConstructorParameterValues(column)
-    assert(dbFields == Seq("nama", "descripta", "locata"))
+    assert(dbFields == Seq("nama", "cataloa", "descripta", "locata"))
     assert(Seq(tableFields(0), tableFields(1), tableFields(3), tableFields(4), tableFields(5)) ==
       Seq("nama", "cataloa", "descripta", "typa", false))
     assert(tableFields(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowNamespaces, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -317,10 +317,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           val metadata = catalog.loadNamespaceMetadata(namespace.toArray)
           new Database(
             name = namespace.mkString("."),
+            catalog = catalog.name,
             description = metadata.get(SupportsNamespaces.PROP_COMMENT),
             locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION))
         // similar to databaseExists: if the catalog doesn't support namespaces, we assume it's an
         // implicit namespace, which exists but has no metadata.
+        case ResolvedNamespace(catalog: CatalogPlugin, namespace) =>
+          new Database(
+            name = dbName,
+            catalog = catalog.name,
+            description = null,
+            locationUri = null)
         case _ => new Database(name = dbName, description = null, locationUri = null)
       }
     }
