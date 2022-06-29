@@ -17,35 +17,36 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder, encoderFor}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.AllTuples
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.read.streaming.{SparkDataStream, Offset => OffsetV2}
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
+import org.apache.spark.sql.execution.streaming.sources.MemorySink
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.streaming.StreamingQueryListener._
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.concurrent.{Eventually, Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.exceptions.TestFailedDueToTimeoutException
+import org.scalatest.time.Span
+import org.scalatest.time.SpanSugar._
+import org.scalatest.{Assertions, BeforeAndAfterAll}
+
+import java.io.File
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
-
-import org.scalatest.{Assertions, BeforeAndAfterAll}
-import org.scalatest.concurrent.{Eventually, Signaler, ThreadSignaler, TimeLimits}
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.exceptions.TestFailedDueToTimeoutException
-import org.scalatest.time.Span
-import org.scalatest.time.SpanSugar._
-
-import org.apache.spark.SparkEnv
-import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.physical.AllTuples
-import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
-import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.StreamingQueryListener._
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -214,6 +215,30 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
   case class CheckNewAnswerRows(expectedAnswer: Seq[Row])
     extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"CheckNewAnswer: ${expectedAnswer.mkString(",")}"
+  }
+
+  object CheckNonEmptyStateAnswer {
+    def apply[K,V](expectedKey: K, expectedValue: V)(implicit keyEncoder: ExpressionEncoder[K]): CheckNonEmptyState[K,V] =
+      CheckNonEmptyState(expectedKey, expectedValue, keyEncoder.resolveAndBind().createDeserializer())
+  }
+
+  object CheckEmptyStateAnswer {
+    def apply[K](expectedKey: K)(implicit keyEncoder: ExpressionEncoder[K]): CheckEmptyState[K] =
+      CheckEmptyState(expectedKey, keyEncoder.resolveAndBind().createDeserializer())
+  }
+
+  case class CheckNonEmptyState[K, V](expectedKey: K, expectedState: V, keyDeserializer: Deserializer[K])
+    extends StreamAction
+      with StreamMustBeRunning {
+    override def toString: String = s"$operatorName: ${expectedKey}-${expectedState}"
+    private def operatorName      = "CheckNonEmptyState"
+  }
+
+  case class CheckEmptyState[K](expectedKey: K, keyDeserializer: Deserializer[K])
+    extends StreamAction
+      with StreamMustBeRunning {
+    override def toString: String = s"$operatorName: ${expectedKey}.isEmpty"
+    private def operatorName      = "CheckEmptyState"
   }
 
   object CheckNewAnswer {
@@ -475,15 +500,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
       verify(currentStream != null, "stream not running")
 
       // Block until all data added has been processed for all the source
-      awaiting.foreach { case (sourceIndex, offset) =>
-        failAfter(streamingTimeout) {
-          currentStream.awaitOffset(sourceIndex, offset, streamingTimeout.toMillis)
-          // Make sure all processing including no-data-batches have been executed
-          if (!currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
-            currentStream.processAllAvailable()
-          }
-        }
-      }
+      blockUntilDataAreProcessed()
 
       val lastExecution = currentStream.lastExecution
       if (currentStream.isInstanceOf[MicroBatchExecution] && lastExecution != null) {
@@ -518,6 +535,68 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
       }
       lastFetchedMemorySinkLastBatchId = sink.latestBatchId.getOrElse(-1L)
       rows
+    }
+
+    def blockUntilDataAreProcessed(): Unit =
+      awaiting.foreach { case (sourceIndex, offset) =>
+        failAfter(streamingTimeout) {
+          currentStream.awaitOffset(sourceIndex, offset, streamingTimeout.toMillis)
+          // Make sure all processing including no-data-batches have been executed
+          if (!currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
+            currentStream.processAllAvailable()
+          }
+        }
+      }
+
+    def fetchStreamStateAnswer[K](
+                                   currentStream: StreamExecution,
+                                   keyDeserializer: Deserializer[K]
+                                 ) = {
+      verify(currentStream != null, "stream not running")
+
+      // Block until all data added has been processed for all the source
+      blockUntilDataAreProcessed()
+
+      val lastExecution = currentStream.lastExecution
+      if (currentStream.isInstanceOf[MicroBatchExecution]) {
+        try {
+          lastExecution.executedPlan.collect {
+            case stateExec: FlatMapGroupsWithStateExec =>
+              val stateInfo = stateExec.stateInfo.get
+              val stateDirPath = s"${stateInfo.checkpointLocation.replace("file:/", "")}/${stateInfo.operatorId}"
+              new File(stateDirPath)
+                .listFiles()
+                .map(_.getName.toInt)
+                .flatMap(partitionId => {
+                  val stateStoreId = StateStoreId(
+                    stateInfo.checkpointLocation,
+                    stateInfo.operatorId,
+                    partitionId)
+                  val stateStoreProviderId = StateStoreProviderId(
+                    stateStoreId,
+                    stateInfo.queryRunId)
+                  val stateStore = StateStore.get(
+                    stateStoreProviderId,
+                    stateExec.groupingAttributes.toStructType,
+                    stateExec.stateManager.stateSchema,
+                    0,
+                    stateInfo.storeVersion + 1,
+                    StateStoreConf(lastExecution.sparkSession.sessionState.conf),
+                    lastExecution.sparkSession.sparkContext.hadoopConfiguration
+                  )
+                  stateExec.stateManager
+                    .getAllState(stateStore)
+                    .map(state => {
+                      keyDeserializer.apply(state.keyRow) -> state.stateObj
+                    }).toMap
+                })
+          }.foldLeft(Map.empty[Any, Any])((acc, map) => acc ++ map)
+        } catch {
+          case e: Throwable => failTest("Unable to retrieve states from checkpointDir.", e)
+        }
+      } else {
+        Map.empty[Any, Any]
+      }
     }
 
     def executeAction(action: StreamAction): Unit = {
@@ -768,6 +847,17 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
           QueryTest.sameRows(expectedAnswer, sparkAnswer).foreach {
             error => failTest(error)
           }
+
+        case CheckNonEmptyState(expectedKey, expectedState, keyDeserializer) =>
+          val stateAnswer = fetchStreamStateAnswer(currentStream, keyDeserializer)
+          assertResult(true)(stateAnswer.contains(expectedKey))
+          val maybeState = stateAnswer.get(expectedKey)
+          assertResult(true)(maybeState.isDefined)
+          assertResult(expectedState)(maybeState.get)
+
+        case CheckEmptyState(expectedKey, keyDeserializer) =>
+          val stateAnswer = fetchStreamStateAnswer(currentStream, keyDeserializer)
+          assertResult(false)(stateAnswer.contains(expectedKey))
       }
     }
 
