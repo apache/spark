@@ -46,7 +46,7 @@ sealed trait CatalystIdentifier {
     if (catalog.isDefined && replacedDb.isDefined) {
       s"`${catalog.get}`.`${replacedDb.get}`.`$replacedId`"
     } else if (replacedDb.isDefined) {
-       s"`${replacedDb.get}`.`$replacedId`"
+      s"`${replacedDb.get}`.`$replacedId`"
     } else {
       s"`$replacedId`"
     }
