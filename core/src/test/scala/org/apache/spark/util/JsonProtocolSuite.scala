@@ -594,7 +594,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     // The "Metrics Properties" field was added in Spark 3.4.0:
     val expectedEvent: SparkListenerEnvironmentUpdate = {
       val e = JsonProtocol.environmentUpdateFromJson(environmentUpdateJsonString)
-      e.copy(environmentDetails = e.environmentDetails.updated("Metrics Properties", Seq.empty))
+      e.copy(environmentDetails =
+        e.environmentDetails + ("Metrics Properties" -> Seq.empty[(String, String)]))
     }
     val oldEnvironmentUpdateJson = environmentUpdateJsonString
       .removeField("Metrics Properties")
@@ -612,7 +613,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       new ExecutorInfo(
         "Hostee.awesome.com",
         11,
-        logUrlMap = Map.empty,
+        logUrlMap = Map.empty[String, String],
         attributes = attributes,
         resourcesInfo = resourcesInfo,
         resourceProfileId = 123,
