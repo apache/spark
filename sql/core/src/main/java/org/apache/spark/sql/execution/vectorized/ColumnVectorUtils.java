@@ -305,7 +305,7 @@ public class ColumnVectorUtils {
    * Capacity is in number of elements, not number of bytes.
    */
   public static ColumnVector[] allocateColumns(
-    int capacity, StructType schema, boolean useOffHeap, int constantColumnLength) {
+      int capacity, StructType schema, boolean useOffHeap, int constantColumnLength) {
     StructField[] fields = schema.fields();
     int fieldsLength = fields.length;
     ColumnVector[] vectors = new ColumnVector[fieldsLength];
