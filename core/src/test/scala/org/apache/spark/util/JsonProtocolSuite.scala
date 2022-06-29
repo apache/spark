@@ -613,7 +613,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       new ExecutorInfo(
         "Hostee.awesome.com",
         11,
-        logUrlMap = Map.empty[String, String],
+        logUrlMap = Map.empty[String, String].toMap,
         attributes = attributes,
         resourcesInfo = resourcesInfo,
         resourceProfileId = 123,
