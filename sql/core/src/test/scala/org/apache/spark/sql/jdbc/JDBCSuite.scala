@@ -1946,7 +1946,6 @@ class JDBCSuite extends QueryTest
           val df = spark.sql(s"select timestamp_ntz '$datetime'")
           df.write.format("jdbc")
             .mode("overwrite")
-            .option("inferTimestampNTZType", "true")
             .option("url", urlWithUserAndPass)
             .option("dbtable", tableName)
             .save()
