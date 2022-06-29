@@ -148,15 +148,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     assert(e1.message.contains("requires a single-part namespace"))
   }
 
-  test("SHOW FUNCTIONS: only support session catalog") {
-    addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
-
-    val e = intercept[AnalysisException] {
-      sql(s"SHOW FUNCTIONS LIKE testcat.abc")
-    }
-    assert(e.message.contains("Catalog testcat does not support functions"))
-  }
-
   test("DROP FUNCTION: only support session catalog") {
     addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
 

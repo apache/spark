@@ -17,10 +17,23 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenNoImpl
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `SHOW FUNCTIONS` command to check V2 table catalogs.
  */
 class ShowFunctionsSuite extends command.ShowFunctionsSuiteBase with CommandSuiteBase {
+  test("SHOW FUNCTIONS: only support session catalog") {
+    withFun(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl)) {
+      val e = intercept[AnalysisException] {
+        sql(s"SHOW FUNCTIONS LIKE $funCatalog.abc")
+      }
+      assert(e.getMessage === s"Catalog $funCatalog does not support functions")
+    }
+  }
 }
