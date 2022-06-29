@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.concurrent.atomic.LongAdder
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.ArgumentMatchers.any
@@ -940,7 +942,6 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("SPARK-39553: Multi-thread unregister shuffle shouldn't throw NPE") {
-    import java.util.concurrent.atomic.{AtomicInteger, LongAdder}
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
