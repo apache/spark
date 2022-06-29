@@ -23,10 +23,13 @@ package org.apache.spark.sql.catalyst
  * Format (unquoted): "name" or "db.name"
  * Format (quoted): "`name`" or "`db`.`name`"
  */
-sealed trait IdentifierWithDatabase {
+sealed trait CatalystIdentifier {
+  private var _catalog: Option[String] = None
   val identifier: String
 
   def database: Option[String]
+  def withCatalog(catalog: String): Unit = this._catalog = Option(catalog)
+  def catalog: Option[String] = _catalog
 
   /*
    * Escapes back-ticks within the identifier name with double-back-ticks.
@@ -37,11 +40,23 @@ sealed trait IdentifierWithDatabase {
     val replacedId = quoteIdentifier(identifier)
     val replacedDb = database.map(quoteIdentifier(_))
 
-    if (replacedDb.isDefined) s"`${replacedDb.get}`.`$replacedId`" else s"`$replacedId`"
+    if (catalog.isDefined && replacedDb.isDefined) {
+      s"`${catalog.get}`.`${replacedDb.get}`.`$replacedId`"
+    } else if (replacedDb.isDefined) {
+       s"`${replacedDb.get}`.`$replacedId`"
+    } else {
+      s"`$replacedId`"
+    }
   }
 
   def unquotedString: String = {
-    if (database.isDefined) s"${database.get}.$identifier" else identifier
+    if (catalog.isDefined && database.isDefined) {
+      s"${catalog.get}.${database.get}.$identifier"
+    } else if (database.isDefined) {
+      s"${database.get}.$identifier"
+    } else {
+      identifier
+    }
   }
 
   override def toString: String = quotedString
@@ -73,11 +88,19 @@ object AliasIdentifier {
  * unquotedString as the function name.
  */
 case class TableIdentifier(table: String, database: Option[String])
-  extends IdentifierWithDatabase {
+  extends CatalystIdentifier {
 
   override val identifier: String = table
 
   def this(table: String) = this(table, None)
+
+  def copy(
+      table: String = this.table,
+      database: Option[String] = this.database): TableIdentifier = {
+    val ident = TableIdentifier(table, database)
+    this.catalog.foreach(ident.withCatalog)
+    ident
+  }
 }
 
 /** A fully qualified identifier for a table (i.e., database.tableName) */
@@ -95,13 +118,21 @@ object TableIdentifier {
  * If `database` is not defined, the current database is used.
  */
 case class FunctionIdentifier(funcName: String, database: Option[String])
-  extends IdentifierWithDatabase {
+  extends CatalystIdentifier {
 
   override val identifier: String = funcName
 
   def this(funcName: String) = this(funcName, None)
 
   override def toString: String = unquotedString
+
+  def copy(
+      funcName: String = this.funcName,
+      database: Option[String] = this.database): FunctionIdentifier = {
+    val ident = FunctionIdentifier(funcName, database)
+    this.catalog.foreach(ident.withCatalog)
+    ident
+  }
 }
 
 object FunctionIdentifier {

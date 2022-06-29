@@ -23,8 +23,10 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -132,7 +134,13 @@ private[sql] object CatalogV2Implicits {
 
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
-      case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
+      case Array(dbName) =>
+        val identifier = TableIdentifier(ident.name, Some(dbName))
+        if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
+          dbName != SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)) {
+          identifier.withCatalog(SESSION_CATALOG_NAME)
+        }
+        identifier
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "TableIdentifier")
@@ -140,7 +148,12 @@ private[sql] object CatalogV2Implicits {
 
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
-      case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
+      case Array(dbName) =>
+        val identifier = FunctionIdentifier(ident.name(), Some(dbName))
+        if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME)) {
+          identifier.withCatalog(SESSION_CATALOG_NAME)
+        }
+        identifier
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "FunctionIdentifier")
@@ -156,7 +169,13 @@ private[sql] object CatalogV2Implicits {
 
     def asTableIdentifier: TableIdentifier = parts match {
       case Seq(tblName) => TableIdentifier(tblName)
-      case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
+      case Seq(dbName, tblName) =>
+        val identifier = TableIdentifier(tblName, Some(dbName))
+        if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
+          dbName != SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)) {
+          identifier.withCatalog(SESSION_CATALOG_NAME)
+        }
+        identifier
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "TableIdentifier")
@@ -164,7 +183,12 @@ private[sql] object CatalogV2Implicits {
 
     def asFunctionIdentifier: FunctionIdentifier = parts match {
       case Seq(funcName) => FunctionIdentifier(funcName)
-      case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
+      case Seq(dbName, funcName) =>
+        val identifier = FunctionIdentifier(funcName, Some(dbName))
+        if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME)) {
+          identifier.withCatalog(SESSION_CATALOG_NAME)
+        }
+        identifier
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "FunctionIdentifier")

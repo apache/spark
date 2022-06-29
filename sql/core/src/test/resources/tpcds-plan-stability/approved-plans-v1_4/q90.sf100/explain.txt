@@ -13,22 +13,22 @@
    :              :     :     :- * Project (4)
    :              :     :     :  +- * Filter (3)
    :              :     :     :     +- * ColumnarToRow (2)
-   :              :     :     :        +- Scan parquet default.web_sales (1)
+   :              :     :     :        +- Scan parquet spark_catalog.default.web_sales (1)
    :              :     :     +- BroadcastExchange (9)
    :              :     :        +- * Project (8)
    :              :     :           +- * Filter (7)
    :              :     :              +- * ColumnarToRow (6)
-   :              :     :                 +- Scan parquet default.web_page (5)
+   :              :     :                 +- Scan parquet spark_catalog.default.web_page (5)
    :              :     +- BroadcastExchange (16)
    :              :        +- * Project (15)
    :              :           +- * Filter (14)
    :              :              +- * ColumnarToRow (13)
-   :              :                 +- Scan parquet default.household_demographics (12)
+   :              :                 +- Scan parquet spark_catalog.default.household_demographics (12)
    :              +- BroadcastExchange (23)
    :                 +- * Project (22)
    :                    +- * Filter (21)
    :                       +- * ColumnarToRow (20)
-   :                          +- Scan parquet default.time_dim (19)
+   :                          +- Scan parquet spark_catalog.default.time_dim (19)
    +- BroadcastExchange (49)
       +- * HashAggregate (48)
          +- Exchange (47)
@@ -42,17 +42,17 @@
                      :     :     :- * Project (32)
                      :     :     :  +- * Filter (31)
                      :     :     :     +- * ColumnarToRow (30)
-                     :     :     :        +- Scan parquet default.web_sales (29)
+                     :     :     :        +- Scan parquet spark_catalog.default.web_sales (29)
                      :     :     +- ReusedExchange (33)
                      :     +- ReusedExchange (36)
                      +- BroadcastExchange (43)
                         +- * Project (42)
                            +- * Filter (41)
                               +- * ColumnarToRow (40)
-                                 +- Scan parquet default.time_dim (39)
+                                 +- Scan parquet spark_catalog.default.time_dim (39)
 
 
-(1) Scan parquet default.web_sales
+(1) Scan parquet spark_catalog.default.web_sales
 Output [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
@@ -70,7 +70,7 @@ Condition : ((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AN
 Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
 Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 
-(5) Scan parquet default.web_page
+(5) Scan parquet spark_catalog.default.web_page
 Output [2]: [wp_web_page_sk#5, wp_char_count#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_page]
@@ -101,7 +101,7 @@ Join condition: None
 Output [2]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2]
 Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, wp_web_page_sk#5]
 
-(12) Scan parquet default.household_demographics
+(12) Scan parquet spark_catalog.default.household_demographics
 Output [2]: [hd_demo_sk#7, hd_dep_count#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
@@ -132,7 +132,7 @@ Join condition: None
 Output [1]: [ws_sold_time_sk#1]
 Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, hd_demo_sk#7]
 
-(19) Scan parquet default.time_dim
+(19) Scan parquet spark_catalog.default.time_dim
 Output [2]: [t_time_sk#9, t_hour#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
@@ -181,7 +181,7 @@ Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#13]
 Results [1]: [count(1)#13 AS amc#14]
 
-(29) Scan parquet default.web_sales
+(29) Scan parquet spark_catalog.default.web_sales
 Output [4]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17, ws_sold_date_sk#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
@@ -223,7 +223,7 @@ Join condition: None
 Output [1]: [ws_sold_time_sk#15]
 Input [3]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, hd_demo_sk#20]
 
-(39) Scan parquet default.time_dim
+(39) Scan parquet spark_catalog.default.time_dim
 Output [2]: [t_time_sk#21, t_hour#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]

@@ -19,7 +19,7 @@ TakeOrderedAndProject (32)
       :     :     :                             +- * Project (4)
       :     :     :                                +- * Filter (3)
       :     :     :                                   +- * ColumnarToRow (2)
-      :     :     :                                      +- Scan parquet default.store_sales (1)
+      :     :     :                                      +- Scan parquet spark_catalog.default.store_sales (1)
       :     :     +- * Sort (20)
       :     :        +- * Project (19)
       :     :           +- * Filter (18)
@@ -29,11 +29,11 @@ TakeOrderedAndProject (32)
       :     +- BroadcastExchange (26)
       :        +- * Filter (25)
       :           +- * ColumnarToRow (24)
-      :              +- Scan parquet default.item (23)
+      :              +- Scan parquet spark_catalog.default.item (23)
       +- ReusedExchange (29)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3, ss_sold_date_sk#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -129,7 +129,7 @@ Join condition: None
 Output [3]: [item_sk#10, rnk#14, item_sk#15]
 Input [4]: [item_sk#10, rnk#14, item_sk#15, rnk#17]
 
-(23) Scan parquet default.item
+(23) Scan parquet spark_catalog.default.item
 Output [2]: [i_item_sk#18, i_product_name#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -181,10 +181,10 @@ Subquery:1 Hosting operator id = 8 Hosting Expression = Subquery scalar-subquery
       +- * Project (36)
          +- * Filter (35)
             +- * ColumnarToRow (34)
-               +- Scan parquet default.store_sales (33)
+               +- Scan parquet spark_catalog.default.store_sales (33)
 
 
-(33) Scan parquet default.store_sales
+(33) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_addr_sk#24, ss_store_sk#25, ss_net_profit#26, ss_sold_date_sk#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]

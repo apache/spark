@@ -37,6 +37,7 @@ case class DescribeNamespaceExec(
     val ns = namespace.toArray
     val metadata = catalog.loadNamespaceMetadata(ns)
 
+    rows += toCatalystRow("Catalog Name", catalog.name())
     rows += toCatalystRow("Namespace Name", ns.last)
 
     CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.foreach { p =>
