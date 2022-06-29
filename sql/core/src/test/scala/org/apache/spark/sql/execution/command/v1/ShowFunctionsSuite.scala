@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command
 
 /**
@@ -32,7 +34,43 @@ import org.apache.spark.sql.execution.command
 trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
   with command.TestsV1AndV2Commands {
 
-  test("show functions") {
+  test("show functions in the default database of the session catalog") {
+    def getFunctions(pattern: String): Seq[Row] = {
+      StringUtils.filterPattern(
+        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName)
+          ++ FunctionRegistry.builtinOperators.keys, pattern)
+        .map(Row(_))
+    }
+
+    def createFunction(names: Seq[String]): Unit = {
+      names.foreach { name =>
+        spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)
+      }
+    }
+
+    def dropFunction(names: Seq[String]): Unit = {
+      names.foreach { name =>
+        spark.sessionState.catalog.dropTempFunction(name, false)
+      }
+    }
+
+    val functions = Array("ilog", "logi", "logii", "logiii", "crc32i", "cubei", "cume_disti",
+      "isize", "ispace", "to_datei", "date_addi", "current_datei")
+
+    createFunction(functions)
+
+    checkAnswer(sql("SHOW functions"), getFunctions("*"))
+    assert(sql("SHOW functions").collect().size > 200)
+
+    Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
+      // For the pattern part, only '*' and '|' are allowed as wildcards.
+      // For '*', we need to replace it to '.*'.
+      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
+    }
+    dropFunction(functions)
+  }
+
+  test("show functions in a scope") {
     withUserDefinedFunction("add_one" -> true) {
       val numFunctions = FunctionRegistry.functionSet.size.toLong +
         TableFunctionRegistry.functionSet.size.toLong +
