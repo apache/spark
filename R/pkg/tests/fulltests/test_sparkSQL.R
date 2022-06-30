@@ -4015,7 +4015,7 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
   expect_error(setCurrentDatabase("zxwtyswklpf"),
-               paste0("Error in setCurrentDatabase : analysis error - Database ",
+               paste0("Error in setCurrentDatabase : analysis error - Namespace ",
                "'zxwtyswklpf' does not exist"))
   dbs <- collect(listDatabases())
   expect_equal(names(dbs), c("name", "catalog", "description", "locationUri"))
