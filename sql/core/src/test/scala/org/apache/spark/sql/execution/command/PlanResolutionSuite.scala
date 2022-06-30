@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
@@ -274,7 +275,7 @@ class PlanResolutionSuite extends AnalysisTest {
         "USING parquet PARTITIONED BY (a)"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab", Some("default")),
+      identifier = TableIdentifier("my_tab", Some("default"), Some(SESSION_CATALOG_NAME)),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType()
@@ -334,7 +335,7 @@ class PlanResolutionSuite extends AnalysisTest {
         "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab", Some("default")),
+      identifier = TableIdentifier("my_tab", Some("default"), Some(SESSION_CATALOG_NAME)),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", IntegerType).add("b", StringType),
@@ -355,7 +356,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab", Some("default")),
+      identifier = TableIdentifier("my_tab", Some("default"), Some(SESSION_CATALOG_NAME)),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", IntegerType).add("b", StringType),
@@ -375,7 +376,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet TBLPROPERTIES('test' = 'test')"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab", Some("default")),
+      identifier = TableIdentifier("my_tab", Some("default"), Some(SESSION_CATALOG_NAME)),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", IntegerType).add("b", StringType),
@@ -395,7 +396,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val v1 = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab", Some("default")),
+      identifier = TableIdentifier("my_tab", Some("default"), Some(SESSION_CATALOG_NAME)),
       tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("/tmp/file"))),
       schema = new StructType().add("a", IntegerType).add("b", StringType),
@@ -426,7 +427,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql = "CREATE TABLE 1m.2g(a INT) USING parquet"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("2g", Some("1m")),
+      identifier = TableIdentifier("2g", Some("1m"), Some(SESSION_CATALOG_NAME)),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", IntegerType),
@@ -449,7 +450,7 @@ class PlanResolutionSuite extends AnalysisTest {
       """.stripMargin
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("table_name", Some("default")),
+      identifier = TableIdentifier("table_name", Some("default"), Some(SESSION_CATALOG_NAME)),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty.copy(
         properties = Map("a" -> "1", "b" -> "0.1", "c" -> "true")
@@ -505,6 +506,7 @@ class PlanResolutionSuite extends AnalysisTest {
     def checkParsing(sql: String): Unit = {
       val (desc, exists) = extractTableDesc(sql)
       assert(exists)
+      assert(desc.identifier.catalog.contains(SESSION_CATALOG_NAME))
       assert(desc.identifier.database.contains("mydb"))
       assert(desc.identifier.table == "page_view")
       assert(desc.storage.locationUri.contains(new URI("/user/external/page_view")))
@@ -696,9 +698,9 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("drop table") {
     val tableName1 = "db.v1Table"
-    val tableIdent1 = TableIdentifier("v1Table", Option("db"))
+    val tableIdent1 = TableIdentifier("v1Table", Option("db"), Some(SESSION_CATALOG_NAME))
     val tableName2 = "v1Table"
-    val tableIdent2 = TableIdentifier("v1Table", Some("default"))
+    val tableIdent2 = TableIdentifier("v1Table", Some("default"), Some(SESSION_CATALOG_NAME))
 
     parseResolveCompare(s"DROP TABLE $tableName1",
       DropTableCommand(tableIdent1, ifExists = false, isView = false, purge = false))
@@ -732,9 +734,9 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("drop view") {
     val viewName1 = "db.view"
-    val viewIdent1 = TableIdentifier("view", Option("db"))
+    val viewIdent1 = TableIdentifier("view", Option("db"), Some(SESSION_CATALOG_NAME))
     val viewName2 = "view"
-    val viewIdent2 = TableIdentifier("view", Option("default"))
+    val viewIdent2 = TableIdentifier("view", Option("default"), Some(SESSION_CATALOG_NAME))
     val tempViewName = "v"
     val tempViewIdent = TableIdentifier("v")
 
@@ -771,7 +773,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val parsed2_view = parseAndResolve(sql2_view)
     val parsed3_view = parseAndResolve(sql3_view)
 
-    val tableIdent = TableIdentifier("view", Some("default"))
+    val tableIdent = TableIdentifier("view", Some("default"), Some(SESSION_CATALOG_NAME))
     val expected1_view = AlterTableSetPropertiesCommand(
       tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = true)
     val expected2_view = AlterTableUnsetPropertiesCommand(
@@ -799,7 +801,7 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
 
         if (useV1Command) {
-          val tableIdent = TableIdentifier(tblName, Some("default"))
+          val tableIdent = TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME))
           val expected1 = AlterTableSetPropertiesCommand(
             tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = false)
           val expected2 = AlterTableUnsetPropertiesCommand(
@@ -862,7 +864,7 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed = parseAndResolve(sql)
         if (useV1Command) {
           val expected = AlterTableSetPropertiesCommand(
-            TableIdentifier(tblName, Some("default")),
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
             isView = false)
 
@@ -884,7 +886,7 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed = parseAndResolve(sql)
         if (useV1Command) {
           val expected = AlterTableSetLocationCommand(
-            TableIdentifier(tblName, Some("default")),
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             None,
             "new location")
           comparePlans(parsed, expected)
@@ -908,9 +910,11 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
           val expected1 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map.empty, false, parsed1.output)
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
+            Map.empty, false, parsed1.output)
           val expected2 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map.empty, true, parsed2.output)
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
+            Map.empty, true, parsed2.output)
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
@@ -932,7 +936,8 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
           val expected3 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map("a" -> "1"), false, parsed3.output)
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
+            Map("a" -> "1"), false, parsed3.output)
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
@@ -1238,7 +1243,7 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed2 = parseAndResolve(sql2)
 
         if (useV1Command) {
-          val tableIdent = TableIdentifier(tblName, Some("default"))
+          val tableIdent = TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME))
           val oldColumn = StructField("i", IntegerType)
           val newColumn = StructField("i", LongType)
           val expected1 = AlterTableChangeColumnCommand(
@@ -1293,7 +1298,8 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql = s"ALTER TABLE v1HiveTable ALTER COLUMN i TYPE char(1)"
     val newColumnWithCleanedType = StructField("i", CharType(1), true)
     val expected = AlterTableChangeColumnCommand(
-      TableIdentifier("v1HiveTable", Some("default")), "i", newColumnWithCleanedType)
+      TableIdentifier("v1HiveTable", Some("default"), Some(SESSION_CATALOG_NAME)),
+      "i", newColumnWithCleanedType)
     val parsed = parseAndResolve(sql)
     comparePlans(parsed, expected)
   }
@@ -1319,7 +1325,7 @@ class PlanResolutionSuite extends AnalysisTest {
         } else {
           val actual = parseAndResolve(sql)
           val expected = AlterTableChangeColumnCommand(
-            TableIdentifier(tblName, Some("default")),
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             "i",
             StructField("i", IntegerType).withComment("new comment"))
           comparePlans(actual, expected)
@@ -2034,7 +2040,8 @@ class PlanResolutionSuite extends AnalysisTest {
         query: Option[LogicalPlan] = None): CreateTableV1 = {
       CreateTableV1(
         CatalogTable(
-          identifier = TableIdentifier(table, database),
+          identifier = TableIdentifier(table, database,
+            if (database.isDefined) Some(SESSION_CATALOG_NAME) else None),
           tableType = tableType,
           storage = storage,
           schema = schema,

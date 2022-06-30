@@ -509,7 +509,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "VIEW"
   override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
-    TableIdentifier(viewName, Some(db))
+    TableIdentifier(viewName, Some(db), Some(SESSION_CATALOG_NAME))
   }
 
   test("SPARK-35686: error out for creating view with auto gen alias") {
