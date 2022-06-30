@@ -54,15 +54,16 @@ Each number format string can contain the following elements (case insensitive):
 
 - **`.`** or **`D`**
 
-  Specifies the position of the decimal point.
+  Specifies the position of the decimal point (optional, only allowed once).
 
-  The input value does not need to include a decimal point.
+  When parsing, the input string does not need to include a decimal point.
 
 - **`,`** or **`G`**
 
   Specifies the position of the `,` grouping (thousands) separator.
 
-  There must be a `0` or `9` to the left and right of each grouping separator. 
+  There must be a `0` or `9` to the left and right of each grouping separator. When parsing,
+  the input string must match the grouping separator relevant for the size of the number.
 
 - **`$`**
 
