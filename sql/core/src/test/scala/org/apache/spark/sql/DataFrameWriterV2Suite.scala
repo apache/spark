@@ -549,7 +549,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .create()
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("table_name"))
 
-      assert(table.identifier === TableIdentifier("table_name", Some("default")))
+      assert(table.identifier ===
+        TableIdentifier("table_name", Some("default"), Some(SESSION_CATALOG_NAME)))
       assert(table.storage.properties.contains("compression"))
       assert(table.storage.properties.getOrElse("compression", "foo") == "zstd")
     }

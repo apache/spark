@@ -1573,8 +1573,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("get function") {
     withBasicCatalog { catalog =>
       val expected =
-        CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
-          Seq.empty[FunctionResource])
+        CatalogFunction(FunctionIdentifier("func1", Some("db2"), Some(SESSION_CATALOG_NAME)),
+          funcClass, Seq.empty[FunctionResource])
       assert(catalog.getFunctionMetadata(FunctionIdentifier("func1", Some("db2"))) == expected)
       // Get function without explicitly specifying database
       catalog.setCurrentDatabase("db2")
@@ -1625,13 +1625,13 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.listFunctions("db2", "*").map(_._1).toSet ==
         Set(FunctionIdentifier("func1"),
           FunctionIdentifier("yes_me"),
-          FunctionIdentifier("func1", Some("db2")),
-          FunctionIdentifier("func2", Some("db2")),
-          FunctionIdentifier("not_me", Some("db2"))))
+          FunctionIdentifier("func1", Some("db2"), Some(SESSION_CATALOG_NAME)),
+          FunctionIdentifier("func2", Some("db2"), Some(SESSION_CATALOG_NAME)),
+          FunctionIdentifier("not_me", Some("db2"), Some(SESSION_CATALOG_NAME))))
       assert(catalog.listFunctions("db2", "func*").map(_._1).toSet ==
         Set(FunctionIdentifier("func1"),
-          FunctionIdentifier("func1", Some("db2")),
-          FunctionIdentifier("func2", Some("db2"))))
+          FunctionIdentifier("func1", Some("db2"), Some(SESSION_CATALOG_NAME)),
+          FunctionIdentifier("func2", Some("db2"), Some(SESSION_CATALOG_NAME))))
     }
   }
 
@@ -1657,7 +1657,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.registerFunction(func2, overrideIfExists = false, functionBuilder = Some(builder))
       // Should not include func2.
       assert(catalog.listFunctions("default", "*").map(_._1).toSet ==
-        Set(FunctionIdentifier("func1"), FunctionIdentifier("func1", Some("default")))
+        Set(FunctionIdentifier("func1"),
+          FunctionIdentifier("func1", Some("default"), Some(SESSION_CATALOG_NAME)))
       )
     }
   }

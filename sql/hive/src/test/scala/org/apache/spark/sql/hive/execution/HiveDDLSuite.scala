@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -92,8 +92,9 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     val schema = new StructType()
       .add("col1", "int", nullable = true, metadata = metadata)
       .add("col2", "string")
+    val catalogOption = name.catalog.orElse(CatalystIdentifier.sessionCatalogOption(name.database))
     CatalogTable(
-      identifier = name,
+      identifier = name.copy(catalog = catalogOption),
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = schema.copy(

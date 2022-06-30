@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -66,8 +66,9 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     val schema = new StructType()
       .add("col1", "int", nullable = true, metadata = metadata)
       .add("col2", "string")
+    val catalogOption = name.catalog.orElse(CatalystIdentifier.sessionCatalogOption(name.database))
     CatalogTable(
-      identifier = name,
+      identifier = name.copy(catalog = catalogOption),
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = schema.copy(
@@ -694,7 +695,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val catalog = spark.sessionState.catalog
     val tableIdent1 = TableIdentifier("tab1", None)
     createTable(catalog, tableIdent1)
-    val expectedTableIdent = tableIdent1.copy(database = Some("default"))
+    val expectedTableIdent = tableIdent1.copy(
+      database = Some("default"), catalog = Some(SESSION_CATALOG_NAME))
     val expectedTable = generateTable(catalog, expectedTableIdent)
     checkCatalogTables(expectedTable, catalog.getTableMetadata(tableIdent1))
   }
