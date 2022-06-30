@@ -25,77 +25,19 @@ import java.io.Serializable;
  * Represent an extract function, which extracts and returns the value of a
  * and a source expression where the field should be extracted.
  * <p>
- * The currently supported field names:
+ * The currently supported fields names following the ISO standard:
  * <ol>
- *  <li>Field Name: <code>SECOND</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(SECOND FROM source)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>MINUTE</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(MINUTE FROM source)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>HOUR</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(HOUR FROM source)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>MONTH</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(MONTH FROM source)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>QUARTER</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(QUARTER FROM source)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>YEAR</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(YEAR FROM source)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>ISO_DAY_OF_WEEK</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(ISO_DAY_OF_WEEK FROM source)</code></li>
- *    <li>Database dialects need to follow ISO semantics when handling ISO_DAY_OF_WEEK.</li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>DAY</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(DAY FROM source)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>DOY</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(DOY FROM source)</code></li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>WEEK</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(WEEK FROM source)</code></li>
- *    <li>Database dialects need to follow ISO semantics when handling WEEK.</li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
- *  <li>Field Name: <code>YEAR_OF_WEEK</code>
- *   <ul>
- *    <li>SQL semantic: <code>EXTRACT(YEAR_OF_WEEK FROM source)</code></li>
- *    <li>Database dialects need to follow ISO semantics when handling YEAR_OF_WEEK.</li>
- *    <li>Since version: 3.4.0</li>
- *   </ul>
- *  </li>
+ *  <li> <code>SECOND</code> Since 3.4.0 </li>
+ *  <li> <code>MINUTE</code> Since 3.4.0 </li>
+ *  <li> <code>HOUR</code> Since 3.4.0 </li>
+ *  <li> <code>MONTH</code> Since 3.4.0 </li>
+ *  <li> <code>QUARTER</code> Since 3.4.0 </li>
+ *  <li> <code>YEAR</code> Since 3.4.0 </li>
+ *  <li> <code>ISO_DAY_OF_WEEK</code> Since 3.4.0 </li>
+ *  <li> <code>DAY</code> Since 3.4.0 </li>
+ *  <li> <code>DOY</code> Since 3.4.0 </li>
+ *  <li> <code>WEEK</code> Since 3.4.0 </li>
+ *  <li> <code>YEAR_OF_WEEK</code> Since 3.4.0 </li>
  * </ol>
  *
  * @since 3.4.0
