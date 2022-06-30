@@ -23,7 +23,7 @@ import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
+import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
@@ -381,12 +381,7 @@ public class GeneralScalarExpression implements Expression, Serializable {
 
   @Override
   public String toString() {
-    V2ExpressionSQLBuilder builder = new V2ExpressionSQLBuilder();
-    try {
-      return builder.build(this);
-    } catch (Throwable e) {
-      return name + "(" +
-        Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
-    }
+    ToStringSQLBuilder builder = new ToStringSQLBuilder();
+    return builder.build(this);
   }
 }
