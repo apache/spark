@@ -168,6 +168,21 @@ object DateTimeUtils {
   }
 
   /**
+   * Converts microseconds since the epoch to an instance of `java.sql.Timestamp`.
+   *
+   * @param micros The number of microseconds since 1970-01-01T00:00:00.000000Z.
+   * @return A `java.sql.Timestamp` from number of micros since epoch.
+   */
+  def toJavaTimestampNoRebase(micros: Long): Timestamp = {
+    val seconds = Math.floorDiv(micros, DateTimeConstants.MICROS_PER_SECOND)
+    val nanos = (micros - seconds * DateTimeConstants.MICROS_PER_SECOND) *
+      DateTimeConstants.NANOS_PER_MICROS
+    val ts = new Timestamp(seconds * DateTimeConstants.MILLIS_PER_SECOND)
+    ts.setNanos(nanos.toInt)
+    ts
+  }
+
+  /**
    * Converts an instance of `java.sql.Timestamp` to the number of microseconds since
    * 1970-01-01T00:00:00.000000Z. It extracts date-time fields from the input, builds
    * a local timestamp in Proleptic Gregorian calendar from the fields, and binds
@@ -190,6 +205,16 @@ object DateTimeUtils {
     val micros = millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
     rebaseJulianToGregorianMicros(micros)
   }
+
+  /**
+   * Converts an instance of `java.sql.Timestamp` to the number of microseconds since
+   * 1970-01-01T00:00:00.000000Z.
+   *
+   * @param t an instance of `java.sql.Timestamp`.
+   * @return The number of micros since epoch from `java.sql.Timestamp`.
+   */
+  def fromJavaTimestampNoRebase(t: Timestamp): Long =
+    millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
 
   /**
    * Converts an Java object to microseconds.

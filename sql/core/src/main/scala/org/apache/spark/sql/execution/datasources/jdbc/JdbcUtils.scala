@@ -37,8 +37,8 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeConstants, DateTimeUtils, GenericArrayData}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp, toJavaTimestampNoRebase}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
@@ -486,9 +486,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
-          val micros = DateTimeUtils.millisToMicros(t.getTime) +
-            (t.getNanos / DateTimeConstants.NANOS_PER_MICROS) % DateTimeConstants.MICROS_PER_MILLIS
-          row.setLong(pos, micros)
+          row.setLong(pos, DateTimeUtils.fromJavaTimestampNoRebase(t))
         } else {
           row.update(pos, null)
         }
@@ -607,12 +605,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampNTZType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         val micros = localDateTimeToMicros(row.getAs[java.time.LocalDateTime](pos))
-        val seconds = Math.floorDiv(micros, DateTimeConstants.MICROS_PER_SECOND)
-        val nanos = (micros - seconds * DateTimeConstants.MICROS_PER_SECOND) *
-          DateTimeConstants.NANOS_PER_MICROS
-        val result = new java.sql.Timestamp(seconds * DateTimeConstants.MILLIS_PER_SECOND)
-        result.setNanos(nanos.toInt)
-        stmt.setTimestamp(pos + 1, result)
+        stmt.setTimestamp(pos + 1, toJavaTimestampNoRebase(micros))
 
     case DateType =>
       if (conf.datetimeJava8ApiEnabled) {
