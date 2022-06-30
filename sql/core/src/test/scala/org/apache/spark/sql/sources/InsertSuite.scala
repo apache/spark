@@ -1025,7 +1025,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
       val COLUMN_DEFAULT_NOT_FOUND = "`default` cannot be resolved."
-      val BAD_SUBQUERY = "cannot evaluate expression scalarsubquery() in inline table definition"
+      val BAD_SUBQUERY = "subquery expressions are not allowed in DEFAULT values"
     }
     // The default value fails to analyze.
     withTable("t") {
@@ -1038,14 +1038,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         sql("create table t(i boolean, s bigint default (select min(x) from badtable)) " +
           "using parquet")
-      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      }.getMessage.contains(Errors.BAD_SUBQUERY))
     }
     // The default value parses but refers to a table from the catalog.
     withTable("t", "other") {
       sql("create table other(x string) using parquet")
       assert(intercept[AnalysisException] {
         sql("create table t(i boolean, s bigint default (select min(x) from other)) using parquet")
-      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      }.getMessage.contains(Errors.BAD_SUBQUERY))
     }
     // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
     // list at the INSERT INTO time.
@@ -1397,6 +1397,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Negative tests") {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
+      val BAD_SUBQUERY = "subquery expressions are not allowed in DEFAULT values"
     }
     // The default value fails to analyze.
     withTable("t") {
@@ -1410,7 +1411,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean) using parquet")
       assert(intercept[AnalysisException] {
         sql("alter table t add column s bigint default (select min(x) from badtable)")
-      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      }.getMessage.contains(Errors.BAD_SUBQUERY))
     }
     // The default value parses but refers to a table from the catalog.
     withTable("t", "other") {
@@ -1418,7 +1419,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean) using parquet")
       assert(intercept[AnalysisException] {
         sql("alter table t add column s bigint default (select min(x) from other)")
-      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      }.getMessage.contains(Errors.BAD_SUBQUERY))
     }
     // The default value parses but the type is not coercible.
     withTable("t") {
@@ -1474,8 +1475,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-38838 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
-      val BAD_SUBQUERY =
-        "cannot evaluate expression CAST(scalarsubquery() AS BIGINT) in inline table definition"
+      val BAD_SUBQUERY = "subquery expressions are not allowed in DEFAULT values"
     }
     val createTable = "create table t(i boolean, s bigint) using parquet"
     val insertDefaults = "insert into t values (default, default)"
@@ -1488,7 +1488,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       // The default value analyzes to a table not in the catalog.
       assert(intercept[AnalysisException] {
         sql("alter table t alter column s set default (select min(x) from badtable)")
-      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      }.getMessage.contains(Errors.BAD_SUBQUERY))
       // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
       // list at the INSERT INTO time.
       sql("alter table t alter column s set default (select 42 as alias)")
