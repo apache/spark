@@ -1673,6 +1673,19 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-39643 Prohibit subquery expressions in DEFAULT values") {
+    Seq(
+      "create table t(a string default (select 'abc')) using parquet",
+      "create table t(a string default exists(select 42 where true)) using parquet",
+      "create table t(a string default 1 in (select 1 union all select 2)) using parquet"
+    ).foreach { query =>
+      assert(intercept[AnalysisException] {
+        sql(query)
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions().getMessage))
+    }
+  }
+
   test("Stop task set if FileAlreadyExistsException was thrown") {
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
