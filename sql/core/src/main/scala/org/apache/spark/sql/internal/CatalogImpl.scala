@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, RefreshTable, ShowTables, SubqueryAlias, TableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, TransformHelper}
@@ -706,12 +706,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     relation.refresh()
 
     // Temporary and global temporary views are not supposed to be put into the relation cache
-    // since they are tracked separately.
+    // since they are tracked separately. V1 and V2 plans are cache invalidated accordingly.
     relation match {
       case SubqueryAlias(_, v: View) if !v.isTempView =>
         sessionCatalog.invalidateCachedTable(v.desc.identifier)
       case SubqueryAlias(_, r: LogicalRelation) =>
         sessionCatalog.invalidateCachedTable(r.catalogTable.get.identifier)
+      case SubqueryAlias(_, h: HiveTableRelation) =>
+        sessionCatalog.invalidateCachedTable(h.tableMeta.identifier)
       case SubqueryAlias(_, r: DataSourceV2Relation) =>
         r.catalog.get.asTableCatalog.invalidateTable(r.identifier.get)
       case SubqueryAlias(_, v: View) if v.isTempView =>
