@@ -1379,9 +1379,7 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
     // drop the original cached version and make the new version cached lazily.
 
-    // use original table identifier
-    tableIdent.withCatalog(null)
-    sparkSession.catalog.refreshTable(tableIdent.quotedString)
+    sparkSession.catalog.refreshTable(tableIdent.copy(catalog = None).quotedString)
     Seq.empty[Row]
   }
 }

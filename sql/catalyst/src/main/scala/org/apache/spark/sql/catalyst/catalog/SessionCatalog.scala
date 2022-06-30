@@ -33,6 +33,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.CatalystIdentifier._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
@@ -346,9 +347,8 @@ class SessionCatalog(
 
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
+    val tableIdentifier = TableIdentifier(table, Some(db), sessionCatalogOption(db))
     validateName(table)
-    CatalystIdentifier.withSessionCatalog(tableIdentifier)
 
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
@@ -513,9 +513,7 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    val catalogTable = externalCatalog.getTable(db, table)
-    CatalystIdentifier.withSessionCatalog(catalogTable.identifier)
-    catalogTable
+    externalCatalog.getTable(db, table)
   }
 
   /**
@@ -1453,7 +1451,6 @@ class SessionCatalog(
    * Constructs a [[FunctionBuilder]] based on the provided function metadata.
    */
   private def makeFunctionBuilder(func: CatalogFunction): FunctionBuilder = {
-    CatalystIdentifier.withSessionCatalog(func.identifier)
     val className = func.className
     if (!Utils.classIsLoadable(className)) {
       throw QueryCompilationErrors.cannotLoadClassWhenRegisteringFunctionError(
@@ -1804,8 +1801,7 @@ class SessionCatalog(
       case f if TableFunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
       case f => (f, "USER")
     }.distinct.map { f =>
-      CatalystIdentifier.withSessionCatalog(f._1)
-      f
+      (f._1.copy(catalog = sessionCatalogOption(f._1.database)), f._2)
     }
   }
 

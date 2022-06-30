@@ -19,7 +19,8 @@ package org.apache.spark.sql.connector.catalog
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.CatalystIdentifier._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
@@ -133,9 +134,7 @@ private[sql] object CatalogV2Implicits {
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) =>
-        val identifier = TableIdentifier(ident.name, Some(dbName))
-        CatalystIdentifier.withSessionCatalog(identifier)
-        identifier
+        TableIdentifier(ident.name, Some(dbName), sessionCatalogOption(dbName))
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "TableIdentifier")
@@ -144,9 +143,7 @@ private[sql] object CatalogV2Implicits {
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) =>
-        val identifier = FunctionIdentifier(ident.name(), Some(dbName))
-        CatalystIdentifier.withSessionCatalog(identifier)
-        identifier
+        FunctionIdentifier(ident.name(), Some(dbName), sessionCatalogOption(dbName))
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "FunctionIdentifier")
@@ -163,9 +160,7 @@ private[sql] object CatalogV2Implicits {
     def asTableIdentifier: TableIdentifier = parts match {
       case Seq(tblName) => TableIdentifier(tblName)
       case Seq(dbName, tblName) =>
-        val identifier = TableIdentifier(tblName, Some(dbName))
-        CatalystIdentifier.withSessionCatalog(identifier)
-        identifier
+        TableIdentifier(tblName, Some(dbName), sessionCatalogOption(dbName))
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "TableIdentifier")
@@ -174,9 +169,7 @@ private[sql] object CatalogV2Implicits {
     def asFunctionIdentifier: FunctionIdentifier = parts match {
       case Seq(funcName) => FunctionIdentifier(funcName)
       case Seq(dbName, funcName) =>
-        val identifier = FunctionIdentifier(funcName, Some(dbName))
-        CatalystIdentifier.withSessionCatalog(identifier)
-        identifier
+        FunctionIdentifier(funcName, Some(dbName), sessionCatalogOption(dbName))
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "FunctionIdentifier")

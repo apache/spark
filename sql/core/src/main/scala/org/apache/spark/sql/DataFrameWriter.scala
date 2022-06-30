@@ -586,7 +586,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val command = (mode, tableOpt) match {
       case (_, Some(_: V1Table)) =>
-        return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
+        return saveAsTable(
+          TableIdentifier(
+            ident.name(),
+            ident.namespace().headOption,
+            CatalystIdentifier.sessionCatalogOption(ident.namespace().headOption)))
 
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
@@ -638,7 +642,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    CatalystIdentifier.withSessionCatalog(tableIdent)
     val catalog = df.sparkSession.sessionState.catalog
     val tableExists = catalog.tableExists(tableIdent)
     val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
