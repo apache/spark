@@ -29,9 +29,6 @@ import org.apache.spark.sql.execution.command
  */
 class ShowFunctionsSuite extends command.ShowFunctionsSuiteBase with CommandSuiteBase {
 
-  override protected def createFunction(name: String): Unit = {}
-  override protected def dropFunction(name: String): Unit = {}
-
   test("only support session catalog") {
     withFun(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl)) {
       val e = intercept[AnalysisException] {

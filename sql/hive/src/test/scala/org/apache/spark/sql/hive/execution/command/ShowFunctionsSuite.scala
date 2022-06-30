@@ -29,10 +29,10 @@ import org.apache.spark.sql.hive.execution.{PairUDF, StringCaseClass, UDFToListI
 class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
 
-  protected def createFunction(name: String): Unit = {
+  override protected def createFunction(name: String): Unit = {
     sql(s"CREATE FUNCTION $name AS '${classOf[UDFToListInt].getName}'")
   }
-  protected def dropFunction(name: String): Unit = {
+  override protected def dropFunction(name: String): Unit = {
     sql(s"DROP FUNCTION IF EXISTS $name")
   }
 

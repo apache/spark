@@ -35,8 +35,9 @@ import org.apache.spark.util.Utils
 trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW FUNCTIONS"
 
-  protected def createFunction(name: String): Unit
-  protected def dropFunction(name: String): Unit
+  protected def createFunction(name: String): Unit = {}
+  protected def dropFunction(name: String): Unit = {}
+  protected def showFun(ns: String, name: String): String = s"$ns.$name"
 
   /**
    * Drops function `funName` after calling `f`.
@@ -48,13 +49,13 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   protected def withNamespaceAndFun(ns: String, funName: String, cat: String = catalog)
-      (f: String => Unit): Unit = {
+      (f: (String, String) => Unit): Unit = {
     val nsCat = s"$cat.$ns"
     withNamespace(nsCat) {
       sql(s"CREATE NAMESPACE $nsCat")
-      val t = s"$nsCat.$funName"
-      withFunction(t) {
-        f(t)
+      val nsCatFn = s"$nsCat.$funName"
+      withFunction(nsCatFn) {
+        f(nsCat, nsCatFn)
       }
     }
   }
