@@ -1050,9 +1050,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
     // list at the INSERT INTO time.
     withTable("t") {
-      sql("create table t(i boolean default (select false as alias), s bigint) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (default, default)")
+        sql("create table t(i boolean default (select false as alias), s bigint) using parquet")
       }.getMessage.contains(Errors.BAD_SUBQUERY))
     }
     // Explicit default values may not participate in complex expressions in the VALUES list.
@@ -1491,9 +1490,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }.getMessage.contains(Errors.BAD_SUBQUERY))
       // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
       // list at the INSERT INTO time.
-      sql("alter table t alter column s set default (select 42 as alias)")
       assert(intercept[AnalysisException] {
-        sql(insertDefaults)
+        sql("alter table t alter column s set default (select 42 as alias)")
       }.getMessage.contains(Errors.BAD_SUBQUERY))
       // The default value parses but the type is not coercible.
       assert(intercept[AnalysisException] {
