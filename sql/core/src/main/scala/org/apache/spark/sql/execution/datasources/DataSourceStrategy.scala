@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, V2ExpressionBu
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -751,6 +751,14 @@ object DataSourceStrategy
         PushableColumnWithoutNestedColumn(right), _) =>
           Some(new GeneralAggregateFunc("CORR", agg.isDistinct,
             Array(FieldReference.column(left), FieldReference.column(right))))
+        case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
+          val translatedExprs = children.flatMap(PushableExpression.unapply(_))
+          if (translatedExprs.length == children.length) {
+            Some(new UserDefinedAggregateFunc(aggrFunc.name(),
+              aggrFunc.canonicalName(), agg.isDistinct, translatedExprs.toArray[V2Expression]))
+          } else {
+            None
+          }
         case _ => None
       }
     } else {
