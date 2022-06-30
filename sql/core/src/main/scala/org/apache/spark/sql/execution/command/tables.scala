@@ -205,7 +205,7 @@ case class AlterTableRenameCommand(
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
-      RefreshTableCommand(oldName).run(sparkSession)
+      catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
       optStorageLevel.foreach { storageLevel =>
         sparkSession.catalog.cacheTable(newName.unquotedString, storageLevel)
@@ -234,7 +234,7 @@ case class AlterTableAddColumnsCommand(
       constantFoldCurrentDefaultsToExistDefaults(sparkSession, catalogTable.provider)
 
     CommandUtils.uncacheTableOrView(sparkSession, table.quotedString)
-    RefreshTableCommand(table).run(sparkSession)
+    catalog.refreshTable(table)
 
     SchemaUtils.checkColumnNameDuplication(
       (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
@@ -401,7 +401,7 @@ case class LoadDataCommand(
     }
 
     // Refresh the data and metadata cache to ensure the data visible to the users
-    RefreshTableCommand(targetTable.identifier).run(sparkSession)
+    sparkSession.catalog.refreshTable(tableIdentWithDB)
 
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
@@ -569,7 +569,7 @@ case class TruncateTableCommand(
     }
     // After deleting the data, refresh the table to make sure we don't keep around a stale
     // file relation in the metastore cache and cached table data in the cache manager.
-    RefreshTableCommand(table.identifier).run(spark)
+    spark.catalog.refreshTable(tableIdentWithDB)
 
     CommandUtils.updateTableStats(spark, table)
     Seq.empty[Row]
@@ -1378,8 +1378,7 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
     // drop the original cached version and make the new version cached lazily.
-
-    sparkSession.catalog.refreshTable(tableIdent.copy(catalog = None).quotedString)
+    sparkSession.catalog.refreshTable(tableIdent.quotedString)
     Seq.empty[Row]
   }
 }
