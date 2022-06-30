@@ -50,7 +50,12 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitExcept(p: Except): Statistics = fallback(p)
 
-  override def visitExpand(p: Expand): Statistics = fallback(p)
+  override def visitExpand(p: Expand): Statistics = {
+    val childStats = p.child.stats
+    fallback(p).copy(
+      rowCount = childStats.rowCount.map(_ * p.projections.size),
+      attributeStats = childStats.attributeStats)
+  }
 
   override def visitFilter(p: Filter): Statistics = {
     FilterEstimation(p).estimate.getOrElse(fallback(p))

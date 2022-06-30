@@ -363,6 +363,19 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       expectedStatsCboOff = Statistics(sizeInBytes = expectedSize))
   }
 
+  test("SPARK-39642: Improve Expand statistics estimation") {
+    val expand = Expand(
+      Seq(
+        Seq(attribute, Literal.create(null, IntegerType), 1),
+        Seq(attribute, attribute, 2)),
+      Seq(attribute, attribute, $"gid".int),
+      plan)
+    checkStats(
+      expand,
+      expectedStatsCboOn = Statistics(400, Some(plan.rowCount * 2), plan.attributeStats),
+      expectedStatsCboOff = Statistics(sizeInBytes = 400))
+  }
+
   /** Check estimated stats when cbo is turned on/off. */
   private def checkStats(
       plan: LogicalPlan,
