@@ -71,33 +71,6 @@ class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase
     }
   }
 
-  test("persistent functions") {
-    import spark.implicits._
-    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    withTempView("inputTable") {
-      testData.createOrReplaceTempView("inputTable")
-      withUserDefinedFunction("testUDFToListInt" -> false) {
-        val numFunc = spark.catalog.listFunctions().count()
-        sql(s"CREATE FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
-        assert(spark.catalog.listFunctions().count() == numFunc + 1)
-        checkAnswer(
-          sql("SELECT testUDFToListInt(s) FROM inputTable"),
-          Seq(Row(Seq(1, 2, 3))))
-        assert(sql("show functions").count() ==
-          numFunc + FunctionRegistry.builtinOperators.size + 1)
-        assert(spark.catalog.listFunctions().count() == numFunc + 1)
-
-        withDatabase("db2") {
-          sql("CREATE DATABASE db2")
-          sql(s"CREATE FUNCTION db2.testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
-          checkAnswer(
-            sql("SHOW FUNCTIONS IN db2 LIKE 'testUDF*'"),
-            Seq(Row("db2.testudftolistint")))
-        }
-      }
-    }
-  }
-
   test("show functions") {
     val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().map(_.unquotedString)
     val allFunctions = sql("SHOW functions").collect().map(r => r(0))
