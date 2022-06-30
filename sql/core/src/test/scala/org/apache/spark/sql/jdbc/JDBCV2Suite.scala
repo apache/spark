@@ -106,7 +106,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   case object CharLength extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
-    override def name(): String = "char_length"
+    override def name(): String = "CHAR_LENGTH"
     override def canonicalName(): String = "h2.char_length"
 
     override def produceResult(input: InternalRow): Int = {
@@ -1000,36 +1000,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       JdbcDialects.registerDialect(testH2Dialect)
       val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 2")
       checkFiltersRemoved(df1)
-      checkPushedInfo(df1, "PushedFilters: [char_length(NAME) > 2],")
+      checkPushedInfo(df1, "PushedFilters: [CHAR_LENGTH(NAME) > 2],")
       checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
 
-      val df2 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 4")
-      checkFiltersRemoved(df2)
-      checkPushedInfo(df2, "PushedFilters: [char_length(NAME) > 4],")
-      checkAnswer(df2, Seq())
-
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        val df3 = sql(
+        val df2 = sql(
           """
             |SELECT *
             |FROM h2.test.people
             |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
           """.stripMargin)
-        checkFiltersRemoved(df3)
-        checkPushedInfo(df3,
-          "PushedFilters: [char_length(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 2],")
-        checkAnswer(df3, Seq(Row("fred", 1), Row("mary", 2)))
-
-        val df4 = sql(
-          """
-            |SELECT *
-            |FROM h2.test.people
-            |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 3
-          """.stripMargin)
-        checkFiltersRemoved(df4)
-        checkPushedInfo(df4,
-          "PushedFilters: [char_length(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 3],")
-        checkAnswer(df4, Seq(Row("fred", 1)))
+        checkFiltersRemoved(df2)
+        checkPushedInfo(df2,
+          "PushedFilters: [CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 2],")
+        checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
       }
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
