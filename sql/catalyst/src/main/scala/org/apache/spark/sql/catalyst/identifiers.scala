@@ -70,7 +70,8 @@ object CatalystIdentifier {
 
   def sessionCatalogOption(database: Option[String]): Option[String] = {
     if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
-      !database.contains(SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE))) {
+      database.isDefined &&
+      database.get != SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)) {
       Some(SESSION_CATALOG_NAME)
     } else {
       None
@@ -119,8 +120,8 @@ case class QualifiedTableName(database: String, name: String) {
 
 object TableIdentifier {
   def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)
-  def apply(tableName: String, database: Option[String]): TableIdentifier =
-    new TableIdentifier(tableName, database)
+  def apply(table: String, database: Option[String]): TableIdentifier =
+    new TableIdentifier(table, database)
 }
 
 

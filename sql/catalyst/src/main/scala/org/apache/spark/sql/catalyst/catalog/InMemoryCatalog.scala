@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -343,7 +343,9 @@ class InMemoryCatalog(
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
     requireTableExists(db, table)
-    catalog(db).tables(table).table
+    val catalogTable = catalog(db).tables(table).table
+    val catalogOption = CatalystIdentifier.sessionCatalogOption(catalogTable.identifier.database)
+    catalogTable.copy(identifier = catalogTable.identifier.copy(catalog = catalogOption))
   }
 
   override def getTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable] = {
@@ -639,7 +641,9 @@ class InMemoryCatalog(
 
   override def getFunction(db: String, funcName: String): CatalogFunction = synchronized {
     requireFunctionExists(db, funcName)
-    catalog(db).functions(funcName)
+    val catalogFunction = catalog(db).functions(funcName)
+    val catalogOption = CatalystIdentifier.sessionCatalogOption(catalogFunction.identifier.database)
+    catalogFunction.copy(identifier = catalogFunction.identifier.copy(catalog = catalogOption))
   }
 
   override def functionExists(db: String, funcName: String): Boolean = synchronized {

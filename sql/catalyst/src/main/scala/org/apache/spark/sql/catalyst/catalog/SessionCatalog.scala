@@ -412,8 +412,9 @@ class SessionCatalog(
    */
   def alterTable(tableDefinition: CatalogTable): Unit = {
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    val catalog = tableDefinition.identifier.catalog.orElse(sessionCatalogOption(db))
     val table = formatTableName(tableDefinition.identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
+    val tableIdentifier = TableIdentifier(table, Some(db), catalog)
     requireDbExists(db)
     requireTableExists(tableIdentifier)
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
@@ -443,8 +444,9 @@ class SessionCatalog(
       identifier: TableIdentifier,
       newDataSchema: StructType): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
+    val catalog = identifier.catalog.orElse(sessionCatalogOption(db))
     val table = formatTableName(identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
+    val tableIdentifier = TableIdentifier(table, Some(db), catalog)
     requireDbExists(db)
     requireTableExists(tableIdentifier)
 
@@ -470,8 +472,9 @@ class SessionCatalog(
    */
   def alterTableStats(identifier: TableIdentifier, newStats: Option[CatalogStatistics]): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
+    val catalog = identifier.catalog.orElse(sessionCatalogOption(db))
     val table = formatTableName(identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
+    val tableIdentifier = TableIdentifier(table, Some(db), catalog)
     requireDbExists(db)
     requireTableExists(tableIdentifier)
     externalCatalog.alterTableStats(db, table, newStats)
@@ -1366,7 +1369,8 @@ class SessionCatalog(
   def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
     val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
     requireDbExists(db)
-    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
+    val catalog = funcDefinition.identifier.catalog.orElse(sessionCatalogOption(db))
+    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db), catalog)
     val newFuncDefinition = funcDefinition.copy(identifier = identifier)
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
@@ -1381,8 +1385,9 @@ class SessionCatalog(
    */
   def dropFunction(name: FunctionIdentifier, ignoreIfNotExists: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val catalog = name.catalog.orElse(sessionCatalogOption(db))
     requireDbExists(db)
-    val identifier = name.copy(database = Some(db))
+    val identifier = name.copy(database = Some(db), catalog = catalog)
     if (functionExists(identifier)) {
       if (functionRegistry.functionExists(identifier)) {
         // If we have loaded this function into the FunctionRegistry,
@@ -1404,7 +1409,8 @@ class SessionCatalog(
   def alterFunction(funcDefinition: CatalogFunction): Unit = {
     val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
     requireDbExists(db)
-    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
+    val catalog = funcDefinition.identifier.catalog.orElse(sessionCatalogOption(db))
+    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db), catalog)
     val newFuncDefinition = funcDefinition.copy(identifier = identifier)
     if (functionExists(identifier)) {
       if (functionRegistry.functionExists(identifier)) {
@@ -1655,7 +1661,8 @@ class SessionCatalog(
    */
   def lookupPersistentFunction(name: FunctionIdentifier): ExpressionInfo = {
     val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName)
-    val qualifiedName = name.copy(database = database)
+    val catalog = name.catalog.orElse(sessionCatalogOption(database))
+    val qualifiedName = name.copy(database = database, catalog = catalog)
     functionRegistry.lookupFunction(qualifiedName)
       .orElse(tableFunctionRegistry.lookupFunction(qualifiedName))
       .getOrElse {
