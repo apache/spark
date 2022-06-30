@@ -61,6 +61,16 @@ class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase
     }
   }
 
+  test("show a function by its id") {
+    withNamespaceAndFun("ns", "crc32i") { (ns, fun) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      createFunction(fun)
+      checkAnswer(
+        sql(s"SHOW USER FUNCTIONS $fun"),
+        Row(showFun("ns", "crc32i")))
+    }
+  }
+
   test("persistent functions") {
     import spark.implicits._
     val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()

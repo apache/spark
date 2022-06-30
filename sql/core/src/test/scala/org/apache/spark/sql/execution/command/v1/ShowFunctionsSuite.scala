@@ -129,4 +129,14 @@ class ShowFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
         Nil)
     }
   }
+
+  test("show a function by its id") {
+    withNamespaceAndFun("ns", "crc32i") { (ns, fun) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      createFunction(fun)
+      checkAnswer(
+        sql(s"SHOW USER FUNCTIONS $fun"),
+        Nil) // FIXME: show a function by its id (legacy mode)
+    }
+  }
 }
