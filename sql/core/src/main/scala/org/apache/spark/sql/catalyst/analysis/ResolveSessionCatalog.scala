@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.CatalystIdentifier._
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -121,7 +122,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterDatabaseSetLocationCommand(db, location)
 
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
-      AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
+      AlterTableRenameCommand(
+        oldName.asTableIdentifier, attachSessionCatalog(newName.asTableIdentifier), isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
@@ -360,7 +362,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         properties, originalText, child, allowExisting, replace) =>
       if (isSessionCatalog(catalog)) {
         CreateViewCommand(
-          name = nameParts.asTableIdentifier,
+          name = attachSessionCatalog(nameParts.asTableIdentifier),
           userSpecifiedColumns = userSpecifiedColumns,
           comment = comment,
           properties = properties,
@@ -454,7 +456,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       ignoreIfExists: Boolean,
       storageFormat: CatalogStorageFormat,
       provider: String): CreateTableV1 = {
-    val tableDesc = buildCatalogTable(name.asTableIdentifier, tableSchema,
+    val tableDesc = buildCatalogTable(attachSessionCatalog(name.asTableIdentifier), tableSchema,
         partitioning, tableSpec.properties, provider,
         tableSpec.location, tableSpec.comment, storageFormat, tableSpec.external)
     val mode = if (ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists

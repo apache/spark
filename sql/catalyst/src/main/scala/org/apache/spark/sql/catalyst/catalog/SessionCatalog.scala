@@ -347,7 +347,8 @@ class SessionCatalog(
 
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db), sessionCatalogOption(db))
+    val catalog = tableDefinition.identifier.catalog.orElse(sessionCatalogOption(db))
+    val tableIdentifier = TableIdentifier(table, Some(db), catalog)
     validateName(table)
 
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
@@ -1806,10 +1807,8 @@ class SessionCatalog(
     functions.map {
       case f if FunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
       case f if TableFunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
-      case f => (f, "USER")
-    }.distinct.map { f =>
-      (f._1.copy(catalog = sessionCatalogOption(f._1.database)), f._2)
-    }
+      case f => (attachSessionCatalog(f), "USER")
+    }.distinct
   }
 
 

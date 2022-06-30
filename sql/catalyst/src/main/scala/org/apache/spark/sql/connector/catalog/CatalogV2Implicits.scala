@@ -159,8 +159,7 @@ private[sql] object CatalogV2Implicits {
 
     def asTableIdentifier: TableIdentifier = parts match {
       case Seq(tblName) => TableIdentifier(tblName)
-      case Seq(dbName, tblName) =>
-        TableIdentifier(tblName, Some(dbName), sessionCatalogOption(dbName))
+      case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "TableIdentifier")
@@ -168,8 +167,7 @@ private[sql] object CatalogV2Implicits {
 
     def asFunctionIdentifier: FunctionIdentifier = parts match {
       case Seq(funcName) => FunctionIdentifier(funcName)
-      case Seq(dbName, funcName) =>
-        FunctionIdentifier(funcName, Some(dbName), sessionCatalogOption(dbName))
+      case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "FunctionIdentifier")

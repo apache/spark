@@ -39,10 +39,11 @@ sealed trait CatalystIdentifier {
 
   def quotedString: String = {
     val replacedId = quoteIdentifier(identifier)
-    val replacedDb = database.map(quoteIdentifier(_))
+    val replacedDb = database.map(quoteIdentifier)
+    val replacedCatalog = catalog.map(quoteIdentifier)
 
-    if (catalog.isDefined && replacedDb.isDefined) {
-      s"`${catalog.get}`.`${replacedDb.get}`.`$replacedId`"
+    if (replacedCatalog.isDefined && replacedDb.isDefined) {
+      s"`${replacedCatalog.get}`.`${replacedDb.get}`.`$replacedId`"
     } else if (replacedDb.isDefined) {
       s"`${replacedDb.get}`.`$replacedId`"
     } else {
@@ -76,6 +77,16 @@ object CatalystIdentifier {
     } else {
       None
     }
+  }
+
+  def attachSessionCatalog(identifier: TableIdentifier): TableIdentifier = {
+    val catalog = identifier.catalog.orElse(sessionCatalogOption(identifier.database))
+    identifier.copy(catalog = catalog)
+  }
+
+  def attachSessionCatalog(identifier: FunctionIdentifier): FunctionIdentifier = {
+    val catalog = identifier.catalog.orElse(sessionCatalogOption(identifier.database))
+    identifier.copy(catalog = catalog)
   }
 }
 
