@@ -30,12 +30,10 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
-import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
@@ -76,42 +74,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         checkAnswer(queryCoalesce, Row("1") :: Nil)
       }
     }
-  }
-
-  test("show functions") {
-    def getFunctions(pattern: String): Seq[Row] = {
-      StringUtils.filterPattern(
-        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName)
-        ++ FunctionRegistry.builtinOperators.keys, pattern)
-        .map(Row(_))
-    }
-
-    def createFunction(names: Seq[String]): Unit = {
-      names.foreach { name =>
-        spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)
-      }
-    }
-
-    def dropFunction(names: Seq[String]): Unit = {
-      names.foreach { name =>
-        spark.sessionState.catalog.dropTempFunction(name, false)
-      }
-    }
-
-    val functions = Array("ilog", "logi", "logii", "logiii", "crc32i", "cubei", "cume_disti",
-      "isize", "ispace", "to_datei", "date_addi", "current_datei")
-
-    createFunction(functions)
-
-    checkAnswer(sql("SHOW functions"), getFunctions("*"))
-    assert(sql("SHOW functions").collect().size > 200)
-
-    Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
-      // For the pattern part, only '*' and '|' are allowed as wildcards.
-      // For '*', we need to replace it to '.*'.
-      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
-    }
-    dropFunction(functions)
   }
 
   test("describe functions") {

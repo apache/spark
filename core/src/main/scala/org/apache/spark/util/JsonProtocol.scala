@@ -675,6 +675,7 @@ private[spark] object JsonProtocol {
     g.writeStartObject()
     g.writeBooleanField("Use Disk", storageLevel.useDisk)
     g.writeBooleanField("Use Memory", storageLevel.useMemory)
+    g.writeBooleanField("Use Off Heap", storageLevel.useOffHeap)
     g.writeBooleanField("Deserialized", storageLevel.deserialized)
     g.writeNumberField("Replication", storageLevel.replication)
     g.writeEndObject()
@@ -945,7 +946,7 @@ private[spark] object JsonProtocol {
 
   def executorResourceRequestFromJson(json: JsonNode): ExecutorResourceRequest = {
     val rName = json.get("Resource Name").textValue
-    val amount = json.get("Amount").intValue
+    val amount = json.get("Amount").longValue
     val discoveryScript = json.get("Discovery Script").textValue
     val vendor = json.get("Vendor").textValue
     new ExecutorResourceRequest(rName, amount, discoveryScript, vendor)
@@ -953,7 +954,7 @@ private[spark] object JsonProtocol {
 
   def taskResourceRequestFromJson(json: JsonNode): TaskResourceRequest = {
     val rName = json.get("Resource Name").textValue
-    val amount = json.get("Amount").intValue
+    val amount = json.get("Amount").doubleValue
     new TaskResourceRequest(rName, amount)
   }
 
@@ -1395,9 +1396,19 @@ private[spark] object JsonProtocol {
   def storageLevelFromJson(json: JsonNode): StorageLevel = {
     val useDisk = json.get("Use Disk").booleanValue
     val useMemory = json.get("Use Memory").booleanValue
+    // The "Use Off Heap" field was added in Spark 3.4.0
+    val useOffHeap = jsonOption(json.get("Use Off Heap")) match {
+      case Some(value) => value.booleanValue
+      case None => false
+    }
     val deserialized = json.get("Deserialized").booleanValue
     val replication = json.get("Replication").intValue
-    StorageLevel(useDisk, useMemory, deserialized, replication)
+    StorageLevel(
+      useDisk = useDisk,
+      useMemory = useMemory,
+      useOffHeap = useOffHeap,
+      deserialized = deserialized,
+      replication = replication)
   }
 
   def blockStatusFromJson(json: JsonNode): BlockStatus = {

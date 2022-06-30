@@ -19,6 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
@@ -271,6 +272,52 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     createDatabase("db1")
     createTable("tab1", Some("db1"))
     testListColumns("tab1", dbName = Some("db1"))
+  }
+
+  test("SPARK-39615: three layer namespace compatibility - listColumns") {
+    val answers = Map(
+      "col1" -> ("int", true, false, true),
+      "col2" -> ("string", true, false, false),
+      "a" -> ("int", true, true, false),
+      "b" -> ("string", true, true, false)
+    )
+
+    assert(spark.catalog.currentCatalog() === "spark_catalog")
+    createTable("my_table1")
+
+    val columns1 = spark.catalog.listColumns("my_table1").collect()
+    assert(answers ===
+      columns1.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val columns2 = spark.catalog.listColumns("default.my_table1").collect()
+    assert(answers ===
+      columns2.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val columns3 = spark.catalog.listColumns("spark_catalog.default.my_table1").collect()
+    assert(answers ===
+      columns3.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    createDatabase("my_db1")
+    createTable("my_table2", Some("my_db1"))
+
+    val columns4 = spark.catalog.listColumns("my_db1.my_table2").collect()
+    assert(answers ===
+      columns4.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val columns5 = spark.catalog.listColumns("spark_catalog.my_db1.my_table2").collect()
+    assert(answers ===
+      columns5.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val catalogName = "testcat"
+    val dbName = "my_db2"
+    val tableName = "my_table2"
+    val tableSchema = new StructType().add("i", "int").add("j", "string")
+    val description = "this is a test managed table"
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], description)
+
+    val columns6 = spark.catalog.listColumns("testcat.my_db2.my_table2").collect()
+    assert(Map("i" -> "int", "j" -> "string") === columns6.map(c => c.name -> c.dataType).toMap)
   }
 
   test("Database.toString") {
@@ -748,5 +795,25 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     spark.catalog.setCurrentCatalog("spark_catalog")
     assert(spark.catalog.currentCatalog().equals("spark_catalog"))
     assert(spark.catalog.listCatalogs().collect().map(c => c.name).toSet == Set("testcat"))
+  }
+
+  test("SPARK-39583: Make RefreshTable be compatible with 3 layer namespace") {
+    withTempDir { dir =>
+      val tableName = "spark_catalog.default.my_table"
+
+      sql(s"""
+           | CREATE TABLE ${tableName}(col STRING) USING TEXT
+           | LOCATION '${dir.getAbsolutePath}'
+           |""".stripMargin)
+      sql(s"""INSERT INTO ${tableName} SELECT 'abc'""".stripMargin)
+      spark.catalog.cacheTable(tableName)
+      assert(spark.table(tableName).collect().length == 1)
+
+      FileUtils.deleteDirectory(dir)
+      assert(spark.table(tableName).collect().length == 1)
+
+      spark.catalog.refreshTable(tableName)
+      assert(spark.table(tableName).collect().length == 0)
+    }
   }
 }
