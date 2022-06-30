@@ -69,23 +69,6 @@ trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
     }
     dropFunction(functions)
   }
-
-  test("show functions in a scope") {
-    withUserDefinedFunction("add_one" -> true) {
-      val numFunctions = FunctionRegistry.functionSet.size.toLong +
-        TableFunctionRegistry.functionSet.size.toLong +
-        FunctionRegistry.builtinOperators.size.toLong
-      assert(sql("show functions").count() === numFunctions)
-      assert(sql("show system functions").count() === numFunctions)
-      assert(sql("show all functions").count() === numFunctions)
-      assert(sql("show user functions").count() === 0L)
-      spark.udf.register("add_one", (x: Long) => x + 1)
-      assert(sql("show functions").count() === numFunctions + 1L)
-      assert(sql("show system functions").count() === numFunctions)
-      assert(sql("show all functions").count() === numFunctions + 1L)
-      assert(sql("show user functions").count() === 1L)
-    }
-  }
 }
 
 /**
@@ -101,5 +84,23 @@ class ShowFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
 
   override protected def dropFunction(name: String): Unit = {
     spark.sessionState.catalog.dropTempFunction(name, false)
+  }
+
+
+  test("show functions from namespaces") {
+    withUserDefinedFunction("add_one" -> true) {
+      val numFunctions = FunctionRegistry.functionSet.size.toLong +
+        TableFunctionRegistry.functionSet.size.toLong +
+        FunctionRegistry.builtinOperators.size.toLong
+      assert(sql("show functions").count() === numFunctions)
+      assert(sql("show system functions").count() === numFunctions)
+      assert(sql("show all functions").count() === numFunctions)
+      assert(sql("show user functions").count() === 0L)
+      spark.udf.register("add_one", (x: Long) => x + 1)
+      assert(sql("show functions").count() === numFunctions + 1L)
+      assert(sql("show system functions").count() === numFunctions)
+      assert(sql("show all functions").count() === numFunctions + 1L)
+      assert(sql("show user functions").count() === 1L)
+    }
   }
 }
