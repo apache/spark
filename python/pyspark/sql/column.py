@@ -150,18 +150,27 @@ def _bin_func_op(
 def _bin_op(
     name: str,
     doc: str = "binary operator",
+    is_other_str: bool = False,
 ) -> Callable[
     ["Column", Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]], "Column"
 ]:
     """Create a method for given binary operator"""
 
-    def _(
-        self: "Column",
-        other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
-    ) -> "Column":
-        jc = other._jc if isinstance(other, Column) else other
-        njc = getattr(self._jc, name)(jc)
-        return Column(njc)
+    if is_other_str:
+        def _(
+            self: "Column",
+            other: str,
+        ) -> "Column":
+            njc = getattr(self._jc, name)(other)
+            return Column(njc)
+    else:
+        def _(
+            self: "Column",
+            other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
+        ) -> "Column":
+            jc = other._jc if isinstance(other, Column) else other
+            njc = getattr(self._jc, name)(jc)
+            return Column(njc)
 
     _.__doc__ = doc
     return _
@@ -656,9 +665,9 @@ class Column:
     """
 
     contains = _bin_op("contains", _contains_doc)
-    rlike = _bin_op("rlike", _rlike_doc)
-    like = _bin_op("like", _like_doc)
-    ilike = _bin_op("ilike", _ilike_doc)
+    rlike = _bin_op("rlike", _rlike_doc, is_other_str=True)
+    like = _bin_op("like", _like_doc, is_other_str=True)
+    ilike = _bin_op("ilike", _ilike_doc, is_other_str=True)
     startswith = _bin_op("startsWith", _startswith_doc)
     endswith = _bin_op("endsWith", _endswith_doc)
 
