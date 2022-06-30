@@ -27,8 +27,9 @@ import org.apache.spark.sql.execution.command
  * table catalogs. The tests that cannot run for all V1 catalogs are located in more
  * specific test suites:
  *
- *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowFunctionsSuite`
- *   - V1 Hive External catalog:
+ *   - Temporary functions of V1 catalog:
+ *     `org.apache.spark.sql.execution.command.v1.ShowTempFunctionsSuite`
+ *   - Permanent functions of V1 catalog:
  *     `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
  */
 trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
@@ -87,10 +88,9 @@ trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
 }
 
 /**
- * The class contains tests for the `SHOW FUNCTIONS` command to check V1 In-Memory
- * table catalog.
+ * The class contains tests for the `SHOW FUNCTIONS` command to check temporary functions.
  */
-class ShowFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
+class ShowTempFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
 
   override protected def createFunction(name: String): Unit = {
@@ -103,40 +103,5 @@ class ShowFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
 
   override protected def showFun(ns: String, name: String): String = {
     s"$catalog.$ns.$name".toLowerCase(Locale.ROOT)
-  }
-
-  test("show a function by its string name") {
-    val testFuns = Seq("crc32i", "crc16j")
-    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      funs.foreach(createFunction)
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns 'crc32i'"),
-        Nil) // FIXME: v1 In-Memory implementation should return the function
-    }
-  }
-
-  test("show functions matched to the '|' pattern") {
-    val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
-    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      funs.foreach(createFunction)
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date1900'"),
-        Nil) // FIXME: v1 In-Memory implementation should support the '|' pattern
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date*'"),
-        Nil)
-    }
-  }
-
-  test("show a function by its id") {
-    withNamespaceAndFun("ns", "crc32i") { (ns, fun) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      createFunction(fun)
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS $fun"),
-        Nil) // FIXME: show a function by its id (legacy mode)
-    }
   }
 }

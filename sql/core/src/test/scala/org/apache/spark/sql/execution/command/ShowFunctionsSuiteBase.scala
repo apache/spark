@@ -27,11 +27,12 @@ import org.apache.spark.util.Utils
  * table catalogs. The tests that cannot run for all supported catalogs are located in more
  * specific test suites:
  *
- *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.ShowFunctionsSuite`
- *   - V1 table catalog tests:
+ *   - V2 catalog tests: `org.apache.spark.sql.execution.command.v2.ShowFunctionsSuite`
+ *   - V1 catalog tests:
  *     `org.apache.spark.sql.execution.command.v1.ShowFunctionsSuiteBase`
- *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowFunctionsSuite`
- *     - V1 Hive External catalog:
+ *     - Temporary functions:
+ *        `org.apache.spark.sql.execution.command.v1.ShowTempFunctionsSuite`
+ *     - Permanent functions:
  *        `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
  */
 trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {

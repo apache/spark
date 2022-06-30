@@ -22,8 +22,7 @@ import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.hive.execution.UDFToListInt
 
 /**
- * The class contains tests for the `SHOW FUNCTIONS` command to check V1 Hive external
- * table catalog.
+ * The class contains tests for the `SHOW FUNCTIONS` command to check permanent functions.
  */
 class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
