@@ -23,6 +23,8 @@ import java.util.Locale
 
 import scala.collection.mutable.ArrayBuilder
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
@@ -217,7 +219,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
             // The only property we are building here is `COMMENT` because it's the only one
             // we can get from `SHOW INDEXES`.
             val properties = new util.Properties();
-            if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
+            if (StringUtils.isNotEmpty(indexComment)) properties.put("COMMENT", indexComment)
             val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
               new util.HashMap[NamedReference, util.Properties](), properties)
             indexMap += (indexName -> index)
