@@ -183,12 +183,14 @@ class ArrowTests(ReusedSQLTestCase):
 
     @property
     def create_np_arrs(self):
-        return [
-            np.array([1, 2]),  # dtype('int64')
-            np.array([0.1, 0.2]),  # dtype('float64')
-            np.array([[1, 2], [3, 4]]),  # dtype('int64')
-            np.array([[0.1, 0.2], [0.3, 0.4]]),  # dtype('float64')
-        ]
+        int_dtypes = ["int8", "int16", "int32", "int64"]
+        float_dtypes = ["float32", "float64"]
+        return (
+            [np.array([1, 2]).astype(t) for t in int_dtypes]
+            + [np.array([0.1, 0.2]).astype(t) for t in float_dtypes]
+            + [np.array([[1, 2], [3, 4]]).astype(t) for t in int_dtypes]
+            + [np.array([[0.1, 0.2], [0.3, 0.4]]).astype(t) for t in float_dtypes]
+        )
 
     def test_toPandas_fallback_enabled(self):
         ts = datetime.datetime(2015, 11, 1, 0, 30)
@@ -507,19 +509,17 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(self.schema, schema_rt)
 
     def test_createDataFrame_with_ndarray(self):
-        arrs = self.create_np_arrs
-        collected_dtypes = [
-            ([Row(value=1), Row(value=2)], [("value", "bigint")]),
-            ([Row(value=0.1), Row(value=0.2)], [("value", "double")]),
-            ([Row(_1=1, _2=2), Row(_1=3, _2=4)], [("_1", "bigint"), ("_2", "bigint")]),
-            ([Row(_1=0.1, _2=0.2), Row(_1=0.3, _2=0.4)], [("_1", "double"), ("_2", "double")]),
+        dtypes = ["tinyint", "smallint", "int", "bigint", "float", "double"]
+        expected_dtypes = [[("value", t)] for t in dtypes] + [
+            [("_1", t), ("_2", t)] for t in dtypes
         ]
-        for arr, [collected, dtypes] in zip(arrs, collected_dtypes):
+        arrs = self.create_np_arrs
+
+        for arr, dtypes in zip(arrs, expected_dtypes):
             df, df_arrow = self._createDataFrame_toggle(arr)
-            self.assertEqual(df.dtypes, dtypes)
+            self.assertEqual(df.dtypes, df_arrow.dtypes)
             self.assertEqual(df_arrow.dtypes, dtypes)
-            self.assertEqual(df.collect(), collected)
-            self.assertEqual(df_arrow.collect(), collected)
+            self.assertEqual(df.collect(), df_arrow.collect())
 
         with self.assertRaisesRegex(ValueError, "NumPy array input should be of 1 or 2 dimensions"):
             self.spark.createDataFrame(np.array(0))

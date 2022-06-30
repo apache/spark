@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -2203,5 +2203,21 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |)
             |""".stripMargin),
       Row("2022-06-01"))
+  }
+
+  test("SPARK-39511: Push limit 1 to right side if join type is Left Semi/Anti") {
+    withTable("t1", "t2") {
+      withTempView("v1") {
+        spark.sql("CREATE TABLE t1(id int) using parquet")
+        spark.sql("CREATE TABLE t2(id int, type string) using parquet")
+        spark.sql("CREATE TEMP VIEW v1 AS SELECT id, 't' AS type FROM t1")
+        val df = spark.sql("SELECT * FROM v1 WHERE type IN (SELECT type FROM t2)")
+        val join =
+          df.queryExecution.sparkPlan.collectFirst { case b: BroadcastNestedLoopJoinExec => b }
+        assert(join.nonEmpty)
+        assert(join.head.right.isInstanceOf[LocalLimitExec])
+        assert(join.head.right.asInstanceOf[LocalLimitExec].limit === 1)
+      }
+    }
   }
 }

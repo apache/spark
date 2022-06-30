@@ -491,12 +491,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
 private[sql] object DataSourceV2Strategy {
 
-  private def translateLeafNodeFilterV2(
-      predicate: Expression,
-      supportNestedPredicatePushdown: Boolean): Option[Predicate] = {
-    val pushablePredicate = PushablePredicate(supportNestedPredicatePushdown)
+  private def translateLeafNodeFilterV2(predicate: Expression): Option[Predicate] = {
     predicate match {
-      case pushablePredicate(expr) => Some(expr)
+      case PushablePredicate(expr) => Some(expr)
       case _ => None
     }
   }
@@ -506,10 +503,8 @@ private[sql] object DataSourceV2Strategy {
    *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
-  protected[sql] def translateFilterV2(
-      predicate: Expression,
-      supportNestedPredicatePushdown: Boolean): Option[Predicate] = {
-    translateFilterV2WithMapping(predicate, None, supportNestedPredicatePushdown)
+  protected[sql] def translateFilterV2(predicate: Expression): Option[Predicate] = {
+    translateFilterV2WithMapping(predicate, None)
   }
 
   /**
@@ -523,8 +518,7 @@ private[sql] object DataSourceV2Strategy {
    */
   protected[sql] def translateFilterV2WithMapping(
       predicate: Expression,
-      translatedFilterToExpr: Option[mutable.HashMap[Predicate, Expression]],
-      nestedPredicatePushdownEnabled: Boolean)
+      translatedFilterToExpr: Option[mutable.HashMap[Predicate, Expression]])
   : Option[Predicate] = {
     predicate match {
       case And(left, right) =>
@@ -538,26 +532,21 @@ private[sql] object DataSourceV2Strategy {
         // Pushing one leg of AND down is only safe to do at the top level.
         // You can see ParquetFilters' createFilter for more details.
         for {
-          leftFilter <- translateFilterV2WithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          rightFilter <- translateFilterV2WithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          leftFilter <- translateFilterV2WithMapping(left, translatedFilterToExpr)
+          rightFilter <- translateFilterV2WithMapping(right, translatedFilterToExpr)
         } yield new V2And(leftFilter, rightFilter)
 
       case Or(left, right) =>
         for {
-          leftFilter <- translateFilterV2WithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          rightFilter <- translateFilterV2WithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          leftFilter <- translateFilterV2WithMapping(left, translatedFilterToExpr)
+          rightFilter <- translateFilterV2WithMapping(right, translatedFilterToExpr)
         } yield new V2Or(leftFilter, rightFilter)
 
       case Not(child) =>
-        translateFilterV2WithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          .map(new V2Not(_))
+        translateFilterV2WithMapping(child, translatedFilterToExpr).map(new V2Not(_))
 
       case other =>
-        val filter = translateLeafNodeFilterV2(other, nestedPredicatePushdownEnabled)
+        val filter = translateLeafNodeFilterV2(other)
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
           translatedFilterToExpr.get(filter.get) = predicate
         }
@@ -589,10 +578,9 @@ private[sql] object DataSourceV2Strategy {
 /**
  * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
  */
-case class PushablePredicate(nestedPredicatePushdownEnabled: Boolean) {
-
+object PushablePredicate {
   def unapply(e: Expression): Option[Predicate] =
-    new V2ExpressionBuilder(e, nestedPredicatePushdownEnabled, true).build().map { v =>
+    new V2ExpressionBuilder(e, true).build().map { v =>
       assert(v.isInstanceOf[Predicate])
       v.asInstanceOf[Predicate]
     }
