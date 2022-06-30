@@ -44,6 +44,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   private def sessionCatalog: SessionCatalog = sparkSession.sessionState.catalog
 
+  private def requireDatabaseExists(dbName: String): Unit = {
+    if (!sessionCatalog.databaseExists(dbName)) {
+      throw QueryCompilationErrors.databaseDoesNotExistError(dbName)
+    }
+  }
+
   private def requireTableExists(dbName: String, tableName: String): Unit = {
     if (!sessionCatalog.tableExists(TableIdentifier(tableName, Some(dbName)))) {
       throw QueryCompilationErrors.tableDoesNotExistInDatabaseError(tableName, dbName)
@@ -54,23 +60,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns the current default database in this session.
    */
   override def currentDatabase: String =
-    sparkSession.sessionState.catalogManager.currentNamespace.mkString(".")
+    sparkSession.sessionState.catalogManager.currentNamespace.toSeq.quoted
 
   /**
    * Sets the current default database in this session.
    */
   @throws[AnalysisException]("database does not exist")
   override def setCurrentDatabase(dbName: String): Unit = {
+    // we assume dbName will not include the catalog prefix. e.g. if you call
+    // setCurrentDatabase("catalog.db") it will search for a database catalog.db in the catalog.
     val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
-    // ident may or may not include catalog prefix
-    // if it includes the current catalog, strip it. otherwise consider it all to be namespace
-    val catalog = currentCatalog()
-    val ns = ident.headOption match {
-      // TODO case-sensitivity?
-      case Some(catalogName) if catalogName == catalog && ident.length > 1 => ident.tail
-      case _ => ident
-    }
-    sparkSession.sessionState.catalogManager.setCurrentNamespace(ns.toArray)
+    sparkSession.sessionState.catalogManager.setCurrentNamespace(ident.toArray)
   }
 
   /**
@@ -194,9 +194,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
-    if (!sessionCatalog.databaseExists(dbName)) {
-      throw QueryCompilationErrors.databaseDoesNotExistError(dbName)
-    }
+    requireDatabaseExists(dbName)
     val functions = sessionCatalog.listFunctions(dbName).map { case (functIdent, _) =>
       makeFunction(functIdent)
     }

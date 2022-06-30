@@ -867,36 +867,18 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(spark.catalog.getDatabase(qualified).name === db)
   }
 
-  test("three layer namespace compatibility - current database") {
-    sql("CREATE NAMESPACE testcat.my_db")
-    // current catalog is spark_catalog, setting current databse to one in testcat will fail
-    val hiveErr = intercept[AnalysisException] {
-      spark.catalog.setCurrentDatabase("testcat.my_db")
-    }.getMessage
-    assert(hiveErr.contains("Namespace 'testcat.my_db' not found"))
-
-    // now switch catalogs and try again
-    // TODO? sql("USE CATALOG testcat")
+  test("three layer namespace compatibility - set current database") {
     spark.catalog.setCurrentCatalog("testcat")
+    // namespace with the same name as catalog
+    sql("CREATE NAMESPACE testcat.testcat.my_db")
     spark.catalog.setCurrentDatabase("testcat.my_db")
-    assert(spark.catalog.currentDatabase == "my_db")
-    spark.catalog.setCurrentDatabase("my_db")
-    assert(spark.catalog.currentDatabase == "my_db")
+    assert(spark.catalog.currentDatabase == "testcat.my_db")
     // sessionCatalog still reports 'default' as current database
     assert(sessionCatalog.getCurrentDatabase == "default")
     val e = intercept[AnalysisException] {
-      spark.catalog.setCurrentDatabase("testcat.unknown_db")
+      spark.catalog.setCurrentDatabase("my_db")
     }.getMessage
-    assert(e.contains("unknown_db"))
-
-    // add namespace layer
-    sql("CREATE NAMESPACE testcat.ns1.my_db")
-    spark.catalog.setCurrentDatabase("testcat.ns1.my_db")
-    assert(spark.catalog.currentDatabase == "ns1.my_db")
-    val e2 = intercept[AnalysisException] {
-      spark.catalog.setCurrentDatabase("testcat.ns1.unknown_db")
-    }.getMessage
-    assert(e2.contains("ns1.unknown_db"))
+    assert(e.contains("my_db"))
 
     // check that we can fall back to old sessionCatalog
     createDatabase("hive_db")
