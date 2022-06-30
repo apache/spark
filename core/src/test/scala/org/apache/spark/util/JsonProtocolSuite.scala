@@ -1111,14 +1111,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
     }
   }
 
+  private def prettyString(json: JsonNode): String = {
+    mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json)
+  }
+
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String): Unit = {
     val expectedJson = mapper.readTree(expected)
     val actualJson = mapper.readTree(actual)
     if (expectedJson != actualJson) {
       // scalastyle:off
       // This prints something useful if the JSON strings don't match
-      println(s"=== EXPECTED ===\n${expectedJson}\n")
-      println(s"=== ACTUAL ===\n${actualJson}\n")
+      println(s"=== EXPECTED ===\n${prettyString(expectedJson)}\n")
+      println(s"=== ACTUAL ===\n${prettyString(actualJson)}\n")
       // scalastyle:on
       throw new TestFailedException(s"$metadata JSON did not equal", 1)
     }
