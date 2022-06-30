@@ -1346,7 +1346,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       withDebugMode {
         val tableMeta = sharedState.externalCatalog.getTable("default", "t")
-        assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
+        assert(tableMeta.identifier ==
+          TableIdentifier("t", Some("default"), Some(SESSION_CATALOG_NAME)))
         assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
       }
     } finally {
