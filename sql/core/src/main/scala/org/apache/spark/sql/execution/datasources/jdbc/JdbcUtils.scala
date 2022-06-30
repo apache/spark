@@ -605,19 +605,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
 
     case TimestampNTZType =>
-      if (conf.datetimeJava8ApiEnabled) {
-        (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
-      } else {
-        (stmt: PreparedStatement, row: Row, pos: Int) =>
-          val micros = localDateTimeToMicros(row.getAs[java.time.LocalDateTime](pos))
-          val seconds = Math.floorDiv(micros, DateTimeConstants.MICROS_PER_SECOND)
-          val nanos = (micros - seconds * DateTimeConstants.MICROS_PER_SECOND) *
-            DateTimeConstants.NANOS_PER_MICROS
-          val result = new java.sql.Timestamp(seconds * DateTimeConstants.MILLIS_PER_SECOND)
-          result.setNanos(nanos.toInt)
-          stmt.setTimestamp(pos + 1, result)
-      }
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        val micros = localDateTimeToMicros(row.getAs[java.time.LocalDateTime](pos))
+        val seconds = Math.floorDiv(micros, DateTimeConstants.MICROS_PER_SECOND)
+        val nanos = (micros - seconds * DateTimeConstants.MICROS_PER_SECOND) *
+          DateTimeConstants.NANOS_PER_MICROS
+        val result = new java.sql.Timestamp(seconds * DateTimeConstants.MILLIS_PER_SECOND)
+        result.setNanos(nanos.toInt)
+        stmt.setTimestamp(pos + 1, result)
 
     case DateType =>
       if (conf.datetimeJava8ApiEnabled) {
