@@ -26,12 +26,13 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, RefreshTable, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
@@ -700,17 +701,23 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def refreshTable(tableName: String): Unit = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val relation = sparkSession.table(tableIdent).queryExecution.analyzed
+    val relation = sparkSession.table(tableName).queryExecution.analyzed
 
     relation.refresh()
 
     // Temporary and global temporary views are not supposed to be put into the relation cache
     // since they are tracked separately.
-    if (!sessionCatalog.isTempView(tableIdent)) {
-      sessionCatalog.invalidateCachedTable(tableIdent)
+    relation match {
+      case SubqueryAlias(_, v: View) if !v.isTempView =>
+        sessionCatalog.invalidateCachedTable(v.desc.identifier)
+      case SubqueryAlias(_, r: LogicalRelation) =>
+        sessionCatalog.invalidateCachedTable(r.catalogTable.get.identifier)
+      case SubqueryAlias(_, r: DataSourceV2Relation) =>
+        r.catalog.get.asTableCatalog.invalidateTable(r.identifier.get)
+      case SubqueryAlias(_, v: View) if v.isTempView =>
+      case _ =>
+        throw QueryCompilationErrors.unexpectedTypeOfRelationError(relation, tableName)
     }
-
     // Re-caches the logical plan of the relation.
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,

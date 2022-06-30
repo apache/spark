@@ -19,6 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
@@ -794,5 +795,25 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     spark.catalog.setCurrentCatalog("spark_catalog")
     assert(spark.catalog.currentCatalog().equals("spark_catalog"))
     assert(spark.catalog.listCatalogs().collect().map(c => c.name).toSet == Set("testcat"))
+  }
+
+  test("SPARK-39583: Make RefreshTable be compatible with 3 layer namespace") {
+    withTempDir { dir =>
+      val tableName = "spark_catalog.default.my_table"
+
+      sql(s"""
+           | CREATE TABLE ${tableName}(col STRING) USING TEXT
+           | LOCATION '${dir.getAbsolutePath}'
+           |""".stripMargin)
+      sql(s"""INSERT INTO ${tableName} SELECT 'abc'""".stripMargin)
+      spark.catalog.cacheTable(tableName)
+      assert(spark.table(tableName).collect().length == 1)
+
+      FileUtils.deleteDirectory(dir)
+      assert(spark.table(tableName).collect().length == 1)
+
+      spark.catalog.refreshTable(tableName)
+      assert(spark.table(tableName).collect().length == 0)
+    }
   }
 }
