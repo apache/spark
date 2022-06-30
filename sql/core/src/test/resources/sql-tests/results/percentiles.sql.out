@@ -412,3 +412,114 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 Cannot specify order by or frame for 'median'.
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW intervals AS SELECT * FROM VALUES
+(0, INTERVAL '0' MONTH, INTERVAL '0' SECOND),
+(0, INTERVAL '10' MONTH, INTERVAL '10' SECOND),
+(0, INTERVAL '20' MONTH, INTERVAL '20' SECOND),
+(0, INTERVAL '30' MONTH, INTERVAL '30' SECOND),
+(0, INTERVAL '40' MONTH, INTERVAL '40' SECOND),
+(1, INTERVAL '10' MONTH, INTERVAL '10' SECOND),
+(1, INTERVAL '20' MONTH, INTERVAL '20' SECOND),
+(2, INTERVAL '10' MONTH, INTERVAL '10' SECOND),
+(2, INTERVAL '20' MONTH, INTERVAL '20' SECOND),
+(2, INTERVAL '25' MONTH, INTERVAL '25' SECOND),
+(2, INTERVAL '30' MONTH, INTERVAL '30' SECOND),
+(3, INTERVAL '60' MONTH, INTERVAL '60' SECOND),
+(4, null, null)
+AS intervals(k, dt, ym)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY dt),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY dt DESC)
+FROM intervals
+-- !query schema
+struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval month,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval month>
+-- !query output
+0-10	2-6
+
+
+-- !query
+SELECT
+  k,
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY ym),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY ym DESC)
+FROM intervals
+GROUP BY k
+ORDER BY k
+-- !query schema
+struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval second,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval second>
+-- !query output
+0	0 00:00:10.000000000	0 00:00:30.000000000
+1	0 00:00:12.500000000	0 00:00:17.500000000
+2	0 00:00:17.500000000	0 00:00:26.250000000
+3	0 00:01:00.000000000	0 00:01:00.000000000
+4	NULL	NULL
+
+
+-- !query
+SELECT
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY dt),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY dt DESC)
+FROM intervals
+-- !query schema
+struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval month,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval month>
+-- !query output
+0-10	2-6
+
+
+-- !query
+SELECT
+  k,
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY ym),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY ym DESC)
+FROM intervals
+GROUP BY k
+ORDER BY k
+-- !query schema
+struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval second,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval second>
+-- !query output
+0	0 00:00:10.000000000	0 00:00:30.000000000
+1	0 00:00:10.000000000	0 00:00:20.000000000
+2	0 00:00:10.000000000	0 00:00:30.000000000
+3	0 00:01:00.000000000	0 00:01:00.000000000
+4	NULL	NULL
+
+
+-- !query
+SELECT
+  median(dt),
+  percentile(dt, 0.5),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY dt)
+FROM intervals
+-- !query schema
+struct<median(dt):interval month,percentile(dt, 0.5, 1):interval month,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval month>
+-- !query output
+1-8	1-8	1-8
+
+
+-- !query
+SELECT
+  k,
+  median(ym),
+  percentile(ym, 0.5),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY ym)
+FROM intervals
+GROUP BY k
+ORDER BY k
+-- !query schema
+struct<k:int,median(ym):interval second,percentile(ym, 0.5, 1):interval second,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval second>
+-- !query output
+0	0 00:00:20.000000000	0 00:00:20.000000000	0 00:00:20.000000000
+1	0 00:00:15.000000000	0 00:00:15.000000000	0 00:00:15.000000000
+2	0 00:00:22.500000000	0 00:00:22.500000000	0 00:00:22.500000000
+3	0 00:01:00.000000000	0 00:01:00.000000000	0 00:01:00.000000000
+4	NULL	NULL	NULL

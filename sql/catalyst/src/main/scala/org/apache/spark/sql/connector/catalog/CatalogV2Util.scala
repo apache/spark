@@ -203,6 +203,18 @@ private[sql] object CatalogV2Util {
               })
           }
 
+        case update: UpdateColumnDefaultValue =>
+          replace(schema, update.fieldNames, field =>
+            // The new DEFAULT value string will be non-empty for any DDL commands that set the
+            // default value, such as "ALTER TABLE t ALTER COLUMN c SET DEFAULT ..." (this is
+            // enforced by the parser). On the other hand, commands that drop the default value such
+            // as "ALTER TABLE t ALTER COLUMN c DROP DEFAULT" will set this string to empty.
+            if (update.newDefaultValue().nonEmpty) {
+              Some(field.withCurrentDefaultValue(update.newDefaultValue()))
+            } else {
+              Some(field.clearCurrentDefaultValue)
+            })
+
         case delete: DeleteColumn =>
           replace(schema, delete.fieldNames, _ => None, delete.ifExists)
 

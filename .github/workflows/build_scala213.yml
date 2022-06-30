@@ -32,8 +32,16 @@ jobs:
       java: 8
       branch: master
       hadoop: hadoop3
-      type: scheduled
       envs: >-
         {
           "SCALA_PROFILE": "scala2.13"
+        }
+      jobs: >-
+        {
+          "build": "true",
+          "pyspark": "true",
+          "sparkr": "true",
+          "tpcds-1g": "true",
+          "docker-integration-tests": "true",
+          "lint" : "true"
         }

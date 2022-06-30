@@ -23,7 +23,7 @@ import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
+import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
@@ -106,6 +106,42 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>GREATEST</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>GREATEST(expr, ...)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LEAST</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LEAST(expr, ...)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>RAND</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>RAND([seed])</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LOG</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LOG(base, expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LOG10</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LOG10(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LOG2</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LOG2(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
  *  <li>Name: <code>LN</code>
  *   <ul>
  *    <li>SQL semantic: <code>LN(expr)</code></li>
@@ -140,6 +176,120 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <ul>
  *    <li>SQL semantic: <code>CEIL(expr)</code></li>
  *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ROUND</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ROUND(expr, [scale])</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SIN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SIN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SINH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SINH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>COS</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>COS(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>COSH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>COSH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>TAN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>TAN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>TANH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>TANH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>COT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>COT(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ASIN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ASIN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ASINH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ASINH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ACOS</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ACOS(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ACOSH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ACOSH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ATAN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ATAN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ATANH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ATANH(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ATAN2</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ATAN2(exprY, exprX)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>CBRT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CBRT(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>DEGREES</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>DEGREES(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>RADIANS</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>RADIANS(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SIGN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SIGN(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
  *  <li>Name: <code>WIDTH_BUCKET</code>
@@ -231,12 +381,7 @@ public class GeneralScalarExpression implements Expression, Serializable {
 
   @Override
   public String toString() {
-    V2ExpressionSQLBuilder builder = new V2ExpressionSQLBuilder();
-    try {
-      return builder.build(this);
-    } catch (Throwable e) {
-      return name + "(" +
-        Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
-    }
+    ToStringSQLBuilder builder = new ToStringSQLBuilder();
+    return builder.build(this);
   }
 }

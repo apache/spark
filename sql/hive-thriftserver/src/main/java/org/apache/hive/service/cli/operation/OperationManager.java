@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class OperationManager extends AbstractService {
-  private final Logger LOG = LoggerFactory.getLogger(OperationManager.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(OperationManager.class);
 
   private final Map<OperationHandle, Operation> handleToOperation =
       new HashMap<OperationHandle, Operation>();

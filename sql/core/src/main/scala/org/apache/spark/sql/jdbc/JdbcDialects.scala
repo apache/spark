@@ -549,6 +549,13 @@ abstract class JdbcDialect extends Serializable with Logging{
     if (limit > 0 ) s"LIMIT $limit" else ""
   }
 
+  /**
+   * returns the OFFSET clause for the SELECT statement
+   */
+  def getOffsetClause(offset: Integer): String = {
+    if (offset > 0 ) s"OFFSET $offset" else ""
+  }
+
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =
