@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.util.Utils
 
 /**
  * This base suite contains unified tests for the `SHOW FUNCTIONS` command that check V1 and V2
@@ -33,4 +34,28 @@ import org.apache.spark.sql.QueryTest
  */
 trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW FUNCTIONS"
+
+  protected def createFunction(name: String): Unit
+  protected def dropFunction(name: String): Unit
+
+  /**
+   * Drops function `funName` after calling `f`.
+   */
+  protected def withFunction(functionNames: String*)(f: => Unit): Unit = {
+    Utils.tryWithSafeFinally(f) {
+      functionNames.foreach(dropFunction)
+    }
+  }
+
+  protected def withNamespaceAndFun(ns: String, funName: String, cat: String = catalog)
+      (f: String => Unit): Unit = {
+    val nsCat = s"$cat.$ns"
+    withNamespace(nsCat) {
+      sql(s"CREATE NAMESPACE $nsCat")
+      val t = s"$nsCat.$funName"
+      withFunction(t) {
+        f(t)
+      }
+    }
+  }
 }
