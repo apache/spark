@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, ByteType, IntegerType, LongType}
@@ -177,12 +178,17 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("windows") {
-    val windows = plan.window(Seq(min(attribute).as("sum_attr")), Seq(attribute), Nil)
-    val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
+    val windows = Window(Seq(min(attribute).as("sum_attr")), Seq(attribute), Nil, plan)
+    val expectedDefaultStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
+    val expectedCboStats = Statistics(
+      sizeInBytes = plan.stats.sizeInBytes +
+        EstimationUtils.getSizePerRow(windows.windowOutputSet.toSeq) * 10,
+      rowCount = Some(10),
+      attributeStats = AttributeMap(Seq(attribute -> colStat)))
     checkStats(
       windows,
-      expectedStatsCboOn = windowsStats,
-      expectedStatsCboOff = windowsStats)
+      expectedStatsCboOn = expectedCboStats,
+      expectedStatsCboOff = expectedDefaultStats)
   }
 
   test("offset estimation: offset < child's rowCount") {

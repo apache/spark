@@ -100,7 +100,13 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     UnionEstimation.estimate(p).getOrElse(fallback(p))
   }
 
-  override def visitWindow(p: Window): Statistics = fallback(p)
+  override def visitWindow(p: Window): Statistics = {
+    val childStats = p.child.stats
+    childStats.rowCount.map { rowCount =>
+      val windowOutputDataSize = EstimationUtils.getSizePerRow(p.windowOutputSet.toSeq) * rowCount
+      childStats.copy(sizeInBytes = childStats.sizeInBytes + windowOutputDataSize)
+    }.getOrElse(childStats)
+  }
 
   override def visitSort(p: Sort): Statistics = fallback(p)
 
