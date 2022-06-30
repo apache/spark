@@ -2479,6 +2479,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
     new AnalysisException(
-      "Failed to execute command because subquery expresisons are not allowed in DEFAULT values")
+      "Failed to execute command because subquery expressions are not allowed in DEFAULT values")
   }
 }
