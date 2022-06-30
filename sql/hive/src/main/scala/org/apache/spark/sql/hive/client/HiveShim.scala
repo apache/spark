@@ -809,8 +809,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   }
 
   private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
-    val name = FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName),
-      CatalystIdentifier.sessionCatalogOption(hf.getDbName))
+    val name = CatalystIdentifier.attachSessionCatalog(
+      FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName)))
     val resources = hf.getResourceUris.asScala.map { uri =>
       val resourceType = uri.getResourceType() match {
         case ResourceType.ARCHIVE => "archive"

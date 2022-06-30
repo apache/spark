@@ -92,9 +92,8 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     val schema = new StructType()
       .add("col1", "int", nullable = true, metadata = metadata)
       .add("col2", "string")
-    val catalogOption = name.catalog.orElse(CatalystIdentifier.sessionCatalogOption(name.database))
     CatalogTable(
-      identifier = name.copy(catalog = catalogOption),
+      identifier = CatalystIdentifier.attachSessionCatalog(name),
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = schema.copy(

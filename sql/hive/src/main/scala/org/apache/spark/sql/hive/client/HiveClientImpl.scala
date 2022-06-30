@@ -503,8 +503,8 @@ private[hive] class HiveClientImpl(
     val comment = properties.get("comment")
 
     CatalogTable(
-      identifier = TableIdentifier(
-        h.getTableName, Option(h.getDbName), CatalystIdentifier.sessionCatalogOption(h.getDbName)),
+      identifier = CatalystIdentifier.attachSessionCatalog(
+        TableIdentifier(h.getTableName, Option(h.getDbName))),
       tableType = h.getTableType match {
         case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
         case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED

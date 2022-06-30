@@ -65,11 +65,7 @@ sealed trait CatalystIdentifier {
 }
 
 object CatalystIdentifier {
-  def sessionCatalogOption(database: String): Option[String] = {
-    sessionCatalogOption(Option(database))
-  }
-
-  def sessionCatalogOption(database: Option[String]): Option[String] = {
+  private def sessionCatalogOption(database: Option[String]): Option[String] = {
     if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
       database.isDefined &&
       database.get != SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)) {

@@ -134,7 +134,7 @@ private[sql] object CatalogV2Implicits {
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) =>
-        TableIdentifier(ident.name, Some(dbName), sessionCatalogOption(dbName))
+        attachSessionCatalog(TableIdentifier(ident.name, Some(dbName)))
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "TableIdentifier")
@@ -143,7 +143,7 @@ private[sql] object CatalogV2Implicits {
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) =>
-        FunctionIdentifier(ident.name(), Some(dbName), sessionCatalogOption(dbName))
+        attachSessionCatalog(FunctionIdentifier(ident.name(), Some(dbName)))
       case _ =>
         throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "FunctionIdentifier")

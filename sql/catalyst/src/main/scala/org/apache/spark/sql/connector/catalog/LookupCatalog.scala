@@ -137,11 +137,8 @@ private[sql] trait LookupCatalog extends Logging {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = {
       def namesToTableIdentifier(names: Seq[String]): Option[TableIdentifier] = names match {
         case Seq(name) => Some(TableIdentifier(name))
-        case Seq(database, name) => Some(
-          TableIdentifier(
-            name,
-            Some(database),
-            CatalystIdentifier.sessionCatalogOption(database)))
+        case Seq(database, name) =>
+          Some(CatalystIdentifier.attachSessionCatalog(TableIdentifier(name, Some(database))))
         case _ => None
       }
       parts match {

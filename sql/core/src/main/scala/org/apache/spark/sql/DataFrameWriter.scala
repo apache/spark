@@ -641,8 +641,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val catalog = df.sparkSession.sessionState.catalog
     val tableExists = catalog.tableExists(tableIdent)
     val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
-    val catalogOption = tableIdent.catalog.orElse(CatalystIdentifier.sessionCatalogOption(db))
-    val tableIdentWithDB = tableIdent.copy(database = Some(db), catalog = catalogOption)
+    val tableIdentWithDB = CatalystIdentifier.attachSessionCatalog(
+      tableIdent.copy(database = Some(db)))
     val tableName = tableIdentWithDB.unquotedString
 
     (tableExists, mode) match {
