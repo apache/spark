@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import java.util.Locale
+
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command
 
 /**
@@ -71,40 +71,18 @@ trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
     }
   }
 
-  test("show functions in the default database of the session catalog") {
-    def getFunctions(pattern: String): Seq[Row] = {
-      StringUtils.filterPattern(
-        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName)
-          ++ FunctionRegistry.builtinOperators.keys, pattern)
-        .map(Row(_))
+  test("show functions matched to the wildcard pattern") {
+    val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
+    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      funs.foreach(createFunction)
+      checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*'"),
+        testFuns.map(testFun => Row(showFun("ns", testFun))))
+      checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*rc*'"),
+        Seq("crc32i", "crc16j").map(testFun => Row(showFun("ns", testFun))))
     }
-
-    def createFunction(names: Seq[String]): Unit = {
-      names.foreach { name =>
-        spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)
-      }
-    }
-
-    def dropFunction(names: Seq[String]): Unit = {
-      names.foreach { name =>
-        spark.sessionState.catalog.dropTempFunction(name, false)
-      }
-    }
-
-    val functions = Array("ilog", "logi", "logii", "logiii", "crc32i", "cubei", "cume_disti",
-      "isize", "ispace", "to_datei", "date_addi", "current_datei")
-
-    createFunction(functions)
-
-    checkAnswer(sql("SHOW functions"), getFunctions("*"))
-    assert(sql("SHOW functions").collect().size > 200)
-
-    Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
-      // For the pattern part, only '*' and '|' are allowed as wildcards.
-      // For '*', we need to replace it to '.*'.
-      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
-    }
-    dropFunction(functions)
   }
 }
 
@@ -123,5 +101,21 @@ class ShowFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
     spark.sessionState.catalog.dropTempFunction(name, false)
   }
 
-  override protected def showFun(ns: String, name: String): String = s"$catalog.$ns.$name"
+  override protected def showFun(ns: String, name: String): String = {
+    s"$catalog.$ns.$name".toLowerCase(Locale.ROOT)
+  }
+
+  test("show functions matched to the '|' pattern") {
+    val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
+    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      funs.foreach(createFunction)
+      checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date1900'"),
+        Nil) // FIXME: v1 In-Memory catalog doesn't support the '|' pattern
+      checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date*'"),
+        Nil)
+    }
+  }
 }

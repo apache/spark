@@ -36,6 +36,20 @@ class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase
     sql(s"DROP FUNCTION IF EXISTS $name")
   }
 
+  test("show functions matched to the '|' pattern") {
+    val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
+    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      funs.foreach(createFunction)
+      checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date1900'"),
+        Seq("crc32i", "date1900").map(testFun => Row(showFun("ns", testFun))))
+      checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date*'"),
+        Seq("crc32i", "date1900", "Date1").map(testFun => Row(showFun("ns", testFun))))
+    }
+  }
+
   test("persistent functions") {
     import spark.implicits._
     val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()

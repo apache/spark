@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.Locale
+
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.util.Utils
 
@@ -37,7 +39,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def createFunction(name: String): Unit = {}
   protected def dropFunction(name: String): Unit = {}
-  protected def showFun(ns: String, name: String): String = s"$ns.$name"
+  protected def showFun(ns: String, name: String): String = s"$ns.$name".toLowerCase(Locale.ROOT)
 
   /**
    * Drops function `funName` after calling `f`.
@@ -48,15 +50,22 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  protected def withNamespaceAndFun(ns: String, funName: String, cat: String = catalog)
-      (f: (String, String) => Unit): Unit = {
+  protected def withNamespaceAndFuns(ns: String, funNames: Seq[String], cat: String = catalog)
+      (f: (String, Seq[String]) => Unit): Unit = {
     val nsCat = s"$cat.$ns"
     withNamespace(nsCat) {
       sql(s"CREATE NAMESPACE $nsCat")
-      val nsCatFn = s"$nsCat.$funName"
-      withFunction(nsCatFn) {
-        f(nsCat, nsCatFn)
+      val nsCatFns = funNames.map(funName => s"$nsCat.$funName")
+      withFunction(nsCatFns: _*) {
+        f(nsCat, nsCatFns)
       }
+    }
+  }
+
+  protected def withNamespaceAndFun(ns: String, funName: String, cat: String = catalog)
+      (f: (String, String) => Unit): Unit = {
+    withNamespaceAndFuns(ns, Seq(funName), cat) { case (ns, Seq(name)) =>
+      f(ns, name)
     }
   }
 }
