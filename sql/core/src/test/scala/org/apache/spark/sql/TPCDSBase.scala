@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 trait TPCDSBase extends TPCBase with TPCDSSchema {
 
   // The TPCDS queries below are based on v1.4
-  private val tpcdsAllQueries: Seq[String] = Seq(
+  // Used for plan related tests.
+  val tpcdsAllQueries: Seq[String] = Seq(
     "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11",
     "q12", "q13", "q14a", "q14b", "q15", "q16", "q17", "q18", "q19", "q20",
     "q21", "q22", "q23a", "q23b", "q24a", "q24b", "q25", "q26", "q27", "q28", "q29", "q30",
@@ -40,6 +41,7 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
   // For more details, see SPARK-35327.
   private val excludedTpcdsQueries: Set[String] = Set("q6", "q34", "q64", "q74", "q75", "q78")
 
+  // Used for result related tests.
   val tpcdsQueries: Seq[String] = tpcdsAllQueries.filterNot(excludedTpcdsQueries.contains)
 
   // This list only includes TPCDS v2.7 queries that are different from v1.4 ones

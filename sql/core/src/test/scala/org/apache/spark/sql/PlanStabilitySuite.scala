@@ -277,7 +277,7 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
-  tpcdsQueries.foreach { q =>
+  tpcdsAllQueries.foreach { q =>
     test(s"check simplified (tpcds-v1.4/$q)") {
       testQuery("tpcds", q)
     }
@@ -291,7 +291,7 @@ class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCD
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
-  tpcdsQueries.foreach { q =>
+  tpcdsAllQueries.foreach { q =>
     test(s"check simplified sf100 (tpcds-v1.4/$q)") {
       testQuery("tpcds", q, ".sf100")
     }

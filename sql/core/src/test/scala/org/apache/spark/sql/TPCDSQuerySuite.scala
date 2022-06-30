@@ -29,7 +29,7 @@ import org.apache.spark.tags.ExtendedSQLTest
 @ExtendedSQLTest
 class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 
-  tpcdsQueries.foreach { name =>
+  tpcdsAllQueries.foreach { name =>
     val queryString = resourceToString(s"tpcds/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
