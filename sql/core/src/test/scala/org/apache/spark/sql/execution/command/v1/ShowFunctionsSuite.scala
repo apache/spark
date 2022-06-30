@@ -52,15 +52,6 @@ trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
     }
   }
 
-  test("show functions in the SYSTEM name space") {
-    withNamespaceAndFun("ns", "date_addi") { (ns, f) =>
-      val systemFuns = sql(s"SHOW SYSTEM FUNCTIONS IN $ns").count()
-      assert(systemFuns > 0)
-      createFunction(f)
-      assert(sql(s"SHOW SYSTEM FUNCTIONS IN $ns").count() === systemFuns)
-    }
-  }
-
   test("show functions among both user and system defined functions") {
     withNamespaceAndFun("ns", "current_datei") { (ns, f) =>
       val allFuns = sql(s"SHOW ALL FUNCTIONS IN $ns").collect()
