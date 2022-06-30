@@ -36,6 +36,17 @@ class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase
     sql(s"DROP FUNCTION IF EXISTS $name")
   }
 
+  test("show a function by its string name") {
+    val testFuns = Seq("crc32i", "crc16j")
+    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      funs.foreach(createFunction)
+      checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns 'crc32i'"),
+        Row(showFun("ns", "crc32i")))
+    }
+  }
+
   test("show functions matched to the '|' pattern") {
     val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
     withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
