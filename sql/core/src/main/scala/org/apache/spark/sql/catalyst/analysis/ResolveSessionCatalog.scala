@@ -400,13 +400,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "functions")
       }
 
-    case ShowFunctions(ns: ResolvedNamespace, userScope, systemScope, pattern, output) =>
-      ns match {
-        case DatabaseInSessionCatalog(db) =>
-          ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
-        case _ =>
-          throw QueryCompilationErrors.missingCatalogAbilityError(ns.catalog, "functions")
-      }
+    case ShowFunctions(DatabaseInSessionCatalog(db), userScope, systemScope, pattern, output) =>
+      ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
 
     case DropFunction(ResolvedPersistentFunc(catalog, identifier, _), ifExists) =>
       if (isSessionCatalog(catalog)) {
