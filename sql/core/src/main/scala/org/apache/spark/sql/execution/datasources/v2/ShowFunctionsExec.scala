@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
@@ -40,7 +40,8 @@ case class ShowFunctionsExec(
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val systemFunctions = if (systemScope) {
-      FunctionRegistry.functionSet.map(_.unquotedString) ++
+      // All built-in functions
+      (FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet).map(_.unquotedString) ++
       // Hard code "<>", "!=", "between", "case", and "||"
       // for now as there is no corresponding functions.
       // "<>", "!=", "between", "case", and "||" is system functions,
@@ -48,11 +49,14 @@ case class ShowFunctionsExec(
       FunctionRegistry.builtinOperators.keys.toSeq
     } else Seq.empty
     val userFunctions = if (userScope) {
+      // List all temporary functions in the session catalog
+      session.sessionState.catalog.listTemporaryFunctions().map(_.unquotedString) ++
+      // List all functions registered in the given name space of the catalog
       catalog.listFunctions(namespace.toArray).map(_.name()).toSeq
     } else Seq.empty
-    val allFunctions =
-      StringUtils.filterPattern(userFunctions ++ systemFunctions, pattern.getOrElse("*"))
-      .sorted
+    val allFunctions = StringUtils.filterPattern(
+      userFunctions ++ systemFunctions,
+      pattern.getOrElse("*")).distinct.sorted
 
     allFunctions.foreach { fn =>
       rows += toCatalystRow(fn)

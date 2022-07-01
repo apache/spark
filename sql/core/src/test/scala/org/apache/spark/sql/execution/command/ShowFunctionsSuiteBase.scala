@@ -92,12 +92,21 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("show a temporary function as an USER function") {
-    val f = "temp_test_fun"
-    withUserDefinedFunction(f -> true) {
-      spark.udf.register(f, (arg1: Int, arg2: String) => arg2 + arg1)
-      QueryTest.checkAnswer(sql(s"SHOW USER FUNCTIONS"), Row(f) :: Nil)
-      QueryTest.checkAnswer(sql(s"SHOW ALL FUNCTIONS").filter(s"function='$f'"), Row(f) :: Nil)
-      QueryTest.checkAnswer(sql(s"SHOW SYSTEM FUNCTIONS").filter(s"function='$f'"), Nil)
+    withNamespaceAndFun("ns", "poggi") { (ns, f0) =>
+      createFunction(f0)
+      val f1 = "temp_test_fun"
+      withUserDefinedFunction(f1 -> true) {
+        spark.udf.register(f1, (arg1: Int, arg2: String) => arg2 + arg1)
+        QueryTest.checkAnswer(
+          sql(s"SHOW USER FUNCTIONS IN $ns"),
+          Row(showFun("ns", "poggi")) :: Row(f1) :: Nil)
+        QueryTest.checkAnswer(
+          sql(s"SHOW ALL FUNCTIONS IN $ns").filter(s"function='$f1'"),
+          Row(f1) :: Nil)
+        QueryTest.checkAnswer(
+          sql(s"SHOW SYSTEM FUNCTIONS IN $ns").filter(s"function='$f1'"),
+          Nil)
+      }
     }
   }
 

@@ -1805,6 +1805,13 @@ class SessionCatalog(
     }.distinct
   }
 
+  /**
+   * List all temporary functions.
+   */
+  def listTemporaryFunctions(): Seq[FunctionIdentifier] = {
+    (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
+      .filter(isTemporaryFunction)
+  }
 
   // -----------------
   // | Other methods |
