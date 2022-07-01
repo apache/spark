@@ -492,12 +492,15 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         }
       s"ARRAY(${arrayValues.mkString(", ")})"
     case (row: GenericInternalRow, structType: StructType) =>
+      val structNames: Array[String] = structType.fields.map(_.name)
       val structValues: Array[String] =
         row.values.zip(structType.fields.map(_.dataType)).map {
           case (value: Any, fieldType: DataType) =>
             Literal(value, fieldType).sql
         }
-      s"STRUCT(${structValues.mkString(", ")})"
+      val structFields: Array[String] =
+        structNames.zip(structValues).map { kv => s"${kv._1}, ${kv._2}" }
+      s"NAMED_STRUCT(${structFields.mkString(", ")})"
     case (data: ArrayBasedMapData, mapType: MapType) =>
       val keyData = data.keyArray.asInstanceOf[GenericArrayData]
       val valueData = data.valueArray.asInstanceOf[GenericArrayData]
