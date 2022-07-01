@@ -11,18 +11,18 @@ TakeOrderedAndProject (21)
                :     :  +- * Project (4)
                :     :     +- * Filter (3)
                :     :        +- * ColumnarToRow (2)
-               :     :           +- Scan parquet default.date_dim (1)
+               :     :           +- Scan parquet spark_catalog.default.date_dim (1)
                :     +- * Filter (8)
                :        +- * ColumnarToRow (7)
-               :           +- Scan parquet default.store_sales (6)
+               :           +- Scan parquet spark_catalog.default.store_sales (6)
                +- BroadcastExchange (15)
                   +- * Project (14)
                      +- * Filter (13)
                         +- * ColumnarToRow (12)
-                           +- Scan parquet default.item (11)
+                           +- Scan parquet spark_catalog.default.item (11)
 
 
-(1) Scan parquet default.date_dim
+(1) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#1, d_year#2, d_moy#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -44,7 +44,7 @@ Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
 Input [2]: [d_date_sk#1, d_year#2]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
-(6) Scan parquet default.store_sales
+(6) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_item_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6]
 Batched: true
 Location: InMemoryFileIndex []
@@ -68,7 +68,7 @@ Join condition: None
 Output [3]: [d_year#2, ss_item_sk#4, ss_ext_sales_price#5]
 Input [5]: [d_date_sk#1, d_year#2, ss_item_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6]
 
-(11) Scan parquet default.item
+(11) Scan parquet spark_catalog.default.item
 Output [4]: [i_item_sk#8, i_category_id#9, i_category#10, i_manager_id#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]

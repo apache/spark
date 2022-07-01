@@ -13,20 +13,20 @@ TakeOrderedAndProject (44)
       :     :     :           +- * BroadcastHashJoin Inner BuildRight (8)
       :     :     :              :- * Filter (3)
       :     :     :              :  +- * ColumnarToRow (2)
-      :     :     :              :     +- Scan parquet default.store_sales (1)
+      :     :     :              :     +- Scan parquet spark_catalog.default.store_sales (1)
       :     :     :              +- BroadcastExchange (7)
       :     :     :                 +- * Filter (6)
       :     :     :                    +- * ColumnarToRow (5)
-      :     :     :                       +- Scan parquet default.date_dim (4)
+      :     :     :                       +- Scan parquet spark_catalog.default.date_dim (4)
       :     :     +- BroadcastExchange (16)
       :     :        +- * Filter (15)
       :     :           +- * ColumnarToRow (14)
-      :     :              +- Scan parquet default.store (13)
+      :     :              +- Scan parquet spark_catalog.default.store (13)
       :     +- BroadcastExchange (23)
       :        +- * Project (22)
       :           +- * Filter (21)
       :              +- * ColumnarToRow (20)
-      :                 +- Scan parquet default.date_dim (19)
+      :                 +- Scan parquet spark_catalog.default.date_dim (19)
       +- BroadcastExchange (41)
          +- * Project (40)
             +- * BroadcastHashJoin Inner BuildRight (39)
@@ -37,15 +37,15 @@ TakeOrderedAndProject (44)
                :     +- BroadcastExchange (31)
                :        +- * Filter (30)
                :           +- * ColumnarToRow (29)
-               :              +- Scan parquet default.store (28)
+               :              +- Scan parquet spark_catalog.default.store (28)
                +- BroadcastExchange (38)
                   +- * Project (37)
                      +- * Filter (36)
                         +- * ColumnarToRow (35)
-                           +- Scan parquet default.date_dim (34)
+                           +- Scan parquet spark_catalog.default.date_dim (34)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_store_sk#1, ss_sales_price#2, ss_sold_date_sk#3]
 Batched: true
 Location: InMemoryFileIndex []
@@ -60,7 +60,7 @@ Input [3]: [ss_store_sk#1, ss_sales_price#2, ss_sold_date_sk#3]
 Input [3]: [ss_store_sk#1, ss_sales_price#2, ss_sold_date_sk#3]
 Condition : isnotnull(ss_store_sk#1)
 
-(4) Scan parquet default.date_dim
+(4) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -105,7 +105,7 @@ Functions [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#6 = Sunday   ) THEN ss_s
 Aggregate Attributes [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#6 = Sunday   ) THEN ss_sales_price#2 END))#21, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Monday   ) THEN ss_sales_price#2 END))#22, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Tuesday  ) THEN ss_sales_price#2 END))#23, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Wednesday) THEN ss_sales_price#2 END))#24, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Thursday ) THEN ss_sales_price#2 END))#25, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Friday   ) THEN ss_sales_price#2 END))#26, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Saturday ) THEN ss_sales_price#2 END))#27]
 Results [9]: [d_week_seq#5, ss_store_sk#1, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Sunday   ) THEN ss_sales_price#2 END))#21,17,2) AS sun_sales#28, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Monday   ) THEN ss_sales_price#2 END))#22,17,2) AS mon_sales#29, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Tuesday  ) THEN ss_sales_price#2 END))#23,17,2) AS tue_sales#30, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Wednesday) THEN ss_sales_price#2 END))#24,17,2) AS wed_sales#31, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Thursday ) THEN ss_sales_price#2 END))#25,17,2) AS thu_sales#32, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Friday   ) THEN ss_sales_price#2 END))#26,17,2) AS fri_sales#33, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Saturday ) THEN ss_sales_price#2 END))#27,17,2) AS sat_sales#34]
 
-(13) Scan parquet default.store
+(13) Scan parquet spark_catalog.default.store
 Output [3]: [s_store_sk#35, s_store_id#36, s_store_name#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -132,7 +132,7 @@ Join condition: None
 Output [10]: [d_week_seq#5, sun_sales#28, mon_sales#29, tue_sales#30, wed_sales#31, thu_sales#32, fri_sales#33, sat_sales#34, s_store_id#36, s_store_name#37]
 Input [12]: [d_week_seq#5, ss_store_sk#1, sun_sales#28, mon_sales#29, tue_sales#30, wed_sales#31, thu_sales#32, fri_sales#33, sat_sales#34, s_store_sk#35, s_store_id#36, s_store_name#37]
 
-(19) Scan parquet default.date_dim
+(19) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_month_seq#38, d_week_seq#39]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -173,7 +173,7 @@ Functions [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#6 = Sunday   ) THEN ss_s
 Aggregate Attributes [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#6 = Sunday   ) THEN ss_sales_price#2 END))#21, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Monday   ) THEN ss_sales_price#2 END))#22, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Tuesday  ) THEN ss_sales_price#2 END))#23, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Wednesday) THEN ss_sales_price#2 END))#24, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Thursday ) THEN ss_sales_price#2 END))#25, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Friday   ) THEN ss_sales_price#2 END))#26, sum(UnscaledValue(CASE WHEN (d_day_name#6 = Saturday ) THEN ss_sales_price#2 END))#27]
 Results [9]: [d_week_seq#5, ss_store_sk#1, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Sunday   ) THEN ss_sales_price#2 END))#21,17,2) AS sun_sales#28, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Monday   ) THEN ss_sales_price#2 END))#22,17,2) AS mon_sales#29, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Tuesday  ) THEN ss_sales_price#2 END))#23,17,2) AS tue_sales#30, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Wednesday) THEN ss_sales_price#2 END))#24,17,2) AS wed_sales#31, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Thursday ) THEN ss_sales_price#2 END))#25,17,2) AS thu_sales#32, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Friday   ) THEN ss_sales_price#2 END))#26,17,2) AS fri_sales#33, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#6 = Saturday ) THEN ss_sales_price#2 END))#27,17,2) AS sat_sales#34]
 
-(28) Scan parquet default.store
+(28) Scan parquet spark_catalog.default.store
 Output [2]: [s_store_sk#57, s_store_id#58]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -200,7 +200,7 @@ Join condition: None
 Output [9]: [d_week_seq#5, sun_sales#28, mon_sales#29, tue_sales#30, wed_sales#31, thu_sales#32, fri_sales#33, sat_sales#34, s_store_id#58]
 Input [11]: [d_week_seq#5, ss_store_sk#1, sun_sales#28, mon_sales#29, tue_sales#30, wed_sales#31, thu_sales#32, fri_sales#33, sat_sales#34, s_store_sk#57, s_store_id#58]
 
-(34) Scan parquet default.date_dim
+(34) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_month_seq#59, d_week_seq#60]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

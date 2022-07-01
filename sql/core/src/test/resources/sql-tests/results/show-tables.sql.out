@@ -128,7 +128,8 @@ Schema: root
  |-- e: integer (nullable = true)
 
 
-showdb	show_t1	false	Database: showdb
+showdb	show_t1	false	Catalog: spark_catalog
+Database: showdb
 Table: show_t1
 Created Time [not included in comparison]
 Last Access [not included in comparison]
@@ -145,7 +146,8 @@ Schema: root
  |-- d: string (nullable = true)
 
 
-showdb	show_t2	false	Database: showdb
+showdb	show_t2	false	Catalog: spark_catalog
+Database: showdb
 Table: show_t2
 Created Time [not included in comparison]
 Last Access [not included in comparison]
@@ -212,7 +214,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`showdb`.`show_t1`'
+Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`showdb`.`show_t1`'
 
 
 -- !query
@@ -221,7 +223,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(a='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-a is not a valid partition column in table `showdb`.`show_t1`.
+a is not a valid partition column in table `spark_catalog`.`showdb`.`show_t1`.
 
 
 -- !query

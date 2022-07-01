@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
@@ -253,7 +254,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         """.stripMargin)
 
       checkKeywordsExist(sql("describe function udtf_count"),
-        "Function: default.udtf_count",
+        s"Function: $SESSION_CATALOG_NAME.default.udtf_count",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
 
@@ -262,7 +263,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         Row(3) :: Row(3) :: Nil)
 
       checkKeywordsExist(sql("describe function udtf_count"),
-        "Function: default.udtf_count",
+        s"Function: $SESSION_CATALOG_NAME.default.udtf_count",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
     }
@@ -2105,7 +2106,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   test("Auto alias construction of get_json_object") {
     val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
     val expectedMsg = "Cannot create a table having a column whose name contains commas " +
-      "in Hive metastore. Table: `default`.`t`; Column: get_json_object(jstring, $.f1)"
+      s"in Hive metastore. Table: `$SESSION_CATALOG_NAME`.`default`.`t`; Column: " +
+      "get_json_object(jstring, $.f1)"
 
     withTable("t") {
       val e = intercept[AnalysisException] {
