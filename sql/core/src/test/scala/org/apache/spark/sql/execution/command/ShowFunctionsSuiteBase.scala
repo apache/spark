@@ -123,4 +123,46 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
         Seq("crc32i", "crc16j").map(testFun => Row(showFun("ns", testFun))))
     }
   }
+
+  private def isNotTempFunctions(): Boolean = {
+    catalogVersion != "V1" && !defaultUsing.contains("parquet")
+  }
+
+  test("show a function by its string name") {
+    assume(isNotTempFunctions())
+    val testFuns = Seq("crc32i", "crc16j")
+    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      funs.foreach(createFunction)
+      QueryTest.checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns 'crc32i'"),
+        Row(showFun("ns", "crc32i")) :: Nil)
+    }
+  }
+
+  test("show functions matched to the '|' pattern") {
+    assume(isNotTempFunctions())
+    val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
+    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      funs.foreach(createFunction)
+      QueryTest.checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date1900'"),
+        Seq("crc32i", "date1900").map(testFun => Row(showFun("ns", testFun))))
+      QueryTest.checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date*'"),
+        Seq("crc32i", "date1900", "Date1").map(testFun => Row(showFun("ns", testFun))))
+    }
+  }
+
+  test("show a function by its id") {
+    assume(isNotTempFunctions())
+    withNamespaceAndFun("ns", "crc32i") { (ns, fun) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      createFunction(fun)
+      QueryTest.checkAnswer(
+        sql(s"SHOW USER FUNCTIONS $fun"),
+        Row(showFun("ns", "crc32i")) :: Nil)
+    }
+  }
 }
