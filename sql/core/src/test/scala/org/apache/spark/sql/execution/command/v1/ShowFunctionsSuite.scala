@@ -35,14 +35,6 @@ import org.apache.spark.sql.execution.command
 trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
   with command.TestsV1AndV2Commands {
 
-  test("show a function in the USER name space") {
-    withNamespaceAndFun("ns", "logiii") { (ns, f) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").count() === 0)
-      createFunction(f)
-      checkAnswer(sql(s"SHOW USER FUNCTIONS IN $ns"), Row(showFun("ns", "logiii")))
-    }
-  }
-
   test("show functions among both user and system defined functions") {
     withNamespaceAndFun("ns", "current_datei") { (ns, f) =>
       val allFuns = sql(s"SHOW ALL FUNCTIONS IN $ns").collect()

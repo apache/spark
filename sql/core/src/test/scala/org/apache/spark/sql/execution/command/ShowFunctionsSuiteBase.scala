@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.util.Locale
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.util.Utils
 
 /**
@@ -77,6 +77,16 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       createFunction(f)
       assert(sql(s"SHOW FUNCTIONS IN $ns").count() - totalFuns === 1)
       assert(!sql(s"SHOW FUNCTIONS IN $ns").filter("contains(function, 'iiilog')").isEmpty)
+    }
+  }
+
+  test("show a function in the USER name space") {
+    withNamespaceAndFun("ns", "logiii") { (ns, f) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").count() === 0)
+      createFunction(f)
+      QueryTest.checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns"),
+        Row(showFun("ns", "logiii")) :: Nil)
     }
   }
 
