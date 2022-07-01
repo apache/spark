@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
@@ -305,22 +305,9 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("3.3.0")
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
-      case min: Min =>
-        compileExpression(min.column).map(v => s"MIN($v)")
-      case max: Max =>
-        compileExpression(max.column).map(v => s"MAX($v)")
-      case count: Count =>
-        val distinct = if (count.isDistinct) "DISTINCT " else ""
-        compileExpression(count.column).map(v => s"COUNT($distinct$v)")
-      case sum: Sum =>
-        val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        compileExpression(sum.column).map(v => s"SUM($distinct$v)")
-      case _: CountStar =>
-        Some("COUNT(*)")
-      case avg: Avg =>
-        val distinct = if (avg.isDistinct) "DISTINCT " else ""
-        compileExpression(avg.column).map(v => s"AVG($distinct$v)")
-      case _ => None
+      case f: GeneralAggregateFunc if isSupportedFunction(f.name()) =>
+        compileExpression(f)
+      case _ => compileExpression(aggFunction)
     }
   }
 

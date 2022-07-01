@@ -20,9 +20,11 @@ package org.apache.spark.sql.jdbc
 import java.sql.SQLException
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -53,28 +55,38 @@ private object MsSqlServerDialect extends JdbcDialect {
   // scalastyle:off line.size.limit
   // See https://docs.microsoft.com/en-us/sql/t-sql/functions/aggregate-functions-transact-sql?view=sql-server-ver15
   // scalastyle:on line.size.limit
-  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    super.compileAggregate(aggFunction).orElse(
-      aggFunction match {
-        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VARP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDEVP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDEV($distinct${f.children().head})")
-        case _ => None
+  private val supportedAggregateFunctions = Set("VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
+
+  class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
+    override def visitAggregateFunction(
+         funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
+      funcName match {
+        case "VAR_POP" =>
+          super.visitAggregateFunction("VARP", isDistinct, inputs)
+        case "VAR_SAMP" =>
+          super.visitAggregateFunction("VAR", isDistinct, inputs)
+        case "STDDEV_POP" =>
+          super.visitAggregateFunction("STDEVP", isDistinct, inputs)
+        case "STDDEV_SAMP" =>
+          super.visitAggregateFunction("STDEV", isDistinct, inputs)
+        case _ => super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
-    )
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val msSqlServerSQLBuilder = new MsSqlServerSQLBuilder()
+    try {
+      Some(msSqlServerSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
   }
 
   override def getCatalystType(

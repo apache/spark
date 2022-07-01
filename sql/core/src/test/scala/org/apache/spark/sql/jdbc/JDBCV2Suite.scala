@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLim
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, UserDefinedAggregateFunc}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
@@ -66,9 +65,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         canonicalName match {
           case "h2.iavg" =>
             if (isDistinct) {
-              s"$funcName(DISTINCT ${inputs.mkString(", ")})"
+              s"AVG(DISTINCT ${inputs.mkString(", ")})"
             } else {
-              s"$funcName(${inputs.mkString(", ")})"
+              s"AVG(${inputs.mkString(", ")})"
             }
           case _ =>
             super.visitUserDefinedAggregateFunction(funcName, canonicalName, isDistinct, inputs)
@@ -85,18 +84,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           logWarning("Error occurs while compiling V2 expression", e)
           None
       }
-    }
-
-    override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-      super.compileAggregate(aggFunction).orElse(
-        aggFunction match {
-          case f: UserDefinedAggregateFunc if f.name() == "iavg" =>
-            assert(f.children().length == 1)
-            val distinct = if (f.isDistinct) "DISTINCT " else ""
-            compileExpression(f.children().head).map(v => s"AVG($distinct$v)")
-          case _ => None
-        }
-      )
     }
 
     override def functions: Seq[(String, UnboundFunction)] = H2Dialect.functions
