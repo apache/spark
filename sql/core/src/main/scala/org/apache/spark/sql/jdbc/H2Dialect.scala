@@ -40,9 +40,7 @@ private[sql] object H2Dialect extends JdbcDialect {
     Set("ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LOG", "LOG10", "LN", "EXP",
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
-      "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "SECOND", "MINUTE",
-      "HOUR", "MONTH", "QUARTER", "YEAR", "DAY", "DOY", "DAY_OF_WEEK", "YEAR_OF_WEEK",
-      "WEEK")
+      "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)

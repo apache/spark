@@ -35,7 +35,7 @@ import java.io.Serializable;
  *  <li> <code>YEAR</code> Since 3.4.0 </li>
  *  <li> <code>DAY_OF_WEEK</code> Since 3.4.0 </li>
  *  <li> <code>DAY</code> Since 3.4.0 </li>
- *  <li> <code>DOY</code> Since 3.4.0 </li>
+ *  <li> <code>DAY_OF_YEAR</code> Since 3.4.0 </li>
  *  <li> <code>WEEK</code> Since 3.4.0 </li>
  *  <li> <code>YEAR_OF_WEEK</code> Since 3.4.0 </li>
  * </ol>

@@ -19,9 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
-
 import scala.util.control.NonFatal
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -31,9 +29,10 @@ import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, UserDefinedAggregateFunc}
+import org.apache.spark.sql.execution.SimpleMode
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
+import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when, log => logarithm}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -210,7 +209,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String*): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
-        checkKeywordsExistsInExplain(df, expectedPlanFragment: _*)
+        checkKeywordsExistsInExplain(df, SimpleMode, expectedPlanFragment: _*)
     }
   }
 
@@ -1047,56 +1046,72 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
         checkFiltersRemoved(df7)
         val expectedPlanFragment7 =
-          "PushedFilters: [DATE1 IS NOT NULL, EXTRACT(DOY FROM DATE1) > 100, " +
-            "EXTRACT(DAY FROM DATE1) > 10]"
+          "PushedFilters: [DATE1 IS NOT NULL, EXTRACT(DAY_OF_YEAR FROM DATE1) > 100, " +
+          "EXTRACT(DAY FROM DATE1) > 10]"
         checkPushedInfo(df7, expectedPlanFragment7)
         checkAnswer(df7, Seq(Row("amy"), Row("alex")))
 
         val df8 = sql("SELECT name FROM h2.test.datetime WHERE " +
-          "year(date1) = 2022 AND quarter(date1) = 2 AND month(date1) = 5")
+          "year(date1) = 2022 AND quarter(date1) = 2")
         checkFiltersRemoved(df8)
         val expectedPlanFragment8 =
           "[DATE1 IS NOT NULL, EXTRACT(YEAR FROM DATE1) = 2022, " +
-            "EXTRACT(QUARTER FROM DATE1) = 2, EXTRACT(MON...,"
+          "EXTRACT(QUARTER FROM DATE1) = 2]"
         checkPushedInfo(df8, expectedPlanFragment8)
         checkAnswer(df8, Seq(Row("amy"), Row("alex")))
 
         val df9 = sql("SELECT name FROM h2.test.datetime WHERE " +
-          "hour(time1) = 0 AND minute(time1) = 0 AND second(time1) = 0")
+          "second(time1) = 0 AND month(date1) = 5")
         checkFiltersRemoved(df9)
         val expectedPlanFragment9 =
-          "PushedFilters: [TIME1 IS NOT NULL, EXTRACT(HOUR FROM TIME1) = 0, " +
-            "EXTRACT(MINUTE FROM TIME1) = 0, EXTRACT(SECOND ..."
+          "PushedFilters: [TIME1 IS NOT NULL, DATE1 IS NOT NULL, EXTRACT(SECOND FROM TIME1) = 0, " +
+          "EXTRACT(MONTH FROM DATE1) ..."
         checkPushedInfo(df9, expectedPlanFragment9)
         checkAnswer(df9, Seq(Row("amy"), Row("alex")))
 
         val df10 = sql("SELECT name FROM h2.test.datetime WHERE " +
-          "extract(WEEk from date1) > 10 AND extract(YEAROFWEEK from date1) = 2022")
+          "hour(time1) = 0 AND minute(time1) = 0")
         checkFiltersRemoved(df10)
         val expectedPlanFragment10 =
+          "PushedFilters: [TIME1 IS NOT NULL, EXTRACT(HOUR FROM TIME1) = 0, " +
+            "EXTRACT(MINUTE FROM TIME1) = 0]"
+        checkPushedInfo(df10, expectedPlanFragment10)
+        checkAnswer(df10, Seq(Row("amy"), Row("alex")))
+
+        val df11 = sql("SELECT name FROM h2.test.datetime WHERE " +
+          "extract(WEEk from date1) > 10 AND extract(YEAROFWEEK from date1) = 2022")
+        checkFiltersRemoved(df11)
+        val expectedPlanFragment11 =
           "PushedFilters: [DATE1 IS NOT NULL, EXTRACT(WEEK FROM DATE1) > 10, " +
             "EXTRACT(YEAR_OF_WEEK FROM DATE1) = 2022]"
-        checkPushedInfo(df10, expectedPlanFragment10)
-        checkAnswer(df10, Seq(Row("alex"), Row("amy")))
+        checkPushedInfo(df11, expectedPlanFragment11)
+        checkAnswer(df11, Seq(Row("alex"), Row("amy")))
 
         // H2 does not support
-        val df11 = sql("SELECT name FROM h2.test.datetime WHERE " +
+        val df12 = sql("SELECT name FROM h2.test.datetime WHERE " +
           "trunc(date1, 'week') = date'2022-05-16' AND date_add(date1, 1) = date'2022-05-20' " +
           "AND datediff(date1, '2022-05-10') > 0")
-        checkFiltersRemoved(df11, false)
-        val expectedPlanFragment11 =
-          "PushedFilters: [DATE1 IS NOT NULL]"
-        checkPushedInfo(df11, expectedPlanFragment11)
-        checkAnswer(df11, Seq(Row("amy")))
-
-        val df12 = sql("SELECT name FROM h2.test.datetime WHERE " +
-          "weekday(date1) = 2 AND dayofweek(date1) = 4")
-        checkFiltersRemoved(df12)
+        checkFiltersRemoved(df12, false)
         val expectedPlanFragment12 =
-          "PushedFilters: [DATE1 IS NOT NULL, (EXTRACT(DAY_OF_WEEK FROM DATE1) - 1) = 2, " +
-          "((EXTRACT(DAY_OF_WEEK FROM DATE1) ..."
+          "PushedFilters: [DATE1 IS NOT NULL]"
         checkPushedInfo(df12, expectedPlanFragment12)
-        checkAnswer(df12, Seq(Row("alex")))
+        checkAnswer(df12, Seq(Row("amy")))
+
+        val df13 = sql("SELECT name FROM h2.test.datetime WHERE " +
+          "weekday(date1) = 2")
+        checkFiltersRemoved(df13)
+        val expectedPlanFragment13 =
+          "PushedFilters: [DATE1 IS NOT NULL, (EXTRACT(DAY_OF_WEEK FROM DATE1) - 1) = 2]"
+        checkPushedInfo(df13, expectedPlanFragment13)
+        checkAnswer(df13, Seq(Row("alex")))
+
+        val df14 = sql("SELECT name FROM h2.test.datetime WHERE " +
+          "dayofweek(date1) = 4")
+        checkFiltersRemoved(df14)
+        val expectedPlanFragment14 =
+          "PushedFilters: [DATE1 IS NOT NULL, ((EXTRACT(DAY_OF_WEEK FROM DATE1) % 7) + 1) = 4]"
+        checkPushedInfo(df14, expectedPlanFragment14)
+        checkAnswer(df14, Seq(Row("alex")))
       }
     }
   }
