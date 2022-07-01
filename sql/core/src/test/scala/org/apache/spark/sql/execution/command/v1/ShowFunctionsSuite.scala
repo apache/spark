@@ -39,6 +39,7 @@ trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
  */
 class ShowTempFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
+  override protected def isTempFunctions(): Boolean = true
 
   override protected def createFunction(name: String): Unit = {
     spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)

@@ -42,6 +42,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   protected def createFunction(name: String): Unit = {}
   protected def dropFunction(name: String): Unit = {}
   protected def showFun(ns: String, name: String): String = s"$ns.$name".toLowerCase(Locale.ROOT)
+  protected def isTempFunctions(): Boolean = false
 
   /**
    * Drops function `funName` after calling `f`.
@@ -124,12 +125,8 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  private def isNotTempFunctions(): Boolean = {
-    catalogVersion != "V1" && !defaultUsing.contains("parquet")
-  }
-
   test("show a function by its string name") {
-    assume(isNotTempFunctions())
+    assume(!isTempFunctions())
     val testFuns = Seq("crc32i", "crc16j")
     withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
       assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
@@ -141,7 +138,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("show functions matched to the '|' pattern") {
-    assume(isNotTempFunctions())
+    assume(!isTempFunctions())
     val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
     withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
       assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
@@ -156,7 +153,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("show a function by its id") {
-    assume(isNotTempFunctions())
+    assume(!isTempFunctions())
     withNamespaceAndFun("ns", "crc32i") { (ns, fun) =>
       assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
       createFunction(fun)
