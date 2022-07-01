@@ -161,25 +161,32 @@ class PruneFiltersSuite extends PlanTest {
     }
   }
 
-  test("Pruning condition with rand") {
+  test("Pruning filter conditions with rand") {
     val tr = LocalRelation($"a".int, $"b".int, $"c".int)
-    val correctAnswer = tr.analyze
+    val trueFilter = tr.where(booleanToLiteral(true))
+    val falseFilter = tr.where(booleanToLiteral(false))
+    val literal10d = doubleToLiteral(10d)
+    val rand5 = rand(5)
 
-    val queryWithUselessFilter1 = tr.where(doubleToLiteral(10d) > rand(5))
-    val optimized1 = Optimize.execute(queryWithUselessFilter1.analyze)
-    comparePlans(optimized1, correctAnswer)
+    Seq(
+      literal10d > rand5,
+      literal10d >= rand5,
+      rand5 < literal10d,
+      rand5 <= literal10d).foreach { condition =>
+      val queryWithUselessFilter = tr.where(condition)
+      val optimized = Optimize.execute(queryWithUselessFilter.analyze)
+      comparePlans(optimized, trueFilter)
+    }
 
-    val queryWithUselessFilter2 = tr.where(doubleToLiteral(10d) >= rand(5))
-    val optimized2 = Optimize.execute(queryWithUselessFilter2.analyze)
-    comparePlans(optimized2, correctAnswer)
-
-    val queryWithUselessFilter3 = tr.where(rand(5) < 10d)
-    val optimized3 = Optimize.execute(queryWithUselessFilter3.analyze)
-    comparePlans(optimized3, correctAnswer)
-
-    val queryWithUselessFilter4 = tr.where(rand(5) <= 10d)
-    val optimized4 = Optimize.execute(queryWithUselessFilter4.analyze)
-    comparePlans(optimized4, correctAnswer)
+    Seq(
+      literal10d <= rand5,
+      literal10d < rand5,
+      rand5 >= literal10d,
+      rand5 > literal10d).foreach { condition =>
+      val queryWithUselessFilter = tr.where(condition)
+      val optimized = Optimize.execute(queryWithUselessFilter.analyze)
+      comparePlans(optimized, falseFilter)
+    }
   }
 
   test("SPARK-35273: CombineFilters support non-deterministic expressions") {
