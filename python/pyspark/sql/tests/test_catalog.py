@@ -176,8 +176,6 @@ class CatalogTests(ReusedSQLTestCase):
                     )
 
     def test_list_functions(self):
-        from pyspark.sql.catalog import Function
-
         spark = self.spark
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
