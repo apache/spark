@@ -93,10 +93,14 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("show functions in the SYSTEM name space") {
     withNamespaceAndFun("ns", "date_addi") { (ns, f) =>
-      val systemFuns = sql(s"SHOW SYSTEM FUNCTIONS IN $ns").count()
-      assert(systemFuns > 0)
+      val systemFuns = sql(s"SHOW SYSTEM FUNCTIONS IN $ns")
+      assert(systemFuns.count() > 0)
       createFunction(f)
-      assert(sql(s"SHOW SYSTEM FUNCTIONS IN $ns").count() === systemFuns)
+      assert(sql(s"SHOW SYSTEM FUNCTIONS IN $ns").count() === systemFuns.count())
+      // Built-in operators
+      assert(!systemFuns.filter("function='case'").isEmpty)
+      // Built-in functions
+      assert(!systemFuns.filter("function='substring'").isEmpty)
     }
   }
 

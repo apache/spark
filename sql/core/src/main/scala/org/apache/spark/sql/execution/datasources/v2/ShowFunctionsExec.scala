@@ -40,7 +40,12 @@ case class ShowFunctionsExec(
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val systemFunctions = if (systemScope) {
-        FunctionRegistry.builtinOperators.keys.toSeq
+      FunctionRegistry.functionSet.map(_.unquotedString) ++
+      // Hard code "<>", "!=", "between", "case", and "||"
+      // for now as there is no corresponding functions.
+      // "<>", "!=", "between", "case", and "||" is system functions,
+      // only show when systemScope=true
+      FunctionRegistry.builtinOperators.keys.toSeq
     } else Seq.empty
     val userFunctions = if (userScope) {
       catalog.listFunctions(namespace.toArray).map(_.name()).toSeq
