@@ -193,7 +193,9 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertTrue("current_database" in functions)
             self.assertEqual(functions["+"].name, "+")
             self.assertEqual(functions["+"].description, None)
-            self.assertEqual(functions["+"].className, "org.apache.spark.sql.catalyst.expressions.Add")
+            self.assertEqual(
+                functions["+"].className, "org.apache.spark.sql.catalyst.expressions.Add"
+            )
             self.assertTrue(functions["+"].isTemporary)
             self.assertEqual(functions, functionsDefault)
 

@@ -205,7 +205,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       CatalogImpl.makeDataset(functions, sparkSession)
     } else {
       val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
-      val functions = collection.mutable.ArrayBuffer.empty[Function]
+      val functions = collection.mutable.ArrayBuilder.make[Function]
 
       // built-in functions
       val plan0 = ShowFunctions(UnresolvedNamespace(ident),
@@ -215,7 +215,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         // require the input identifier only contains the name, otherwise, built-in functions
         // will be skipped.
         val name = row.getString(0)
-        functions.append(makeFunction(Seq(name)))
+        functions += makeFunction(Seq(name))
       }
 
       // user functions
@@ -224,10 +224,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       sparkSession.sessionState.executePlan(plan1).toRdd.collect().foreach { row =>
         // `row.getString(0)` maybe `db.function`, here only use the function name.
         val name = row.getString(0).split("\\.").last
-        functions.append(makeFunction(ident :+ name))
+        functions += makeFunction(ident :+ name)
       }
 
-      CatalogImpl.makeDataset(functions, sparkSession)
+      CatalogImpl.makeDataset(functions.result(), sparkSession)
     }
   }
 
