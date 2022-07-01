@@ -96,9 +96,6 @@ input string does not match the given number format.
 * The `to_char` function accepts an input decimal and a format string argument. It requires that
 the input decimal matches the provided format and raises an error otherwise. The function then
 returns the corresponding string value.
-* The `try_to_char` function accepts an input decimal and a format string argument. It works the
-same as the `to_char` function except that it returns NULL instead of raising an error if the
-input decimal does not match the given number format.
 * All functions will fail if the given format string is invalid.
 
 ### Examples
@@ -173,15 +170,15 @@ Note that the format string used in most of these examples expects:
 
 > SELECT to_char(decimal(12454), '99,999');
   "12,454"
-```
 
-#### The `try_to_char` function:
+-- digit sequence with a larger size leads to '#' sequence.
+> SELECT to_char(decimal(78.12), '$9.99');
+  "$#.##"
 
-```sql
-> SELECT try_to_char(decimal(78.12), '$99.99');
-  "$78.12"
+-- 'S' can be at the end.
 > SELECT try_to_char(decimal(-12454.8), '99,999.9S');
   "12,454.8-"
+
 > SELECT try_to_char(decimal(12454.8), 'L99,999.9');
   Error: cannot resolve 'try_to_char(Decimal(12454.8), 'L99,999.9')' due to data type mismatch:
   Unexpected character 'L' found in the format string 'L99,999.9'; the structure of the format
