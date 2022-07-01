@@ -16,19 +16,19 @@ TakeOrderedAndProject (27)
                               :     :  +- * BroadcastHashJoin Inner BuildRight (8)
                               :     :     :- * Filter (3)
                               :     :     :  +- * ColumnarToRow (2)
-                              :     :     :     +- Scan parquet default.item (1)
+                              :     :     :     +- Scan parquet spark_catalog.default.item (1)
                               :     :     +- BroadcastExchange (7)
                               :     :        +- * Filter (6)
                               :     :           +- * ColumnarToRow (5)
-                              :     :              +- Scan parquet default.store_sales (4)
+                              :     :              +- Scan parquet spark_catalog.default.store_sales (4)
                               :     +- ReusedExchange (10)
                               +- BroadcastExchange (16)
                                  +- * Filter (15)
                                     +- * ColumnarToRow (14)
-                                       +- Scan parquet default.store (13)
+                                       +- Scan parquet spark_catalog.default.store (13)
 
 
-(1) Scan parquet default.item
+(1) Scan parquet spark_catalog.default.item
 Output [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -42,7 +42,7 @@ Input [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 Input [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 Condition : (((i_category#4 IN (Books                                             ,Electronics                                       ,Sports                                            ) AND i_class#3 IN (computers                                         ,stereo                                            ,football                                          )) OR (i_category#4 IN (Men                                               ,Jewelry                                           ,Women                                             ) AND i_class#3 IN (shirts                                            ,birdal                                            ,dresses                                           ))) AND isnotnull(i_item_sk#1))
 
-(4) Scan parquet default.store_sales
+(4) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_item_sk#5, ss_store_sk#6, ss_sales_price#7, ss_sold_date_sk#8]
 Batched: true
 Location: InMemoryFileIndex []
@@ -82,7 +82,7 @@ Join condition: None
 Output [6]: [i_brand#2, i_class#3, i_category#4, ss_store_sk#6, ss_sales_price#7, d_moy#11]
 Input [8]: [i_brand#2, i_class#3, i_category#4, ss_store_sk#6, ss_sales_price#7, ss_sold_date_sk#8, d_date_sk#10, d_moy#11]
 
-(13) Scan parquet default.store
+(13) Scan parquet spark_catalog.default.store
 Output [3]: [s_store_sk#12, s_store_name#13, s_company_name#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -158,10 +158,10 @@ BroadcastExchange (32)
 +- * Project (31)
    +- * Filter (30)
       +- * ColumnarToRow (29)
-         +- Scan parquet default.date_dim (28)
+         +- Scan parquet spark_catalog.default.date_dim (28)
 
 
-(28) Scan parquet default.date_dim
+(28) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#10, d_year#21, d_moy#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

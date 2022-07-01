@@ -57,8 +57,8 @@ Project [c#x], Statistics(sizeInBytes=1.0 B, rowCount=0)
    :     +- Aggregate [sum(b#x) AS csales#xL], Statistics(sizeInBytes=16.0 B, rowCount=1)
    :        +- Project [b#x], Statistics(sizeInBytes=1.0 B, rowCount=0)
    :           +- Filter (isnotnull(a#x) AND (a#x < 100)), Statistics(sizeInBytes=1.0 B, rowCount=0)
-   :              +- Relation default.explain_temp1[a#x,b#x] parquet, Statistics(sizeInBytes=1.0 B, rowCount=0)
-   +- Relation default.explain_temp2[c#x,d#x] parquet, Statistics(sizeInBytes=1.0 B, rowCount=0)
+   :              +- Relation spark_catalog.default.explain_temp1[a#x,b#x] parquet, Statistics(sizeInBytes=1.0 B, rowCount=0)
+   +- Relation spark_catalog.default.explain_temp2[c#x,d#x] parquet, Statistics(sizeInBytes=1.0 B, rowCount=0)
 
 == Physical Plan ==
 AdaptiveSparkPlan isFinalPlan=false
@@ -73,8 +73,8 @@ AdaptiveSparkPlan isFinalPlan=false
       :                    +- HashAggregate(keys=[], functions=[partial_sum(b#x)], output=[sum#xL])
       :                       +- Project [b#x]
       :                          +- Filter (isnotnull(a#x) AND (a#x < 100))
-      :                             +- FileScan parquet default.explain_temp1[a#x,b#x] Batched: true, DataFilters: [isnotnull(a#x), (a#x < 100)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp1], PartitionFilters: [], PushedFilters: [IsNotNull(a), LessThan(a,100)], ReadSchema: struct<a:int,b:int>
-      +- FileScan parquet default.explain_temp2[c#x,d#x] Batched: true, DataFilters: [isnotnull(d#x)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp2], PartitionFilters: [], PushedFilters: [IsNotNull(d)], ReadSchema: struct<c:int,d:int>
+      :                             +- FileScan parquet spark_catalog.default.explain_temp1[a#x,b#x] Batched: true, DataFilters: [isnotnull(a#x), (a#x < 100)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp1], PartitionFilters: [], PushedFilters: [IsNotNull(a), LessThan(a,100)], ReadSchema: struct<a:int,b:int>
+      +- FileScan parquet spark_catalog.default.explain_temp2[c#x,d#x] Batched: true, DataFilters: [isnotnull(d#x)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp2], PartitionFilters: [], PushedFilters: [IsNotNull(d)], ReadSchema: struct<c:int,d:int>
 
 
 -- !query

@@ -35,14 +35,14 @@ TakeOrderedAndProject [customer_preferred_cust_flag]
                                                                     Filter [ss_customer_sk]
                                                                       ColumnarToRow
                                                                         InputAdapter
-                                                                          Scan parquet default.store_sales [ss_customer_sk,ss_ext_discount_amt,ss_ext_list_price,ss_sold_date_sk]
+                                                                          Scan parquet spark_catalog.default.store_sales [ss_customer_sk,ss_ext_discount_amt,ss_ext_list_price,ss_sold_date_sk]
                                                                             SubqueryBroadcast [d_date_sk] #1
                                                                               BroadcastExchange #4
                                                                                 WholeStageCodegen (1)
                                                                                   Filter [d_year,d_date_sk]
                                                                                     ColumnarToRow
                                                                                       InputAdapter
-                                                                                        Scan parquet default.date_dim [d_date_sk,d_year]
+                                                                                        Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
                                                                     InputAdapter
                                                                       ReusedExchange [d_date_sk,d_year] #4
                                                     InputAdapter
@@ -54,7 +54,7 @@ TakeOrderedAndProject [customer_preferred_cust_flag]
                                                                 Filter [c_customer_sk,c_customer_id]
                                                                   ColumnarToRow
                                                                     InputAdapter
-                                                                      Scan parquet default.customer [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address]
+                                                                      Scan parquet spark_catalog.default.customer [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address]
                         InputAdapter
                           WholeStageCodegen (16)
                             Sort [customer_id]
@@ -79,14 +79,14 @@ TakeOrderedAndProject [customer_preferred_cust_flag]
                                                                   Filter [ss_customer_sk]
                                                                     ColumnarToRow
                                                                       InputAdapter
-                                                                        Scan parquet default.store_sales [ss_customer_sk,ss_ext_discount_amt,ss_ext_list_price,ss_sold_date_sk]
+                                                                        Scan parquet spark_catalog.default.store_sales [ss_customer_sk,ss_ext_discount_amt,ss_ext_list_price,ss_sold_date_sk]
                                                                           SubqueryBroadcast [d_date_sk] #2
                                                                             BroadcastExchange #9
                                                                               WholeStageCodegen (1)
                                                                                 Filter [d_year,d_date_sk]
                                                                                   ColumnarToRow
                                                                                     InputAdapter
-                                                                                      Scan parquet default.date_dim [d_date_sk,d_year]
+                                                                                      Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
                                                                   InputAdapter
                                                                     ReusedExchange [d_date_sk,d_year] #9
                                                   InputAdapter
@@ -119,7 +119,7 @@ TakeOrderedAndProject [customer_preferred_cust_flag]
                                                             Filter [ws_bill_customer_sk]
                                                               ColumnarToRow
                                                                 InputAdapter
-                                                                  Scan parquet default.web_sales [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_list_price,ws_sold_date_sk]
+                                                                  Scan parquet spark_catalog.default.web_sales [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_list_price,ws_sold_date_sk]
                                                                     ReusedSubquery [d_date_sk] #1
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk,d_year] #4
@@ -152,7 +152,7 @@ TakeOrderedAndProject [customer_preferred_cust_flag]
                                                   Filter [ws_bill_customer_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.web_sales [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_list_price,ws_sold_date_sk]
+                                                        Scan parquet spark_catalog.default.web_sales [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_list_price,ws_sold_date_sk]
                                                           ReusedSubquery [d_date_sk] #2
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk,d_year] #9

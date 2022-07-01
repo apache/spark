@@ -393,6 +393,7 @@ case class CatalogTable(
       if (lastAccessTime <= 0) "UNKNOWN" else new Date(lastAccessTime).toString
     }
 
+    identifier.catalog.foreach(map.put("Catalog", _))
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
     if (owner != null && owner.nonEmpty) map.put("Owner", owner)

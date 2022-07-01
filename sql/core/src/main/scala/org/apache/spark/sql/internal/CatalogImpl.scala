@@ -26,10 +26,10 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowTables, SubqueryAlias, TableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowNamespaces, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, TransformHelper}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, MultipartIdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -74,7 +74,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of databases available across all sessions.
    */
   override def listDatabases(): Dataset[Database] = {
-    val databases = sessionCatalog.listDatabases().map(makeDatabase)
+    val catalog = currentCatalog()
+    val plan = ShowNamespaces(UnresolvedNamespace(Seq(catalog)), None)
+    val databases = sparkSession.sessionState.executePlan(plan).toRdd.collect()
+      .map(row => catalog + "." + row.getString(0))
+      .map(getDatabase)
     CatalogImpl.makeDataset(databases, sparkSession)
   }
 
@@ -297,7 +301,36 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
-    makeDatabase(dbName)
+    // `dbName` could be either a single database name (behavior in Spark 3.3 and prior) or a
+    // qualified namespace with catalog name. To maintain backwards compatibility, we first assume
+    // it's a single database name and return the database from sessionCatalog if it exists.
+    // Otherwise we try 3-part name parsing and locate the database. If the parased identifier
+    // contains both catalog name and database name, we then search the database in the catalog.
+    if (sessionCatalog.databaseExists(dbName) || sessionCatalog.isGlobalTempViewDB(dbName)) {
+      makeDatabase(dbName)
+    } else {
+      val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+      val plan = UnresolvedNamespace(ident)
+      val resolved = sparkSession.sessionState.executePlan(plan).analyzed
+      resolved match {
+        case ResolvedNamespace(catalog: SupportsNamespaces, namespace) =>
+          val metadata = catalog.loadNamespaceMetadata(namespace.toArray)
+          new Database(
+            name = namespace.quoted,
+            catalog = catalog.name,
+            description = metadata.get(SupportsNamespaces.PROP_COMMENT),
+            locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION))
+        // similar to databaseExists: if the catalog doesn't support namespaces, we assume it's an
+        // implicit namespace, which exists but has no metadata.
+        case ResolvedNamespace(catalog: CatalogPlugin, namespace) =>
+          new Database(
+            name = namespace.quoted,
+            catalog = catalog.name,
+            description = null,
+            locationUri = null)
+        case _ => new Database(name = dbName, description = null, locationUri = null)
+      }
+    }
   }
 
   /**

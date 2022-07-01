@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import java.util.Locale
+
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.hive.execution.UDFToListInt
 
@@ -25,6 +28,8 @@ import org.apache.spark.sql.hive.execution.UDFToListInt
  */
 class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
+  override protected def showFun(ns: String, name: String): String =
+    s"$SESSION_CATALOG_NAME.$ns.$name".toLowerCase(Locale.ROOT)
 
   override protected def createFunction(name: String): Unit = {
     sql(s"CREATE FUNCTION $name AS '${classOf[UDFToListInt].getName}'")
