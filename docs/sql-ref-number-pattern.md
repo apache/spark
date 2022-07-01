@@ -54,7 +54,7 @@ Each number format string can contain the following elements (case insensitive):
 
 - **`.`** or **`D`**
 
-  Specifies the position of the decimal point (optional, only allowed once).
+  Specifies the position of the decimal point. This character may only be specified once.
 
   When parsing, the input string does not need to include a decimal point.
 
@@ -75,7 +75,9 @@ Each number format string can contain the following elements (case insensitive):
 
 - **`MI`**
 
-  Specifies an optional `-` sign at the beginning or end, but no `+`.
+  Specifies the position of an optional '-' sign (no '+'). This character may only be specified once.
+
+  When formatting, it prints a space for positive values.
 
 - **`PR`**
 
@@ -92,17 +94,16 @@ returns the corresponding Decimal value.
 same as the `to_number` function except that it returns NULL instead of raising an error if the
 input string does not match the given number format.
 * The `to_char` function accepts an input decimal and a format string argument. It requires that
-  the input decimal matches the provided format and raises an error otherwise. The function then
-  returns the corresponding string value.
+the input decimal matches the provided format and raises an error otherwise. The function then
+returns the corresponding string value.
 * The `try_to_char` function accepts an input decimal and a format string argument. It works the
-  same as the `to_char` function except that it returns NULL instead of raising an error if the
-  input decimal does not match the given number format.
+same as the `to_char` function except that it returns NULL instead of raising an error if the
+input decimal does not match the given number format.
 
 ### Examples
 
 The following examples use the `to_number`, `try_to_number`, `to_char`, and `try_to_char` SQL
-functions which each accept an input string as the first argument and a format string as the second
-argument.
+functions.
 
 Note that the format string used in most of these examples expects:
 * an optional sign at the beginning,
@@ -111,7 +112,7 @@ Note that the format string used in most of these examples expects:
 * thousands separators,
 * up to two digits beyond the decimal point.
 
-#### For the `to_number` function:
+#### The `to_number` function
 
 ```sql
 -- The negative number with currency symbol maps to characters in the format string.
@@ -135,7 +136,7 @@ Note that the format string used in most of these examples expects:
  -1234
 ```
 
-#### For the `try_to_number` function:
+#### The `try_to_number` function:
 
 ```sql
 -- The negative number with currency symbol maps to characters in the format string.
@@ -159,7 +160,7 @@ Note that the format string used in most of these examples expects:
  -1234
 ```
 
-#### For the `to_char` function:
+#### The `to_char` function:
 
 ```sql
 > SELECT to_char(Decimal(454), '999');
@@ -170,7 +171,7 @@ Note that the format string used in most of these examples expects:
   "12,454"
 ```
 
-#### For the `try_to_char` function:
+#### The `try_to_char` function:
 
 ```sql
 > SELECT try_to_char(Decimal(78.12), '$99.99');
