@@ -109,4 +109,18 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
         allFuns :+ Row(showFun("ns", "current_datei")))
     }
   }
+
+  test("show functions matched to the wildcard pattern") {
+    val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
+    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+      funs.foreach(createFunction)
+      QueryTest.checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*'"),
+        testFuns.map(testFun => Row(showFun("ns", testFun))))
+      QueryTest.checkAnswer(
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*rc*'"),
+        Seq("crc32i", "crc16j").map(testFun => Row(showFun("ns", testFun))))
+    }
+  }
 }

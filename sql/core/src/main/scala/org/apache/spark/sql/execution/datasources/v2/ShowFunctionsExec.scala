@@ -40,14 +40,16 @@ case class ShowFunctionsExec(
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val systemFunctions = if (systemScope) {
-      StringUtils.filterPattern(
-        FunctionRegistry.builtinOperators.keys.toSeq, pattern.getOrElse("*"))
+        FunctionRegistry.builtinOperators.keys.toSeq
     } else Seq.empty
     val userFunctions = if (userScope) {
       catalog.listFunctions(namespace.toArray).map(_.name()).toSeq
     } else Seq.empty
+    val allFunctions =
+      StringUtils.filterPattern(userFunctions ++ systemFunctions, pattern.getOrElse("*"))
+      .sorted
 
-    (userFunctions ++ systemFunctions).sorted.foreach { fn =>
+    allFunctions.foreach { fn =>
       rows += toCatalystRow(fn)
     }
 

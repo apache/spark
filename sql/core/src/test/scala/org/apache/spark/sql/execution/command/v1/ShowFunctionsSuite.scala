@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v1
 
 import java.util.Locale
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 
 /**
@@ -33,22 +32,7 @@ import org.apache.spark.sql.execution.command
  *     `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
  */
 trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
-  with command.TestsV1AndV2Commands {
-
-  test("show functions matched to the wildcard pattern") {
-    val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
-    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      funs.foreach(createFunction)
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*'"),
-        testFuns.map(testFun => Row(showFun("ns", testFun))))
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*rc*'"),
-        Seq("crc32i", "crc16j").map(testFun => Row(showFun("ns", testFun))))
-    }
-  }
-}
+  with command.TestsV1AndV2Commands
 
 /**
  * The class contains tests for the `SHOW FUNCTIONS` command to check temporary functions.
