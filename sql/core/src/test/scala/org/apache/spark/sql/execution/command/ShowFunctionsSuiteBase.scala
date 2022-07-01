@@ -98,4 +98,15 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       assert(sql(s"SHOW SYSTEM FUNCTIONS IN $ns").count() === systemFuns)
     }
   }
+
+  test("show functions among both user and system defined functions") {
+    withNamespaceAndFun("ns", "current_datei") { (ns, f) =>
+      val allFuns = sql(s"SHOW ALL FUNCTIONS IN $ns").collect()
+      assert(allFuns.nonEmpty)
+      createFunction(f)
+      QueryTest.checkAnswer(
+        sql(s"SHOW ALL FUNCTIONS IN $ns"),
+        allFuns :+ Row(showFun("ns", "current_datei")))
+    }
+  }
 }
