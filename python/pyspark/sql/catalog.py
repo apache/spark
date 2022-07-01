@@ -36,6 +36,7 @@ class CatalogMetadata(NamedTuple):
 
 class Database(NamedTuple):
     name: str
+    catalog: Optional[str]
     description: Optional[str]
     locationUri: str
 
@@ -127,7 +128,11 @@ class Catalog:
 
     @since(2.0)
     def setCurrentDatabase(self, dbName: str) -> None:
-        """Sets the current default database in this session."""
+        """Sets the current default database in this session.
+
+        .. versionchanged:: 3.4
+           Allowed ``dbName`` to be qualified with catalog name.
+        """
         return self._jcatalog.setCurrentDatabase(dbName)
 
     @since(2.0)
@@ -139,10 +144,39 @@ class Catalog:
             jdb = iter.next()
             databases.append(
                 Database(
-                    name=jdb.name(), description=jdb.description(), locationUri=jdb.locationUri()
+                    name=jdb.name(),
+                    catalog=jdb.catalog(),
+                    description=jdb.description(),
+                    locationUri=jdb.locationUri(),
                 )
             )
         return databases
+
+    def getDatabase(self, dbName: str) -> Database:
+        """Get the database with the specified name.
+        This throws an AnalysisException when the database cannot be found.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        dbName : str
+             name of the database to check existence.
+
+        Examples
+        --------
+        >>> spark.catalog.getDatabase("default")
+        Database(name='default', catalog=None, description='default database', ...
+        >>> spark.catalog.getDatabase("spark_catalog.default")
+        Database(name='default', catalog='spark_catalog', description='default database', ...
+        """
+        jdb = self._jcatalog.getDatabase(dbName)
+        return Database(
+            name=jdb.name(),
+            catalog=jdb.catalog(),
+            description=jdb.description(),
+            locationUri=jdb.locationUri(),
+        )
 
     def databaseExists(self, dbName: str) -> bool:
         """Check if the database with the specified name exists.
@@ -309,14 +343,33 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        Parameters
+        ----------
+        tableName : str
+                    name of the table to check existence
+        dbName : str, optional
+                 name of the database to check table existence in.
+
+           .. deprecated:: 3.4.0
+
+        .. versionchanged:: 3.4
+           Allowed ``tableName`` to be qualified with catalog name when ``dbName`` is None.
+
          Notes
          -----
          the order of arguments here is different from that of its JVM counterpart
          because Python does not support method overloading.
         """
         if dbName is None:
-            dbName = self.currentDatabase()
-        iter = self._jcatalog.listColumns(dbName, tableName).toLocalIterator()
+            iter = self._jcatalog.listColumns(tableName).toLocalIterator()
+        else:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use tableExists(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
+            iter = self._jcatalog.listColumns(dbName, tableName).toLocalIterator()
+
         columns = []
         while iter.hasNext():
             jcolumn = iter.next()
@@ -590,7 +643,11 @@ class Catalog:
 
     @since(2.0)
     def refreshTable(self, tableName: str) -> None:
-        """Invalidates and refreshes all the cached data and metadata of the given table."""
+        """Invalidates and refreshes all the cached data and metadata of the given table.
+
+        .. versionchanged:: 3.4
+           Allowed ``tableName`` to be qualified with catalog name.
+        """
         self._jcatalog.refreshTable(tableName)
 
     @since("2.1.1")

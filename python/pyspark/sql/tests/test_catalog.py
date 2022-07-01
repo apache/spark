@@ -53,6 +53,14 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertTrue(spark.catalog.databaseExists("spark_catalog.some_db"))
             self.assertFalse(spark.catalog.databaseExists("spark_catalog.some_db2"))
 
+    def test_get_database(self):
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            db = spark.catalog.getDatabase("spark_catalog.some_db")
+            self.assertEqual(db.name, "some_db")
+            self.assertEqual(db.catalog, "spark_catalog")
+
     def test_list_tables(self):
         from pyspark.sql.catalog import Table
 
@@ -245,7 +253,9 @@ class CatalogTests(ReusedSQLTestCase):
                 spark.sql(
                     "CREATE TABLE some_db.tab2 (nickname STRING, tolerance FLOAT) USING parquet"
                 )
-                columns = sorted(spark.catalog.listColumns("tab1"), key=lambda c: c.name)
+                columns = sorted(
+                    spark.catalog.listColumns("spark_catalog.default.tab1"), key=lambda c: c.name
+                )
                 columnsDefault = sorted(
                     spark.catalog.listColumns("tab1", "default"), key=lambda c: c.name
                 )
