@@ -326,7 +326,7 @@ class Catalog:
         else:
             warnings.warn(
                 "`dbName` has been deprecated since Spark 3.4 and might be removed in "
-                "a future version. Use tableExists(`dbName.tableName`) instead.",
+                "a future version. Use functionExists(`dbName.tableName`) instead.",
                 FutureWarning,
             )
             return self._jcatalog.functionExists(self.currentDatabase(), functionName)
@@ -346,9 +346,9 @@ class Catalog:
         --------
         >>> func = spark.sql("CREATE FUNCTION my_func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
         >>> spark.catalog.getFunction("my_func1")
-        Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
+        Function(name='my_func1', catalog=None, namespace=['default'], ...
         >>> spark.catalog.getFunction("default.my_func1")
-        Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
+        Function(name='my_func1', catalog=None, namespace=['default'], ...
         >>> spark.catalog.getFunction("spark_catalog.default.my_func1")
         Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
         >>> spark.catalog.getFunction("my_func2")

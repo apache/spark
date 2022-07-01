@@ -918,8 +918,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val func1a = spark.catalog.getFunction("my_db1.my_func1")
     val func1b = spark.catalog.getFunction("spark_catalog.my_db1.my_func1")
     assert(func1a.name === func1b.name && func1a.namespace === func1b.namespace &&
-      func1a.catalog === func1b.catalog && func1a.className === func1b.className &&
-      func1a.isTemporary === func1b.isTemporary)
+      func1a.className === func1b.className && func1a.isTemporary === func1b.isTemporary)
+    assert(func1a.catalog === null && func1b.catalog === "spark_catalog")
     assert(func1a.description === null && func1b.description === "N/A.")
 
     val function: UnboundFunction = new UnboundFunction {

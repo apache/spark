@@ -191,17 +191,10 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertTrue("to_timestamp" in functions)
             self.assertTrue("to_unix_timestamp" in functions)
             self.assertTrue("current_database" in functions)
-            self.assertEqual(
-                functions["+"],
-                Function(
-                    name="+",
-                    catalog="spark_catalog",
-                    namespace=None,
-                    description=None,
-                    className="org.apache.spark.sql.catalyst.expressions.Add",
-                    isTemporary=True,
-                ),
-            )
+            self.assertEqual(functions["+"].name, "+")
+            self.assertEqual(functions["+"].description, None)
+            self.assertEqual(functions["+"].className, "org.apache.spark.sql.catalyst.expressions.Add")
+            self.assertTrue(functions["+"].isTemporary)
             self.assertEqual(functions, functionsDefault)
 
             with self.function("func1", "some_db.func2"):

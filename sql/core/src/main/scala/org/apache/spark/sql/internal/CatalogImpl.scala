@@ -199,39 +199,46 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // a qualified namespace with catalog name. We assume it's a single database name
     // and check if we can find the dbName in sessionCatalog. If so we listFunctions under
     // that database. Otherwise we try 3-part name parsing and locate the database.
-    if (sessionCatalog.databaseExists(dbName) || sessionCatalog.isGlobalTempViewDB(dbName)) {
+    if (sessionCatalog.databaseExists(dbName)) {
       val functions = sessionCatalog.listFunctions(dbName)
         .map { case (functIdent, _) => makeFunction(functIdent) }
       CatalogImpl.makeDataset(functions, sparkSession)
     } else {
       val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
-      val plan = ShowFunctions(UnresolvedNamespace(ident), true, true, None)
-      val results = sparkSession.sessionState.executePlan(plan).toRdd.collect()
-      val functions = results.map { row =>
-        val name = row.getString(0).split("\\.").last
-        makeFunction(ident :+ name)
+      val functions = collection.mutable.ArrayBuffer.empty[Function]
+
+      // built-in functions
+      val plan0 = ShowFunctions(UnresolvedNamespace(ident),
+        userScope = false, systemScope = true, None)
+      sparkSession.sessionState.executePlan(plan0).toRdd.collect().foreach { row =>
+        // `lookupBuiltinOrTempFunction` and `lookupBuiltinOrTempTableFunction` in Analyzer
+        // require the input identifier only contains the name, otherwise, built-in functions
+        // will be skipped.
+        val name = row.getString(0)
+        functions.append(makeFunction(Seq(name)))
       }
+
+      // user functions
+      val plan1 = ShowFunctions(UnresolvedNamespace(ident),
+        userScope = true, systemScope = false, None)
+      sparkSession.sessionState.executePlan(plan1).toRdd.collect().foreach { row =>
+        // `row.getString(0)` maybe `db.function`, here only use the function name.
+        val name = row.getString(0).split("\\.").last
+        functions.append(makeFunction(ident :+ name))
+      }
+
       CatalogImpl.makeDataset(functions, sparkSession)
     }
   }
 
   private def makeFunction(funcIdent: FunctionIdentifier): Function = {
-    val metadata = try {
-      Some(sessionCatalog.getFunctionMetadata(funcIdent))
-    } catch {
-      case NonFatal(_) => None
-    }
-    val qualifier = metadata.map(_.identifier.database)
-      .getOrElse(funcIdent.database).map(Array(_))
-      .orNull
-    val funcInfo = sessionCatalog.lookupFunctionInfo(funcIdent)
+    val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
     new Function(
-      name = funcInfo.getName,
-      catalog = CatalogManager.SESSION_CATALOG_NAME,
-      namespace = qualifier,
+      name = metadata.getName,
+      database = metadata.getDb,
       description = null, // for now, this is always undefined
-      className = funcInfo.getClassName,
-      isTemporary = funcInfo.getDb == null)
+      className = metadata.getClassName,
+      isTemporary = metadata.getDb == null)
   }
 
   private def makeFunction(ident: Seq[String]): Function = {
