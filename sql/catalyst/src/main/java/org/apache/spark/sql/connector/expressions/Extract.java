@@ -23,7 +23,7 @@ import java.io.Serializable;
 
 /**
  * Represent an extract function, which extracts and returns the value of a
- * and a source expression where the field should be extracted.
+ * specified datetime field from a datetime or interval value expression.
  * <p>
  * The currently supported fields names following the ISO standard:
  * <ol>
