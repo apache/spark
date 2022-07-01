@@ -853,7 +853,7 @@ Output: []
 Arguments: `spark_catalog`.`default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView, true
 
 (3) LogicalRelation
-Arguments: parquet, [key#x, val#x], `spark_catalog`.`default`.`explain_temp1`, false
+Arguments: parquet, [key#x, val#x], `spark_catalog`.`default`.`explain_temp1`[not included in comparison], false
 
 (4) SubqueryAlias
 Arguments: spark_catalog.default.explain_temp1
