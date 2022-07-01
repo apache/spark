@@ -561,7 +561,7 @@ class DataSourceV2SQLSuite
       val expected = StructField("id", LongType, nullable = false,
         new MetadataBuilder().putString(
           ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1")
-          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS bigint)")
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
           .build())
       assert(actual === expected,
         "Replaced table should have new schema with DEFAULT column metadata.")
