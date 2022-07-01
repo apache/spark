@@ -444,10 +444,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * function. This throws an `AnalysisException` when no `Function` can be found.
    */
   override def getFunction(functionName: String): Function = {
-    // calling `sqlParser.parseTableIdentifier` to parse tableName. If it contains only table name
-    // and optionally contains a database name(thus a TableIdentifier), then we look up the table in
-    // sessionCatalog. Otherwise we try `sqlParser.parseMultipartIdentifier` to have a sequence of
-    // string as the qualified identifier and resolve the table through SQL analyzer.
+    // calling `sqlParser.parseFunctionIdentifier` to parse functionName. If it contains only
+    // function name and optionally contains a database name(thus a FunctionIdentifier), then
+    // we look up the function in sessionCatalog.
+    // Otherwise we try `sqlParser.parseMultipartIdentifier` to have a sequence of string as
+    // the qualified identifier and resolve the function through SQL analyzer.
     try {
       val ident = sparkSession.sessionState.sqlParser.parseFunctionIdentifier(functionName)
       getFunction(ident.database.orNull, ident.funcName)
