@@ -290,17 +290,51 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(
                 ps.read_csv(fn, quotechar="Q"), pd.read_csv(fn, quotechar="Q"), almost=True
             )
+            self.assertRaisesRegex(
+                ValueError,
+                "Only length-1 quotechar characters supported",
+                lambda: ps.read_csv(fn, quotechar="").show(),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Only length-1 quotechar characters supported",
+                lambda: ps.read_csv(fn, quotechar=" ").show(),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Only length-1 quotechar characters supported",
+                lambda: ps.read_csv(fn, quotechar=1),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Only length-1 quotechar characters supported",
+                lambda: ps.read_csv(fn, quotechar=[1]),
+            )
 
     def test_read_csv_with_escapechar(self):
         with self.csv_file(self.e_escapeted_csv_text) as fn:
             self.assert_eq(
                 ps.read_csv(fn, escapechar="E"), pd.read_csv(fn, escapechar="E"), almost=True
             )
-
-            self.assert_eq(
-                ps.read_csv(fn, escapechar="ABC", escape="E"),
-                pd.read_csv(fn, escapechar="E"),
-                almost=True,
+            self.assertRaisesRegex(
+                ValueError,
+                "Only length-1 escapechar characters supported",
+                lambda: ps.read_csv(fn, escapechar="").show(),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Only length-1 escapechar characters supported",
+                lambda: ps.read_csv(fn, escapechar=" ").show(),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Only length-1 escapechar characters supported",
+                lambda: ps.read_csv(fn, escapechar=1),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Only length-1 escapechar characters supported",
+                lambda: ps.read_csv(fn, escapechar=[1]),
             )
 
     def test_to_csv(self):

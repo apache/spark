@@ -36,6 +36,7 @@ from collections.abc import Iterable
 from datetime import tzinfo
 from functools import reduce
 from io import BytesIO
+import inspect
 import json
 import warnings
 
@@ -326,16 +327,12 @@ def read_csv(
         else:
             raise ValueError("Unknown header argument {}".format(header))
 
-        if quotechar is not None:
+        if _check_1_char_parameter(quotechar):
             reader.option("quote", quotechar)
-        if escapechar is not None:
+        if _check_1_char_parameter(escapechar):
             reader.option("escape", escapechar)
-
-        if comment is not None:
-            if not isinstance(comment, str) or len(comment) != 1:
-                raise ValueError("Only length-1 comment characters supported")
+        if _check_1_char_parameter(comment):
             reader.option("comment", comment)
-
         reader.options(**options)
 
         if encoding is not None:
@@ -3716,6 +3713,18 @@ def _get_index_map(
         index_names = None
 
     return index_spark_columns, index_names
+
+
+def _check_1_char_parameter(var: Optional[str]) -> bool:
+    if var is not None:
+        callers_local_vars = inspect.currentframe().f_back.f_locals.items()
+        var_name, var_val = [
+            (var_name, var_val) for var_name, var_val in callers_local_vars if var_val is var
+        ][0]
+        if not isinstance(var_val, str) or len(var_val.strip()) != 1:
+            raise ValueError("Only length-1 %s characters supported" % var_name)
+        return True
+    return False
 
 
 _get_dummies_default_accept_types = (DecimalType, StringType, DateType)
