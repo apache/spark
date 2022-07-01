@@ -162,7 +162,7 @@ Note that the format string used in most of these examples expects:
 
 -- '99' can format digit sequence with a smaller size.
 > SELECT to_char(decimal(1), '99.9');
-  "1.0"
+  " 1.0"
 
 -- '000' left-pads 0 for digit sequence with a smaller size.
 > SELECT to_char(decimal(45.00), '000.00');
