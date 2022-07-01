@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -140,6 +141,10 @@ object ResolveDefaultColumns {
           s"Failed to execute $statementType command because the destination table column " +
             s"${field.name} has a DEFAULT value of $colText which fails to parse as a valid " +
             s"expression: ${ex.getMessage}")
+    }
+    // Check invariants before moving on to analysis.
+    if (parsed.containsPattern(PLAN_EXPRESSION)) {
+      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions()
     }
     // Analyze the parse result.
     val plan = try {
