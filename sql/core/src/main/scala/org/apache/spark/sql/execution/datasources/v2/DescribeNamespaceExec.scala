@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
 /**
  * Physical plan node for describing a namespace.
@@ -38,7 +39,7 @@ case class DescribeNamespaceExec(
     val metadata = catalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Catalog Name", catalog.name())
-    rows += toCatalystRow("Namespace Name", ns.last)
+    rows += toCatalystRow("Namespace Name", ns.quoted)
 
     CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.foreach { p =>
       rows ++= Option(metadata.get(p)).map(toCatalystRow(p.capitalize, _))
