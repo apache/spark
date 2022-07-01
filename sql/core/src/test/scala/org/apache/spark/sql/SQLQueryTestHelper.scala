@@ -44,14 +44,6 @@ trait SQLQueryTestHelper {
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
-
-      // Below is needed since the catalog table in LogicalRelation can produce serde class
-      // "optionally" if CatalogTable is presented and has a serde information in the storage.
-      // This assumes LogicalRelation contains a catalog table, otherwise it would not match with
-      // this pattern.
-      .replaceAll("Arguments: (?<relation>.+), (?<attr>\\[(.+#x)(, .+#x)?\\]), " +
-        "(?<tbl>(`.+`)(\\.`.+`)+)(, .+)?, (?<isstreaming>false|true)",
-        s"Arguments: $${relation}, $${attr}, $${tbl}$notIncludedMsg, $${isstreaming}")
   }
 
 

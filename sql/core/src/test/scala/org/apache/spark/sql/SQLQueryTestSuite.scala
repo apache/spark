@@ -147,6 +147,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
     // use Java 8 time API to handle negative years properly
     .set(SQLConf.DATETIME_JAVA8API_ENABLED, true)
+    // exclude serde on catalog table for explain to make life easier
+    .set(SQLConf.SQL_EXPLAIN_EXCLUDE_SERDE_ON_CATALOG_TABLE, true)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.
