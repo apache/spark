@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.SparkException
 
 class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -1437,6 +1438,22 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
               case j: ShuffledHashJoinExec if j.ignoreDuplicatedKey == ignoreDuplicatedKey => true
             }.size == 1)
           }
+      }
+    }
+  }
+
+  test("SPARK-39655: Add a config to limit CartesianProductExec's partition number") {
+    withTempView("t1", "t2") {
+      withSQLConf(
+        SQLConf.CARTESIAN_PRODUCT_MAX_PARTITIONS.key -> "10",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        spark.range(1, 3, 1, 3).createTempView("t1")
+        spark.range(1, 5, 1, 5).createTempView("t2")
+
+        val e = intercept[SparkException] {
+          sql("SELECT * FROM t1 JOIN t2 ON t1.id = t1.id").collect()
+        }
+        assert(e.getMessage.contains("Detected cartesian product's partition number exceeded 10"))
       }
     }
   }

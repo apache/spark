@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, Predicate, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.CompletionIterator
@@ -76,6 +77,12 @@ case class CartesianProductExec(
 
     val leftResults = left.execute().asInstanceOf[RDD[UnsafeRow]]
     val rightResults = right.execute().asInstanceOf[RDD[UnsafeRow]]
+
+    if (leftResults.partitions.length * rightResults.partitions.length >
+      conf.cartesianProductMaxPartitions) {
+      throw QueryExecutionErrors.cartesianProductExceedMaxPartitions(
+        treeString, conf.cartesianProductMaxPartitions)
+    }
 
     val pair = new UnsafeCartesianRDD(
       leftResults,

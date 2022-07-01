@@ -1410,6 +1410,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val CARTESIAN_PRODUCT_MAX_PARTITIONS = buildConf("spark.sql.cartesianProduct.maxPartitions")
+    .doc("The maximum number of partitions allowed when doing cartesian product.")
+    .version("3.4.0")
+    .intConf
+    .checkValue(_ > 0,
+      "the value of spark.sql.cartesianProduct.maxPartitions must be greater than 0.")
+    .createWithDefault(Int.MaxValue)
+
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
          "When false, the ordinal numbers in order/sort by clause are ignored.")
@@ -4355,6 +4363,8 @@ class SQLConf extends Serializable with Logging {
   def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def cartesianProductMaxPartitions: Int = getConf(SQLConf.CARTESIAN_PRODUCT_MAX_PARTITIONS)
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
