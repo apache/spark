@@ -365,7 +365,7 @@ class Catalog:
         else:
             warnings.warn(
                 "`dbName` has been deprecated since Spark 3.4 and might be removed in "
-                "a future version. Use tableExists(`dbName.tableName`) instead.",
+                "a future version. Use listColumns(`dbName.tableName`) instead.",
                 FutureWarning,
             )
             iter = self._jcatalog.listColumns(dbName, tableName).toLocalIterator()
