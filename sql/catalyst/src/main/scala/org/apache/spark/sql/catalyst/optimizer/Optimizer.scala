@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
@@ -1525,7 +1526,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(fc, p: LogicalPlan) =>
       val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
-          cond.deterministic && p.constraints.contains(cond)
+          cond.deterministic && p.constraints.contains(cond) || isPrunedConditionWithRand(cond)
         }
       if (prunedPredicates.isEmpty) {
         f
@@ -1535,6 +1536,34 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
         val newCond = remainingPredicates.reduce(And)
         Filter(newCond, p)
       }
+  }
+
+  private def isPrunedConditionWithRand(cond: Expression): Boolean = {
+    cond match {
+      case GreaterThan(left, rand @ Rand(child, _)) if left.foldable && child.foldable =>
+        val newCond = GreaterThan(left, Cast(child, rand.dataType))
+        eval(newCond)
+      case GreaterThanOrEqual(left, rand @ Rand(child, _)) if left.foldable && child.foldable =>
+        val newCond = GreaterThanOrEqual(left, Cast(child, rand.dataType))
+        eval(newCond)
+      case LessThan(rand @ Rand(child, _), right) if right.foldable && child.foldable =>
+        val newCond = LessThan(Cast(child, rand.dataType), right)
+        eval(newCond)
+      case LessThanOrEqual(rand @ Rand(child, _), right) if right.foldable && child.foldable =>
+        val newCond = LessThan(Cast(child, rand.dataType), right)
+        eval(newCond)
+      case _ => false
+    }
+  }
+
+  private def eval(cond: Expression): Boolean = if (cond.foldable) {
+    try {
+      cond.eval(EmptyRow).asInstanceOf[Boolean]
+    } catch {
+      case NonFatal(_) => false
+    }
+  } else {
+    false
   }
 }
 
