@@ -212,8 +212,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         userScope = false, systemScope = true, None)
       sparkSession.sessionState.executePlan(plan0).toRdd.collect().foreach { row =>
         // `lookupBuiltinOrTempFunction` and `lookupBuiltinOrTempTableFunction` in Analyzer
-        // require the input identifier only contains the name, otherwise, built-in functions
-        // will be skipped.
+        // require the input identifier only contains the function name, otherwise, built-in
+        // functions will be skipped.
         val name = row.getString(0)
         functions += makeFunction(Seq(name))
       }
@@ -222,7 +222,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val plan1 = ShowFunctions(UnresolvedNamespace(ident),
         userScope = true, systemScope = false, None)
       sparkSession.sessionState.executePlan(plan1).toRdd.collect().foreach { row =>
-        // `row.getString(0)` maybe `db.function`, here only use the function name.
+        // `row.getString(0)` may contain dbName like `db.function`, so extract the function name.
         val name = row.getString(0).split("\\.").last
         functions += makeFunction(ident :+ name)
       }
@@ -242,9 +242,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   private def makeFunction(ident: Seq[String]): Function = {
-    val plan = UnresolvedFunc(ident, "Catalog.listFunctions", false, None)
-    val node = sparkSession.sessionState.executePlan(plan).analyzed
-    node match {
+    val plan = UnresolvedFunc(ident, "Catalog.makeFunction", false, None)
+    sparkSession.sessionState.executePlan(plan).analyzed match {
       case f: ResolvedPersistentFunc =>
         val className = f.func match {
           case f: V1Function => f.info.getClassName
@@ -271,7 +270,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           className = className,
           isTemporary = true)
 
-      case _ => throw QueryCompilationErrors.functionNotFound(ident)
+      case _ => throw QueryCompilationErrors.noSuchFunctionError(ident, plan)
     }
   }
 
@@ -523,10 +522,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       functionExists(ident.database.orNull, ident.funcName)
     } catch {
       case e: org.apache.spark.sql.catalyst.parser.ParseException =>
-        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(functionName)
-        val catalog =
-          sparkSession.sessionState.catalogManager.catalog(ident(0)).asFunctionCatalog
-        catalog.functionExists(Identifier.of(Array(ident(1)), ident(2)))
+        try {
+          val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(functionName)
+          val plan = UnresolvedFunc(ident, "Catalog.functionExists", false, None)
+          sparkSession.sessionState.executePlan(plan).analyzed match {
+            case _: ResolvedPersistentFunc => true
+            case _: ResolvedNonPersistentFunc => true
+            case _ => false
+          }
+        } catch {
+          case _: org.apache.spark.sql.AnalysisException => false
+        }
     }
   }
 

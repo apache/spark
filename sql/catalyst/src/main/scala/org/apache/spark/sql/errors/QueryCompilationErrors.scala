@@ -2205,10 +2205,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"Table or view '${ident.quoted}' not found")
   }
 
-  def functionNotFound(ident: Seq[String]): Throwable = {
-    new AnalysisException(s"Function '${ident.quoted}' not found")
-  }
-
   def unexpectedTypeOfRelationError(relation: LogicalPlan, tableName: String): Throwable = {
     new AnalysisException(
       s"Unexpected type ${relation.getClass.getCanonicalName} of the relation $tableName")
