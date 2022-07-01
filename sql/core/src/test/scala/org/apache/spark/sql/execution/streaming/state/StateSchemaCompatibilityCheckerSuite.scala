@@ -231,7 +231,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     assert((resultKeySchema, resultValueSchema) === (keySchema, valueSchema))
   }
 
-  test("SPARK-XXXXX: ignore value schema on compatibility check") {
+  test("SPARK-39650: ignore value schema on compatibility check") {
     val typeChangedValueSchema = StructType(valueSchema.map(_.copy(dataType = TimestampType)))
     verifySuccess(keySchema, valueSchema, keySchema, typeChangedValueSchema,
       ignoreValueSchema = true)
