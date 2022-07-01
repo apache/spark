@@ -3849,10 +3849,11 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
-    buildConf("spark.sql.legacy.nonIdentifierOutputCatalogName")
+    buildConf("spark.sql.legacy.v1IdentifierNoCatalog")
       .internal()
-      .doc("When set to false, the identifier will output catalog name if database is defined. " +
-        "When set to true, it restores the legacy behavior that does not output catalog name.")
+      .doc(s"When set to false, the v1 identifier will include '$SESSION_CATALOG_NAME' as " +
+        "the catalog name if database is defined. When set to true, it restores the legacy " +
+        "behavior that does not include catalog name.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
