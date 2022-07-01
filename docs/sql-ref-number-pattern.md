@@ -99,6 +99,7 @@ returns the corresponding string value.
 * The `try_to_char` function accepts an input decimal and a format string argument. It works the
 same as the `to_char` function except that it returns NULL instead of raising an error if the
 input decimal does not match the given number format.
+* All functions will fail if the given format string is invalid.
 
 ### Examples
 
@@ -117,11 +118,15 @@ Note that the format string used in most of these examples expects:
 ```sql
 -- The negative number with currency symbol maps to characters in the format string.
 > SELECT to_number('-$12,345.67', 'S$999,099.99');
- -12345.67
+  -12345.67
+ 
+-- The '$' sign is not optional.
+> SELECT to_number('5', '$9');
+  Error: the input string does not match the given number format
  
 -- The plus sign is optional, and so are fractional digits.
 > SELECT to_number('$345', 'S$999,099.99');
- 345.00
+  345.00
  
 -- The format requires at least three digits.
 > SELECT to_number('$45', 'S$999,099.99');
@@ -129,56 +134,55 @@ Note that the format string used in most of these examples expects:
  
 -- The format requires at least three digits.
 > SELECT to_number('$045', 'S$999,099.99');
- 45.00
+  45.00
  
 -- MI indicates an optional minus sign at the beginning or end of the input string.
 > SELECT to_number('1234-', '999999MI');
- -1234
+  -1234
+ 
+-- PR indicates optional wrapping angel brakets.
+> SELECT to_number('9', '999PR')
+  9
 ```
 
 #### The `try_to_number` function:
 
 ```sql
--- The negative number with currency symbol maps to characters in the format string.
-> SELECT try_to_number('-$12,345.67', 'S$999,099.99');
- -12345.67
- 
--- The plus sign is optional, and so are fractional digits.
-> SELECT try_to_number('$345', 'S$999,099.99');
- 345.00
+-- The '$' sign is not optional.
+> SELECT try_to_number('5', '$9');
+  NULL
  
 -- The format requires at least three digits.
 > SELECT try_to_number('$45', 'S$999,099.99');
- NULL
- 
--- The format requires at least three digits.
-> SELECT try_to_number('$045', 'S$999,099.99');
- 45.00
- 
--- Using brackets to denote negative values
-> SELECT try_to_number('<1234>', '999999PR');
- -1234
+  NULL
 ```
 
 #### The `to_char` function:
 
 ```sql
-> SELECT to_char(Decimal(454), '999');
+> SELECT to_char(decimal(454), '999');
   "454"
-> SELECT to_char(Decimal(454.00), '000.00');
-  "454.00"
-> SELECT to_char(Decimal(12454), '99,999');
+
+-- '99' can format digit sequence with a smaller size.
+> SELECT to_char(decimal(1), '99.9');
+  "1.0"
+
+-- '000' left-pads 0 for digit sequence with a smaller size.
+> SELECT to_char(decimal(45.00), '000.00');
+  "045.00"
+
+> SELECT to_char(decimal(12454), '99,999');
   "12,454"
 ```
 
 #### The `try_to_char` function:
 
 ```sql
-> SELECT try_to_char(Decimal(78.12), '$99.99');
+> SELECT try_to_char(decimal(78.12), '$99.99');
   "$78.12"
-> SELECT try_to_char(Decimal(-12454.8), '99,999.9S');
+> SELECT try_to_char(decimal(-12454.8), '99,999.9S');
   "12,454.8-"
-> SELECT try_to_char(Decimal(12454.8), 'L99,999.9');
+> SELECT try_to_char(decimal(12454.8), 'L99,999.9');
   Error: cannot resolve 'try_to_char(Decimal(12454.8), 'L99,999.9')' due to data type mismatch:
   Unexpected character 'L' found in the format string 'L99,999.9'; the structure of the format
   string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]; line 1 pos 25
