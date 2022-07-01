@@ -336,13 +336,6 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitExtract(String field, String source) {
-    switch (field) {
-      case "DAY_OF_WEEK":
-        return "(EXTRACT(ISO_DAY_OF_WEEK FROM " + source + ") % 7)+ 1";
-      case "WEEK_DAY":
-        return  "EXTRACT(ISO_DAY_OF_WEEK FROM " + source + ") -1";
-      default:
-        return "EXTRACT(" + field + " FROM " + source + ")";
-    }
+    return "EXTRACT(" + field + " FROM " + source + ")";
   }
 }

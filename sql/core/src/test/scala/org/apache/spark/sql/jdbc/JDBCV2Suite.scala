@@ -1093,8 +1093,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           "weekday(date1) = 2 AND dayofweek(date1) = 4")
         checkFiltersRemoved(df12)
         val expectedPlanFragment12 =
-          "PushedFilters: [DATE1 IS NOT NULL, EXTRACT(ISO_DAY_OF_WEEK FROM DATE1) -1 = 2, " +
-            "(EXTRACT(ISO_DAY_OF_WEEK FROM DAT..."
+          "PushedFilters: [DATE1 IS NOT NULL, (EXTRACT(DAY_OF_WEEK FROM DATE1) - 1) = 2, " +
+          "((EXTRACT(DAY_OF_WEEK FROM DATE1) ..."
         checkPushedInfo(df12, expectedPlanFragment12)
         checkAnswer(df12, Seq(Row("alex")))
       }

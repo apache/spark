@@ -41,8 +41,8 @@ private[sql] object H2Dialect extends JdbcDialect {
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
       "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "SECOND", "MINUTE",
-      "HOUR", "MONTH", "QUARTER", "YEAR", "DAY", "DOY", "DAY_OF_WEEK", "WEEK_DAY",
-      "WEEK", "YEAR_OF_WEEK")
+      "HOUR", "MONTH", "QUARTER", "YEAR", "DAY", "DOY", "DAY_OF_WEEK", "YEAR_OF_WEEK",
+      "WEEK")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -143,6 +143,7 @@ private[sql] object H2Dialect extends JdbcDialect {
 
     override def visitExtract(field: String, source: String): String = {
       field match {
+        case "DAY_OF_WEEK" => s"EXTRACT(ISO_DAY_OF_WEEK FROM $source)"
         case "WEEK" => s"EXTRACT(ISO_WEEK FROM $source)"
         case "YEAR_OF_WEEK" => s"EXTRACT(ISO_WEEK_YEAR FROM $source)"
         case _ => super.visitExtract(field, source)
