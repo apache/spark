@@ -485,6 +485,28 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)
     case (i: Int, YearMonthIntervalType(startField, endField)) =>
       toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)
+    case (data: GenericArrayData, arrayType: ArrayType) =>
+      val arrayValues: Array[String] =
+        data.array.map {
+          Literal(_, arrayType.elementType).sql
+        }
+      s"ARRAY(${arrayValues.mkString(", ")})"
+    case (row: GenericInternalRow, structType: StructType) =>
+      val structValues: Array[String] =
+        row.values.zip(structType.fields.map(_.dataType)).map {
+          case (value: Any, fieldType: DataType) =>
+            Literal(value, fieldType).sql
+        }
+      s"STRUCT(${structValues.mkString(", ")})"
+    case (data: ArrayBasedMapData, mapType: MapType) =>
+      val keyData = data.keyArray.asInstanceOf[GenericArrayData]
+      val valueData = data.valueArray.asInstanceOf[GenericArrayData]
+      val keysAndValues: Array[String] =
+        keyData.array.zip(valueData.array).map {
+          case (key: Any, value: Any) =>
+            s"${Literal(key, mapType.keyType).sql}, ${Literal(value, mapType.valueType).sql}"
+        }
+      s"MAP(${keysAndValues.mkString(", ")})"
     case _ => value.toString
   }
 }
