@@ -80,7 +80,7 @@ class DatasetSuite extends QueryTest
   test("toDS should compare map with byte array keys correctly") {
     // Choose the order of arrays in such way, that sorting keys of different maps by _.toString
     // will not incidentally put equal keys together.
-    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.toString).toArray
+    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.mkString).toArray
     arrays(0)(1) = 1.toByte
     arrays(1)(1) = 2.toByte
     arrays(2)(1) = 2.toByte
@@ -325,13 +325,13 @@ class DatasetSuite extends QueryTest
       var e = intercept[AnalysisException] {
         ds.select(expr("`(_1)?+.+`").as[Int])
       }
-      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
       assert(e.messageParameters.head == "`(_1)?+.+`")
 
       e = intercept[AnalysisException] {
         ds.select(expr("`(_1|_2)`").as[Int])
       }
-      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
       assert(e.messageParameters.head == "`(_1|_2)`")
 
       e = intercept[AnalysisException] {
@@ -934,8 +934,8 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getErrorClass == "MISSING_COLUMN")
-    assert(e.messageParameters.sameElements(Array("c", "a, b")))
+    assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(e.messageParameters.sameElements(Array("`c`", "`a`, `b`")))
   }
 
   test("runtime nullability check") {

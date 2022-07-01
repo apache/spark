@@ -276,7 +276,12 @@ class SparkContext(config: SparkConf) extends Logging {
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master, conf))
+    SparkEnv.createDriverEnv(
+      conf,
+      isLocal,
+      listenerBus,
+      SparkContext.numDriverCores(master, conf),
+      this)
   }
 
   private[spark] def env: SparkEnv = _env
@@ -402,6 +407,7 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
     SparkContext.supplementJavaModuleOptions(_conf)
+    SparkContext.supplementJavaIPv6Options(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -2277,7 +2283,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * a result from one partition)
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.partitions.length)
+    runJob(rdd, func, rdd.partitions.indices)
   }
 
   /**
@@ -2289,7 +2295,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * a result from one partition)
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.partitions.length)
+    runJob(rdd, func, rdd.partitions.indices)
   }
 
   /**
@@ -2304,7 +2310,7 @@ class SparkContext(config: SparkConf) extends Logging {
     rdd: RDD[T],
     processPartition: (TaskContext, Iterator[T]) => U,
     resultHandler: (Int, U) => Unit): Unit = {
-    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.length, resultHandler)
+    runJob[T, U](rdd, processPartition, rdd.partitions.indices, resultHandler)
   }
 
   /**
@@ -2319,7 +2325,7 @@ class SparkContext(config: SparkConf) extends Logging {
       processPartition: Iterator[T] => U,
       resultHandler: (Int, U) => Unit): Unit = {
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
-    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.length, resultHandler)
+    runJob[T, U](rdd, processFunc, rdd.partitions.indices, resultHandler)
   }
 
   /**
@@ -3038,6 +3044,18 @@ object SparkContext extends Logging {
       val v = conf.get(key) match {
         case Some(opts) => s"${JavaModuleOptions.defaultModuleOptions()} $opts"
         case None => JavaModuleOptions.defaultModuleOptions()
+      }
+      conf.set(key.key, v)
+    }
+    supplement(DRIVER_JAVA_OPTIONS)
+    supplement(EXECUTOR_JAVA_OPTIONS)
+  }
+
+  private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
+    def supplement(key: OptionalConfigEntry[String]): Unit = {
+      val v = conf.get(key) match {
+        case Some(opts) => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} $opts"
+        case None => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
       }
       conf.set(key.key, v)
     }

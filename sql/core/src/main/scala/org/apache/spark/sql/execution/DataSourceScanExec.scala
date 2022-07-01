@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
@@ -147,9 +148,11 @@ case class RowDataSourceScanExec(
           s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
           s" LIMIT ${pushedDownOperators.limit.get}"
         Some("PushedTopN" -> pushedTopN)
-    } else {
-      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
-    }
+      } else {
+        pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
+      }
+
+    val offsetInfo = pushedDownOperators.offset.map(value => "PushedOffset" -> s"OFFSET $value")
 
     val pushedFilters = if (pushedDownOperators.pushedPredicates.nonEmpty) {
       seqToString(pushedDownOperators.pushedPredicates.map(_.describe()))
@@ -163,6 +166,7 @@ case class RowDataSourceScanExec(
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
           "PushedGroupByExpressions" -> seqToString(v.groupByExpressions.map(_.describe())))} ++
       topNOrLimitInfo ++
+      offsetInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )
@@ -618,8 +622,7 @@ case class FileSourceScanExec(
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(new Path(f.filePath).getName)
-          // TODO(SPARK-39163): Throw an exception w/ error class for an invalid bucket file
-          .getOrElse(throw new IllegalStateException(s"Invalid bucket file ${f.filePath}"))
+          .getOrElse(throw QueryExecutionErrors.invalidBucketFile(f.filePath))
       }
 
     val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {

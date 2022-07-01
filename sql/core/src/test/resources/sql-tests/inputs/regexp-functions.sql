@@ -51,3 +51,12 @@ SELECT regexp('1a 2b 14m', '\\d+b');
 SELECT regexp('1a 2b 14m', '[a-z]+b');
 SELECT rlike('1a 2b 14m', '\\d+b');
 SELECT rlike('1a 2b 14m', '[a-z]+b');
+
+-- regexp_count
+SELECT regexp_count('1a 2b 14m', '\\d+');
+SELECT regexp_count('1a 2b 14m', 'mmm');
+SELECT regexp_count('the fox', 'FOX');
+SELECT regexp_count('the fox', '(?i)FOX');
+SELECT regexp_count('passwd7 plain A1234 a1234', '(?=[^ ]*[a-z])(?=[^ ]*[0-9])[^ ]+');
+SELECT regexp_count(null, 'abc');
+SELECT regexp_count('abc', null);

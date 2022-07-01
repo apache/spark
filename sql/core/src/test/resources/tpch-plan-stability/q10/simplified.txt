@@ -1,6 +1,6 @@
 TakeOrderedAndProject [revenue,c_custkey,c_name,c_acctbal,n_name,c_address,c_phone,c_comment]
   WholeStageCodegen (5)
-    HashAggregate [c_custkey,c_name,c_acctbal,c_phone,n_name,c_address,c_comment,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(l_extendedprice as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0))),revenue,sum,isEmpty]
+    HashAggregate [c_custkey,c_name,c_acctbal,c_phone,n_name,c_address,c_comment,sum,isEmpty] [sum((l_extendedprice * (1 - l_discount))),revenue,sum,isEmpty]
       InputAdapter
         Exchange [c_custkey,c_name,c_acctbal,c_phone,n_name,c_address,c_comment] #1
           WholeStageCodegen (4)

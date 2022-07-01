@@ -79,7 +79,9 @@ case class Origin(
       ""
     } else {
       val positionContext = if (line.isDefined && startPosition.isDefined) {
-        s"(line ${line.get}, position ${startPosition.get})"
+        // Note that the line number starts from 1, while the start position starts from 0.
+        // Here we increase the start position by 1 for consistency.
+        s"(line ${line.get}, position ${startPosition.get + 1})"
       } else {
         ""
       }
@@ -89,7 +91,7 @@ case class Origin(
         ""
       }
       val builder = new StringBuilder
-      builder ++= s"\n== SQL$objectContext$positionContext ==\n"
+      builder ++= s"== SQL$objectContext$positionContext ==\n"
 
       val text = sqlText.get
       val start = math.max(startIndex.get, 0)
@@ -866,6 +868,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case null => Nil
     case None => Nil
     case Some(null) => Nil
+    case Some(table: CatalogTable) =>
+      stringArgsForCatalogTable(table)
     case Some(any) => any :: Nil
     case map: CaseInsensitiveStringMap =>
       redactMapString(map.asCaseSensitiveMap().asScala, maxFields)
@@ -875,12 +879,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       t.copy(properties = Utils.redact(t.properties).toMap,
         options = Utils.redact(t.options).toMap) :: Nil
     case table: CatalogTable =>
-      table.storage.serde match {
-        case Some(serde) => table.identifier :: serde :: Nil
-        case _ => table.identifier :: Nil
-      }
+      stringArgsForCatalogTable(table)
+
     case other => other :: Nil
   }.mkString(", ")
+
+  private def stringArgsForCatalogTable(table: CatalogTable): Seq[Any] = {
+    table.storage.serde match {
+      case Some(serde) => table.identifier :: serde :: Nil
+      case _ => table.identifier :: Nil
+    }
+  }
 
   /**
    * ONE line description of this node.

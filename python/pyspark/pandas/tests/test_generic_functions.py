@@ -36,15 +36,23 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(ValueError, "invalid limit_direction"):
             psdf.interpolate(limit_direction="jump")
 
+        with self.assertRaisesRegex(ValueError, "invalid limit_area"):
+            psdf.interpolate(limit_area="jump")
+
     def _test_interpolate(self, pobj):
         psobj = ps.from_pandas(pobj)
         self.assert_eq(psobj.interpolate(), pobj.interpolate())
         for limit in range(1, 5):
             for limit_direction in [None, "forward", "backward", "both"]:
-                self.assert_eq(
-                    psobj.interpolate(limit=limit, limit_direction=limit_direction),
-                    pobj.interpolate(limit=limit, limit_direction=limit_direction),
-                )
+                for limit_area in [None, "inside", "outside"]:
+                    self.assert_eq(
+                        psobj.interpolate(
+                            limit=limit, limit_direction=limit_direction, limit_area=limit_area
+                        ),
+                        pobj.interpolate(
+                            limit=limit, limit_direction=limit_direction, limit_area=limit_area
+                        ),
+                    )
 
     def test_interpolate(self):
         pser = pd.Series(
@@ -150,8 +158,8 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pdf.a.kurtosis(skipna=False), psdf.a.kurtosis(skipna=False))
         self.assert_eq(pdf.a.kurtosis(), psdf.a.kurtosis())
         self.assert_eq(pdf.b.kurtosis(skipna=False), psdf.b.kurtosis(skipna=False))
-        # self.assert_eq(pdf.b.kurtosis(), psdf.b.kurtosis())  AssertionError: nan != -2.0
-        self.assert_eq(-1.5, psdf.c.kurtosis())
+        self.assert_eq(pdf.b.kurtosis(), psdf.b.kurtosis())
+        self.assert_eq(pdf.c.kurtosis(), psdf.c.kurtosis())
 
 
 if __name__ == "__main__":

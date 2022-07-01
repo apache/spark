@@ -19,13 +19,19 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.commons.io.FileUtils
+import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.connector.FakeV2Provider
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -34,7 +40,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Tests for the user-facing [[org.apache.spark.sql.catalog.Catalog]].
  */
-class CatalogSuite extends SharedSparkSession with AnalysisTest {
+class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAfter {
   import testImplicits._
 
   private def sessionCatalog: SessionCatalog = spark.sessionState.catalog
@@ -56,6 +62,12 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest {
 
   private def createTable(name: String, db: Option[String] = None): Unit = {
     sessionCatalog.createTable(utils.newTable(name, db), ignoreIfExists = false)
+  }
+
+  private def createTable(name: String, db: String, catalog: String, source: String,
+    schema: StructType, option: Map[String, String], description: String): DataFrame = {
+    spark.catalog.createTable(Array(catalog, db, name).mkString("."), source,
+      schema, description, option)
   }
 
   private def createTempTable(name: String): Unit = {
@@ -112,6 +124,15 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest {
     } finally {
       super.afterEach()
     }
+  }
+
+  before {
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+  }
+
+  after {
+    spark.sessionState.catalogManager.reset()
+    spark.sessionState.conf.clear()
   }
 
   test("current database") {
@@ -253,6 +274,52 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest {
     testListColumns("tab1", dbName = Some("db1"))
   }
 
+  test("SPARK-39615: three layer namespace compatibility - listColumns") {
+    val answers = Map(
+      "col1" -> ("int", true, false, true),
+      "col2" -> ("string", true, false, false),
+      "a" -> ("int", true, true, false),
+      "b" -> ("string", true, true, false)
+    )
+
+    assert(spark.catalog.currentCatalog() === "spark_catalog")
+    createTable("my_table1")
+
+    val columns1 = spark.catalog.listColumns("my_table1").collect()
+    assert(answers ===
+      columns1.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val columns2 = spark.catalog.listColumns("default.my_table1").collect()
+    assert(answers ===
+      columns2.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val columns3 = spark.catalog.listColumns("spark_catalog.default.my_table1").collect()
+    assert(answers ===
+      columns3.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    createDatabase("my_db1")
+    createTable("my_table2", Some("my_db1"))
+
+    val columns4 = spark.catalog.listColumns("my_db1.my_table2").collect()
+    assert(answers ===
+      columns4.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val columns5 = spark.catalog.listColumns("spark_catalog.my_db1.my_table2").collect()
+    assert(answers ===
+      columns5.map(c => c.name -> (c.dataType, c.nullable, c.isPartition, c.isBucket)).toMap)
+
+    val catalogName = "testcat"
+    val dbName = "my_db2"
+    val tableName = "my_table2"
+    val tableSchema = new StructType().add("i", "int").add("j", "string")
+    val description = "this is a test managed table"
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], description)
+
+    val columns6 = spark.catalog.listColumns("testcat.my_db2.my_table2").collect()
+    assert(Map("i" -> "int", "j" -> "string") === columns6.map(c => c.name -> c.dataType).toMap)
+  }
+
   test("Database.toString") {
     assert(new Database("cool_db", "cool_desc", "cool_path").toString ==
       "Database[name='cool_db', description='cool_desc', path='cool_path']")
@@ -261,8 +328,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest {
   }
 
   test("Table.toString") {
-    assert(new Table("volley", "databasa", "one", "world", isTemporary = true).toString ==
-      "Table[name='volley', database='databasa', description='one', " +
+    assert(new Table("volley", null, Array("databasa"), "one", "world", isTemporary = true).toString
+      == "Table[name='volley', database='databasa', description='one', " +
         "tableType='world', isTemporary='true']")
     assert(new Table("volley", null, null, "world", isTemporary = true).toString ==
       "Table[name='volley', tableType='world', isTemporary='true']")
@@ -290,7 +357,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest {
 
   test("catalog classes format in Dataset.show") {
     val db = new Database("nama", "descripta", "locata")
-    val table = new Table("nama", "databasa", "descripta", "typa", isTemporary = false)
+    val table = new Table("nama", "cataloa", Array("databasa"), "descripta", "typa",
+      isTemporary = false)
     val function = new Function("nama", "databasa", "descripta", "classa", isTemporary = false)
     val column = new Column(
       "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
@@ -299,7 +367,9 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest {
     val functionFields = ScalaReflection.getConstructorParameterValues(function)
     val columnFields = ScalaReflection.getConstructorParameterValues(column)
     assert(dbFields == Seq("nama", "descripta", "locata"))
-    assert(tableFields == Seq("nama", "databasa", "descripta", "typa", false))
+    assert(Seq(tableFields(0), tableFields(1), tableFields(3), tableFields(4), tableFields(5)) ==
+      Seq("nama", "cataloa", "descripta", "typa", false))
+    assert(tableFields(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))
     assert(functionFields == Seq("nama", "databasa", "descripta", "classa", false))
     assert(columnFields == Seq("nama", "descripta", "typa", false, true, true))
     val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
@@ -307,7 +377,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest {
     val functionString = CatalogImpl.makeDataset(Seq(function), spark).showString(10)
     val columnString = CatalogImpl.makeDataset(Seq(column), spark).showString(10)
     dbFields.foreach { f => assert(dbString.contains(f.toString)) }
-    tableFields.foreach { f => assert(tableString.contains(f.toString)) }
+    tableFields.foreach { f => assert(tableString.contains(f.toString) ||
+      tableString.contains(f.asInstanceOf[Array[String]].mkString(""))) }
     functionFields.foreach { f => assert(functionString.contains(f.toString)) }
     columnFields.foreach { f => assert(columnString.contains(f.toString)) }
   }
@@ -552,5 +623,197 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest {
       spark.catalog.recoverPartitions("my_temp_table")
     }.getMessage
     assert(errMsg.contains("my_temp_table is a temp view. 'recoverPartitions()' expects a table"))
+  }
+
+  test("three layer namespace compatibility - create managed table") {
+    val catalogName = "testcat"
+    val dbName = "my_db"
+    val tableName = "my_table"
+    val tableSchema = new StructType().add("i", "int")
+    val description = "this is a test table"
+
+    val df = createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName,
+      tableSchema, Map.empty[String, String], description)
+    assert(df.schema.equals(tableSchema))
+
+    val testCatalog =
+      spark.sessionState.catalogManager.catalog(catalogName).asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
+    assert(table.schema().equals(tableSchema))
+    assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
+    assert(table.properties().get("comment").equals(description))
+  }
+
+  test("three layer namespace compatibility - create external table") {
+    withTempDir { dir =>
+      val catalogName = "testcat"
+      val dbName = "my_db"
+      val tableName = "my_table"
+      val tableSchema = new StructType().add("i", "int")
+      val description = "this is a test table"
+
+      val df = createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName,
+        tableSchema, Map("path" -> dir.getAbsolutePath), description)
+      assert(df.schema.equals(tableSchema))
+
+      val testCatalog =
+        spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
+      assert(table.schema().equals(tableSchema))
+      assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
+      assert(table.properties().get("comment").equals(description))
+      assert(table.properties().get("path").equals(dir.getAbsolutePath))
+      assert(table.properties().get("external").equals("true"))
+      assert(table.properties().get("location").equals("file:" + dir.getAbsolutePath))
+    }
+  }
+
+  test("three layer namespace compatibility - list tables") {
+    withTempDir { dir =>
+      val catalogName = "testcat"
+      val dbName = "my_db"
+      val tableName = "my_table"
+      val tableSchema = new StructType().add("i", "int")
+      val description = "this is a test managed table"
+      createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+        Map.empty[String, String], description)
+
+      val tableName2 = "my_table2"
+      val description2 = "this is a test external table"
+      createTable(tableName2, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+        Map("path" -> dir.getAbsolutePath), description2)
+
+      val tables = spark.catalog.listTables("testcat.my_db").collect()
+      assert(tables.size == 2)
+
+      val expectedTable1 =
+        new Table(tableName, catalogName, Array(dbName), description,
+          CatalogTableType.MANAGED.name, false)
+      assert(tables.exists(t =>
+        expectedTable1.name.equals(t.name) && expectedTable1.database.equals(t.database) &&
+        expectedTable1.description.equals(t.description) &&
+        expectedTable1.tableType.equals(t.tableType) &&
+        expectedTable1.isTemporary == t.isTemporary))
+
+      val expectedTable2 =
+        new Table(tableName2, catalogName, Array(dbName), description2,
+          CatalogTableType.EXTERNAL.name, false)
+      assert(tables.exists(t =>
+        expectedTable2.name.equals(t.name) && expectedTable2.database.equals(t.database) &&
+        expectedTable2.description.equals(t.description) &&
+        expectedTable2.tableType.equals(t.tableType) &&
+        expectedTable2.isTemporary == t.isTemporary))
+    }
+  }
+
+  test("list tables when there is `default` catalog") {
+    spark.conf.set("spark.sql.catalog.default", classOf[InMemoryCatalog].getName)
+
+    assert(spark.catalog.listTables("default").collect().isEmpty)
+    createTable("my_table1")
+    createTable("my_table2")
+    createTempTable("my_temp_table")
+    assert(spark.catalog.listTables("default").collect().map(_.name).toSet ==
+      Set("my_table1", "my_table2", "my_temp_table"))
+  }
+
+  test("three layer namespace compatibility - get table") {
+    val catalogName = "testcat"
+    val dbName = "default"
+    val tableName = "my_table"
+    val tableSchema = new StructType().add("i", "int")
+    val description = "this is a test table"
+
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], description)
+
+    val t = spark.catalog.getTable(Array(catalogName, dbName, tableName).mkString("."))
+    val expectedTable =
+      new Table(
+        tableName,
+        catalogName,
+        Array(dbName),
+        description,
+        CatalogTableType.MANAGED.name,
+        false)
+    assert(expectedTable.toString == t.toString)
+
+    // test when both sessionCatalog and testcat contains tables with same name, and we expect
+    // the table in sessionCatalog is returned when use 2 part name.
+    createTable("my_table")
+    val t2 = spark.catalog.getTable(Array(dbName, tableName).mkString("."))
+    assert(t2.catalog == CatalogManager.SESSION_CATALOG_NAME)
+  }
+
+  test("three layer namespace compatibility - table exists") {
+    val catalogName = "testcat"
+    val dbName = "my_db"
+    val tableName = "my_table"
+    val tableSchema = new StructType().add("i", "int")
+
+    assert(!spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], "")
+
+    assert(spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
+  }
+
+  test("three layer namespace compatibility - database exists") {
+    val catalogName = "testcat"
+    val dbName = "my_db"
+    assert(!spark.catalog.databaseExists(Array(catalogName, dbName).mkString(".")))
+
+    sql(s"CREATE NAMESPACE ${catalogName}.${dbName}")
+    assert(spark.catalog.databaseExists(Array(catalogName, dbName).mkString(".")))
+
+    val catalogName2 = "catalog_not_exists"
+    assert(!spark.catalog.databaseExists(Array(catalogName2, dbName).mkString(".")))
+  }
+
+  test("SPARK-39506: three layer namespace compatibility - cache table, isCached and" +
+    "uncacheTable") {
+    val tableSchema = new StructType().add("i", "int")
+    createTable("my_table", "my_db", "testcat", classOf[FakeV2Provider].getName,
+      tableSchema, Map.empty[String, String], "")
+    createTable("my_table2", "my_db", "testcat", classOf[FakeV2Provider].getName,
+      tableSchema, Map.empty[String, String], "")
+
+    spark.catalog.cacheTable("testcat.my_db.my_table", StorageLevel.DISK_ONLY)
+    assert(spark.table("testcat.my_db.my_table").storageLevel == StorageLevel.DISK_ONLY)
+    assert(spark.catalog.isCached("testcat.my_db.my_table"))
+
+    spark.catalog.cacheTable("testcat.my_db.my_table2")
+    assert(spark.catalog.isCached("testcat.my_db.my_table2"))
+
+    spark.catalog.uncacheTable("testcat.my_db.my_table")
+    assert(!spark.catalog.isCached("testcat.my_db.my_table"))
+  }
+
+  test("SPARK-39506: test setCurrentCatalog, currentCatalog and listCatalogs") {
+    spark.catalog.setCurrentCatalog("testcat")
+    assert(spark.catalog.currentCatalog().equals("testcat"))
+    spark.catalog.setCurrentCatalog("spark_catalog")
+    assert(spark.catalog.currentCatalog().equals("spark_catalog"))
+    assert(spark.catalog.listCatalogs().collect().map(c => c.name).toSet == Set("testcat"))
+  }
+
+  test("SPARK-39583: Make RefreshTable be compatible with 3 layer namespace") {
+    withTempDir { dir =>
+      val tableName = "spark_catalog.default.my_table"
+
+      sql(s"""
+           | CREATE TABLE ${tableName}(col STRING) USING TEXT
+           | LOCATION '${dir.getAbsolutePath}'
+           |""".stripMargin)
+      sql(s"""INSERT INTO ${tableName} SELECT 'abc'""".stripMargin)
+      spark.catalog.cacheTable(tableName)
+      assert(spark.table(tableName).collect().length == 1)
+
+      FileUtils.deleteDirectory(dir)
+      assert(spark.table(tableName).collect().length == 1)
+
+      spark.catalog.refreshTable(tableName)
+      assert(spark.table(tableName).collect().length == 0)
+    }
   }
 }

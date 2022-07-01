@@ -85,7 +85,7 @@ function loadMore() {
       if (retStartByte == 0) {
         disableMoreButton();
       }
-      $("pre", ".log-content").prepend(cleanData);
+      $("pre", ".log-content").prepend(document.createTextNode(cleanData));
 
       curLogLength = curLogLength + (startByte - retStartByte);
       startByte = retStartByte;
@@ -115,7 +115,7 @@ function loadNew() {
             var retLogLength = dataInfo[2];
 
             var cleanData = data.substring(newlineIndex + 1);
-            $("pre", ".log-content").append(cleanData);
+            $("pre", ".log-content").append(document.createTextNode(cleanData));
 
             curLogLength = curLogLength + (retEndByte - retStartByte);
             endByte = retEndByte;

@@ -90,6 +90,10 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
         extraClassPath = getenv("SPARK_DAEMON_CLASSPATH");
         memKey = "SPARK_DAEMON_MEMORY";
         break;
+      case "org.apache.hive.beeline.BeeLine":
+        javaOptsKeys.add("SPARK_BEELINE_OPTS");
+        memKey = "SPARK_BEELINE_MEMORY";
+        break;
       default:
         memKey = "SPARK_DRIVER_MEMORY";
         break;

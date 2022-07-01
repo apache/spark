@@ -106,10 +106,10 @@ private[spark] class BasicExecutorFeatureStep(
     val keyToPaths = KubernetesClientUtils.buildKeyToPathObjects(confFilesMap)
     // According to
     // https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names,
-    // hostname must be no longer than `KUBERNETES_DNSNAME_MAX_LENGTH`(63) characters,
+    // hostname must be no longer than `KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH`(63) characters,
     // so take the last 63 characters of the pod name as the hostname.
     // This preserves uniqueness since the end of name contains executorId
-    val hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNSNAME_MAX_LENGTH))
+    val hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH))
       // Remove non-word characters from the start of the hostname
       .replaceAll("^[^\\w]+", "")
       // Replace dangerous characters in the remaining string with a safe alternative.

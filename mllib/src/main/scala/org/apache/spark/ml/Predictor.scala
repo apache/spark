@@ -18,14 +18,11 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.functions.checkNonNegativeWeight
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -62,40 +59,6 @@ private[ml] trait PredictorParams extends Params
       }
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
-  }
-
-  /**
-   * Extract [[labelCol]], weightCol(if any) and [[featuresCol]] from the given dataset,
-   * and put it in an RDD with strong types.
-   */
-  protected def extractInstances(dataset: Dataset[_]): RDD[Instance] = {
-    val w = this match {
-      case p: HasWeightCol =>
-        if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
-          checkNonNegativeWeight((col($(p.weightCol)).cast(DoubleType)))
-        } else {
-          lit(1.0)
-        }
-    }
-
-    dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
-      case Row(label: Double, weight: Double, features: Vector) =>
-        Instance(label, weight, features)
-    }
-  }
-
-  /**
-   * Extract [[labelCol]], weightCol(if any) and [[featuresCol]] from the given dataset,
-   * and put it in an RDD with strong types.
-   * Validate the output instances with the given function.
-   */
-  protected def extractInstances(
-      dataset: Dataset[_],
-      validateInstance: Instance => Unit): RDD[Instance] = {
-    extractInstances(dataset).map { instance =>
-      validateInstance(instance)
-      instance
-    }
   }
 }
 
@@ -175,16 +138,6 @@ abstract class Predictor[
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
-  }
-
-  /**
-   * Extract [[labelCol]] and [[featuresCol]] from the given dataset,
-   * and put it in an RDD with strong types.
-   */
-  protected def extractLabeledPoints(dataset: Dataset[_]): RDD[LabeledPoint] = {
-    dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-      case Row(label: Double, features: Vector) => LabeledPoint(label, features)
-    }
   }
 }
 

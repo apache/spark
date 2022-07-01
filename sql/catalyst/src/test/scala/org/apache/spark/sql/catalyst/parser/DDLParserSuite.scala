@@ -1213,21 +1213,6 @@ class DDLParserSuite extends AnalysisTest {
         "The feature is not supported: DESC TABLE COLUMN for a specific partition."))
   }
 
-  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    comparePlans(parsePlan("describe t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
-    comparePlans(parsePlan("describe table t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
-    comparePlans(parsePlan("describe table extended t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
-    comparePlans(parsePlan("describe table formatted t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
-  }
-
   test("insert table: basic append") {
     Seq(
       "INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM source",
@@ -2055,45 +2040,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("DESCRIBE FUNCTION EXTENDED a.b.c"),
       DescribeFunction(createFuncPlan(Seq("a", "b", "c")), true))
-  }
-
-  test("SHOW FUNCTIONS") {
-    val nsPlan = UnresolvedNamespace(Nil)
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS"),
-      ShowFunctions(nsPlan, true, true, None))
-    comparePlans(
-      parsePlan("SHOW USER FUNCTIONS"),
-      ShowFunctions(nsPlan, true, false, None))
-    comparePlans(
-      parsePlan("SHOW user FUNCTIONS"),
-      ShowFunctions(nsPlan, true, false, None))
-    comparePlans(
-      parsePlan("SHOW SYSTEM FUNCTIONS"),
-      ShowFunctions(nsPlan, false, true, None))
-    comparePlans(
-      parsePlan("SHOW ALL FUNCTIONS"),
-      ShowFunctions(nsPlan, true, true, None))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS 'funct*'"),
-      ShowFunctions(nsPlan, true, true, Some("funct*")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
-      ShowFunctions(nsPlan, true, true, Some("funct*")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS IN db LIKE 'funct*'"),
-      ShowFunctions(UnresolvedNamespace(Seq("db")), true, true, Some("funct*")))
-
-    // The legacy syntax.
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS a"),
-      ShowFunctions(nsPlan, true, true, Some("a")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE a"),
-      ShowFunctions(nsPlan, true, true, Some("a")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
-      ShowFunctions(UnresolvedNamespace(Seq("a", "b")), true, true, Some("c")))
   }
 
   test("REFRESH FUNCTION") {

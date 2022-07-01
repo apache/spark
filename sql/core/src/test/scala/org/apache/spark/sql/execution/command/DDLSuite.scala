@@ -28,7 +28,7 @@ import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -1461,23 +1461,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("select a, b, c from partitionedTable"),
         Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
       )
-    }
-  }
-
-  test("show functions") {
-    withUserDefinedFunction("add_one" -> true) {
-      val numFunctions = FunctionRegistry.functionSet.size.toLong +
-        TableFunctionRegistry.functionSet.size.toLong +
-        FunctionRegistry.builtinOperators.size.toLong
-      assert(sql("show functions").count() === numFunctions)
-      assert(sql("show system functions").count() === numFunctions)
-      assert(sql("show all functions").count() === numFunctions)
-      assert(sql("show user functions").count() === 0L)
-      spark.udf.register("add_one", (x: Long) => x + 1)
-      assert(sql("show functions").count() === numFunctions + 1L)
-      assert(sql("show system functions").count() === numFunctions)
-      assert(sql("show all functions").count() === numFunctions + 1L)
-      assert(sql("show user functions").count() === 1L)
     }
   }
 

@@ -166,7 +166,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)"))
-      assert(e1.getMessage.contains("Cannot resolve column name c4"))
+      assert(e1.getMessage.contains(
+        "[UNRESOLVED_COLUMN] A column or function parameter with name `c4` cannot be resolved. " +
+          "Did you mean one of the following? [`c1`, `c2`, `c3`]"))
     }
   }
 
@@ -314,7 +316,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
             val errorMsg = intercept[NumberFormatException] {
               sql("insert into t partition(a='ansi') values('ansi')")
             }.getMessage
-            assert(errorMsg.contains("""Invalid input syntax for type "INT": 'ansi'"""))
+            assert(errorMsg.contains(
+              """The value 'ansi' of the type "STRING" cannot be cast to "INT""""))
           } else {
             sql("insert into t partition(a='ansi') values('ansi')")
             checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)

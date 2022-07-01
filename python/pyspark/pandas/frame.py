@@ -452,6 +452,13 @@ class DataFrame(Frame, Generic[T]):
                 assert not copy
                 pdf = data
             else:
+                from pyspark.pandas.indexes.base import Index
+
+                if isinstance(index, Index):
+                    raise TypeError(
+                        "The given index cannot be a pandas-on-Spark index. "
+                        "Try pandas index or array-like."
+                    )
                 pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
             internal = InternalFrame.from_pandas(pdf)
 
@@ -551,11 +558,11 @@ class DataFrame(Frame, Generic[T]):
         >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
-        >>> df
+        >>> df  # doctest: +SKIP
                max_speed  shield
         cobra          1       2
         viper          4       5
-        NaN            7       8
+        None           7       8
         >>> df.ndim
         2
         """
@@ -5669,6 +5676,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> "DataFrame":
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
@@ -5678,6 +5686,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             limit_direction not in ["forward", "backward", "both"]
         ):
             raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
+        if (limit_area is not None) and (limit_area not in ["inside", "outside"]):
+            raise ValueError("invalid limit_area: '{}'".format(limit_area))
 
         numeric_col_names = []
         for label in self._internal.column_labels:
@@ -5688,7 +5698,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf = self[numeric_col_names]
         return psdf._apply_series_op(
             lambda psser: psser._interpolate(
-                method=method, limit=limit, limit_direction=limit_direction
+                method=method, limit=limit, limit_direction=limit_direction, limit_area=limit_area
             ),
             should_resolve=True,
         )
@@ -7223,23 +7233,23 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         >>> df = ps.DataFrame({'A': [2, 1, np.nan]}, index=['b', 'a', np.nan])
 
-        >>> df.sort_index()
-               A
-        a    1.0
-        b    2.0
-        NaN  NaN
+        >>> df.sort_index()  # doctest: +SKIP
+                A
+        a     1.0
+        b     2.0
+        None  NaN
 
-        >>> df.sort_index(ascending=False)
-               A
-        b    2.0
-        a    1.0
-        NaN  NaN
+        >>> df.sort_index(ascending=False)  # doctest: +SKIP
+                A
+        b     2.0
+        a     1.0
+        None  NaN
 
-        >>> df.sort_index(na_position='first')
-               A
-        NaN  NaN
-        a    1.0
-        b    2.0
+        >>> df.sort_index(na_position='first')  # doctest: +SKIP
+                A
+        None  NaN
+        a     1.0
+        b     2.0
 
         >>> df.sort_index(ignore_index=True)
              A
@@ -7248,11 +7258,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  NaN
 
         >>> df.sort_index(inplace=True)
-        >>> df
-               A
-        a    1.0
-        b    2.0
-        NaN  NaN
+        >>> df  # doctest: +SKIP
+                A
+        a     1.0
+        b     2.0
+        None  NaN
 
         >>> df = ps.DataFrame({'A': range(4), 'B': range(4)[::-1]},
         ...                   index=[['b', 'b', 'a', 'a'], [1, 0, 1, 0]],
@@ -9367,6 +9377,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         subset: Optional[Union[Name, List[Name]]] = None,
         keep: Union[bool, str] = "first",
         inplace: bool = False,
+        ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
         """
         Return DataFrame with duplicate rows removed, optionally only
@@ -9384,6 +9395,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             - False : Drop all duplicates.
         inplace : boolean, default False
             Whether to drop duplicates in place or to return a copy.
+        ignore_index : boolean, default False
+            If True, the resulting axis will be labeled 0, 1, …, n - 1.
 
         Returns
         -------
@@ -9406,6 +9419,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2  a
         3  2  c
         4  3  d
+
+        >>> df.drop_duplicates(ignore_index=True).sort_index()
+           a  b
+        0  1  a
+        1  2  a
+        2  2  c
+        3  3  d
 
         >>> df.drop_duplicates('a').sort_index()
            a  b
@@ -9439,11 +9459,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         sdf = sdf.where(~scol_for(sdf, column)).drop(column)
         internal = self._internal.with_new_sdf(sdf)
+        psdf: DataFrame = DataFrame(internal)
+
         if inplace:
-            self._update_internal_frame(internal)
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
+            self._update_internal_frame(psdf._internal)
             return None
         else:
-            return DataFrame(internal)
+            return psdf.reset_index(drop=True) if ignore_index else psdf
 
     def reindex(
         self,
@@ -12146,7 +12170,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Returns a frame
             return result
 
-    def explode(self, column: Name) -> "DataFrame":
+    def explode(self, column: Name, ignore_index: bool = False) -> "DataFrame":
         """
         Transform each element of a list-like to a row, replicating index values.
 
@@ -12154,6 +12178,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         column : str or tuple
             Column to explode.
+        ignore_index : bool, default False
+            If True, the resulting index will be labeled 0, 1, …, n - 1.
 
         Returns
         -------
@@ -12184,6 +12210,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  NaN  1
         2  3.0  1
         2  4.0  1
+
+        >>> df.explode('A', ignore_index=True)
+             A  B
+        0  1.0  1
+        1  2.0  1
+        2  3.0  1
+        3  NaN  1
+        4  3.0  1
+        5  4.0  1
         """
         from pyspark.pandas.series import Series
 
@@ -12212,7 +12247,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         data_fields[idx] = field.copy(dtype=dtype, spark_type=spark_type, nullable=True)
 
         internal = psdf._internal.with_new_sdf(sdf, data_fields=data_fields)
-        return DataFrame(internal)
+        result_df: DataFrame = DataFrame(internal)
+        return result_df.reset_index(drop=True) if ignore_index else result_df
 
     def mad(self, axis: Axis = 0) -> "Series":
         """

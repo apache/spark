@@ -106,7 +106,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
-      _, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _)) =>
+      _, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _, _)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -127,7 +127,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       withProjectAndFilter(project, filters, dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
-        DataSourceV2ScanRelation(_, scan: LocalScan, output, _)) =>
+        DataSourceV2ScanRelation(_, scan: LocalScan, output, _, _)) =>
       val localScanExec = LocalTableScanExec(output, scan.rows().toSeq)
       withProjectAndFilter(project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
 
@@ -140,7 +140,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ => false
       }
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
-        relation.keyGroupedPartitioning)
+        relation.keyGroupedPartitioning, relation.ordering)
       withProjectAndFilter(project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
@@ -173,7 +173,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         tableSpec, ifNotExists) =>
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          session.sessionState.analyzer, schema, "CREATE TABLE")
+          schema, tableSpec.provider, "CREATE TABLE")
       CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, newSchema,
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
@@ -195,7 +195,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          session.sessionState.analyzer, schema, "CREATE TABLE")
+          schema, tableSpec.provider, "CREATE TABLE")
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident.asIdentifier, newSchema, parts,
@@ -267,7 +267,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case DeleteFromTable(relation, condition) =>
       relation match {
-        case DataSourceV2ScanRelation(r, _, output, _) =>
+        case DataSourceV2ScanRelation(r, _, output, _, _) =>
           val table = r.table
           if (SubqueryExpression.hasSubquery(condition)) {
             throw QueryCompilationErrors.unsupportedDeleteByConditionWithSubqueryError(condition)
@@ -491,12 +491,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
 private[sql] object DataSourceV2Strategy {
 
-  private def translateLeafNodeFilterV2(
-      predicate: Expression,
-      supportNestedPredicatePushdown: Boolean): Option[Predicate] = {
-    val pushablePredicate = PushablePredicate(supportNestedPredicatePushdown)
+  private def translateLeafNodeFilterV2(predicate: Expression): Option[Predicate] = {
     predicate match {
-      case pushablePredicate(expr) => Some(expr)
+      case PushablePredicate(expr) => Some(expr)
       case _ => None
     }
   }
@@ -506,10 +503,8 @@ private[sql] object DataSourceV2Strategy {
    *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
-  protected[sql] def translateFilterV2(
-      predicate: Expression,
-      supportNestedPredicatePushdown: Boolean): Option[Predicate] = {
-    translateFilterV2WithMapping(predicate, None, supportNestedPredicatePushdown)
+  protected[sql] def translateFilterV2(predicate: Expression): Option[Predicate] = {
+    translateFilterV2WithMapping(predicate, None)
   }
 
   /**
@@ -523,8 +518,7 @@ private[sql] object DataSourceV2Strategy {
    */
   protected[sql] def translateFilterV2WithMapping(
       predicate: Expression,
-      translatedFilterToExpr: Option[mutable.HashMap[Predicate, Expression]],
-      nestedPredicatePushdownEnabled: Boolean)
+      translatedFilterToExpr: Option[mutable.HashMap[Predicate, Expression]])
   : Option[Predicate] = {
     predicate match {
       case And(left, right) =>
@@ -538,26 +532,21 @@ private[sql] object DataSourceV2Strategy {
         // Pushing one leg of AND down is only safe to do at the top level.
         // You can see ParquetFilters' createFilter for more details.
         for {
-          leftFilter <- translateFilterV2WithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          rightFilter <- translateFilterV2WithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          leftFilter <- translateFilterV2WithMapping(left, translatedFilterToExpr)
+          rightFilter <- translateFilterV2WithMapping(right, translatedFilterToExpr)
         } yield new V2And(leftFilter, rightFilter)
 
       case Or(left, right) =>
         for {
-          leftFilter <- translateFilterV2WithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          rightFilter <- translateFilterV2WithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          leftFilter <- translateFilterV2WithMapping(left, translatedFilterToExpr)
+          rightFilter <- translateFilterV2WithMapping(right, translatedFilterToExpr)
         } yield new V2Or(leftFilter, rightFilter)
 
       case Not(child) =>
-        translateFilterV2WithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          .map(new V2Not(_))
+        translateFilterV2WithMapping(child, translatedFilterToExpr).map(new V2Not(_))
 
       case other =>
-        val filter = translateLeafNodeFilterV2(other, nestedPredicatePushdownEnabled)
+        val filter = translateLeafNodeFilterV2(other)
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
           translatedFilterToExpr.get(filter.get) = predicate
         }
@@ -589,10 +578,9 @@ private[sql] object DataSourceV2Strategy {
 /**
  * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
  */
-case class PushablePredicate(nestedPredicatePushdownEnabled: Boolean) {
-
+object PushablePredicate {
   def unapply(e: Expression): Option[Predicate] =
-    new V2ExpressionBuilder(e, nestedPredicatePushdownEnabled, true).build().map { v =>
+    new V2ExpressionBuilder(e, true).build().map { v =>
       assert(v.isInstanceOf[Predicate])
       v.asInstanceOf[Predicate]
     }

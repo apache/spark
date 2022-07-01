@@ -6,7 +6,7 @@ WholeStageCodegen (5)
           Filter [value]
             Subquery #1
               WholeStageCodegen (4)
-                HashAggregate [sum,isEmpty] [sum(CheckOverflow((promote_precision(ps_supplycost) * promote_precision(cast(ps_availqty as decimal(10,0)))), DecimalType(21,0))),(sum((ps_supplycost * ps_availqty)) * 0.0001000000),sum,isEmpty]
+                HashAggregate [sum,isEmpty] [sum((ps_supplycost * cast(ps_availqty as decimal(10,0)))),(sum((ps_supplycost * ps_availqty)) * 0.0001000000),sum,isEmpty]
                   InputAdapter
                     Exchange #5
                       WholeStageCodegen (3)
@@ -23,7 +23,7 @@ WholeStageCodegen (5)
                                     ReusedExchange [s_suppkey,s_nationkey] #3
                               InputAdapter
                                 ReusedExchange [n_nationkey] #4
-            HashAggregate [ps_partkey,sum,isEmpty] [sum(CheckOverflow((promote_precision(ps_supplycost) * promote_precision(cast(ps_availqty as decimal(10,0)))), DecimalType(21,0))),value,sum,isEmpty]
+            HashAggregate [ps_partkey,sum,isEmpty] [sum((ps_supplycost * cast(ps_availqty as decimal(10,0)))),value,sum,isEmpty]
               InputAdapter
                 Exchange [ps_partkey] #2
                   WholeStageCodegen (3)

@@ -59,7 +59,7 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
 
   protected val n = AttributeReference("n", DoubleType, nullable = false)()
   protected val avg = AttributeReference("avg", DoubleType, nullable = false)()
-  protected val m2 = AttributeReference("m2", DoubleType, nullable = false)()
+  protected[sql] val m2 = AttributeReference("m2", DoubleType, nullable = false)()
   protected val m3 = AttributeReference("m3", DoubleType, nullable = false)()
   protected val m4 = AttributeReference("m4", DoubleType, nullable = false)()
 
@@ -365,5 +365,38 @@ case class PandasSkewness(child: Expression)
   }
 
   override protected def withNewChildInternal(newChild: Expression): PandasSkewness =
+    copy(child = newChild)
+}
+
+/**
+ * Kurtosis in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
+ * Refer to pandas.core.nanops.nankurt.
+ */
+case class PandasKurtosis(child: Expression)
+  extends CentralMomentAgg(child, true) {
+
+  override protected def momentOrder = 4
+
+  override val evaluateExpression: Expression = {
+    val adj = ((n - 1) / (n - 2)) * ((n - 1) / (n - 3)) * 3
+    val numerator = n * (n + 1) * (n - 1) * m4
+    val denominator = (n - 2) * (n - 3) * m2 * m2
+
+    // floating point error
+    //
+    // Pandas #18044 in _libs/windows.pyx calc_kurt follow this behavior
+    // to fix the fperr to treat denom <1e-14 as zero
+    //
+    // see https://github.com/pandas-dev/pandas/issues/18044 for details
+    val _numerator = If(abs(numerator) < 1e-14, Literal(0.0), numerator)
+    val _denominator = If(abs(denominator) < 1e-14, Literal(0.0), denominator)
+
+    If(n < 4, Literal.create(null, DoubleType),
+      If(_denominator === 0.0, Literal(0.0), _numerator / _denominator - adj))
+  }
+
+  override def prettyName: String = "pandas_kurtosis"
+
+  override protected def withNewChildInternal(newChild: Expression): PandasKurtosis =
     copy(child = newChild)
 }

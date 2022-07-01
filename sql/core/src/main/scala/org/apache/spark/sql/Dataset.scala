@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkException, SparkThrowable, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -2103,7 +2103,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset by skipping the first `m` rows.
+   * Returns a new Dataset by skipping the first `n` rows.
    *
    * @group typedrel
    * @since 3.4.0
@@ -3689,7 +3689,7 @@ class Dataset[T] private[sql](
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
       case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _),
-          _, _, _) =>
+          _, _, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray
@@ -3916,23 +3916,15 @@ class Dataset[T] private[sql](
 
   /**
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
-   * user-registered callback functions, and also to convert asserts/illegal states to
+   * user-registered callback functions, and also to convert asserts/NPE to
    * the internal error exception.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
-    try {
-      SQLExecution.withNewExecutionId(qe, Some(name)) {
+    SQLExecution.withNewExecutionId(qe, Some(name)) {
+      QueryExecution.withInternalError(s"""The "$name" action failed.""") {
         qe.executedPlan.resetMetrics()
         action(qe.executedPlan)
       }
-    } catch {
-      case e: SparkThrowable => throw e
-      case e @ (_: java.lang.IllegalStateException | _: java.lang.AssertionError) =>
-        throw new SparkException(
-          errorClass = "INTERNAL_ERROR",
-          messageParameters = Array(s"""The "$name" action failed."""),
-          cause = e)
-      case e: Throwable => throw e
     }
   }
 

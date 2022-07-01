@@ -30,12 +30,10 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
-import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
@@ -76,42 +74,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         checkAnswer(queryCoalesce, Row("1") :: Nil)
       }
     }
-  }
-
-  test("show functions") {
-    def getFunctions(pattern: String): Seq[Row] = {
-      StringUtils.filterPattern(
-        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName)
-        ++ FunctionRegistry.builtinOperators.keys, pattern)
-        .map(Row(_))
-    }
-
-    def createFunction(names: Seq[String]): Unit = {
-      names.foreach { name =>
-        spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)
-      }
-    }
-
-    def dropFunction(names: Seq[String]): Unit = {
-      names.foreach { name =>
-        spark.sessionState.catalog.dropTempFunction(name, false)
-      }
-    }
-
-    val functions = Array("ilog", "logi", "logii", "logiii", "crc32i", "cubei", "cume_disti",
-      "isize", "ispace", "to_datei", "date_addi", "current_datei")
-
-    createFunction(functions)
-
-    checkAnswer(sql("SHOW functions"), getFunctions("*"))
-    assert(sql("SHOW functions").collect().size > 200)
-
-    Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
-      // For the pattern part, only '*' and '|' are allowed as wildcards.
-      // For '*', we need to replace it to '.*'.
-      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
-    }
-    dropFunction(functions)
   }
 
   test("describe functions") {
@@ -4225,13 +4187,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("""SELECT from_json(R'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
   }
 
-  test("SPARK-36979: Add RewriteLateralSubquery rule into nonExcludableRules") {
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-      "org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery") {
-      sql("SELECT * FROM testData, LATERAL (SELECT * FROM testData)").collect()
-    }
-  }
-
   test("TABLE SAMPLE") {
     withTable("test") {
       sql("CREATE TABLE test(c int) USING PARQUET")
@@ -4376,18 +4331,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-39190: Query context of decimal overflow error should be serialized to executors" +
-    " when WSCG is off") {
+  test("SPARK-39190,SPARK-39208,SPARK-39210: Query context of decimal overflow error should " +
+    "be serialized to executors when WSCG is off") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
       SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("t") {
         sql("create table t(d decimal(38, 0)) using parquet")
-        sql("insert into t values (2e37BD)")
-        val query = "select d / 0.1 from t"
-        val msg = intercept[SparkException] {
-          sql(query).collect()
-        }.getMessage
-        assert(msg.contains(query))
+        sql("insert into t values (6e37BD),(6e37BD)")
+        Seq(
+          "select d / 0.1 from t",
+          "select sum(d) from t",
+          "select avg(d) from t").foreach { query =>
+          val msg = intercept[SparkException] {
+            sql(query).collect()
+          }.getMessage
+          assert(msg.contains(query))
+        }
       }
     }
   }
@@ -4426,6 +4385,54 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           Row(2, true, mutable.WrappedArray.make(binary2))
         ))
     }
+  }
+
+  test("SPARK-39216: Don't collapse projects in CombineUnions if it hasCorrelatedSubquery") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT (SELECT IF(x, 1, 0)) AS a
+          |FROM (SELECT true) t(x)
+          |UNION
+          |SELECT 1 AS a
+        """.stripMargin),
+      Seq(Row(1)))
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT x + 1
+          |FROM   (SELECT id
+          |               + (SELECT Max(id)
+          |                  FROM   range(2)) AS x
+          |        FROM   range(1)) t
+          |UNION
+          |SELECT 1 AS a
+        """.stripMargin),
+      Seq(Row(2), Row(1)))
+  }
+
+  test("SPARK-39548: CreateView will make queries go into inline CTE code path thus" +
+    "trigger a mis-clarified `window definition not found` issue") {
+    sql(
+      """
+        |create or replace temporary view test_temp_view as
+        |with step_1 as (
+        |select * , min(a) over w2 as min_a_over_w2 from
+        |(select 1 as a, 2 as b, 3 as c) window w2 as (partition by b order by c)) , step_2 as
+        |(
+        |select *, max(e) over w1 as max_a_over_w1
+        |from (select 1 as e, 2 as f, 3 as g)
+        |join step_1 on true
+        |window w1 as (partition by f order by g)
+        |)
+        |select *
+        |from step_2
+        |""".stripMargin)
+
+    checkAnswer(
+      sql("select * from test_temp_view"),
+      Row(1, 2, 3, 1, 2, 3, 1, 1))
   }
 }
 

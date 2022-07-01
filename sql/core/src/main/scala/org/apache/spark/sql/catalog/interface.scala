@@ -27,6 +27,25 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 // DefinedByConstructorParams for the catalog to be able to create encoders for them.
 
 /**
+ * A catalog in Spark, as returned by the `listCatalogs` method defined in [[Catalog]].
+ *
+ * @param name name of the catalog
+ * @param description description of the catalog
+ * @since 3.4.0
+ */
+class CatalogMetadata(
+    val name: String,
+    @Nullable val description: String)
+  extends DefinedByConstructorParams {
+
+  override def toString: String = {
+    "Catalog[" +
+      s"name='$name', " +
+      Option(description).map { d => s"description='$d'] " }.getOrElse("]")
+  }
+}
+
+/**
  * A database in Spark, as returned by the `listDatabases` method defined in [[Catalog]].
  *
  * @param name name of the database.
@@ -55,7 +74,8 @@ class Database(
  * A table in Spark, as returned by the `listTables` method in [[Catalog]].
  *
  * @param name name of the table.
- * @param database name of the database the table belongs to.
+ * @param catalog name of the catalog that the table belongs to.
+ * @param namespace the namespace that the table belongs to.
  * @param description description of the table.
  * @param tableType type of the table (e.g. view, table).
  * @param isTemporary whether the table is a temporary table.
@@ -64,15 +84,36 @@ class Database(
 @Stable
 class Table(
     val name: String,
-    @Nullable val database: String,
+    @Nullable val catalog: String,
+    @Nullable val namespace: Array[String],
     @Nullable val description: String,
     val tableType: String,
     val isTemporary: Boolean)
   extends DefinedByConstructorParams {
 
+  def this(
+      name: String,
+      database: String,
+      description: String,
+      tableType: String,
+      isTemporary: Boolean) = {
+    this(name, null, Array(database), description, tableType, isTemporary)
+  }
+
+  def database: String = {
+    if (namespace == null) {
+      null
+    } else if (namespace.length == 1) {
+      namespace(0)
+    } else {
+      null
+    }
+  }
+
   override def toString: String = {
     "Table[" +
       s"name='$name', " +
+      Option(catalog).map { d => s"catalog='$d', " }.getOrElse("") +
       Option(database).map { d => s"database='$d', " }.getOrElse("") +
       Option(description).map { d => s"description='$d', " }.getOrElse("") +
       s"tableType='$tableType', " +

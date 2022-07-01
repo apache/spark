@@ -24,6 +24,7 @@ import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.functions.col
 
 /**
  * A simple example demonstrating how to write your own learning algorithm using Estimator,
@@ -120,8 +121,10 @@ private class MyLogisticRegression(override val uid: String)
 
   // This method is used by fit()
   override protected def train(dataset: Dataset[_]): MyLogisticRegressionModel = {
-    // Extract columns from data using helper method.
-    val oldDataset = extractLabeledPoints(dataset)
+    // Extract columns from data.
+    val oldDataset = dataset.select(col($(labelCol)).cast("double"), col($(featuresCol)))
+      .rdd
+      .map { case Row(l: Double, f: Vector) => LabeledPoint(l, f) }
 
     // Do learning to estimate the coefficients vector.
     val numFeatures = oldDataset.take(1)(0).features.size

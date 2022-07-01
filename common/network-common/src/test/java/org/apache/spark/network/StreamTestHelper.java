@@ -23,8 +23,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
-import com.google.common.io.Files;
-
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -51,7 +49,7 @@ class StreamTestHelper {
   }
 
   StreamTestHelper() throws Exception {
-    tempDir = Files.createTempDir();
+    tempDir = JavaUtils.createTempDir();
     emptyBuffer = createBuffer(0);
     smallBuffer = createBuffer(100);
     largeBuffer = createBuffer(100000);

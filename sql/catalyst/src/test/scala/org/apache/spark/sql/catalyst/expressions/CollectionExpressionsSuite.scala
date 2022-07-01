@@ -2345,11 +2345,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         } else {
           checkEvaluation(expr, null)
         }
-
-        // SQL array indices start at 1 exception throws for both mode.
-        expr = ElementAt(array, Literal(0))
-        val errMsg = "SQL array indices start at 1"
-        checkExceptionInExpression[Exception](expr, errMsg)
       }
     }
   }

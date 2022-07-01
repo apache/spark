@@ -378,17 +378,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       catalog.reset()
     }
   }
-
-  test("Table Ownership") {
-    val catalog = spark.sessionState.catalog
-    try {
-      sql(s"CREATE TABLE spark_30019(k int)")
-      assert(sql(s"DESCRIBE TABLE EXTENDED spark_30019").where("col_name='Owner'")
-        .collect().head.getString(1) === Utils.getCurrentUserName())
-    } finally {
-      catalog.reset()
-    }
-  }
 }
 
 @SlowHiveTest
@@ -1650,8 +1639,8 @@ class HiveDDLSuite
         // Even if index tables exist, listTables and getTable APIs should still work
         checkAnswer(
           spark.catalog.listTables().toDF(),
-          Row(indexTabName, "default", null, null, false) ::
-            Row(tabName, "default", null, "MANAGED", false) :: Nil)
+          Row(indexTabName, "spark_catalog", Array("default"), null, null, false) ::
+            Row(tabName, "spark_catalog", Array("default"), null, "MANAGED", false) :: Nil)
         assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
 
         intercept[TableAlreadyExistsException] {

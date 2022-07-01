@@ -594,6 +594,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.sql_processor",
         "pyspark.pandas.sql_formatter",
         "pyspark.pandas.strings",
+        "pyspark.pandas.supported_api_gen",
         "pyspark.pandas.utils",
         "pyspark.pandas.window",
         "pyspark.pandas.indexes.base",

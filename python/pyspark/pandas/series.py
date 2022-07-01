@@ -405,6 +405,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 assert not fastpath
                 s = data
             else:
+                from pyspark.pandas.indexes.base import Index
+
+                if isinstance(index, Index):
+                    raise TypeError(
+                        "The given index cannot be a pandas-on-Spark index. "
+                        "Try pandas index or array-like."
+                    )
+
                 s = pd.Series(
                     data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
                 )
@@ -2176,14 +2184,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> "Series":
-        return self._interpolate(method=method, limit=limit, limit_direction=limit_direction)
+        return self._interpolate(
+            method=method, limit=limit, limit_direction=limit_direction, limit_area=limit_area
+        )
 
     def _interpolate(
         self,
         method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
     ) -> "Series":
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
@@ -2193,6 +2205,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             limit_direction not in ["forward", "backward", "both"]
         ):
             raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
+        if (limit_area is not None) and (limit_area not in ["inside", "outside"]):
+            raise ValueError("invalid limit_area: '{}'".format(limit_area))
 
         if not self.spark.nullable and not isinstance(
             self.spark.data_type, (FloatType, DoubleType)
@@ -2259,6 +2273,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
                 pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
                 pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
+
+        if limit_area == "inside":
+            pad_head_cond = SF.lit(False)
+            pad_tail_cond = SF.lit(False)
+        elif limit_area == "outside":
+            fill_cond = SF.lit(False)
 
         cond = self.isnull().spark.column
         scol = (
@@ -2951,10 +2971,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         >>> s = ps.Series([2, 1, np.nan], index=['b', 'a', np.nan])
 
-        >>> s.sort_index()
-        a      1.0
-        b      2.0
-        NaN    NaN
+        >>> s.sort_index()  # doctest: +SKIP
+        a       1.0
+        b       2.0
+        None    NaN
         dtype: float64
 
         >>> s.sort_index(ignore_index=True)
@@ -2963,23 +2983,23 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2    NaN
         dtype: float64
 
-        >>> s.sort_index(ascending=False)
-        b      2.0
-        a      1.0
-        NaN    NaN
+        >>> s.sort_index(ascending=False)  # doctest: +SKIP
+        b       2.0
+        a       1.0
+        None    NaN
         dtype: float64
 
-        >>> s.sort_index(na_position='first')
-        NaN    NaN
-        a      1.0
-        b      2.0
+        >>> s.sort_index(na_position='first')  # doctest: +SKIP
+        None    NaN
+        a       1.0
+        b       2.0
         dtype: float64
 
         >>> s.sort_index(inplace=True)
-        >>> s
-        a      1.0
-        b      2.0
-        NaN    NaN
+        >>> s  # doctest: +SKIP
+        a       1.0
+        b       2.0
+        None    NaN
         dtype: float64
 
         Multi-index series.
@@ -3281,20 +3301,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
-        tmp_col = "__tmp_col__"
-        tmp_lag_col = "__tmp_lag_col__"
-        scol = self.spark.column.alias(tmp_col)
+        scol = self.spark.column
         if periods == 0:
-            lag_col = scol.alias(tmp_lag_col)
+            corr = self._internal.spark_frame.select(F.corr(scol, scol)).head()[0]
         else:
-            window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME)
-            lag_col = F.lag(scol, periods).over(window).alias(tmp_lag_col)
-
-        return (
-            self._internal.spark_frame.select([scol, lag_col])
-            .dropna("any")
-            .corr(tmp_col, tmp_lag_col)
-        )
+            lag_scol = F.lag(scol, periods).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
+            tmp_lag_col = "__tmp_lag_col__"
+            corr = (
+                self._internal.spark_frame.withColumn(tmp_lag_col, lag_scol)
+                .select(F.corr(scol, F.col(tmp_lag_col)))
+                .head()[0]
+            )
+        return np.nan if corr is None else corr
 
     def corr(self, other: "Series", method: str = "pearson") -> float:
         """
@@ -6239,12 +6257,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: SF.lit(-1))]),
         )
 
-    def argmax(self) -> int:
+    def argmax(self, axis: Axis = None, skipna: bool = True) -> int:
         """
         Return int position of the largest value in the Series.
 
         If the maximum is achieved in multiple locations,
         the first row position is returned.
+
+        Parameters
+        ----------
+        axis : {{None}}
+            Dummy argument for consistency with Series.
+        skipna : bool, default True
+            Exclude NA/null values. If the entire Series is NA, the result
+            will be NA.
 
         Returns
         -------
@@ -6255,36 +6281,46 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Consider dataset containing cereal calories
 
-        >>> s = ps.Series({'Corn Flakes': 100.0, 'Almond Delight': 110.0,
+        >>> s = ps.Series({'Corn Flakes': 100.0, 'Almond Delight': 110.0, 'Unknown': np.nan,
         ...                'Cinnamon Toast Crunch': 120.0, 'Cocoa Puff': 110.0})
-        >>> s  # doctest: +SKIP
+        >>> s
         Corn Flakes              100.0
         Almond Delight           110.0
+        Unknown                    NaN
         Cinnamon Toast Crunch    120.0
         Cocoa Puff               110.0
         dtype: float64
 
-        >>> s.argmax()  # doctest: +SKIP
-        2
+        >>> s.argmax()
+        3
+
+        >>> s.argmax(skipna=False)
+        -1
         """
+        axis = validate_axis(axis, none_axis=0)
+        if axis == 1:
+            raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
-        max_value = sdf.select(
-            F.max(scol_for(sdf, self._internal.data_spark_column_names[0])),
-            F.first(NATURAL_ORDER_COLUMN_NAME),
-        ).head()
-        if max_value[1] is None:
-            raise ValueError("attempt to get argmax of an empty sequence")
-        elif max_value[0] is None:
-            return -1
-        # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
         sdf = InternalFrame.attach_distributed_sequence_column(
-            sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
+            sdf,
+            seq_col_name,
         )
-        # If the maximum is achieved in multiple locations, the first row position is returned.
-        return sdf.filter(
-            scol_for(sdf, self._internal.data_spark_column_names[0]) == max_value[0]
-        ).head()[0]
+        scol = scol_for(sdf, self._internal.data_spark_column_names[0])
+
+        if skipna:
+            sdf = sdf.orderBy(scol.desc_nulls_last(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
+        else:
+            sdf = sdf.orderBy(scol.desc_nulls_first(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
+
+        results = sdf.select(scol, seq_col_name).take(1)
+
+        if len(results) == 0:
+            raise ValueError("attempt to get argmax of an empty sequence")
+        else:
+            max_value = results[0]
+            # If the maximum is achieved in multiple locations, the first row position is returned.
+            return -1 if max_value[0] is None else max_value[1]
 
     def argmin(self) -> int:
         """
