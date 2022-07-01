@@ -22,36 +22,30 @@ import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
 /**
- * The general implementation of {@link AggregateFunc}, which contains the upper-cased function
- * name, the `isDistinct` flag and all the inputs. Note that Spark cannot push down partial
- * aggregate with this function to the source, but can only push down the entire aggregate.
- * <p>
- * The currently supported SQL aggregate functions:
- * <ol>
- *  <li><pre>VAR_POP(input1)</pre> Since 3.3.0</li>
- *  <li><pre>VAR_SAMP(input1)</pre> Since 3.3.0</li>
- *  <li><pre>STDDEV_POP(input1)</pre> Since 3.3.0</li>
- *  <li><pre>STDDEV_SAMP(input1)</pre> Since 3.3.0</li>
- *  <li><pre>COVAR_POP(input1, input2)</pre> Since 3.3.0</li>
- *  <li><pre>COVAR_SAMP(input1, input2)</pre> Since 3.3.0</li>
- *  <li><pre>CORR(input1, input2)</pre> Since 3.3.0</li>
- * </ol>
+ * The general representation of user defined aggregate function, which implements
+ * {@link AggregateFunc}, contains the upper-cased function name, the canonical function name,
+ * the `isDistinct` flag and all the inputs. Note that Spark cannot push down aggregate with
+ * this function partially to the source, but can only push down the entire aggregate.
  *
- * @since 3.3.0
+ * @since 3.4.0
  */
 @Evolving
-public final class GeneralAggregateFunc implements AggregateFunc {
+public class UserDefinedAggregateFunc implements AggregateFunc {
   private final String name;
+  private String canonicalName;
   private final boolean isDistinct;
   private final Expression[] children;
 
-  public GeneralAggregateFunc(String name, boolean isDistinct, Expression[] children) {
+  public UserDefinedAggregateFunc(
+      String name, String canonicalName, boolean isDistinct, Expression[] children) {
     this.name = name;
+    this.canonicalName = canonicalName;
     this.isDistinct = isDistinct;
     this.children = children;
   }
 
   public String name() { return name; }
+  public String canonicalName() { return canonicalName; }
   public boolean isDistinct() { return isDistinct; }
 
   @Override

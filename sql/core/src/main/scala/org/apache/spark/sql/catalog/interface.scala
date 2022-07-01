@@ -49,6 +49,7 @@ class CatalogMetadata(
  * A database in Spark, as returned by the `listDatabases` method defined in [[Catalog]].
  *
  * @param name name of the database.
+ * @param catalog name of the catalog that the table belongs to.
  * @param description description of the database.
  * @param locationUri path (in the form of a uri) to data files.
  * @since 2.0.0
@@ -56,13 +57,19 @@ class CatalogMetadata(
 @Stable
 class Database(
     val name: String,
+    @Nullable val catalog: String,
     @Nullable val description: String,
     val locationUri: String)
   extends DefinedByConstructorParams {
 
+  def this(name: String, description: String, locationUri: String) = {
+    this(name, null, description, locationUri)
+  }
+
   override def toString: String = {
     "Database[" +
       s"name='$name', " +
+      Option(catalog).map { c => s"catalog='$c', " }.getOrElse("") +
       Option(description).map { d => s"description='$d', " }.getOrElse("") +
       s"path='$locationUri']"
   }

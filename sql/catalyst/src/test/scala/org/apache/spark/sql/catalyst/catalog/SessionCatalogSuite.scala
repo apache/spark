@@ -164,7 +164,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       }.getMessage.contains("fails to parse as a valid expression"))
       assert(intercept[AnalysisException] {
         ResolveDefaultColumns.analyze(columnD, statementType)
-      }.getMessage.contains("fails to resolve as a valid expression"))
+      }.getMessage.contains("subquery expressions are not allowed in DEFAULT values"))
       assert(intercept[AnalysisException] {
         ResolveDefaultColumns.analyze(columnE, statementType)
       }.getMessage.contains("statement provided a value of incompatible type"))

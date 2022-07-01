@@ -30,6 +30,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
@@ -98,6 +99,61 @@ public class ColumnVectorUtils {
       } else if (t instanceof TimestampType || t instanceof TimestampNTZType ||
         t instanceof DayTimeIntervalType) {
         col.putLongs(0, capacity, row.getLong(fieldIdx));
+      } else {
+        throw new RuntimeException(String.format("DataType %s is not supported" +
+            " in column vectorized reader.", t.sql()));
+      }
+    }
+  }
+
+  /**
+   * Populates the value of `row[fieldIdx]` into `ConstantColumnVector`.
+   */
+  public static void populate(ConstantColumnVector col, InternalRow row, int fieldIdx) {
+    DataType t = col.dataType();
+
+    if (row.isNullAt(fieldIdx)) {
+      col.setNull();
+    } else {
+      if (t == DataTypes.BooleanType) {
+        col.setBoolean(row.getBoolean(fieldIdx));
+      } else if (t == DataTypes.BinaryType) {
+        col.setBinary(row.getBinary(fieldIdx));
+      } else if (t == DataTypes.ByteType) {
+        col.setByte(row.getByte(fieldIdx));
+      } else if (t == DataTypes.ShortType) {
+        col.setShort(row.getShort(fieldIdx));
+      } else if (t == DataTypes.IntegerType) {
+        col.setInt(row.getInt(fieldIdx));
+      } else if (t == DataTypes.LongType) {
+        col.setLong(row.getLong(fieldIdx));
+      } else if (t == DataTypes.FloatType) {
+        col.setFloat(row.getFloat(fieldIdx));
+      } else if (t == DataTypes.DoubleType) {
+        col.setDouble(row.getDouble(fieldIdx));
+      } else if (t == DataTypes.StringType) {
+        UTF8String v = row.getUTF8String(fieldIdx);
+        col.setUtf8String(v);
+      } else if (t instanceof DecimalType) {
+        DecimalType dt = (DecimalType) t;
+        Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
+        if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
+          col.setInt((int)d.toUnscaledLong());
+        } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
+          col.setLong(d.toUnscaledLong());
+        } else {
+          final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
+          byte[] bytes = integer.toByteArray();
+          col.setBinary(bytes);
+        }
+      } else if (t instanceof CalendarIntervalType) {
+        // The value of `numRows` is irrelevant.
+        col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
+      } else if (t instanceof DateType || t instanceof YearMonthIntervalType) {
+        col.setInt(row.getInt(fieldIdx));
+      } else if (t instanceof TimestampType || t instanceof TimestampNTZType ||
+        t instanceof DayTimeIntervalType) {
+        col.setLong(row.getLong(fieldIdx));
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +
             " in column vectorized reader.", t.sql()));
@@ -235,4 +291,37 @@ public class ColumnVectorUtils {
     batch.setNumRows(n);
     return batch;
   }
+
+  /**
+   * <b>This method assumes that all constant column are at the end of schema
+   * and `constantColumnLength` represents the number of constant column.<b/>
+   *
+   * This method allocates columns to store elements of each field of the schema,
+   * the data columns use `OffHeapColumnVector` when `useOffHeap` is true and
+   * use `OnHeapColumnVector` when `useOffHeap` is false, the constant columns
+   * always use `ConstantColumnVector`.
+   *
+   * Capacity is the initial capacity of the vector, and it will grow as necessary.
+   * Capacity is in number of elements, not number of bytes.
+   */
+  public static ColumnVector[] allocateColumns(
+      int capacity, StructType schema, boolean useOffHeap, int constantColumnLength) {
+    StructField[] fields = schema.fields();
+    int fieldsLength = fields.length;
+    ColumnVector[] vectors = new ColumnVector[fieldsLength];
+    if (useOffHeap) {
+      for (int i = 0; i < fieldsLength - constantColumnLength; i++) {
+        vectors[i] = new OffHeapColumnVector(capacity, fields[i].dataType());
+      }
+    } else {
+      for (int i = 0; i < fieldsLength - constantColumnLength; i++) {
+        vectors[i] = new OnHeapColumnVector(capacity, fields[i].dataType());
+      }
+    }
+    for (int i = fieldsLength - constantColumnLength; i < fieldsLength; i++) {
+      vectors[i] = new ConstantColumnVector(capacity, fields[i].dataType());
+    }
+    return vectors;
+  }
+
 }

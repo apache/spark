@@ -50,6 +50,8 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertFalse(spark.catalog.databaseExists("some_db"))
             spark.sql("CREATE DATABASE some_db")
             self.assertTrue(spark.catalog.databaseExists("some_db"))
+            self.assertTrue(spark.catalog.databaseExists("spark_catalog.some_db"))
+            self.assertFalse(spark.catalog.databaseExists("spark_catalog.some_db2"))
 
     def test_list_tables(self):
         from pyspark.sql.catalog import Table
@@ -306,6 +308,21 @@ class CatalogTests(ReusedSQLTestCase):
                     lambda: spark.catalog.listColumns("does_not_exist"),
                 )
 
+    def test_table_cache(self):
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            with self.table("tab1"):
+                spark.sql("CREATE TABLE some_db.tab1 (name STRING, age INT) USING parquet")
+                self.assertFalse(spark.catalog.isCached("some_db.tab1"))
+                self.assertFalse(spark.catalog.isCached("spark_catalog.some_db.tab1"))
+                spark.catalog.cacheTable("spark_catalog.some_db.tab1")
+                self.assertTrue(spark.catalog.isCached("some_db.tab1"))
+                self.assertTrue(spark.catalog.isCached("spark_catalog.some_db.tab1"))
+                spark.catalog.uncacheTable("spark_catalog.some_db.tab1")
+                self.assertFalse(spark.catalog.isCached("some_db.tab1"))
+                self.assertFalse(spark.catalog.isCached("spark_catalog.some_db.tab1"))
+
     def test_table_exists(self):
         # SPARK-36176: testing that table_exists returns correct boolean
         spark = self.spark
@@ -316,8 +333,24 @@ class CatalogTests(ReusedSQLTestCase):
                 self.assertFalse(spark.catalog.tableExists("tab2", "some_db"))
                 spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
                 self.assertTrue(spark.catalog.tableExists("tab1"))
+                self.assertTrue(spark.catalog.tableExists("default.tab1"))
+                self.assertTrue(spark.catalog.tableExists("spark_catalog.default.tab1"))
+                self.assertTrue(spark.catalog.tableExists("tab1", "default"))
                 spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
+                self.assertFalse(spark.catalog.tableExists("tab2"))
+                self.assertTrue(spark.catalog.tableExists("some_db.tab2"))
+                self.assertTrue(spark.catalog.tableExists("spark_catalog.some_db.tab2"))
                 self.assertTrue(spark.catalog.tableExists("tab2", "some_db"))
+
+    def test_get_table(self):
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            with self.table("tab1"):
+                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+                self.assertEqual(spark.catalog.getTable("tab1").database, "default")
+                self.assertEqual(spark.catalog.getTable("default.tab1").catalog, "spark_catalog")
+                self.assertEqual(spark.catalog.getTable("spark_catalog.default.tab1").name, "tab1")
 
 
 if __name__ == "__main__":

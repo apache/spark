@@ -19,6 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
@@ -156,6 +157,13 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     dropDatabase("my_db1")
     assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
       Set("default", "my_db2"))
+  }
+
+  test("list databases with current catalog") {
+    spark.catalog.setCurrentCatalog("testcat")
+    sql(s"CREATE NAMESPACE testcat.my_db")
+    sql(s"CREATE NAMESPACE testcat.my_db2")
+    assert(spark.catalog.listDatabases().collect().map(_.name).toSet == Set("my_db", "my_db2"))
   }
 
   test("list tables") {
@@ -355,7 +363,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("catalog classes format in Dataset.show") {
-    val db = new Database("nama", "descripta", "locata")
+    val db = new Database("nama", "cataloa", "descripta", "locata")
     val table = new Table("nama", "cataloa", Array("databasa"), "descripta", "typa",
       isTemporary = false)
     val function = new Function("nama", "databasa", "descripta", "classa", isTemporary = false)
@@ -365,7 +373,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val tableFields = ScalaReflection.getConstructorParameterValues(table)
     val functionFields = ScalaReflection.getConstructorParameterValues(function)
     val columnFields = ScalaReflection.getConstructorParameterValues(column)
-    assert(dbFields == Seq("nama", "descripta", "locata"))
+    assert(dbFields == Seq("nama", "cataloa", "descripta", "locata"))
     assert(Seq(tableFields(0), tableFields(1), tableFields(3), tableFields(4), tableFields(5)) ==
       Seq("nama", "cataloa", "descripta", "typa", false))
     assert(tableFields(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))
@@ -794,5 +802,68 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     spark.catalog.setCurrentCatalog("spark_catalog")
     assert(spark.catalog.currentCatalog().equals("spark_catalog"))
     assert(spark.catalog.listCatalogs().collect().map(c => c.name).toSet == Set("testcat"))
+  }
+
+  test("SPARK-39583: Make RefreshTable be compatible with 3 layer namespace") {
+    withTempDir { dir =>
+      val tableName = "spark_catalog.default.my_table"
+
+      sql(s"""
+           | CREATE TABLE ${tableName}(col STRING) USING TEXT
+           | LOCATION '${dir.getAbsolutePath}'
+           |""".stripMargin)
+      sql(s"""INSERT INTO ${tableName} SELECT 'abc'""".stripMargin)
+      spark.catalog.cacheTable(tableName)
+      assert(spark.table(tableName).collect().length == 1)
+
+      FileUtils.deleteDirectory(dir)
+      assert(spark.table(tableName).collect().length == 1)
+
+      spark.catalog.refreshTable(tableName)
+      assert(spark.table(tableName).collect().length == 0)
+    }
+  }
+
+  test("three layer namespace compatibility - get database") {
+    val catalogsAndDatabases =
+      Seq(("testcat", "somedb"), ("testcat", "ns.somedb"), ("spark_catalog", "somedb"))
+    catalogsAndDatabases.foreach { case (catalog, dbName) =>
+      val qualifiedDb = s"$catalog.$dbName"
+      sql(s"CREATE NAMESPACE $qualifiedDb COMMENT '$qualifiedDb' LOCATION '/test/location'")
+      val db = spark.catalog.getDatabase(qualifiedDb)
+      assert(db.name === dbName)
+      assert(db.description === qualifiedDb)
+      assert(db.locationUri === "file:/test/location")
+    }
+
+    // test without qualifier
+    val name = "testns"
+    sql(s"CREATE NAMESPACE testcat.$name COMMENT '$name'")
+    spark.catalog.setCurrentCatalog("testcat")
+    val db = spark.catalog.getDatabase(name)
+    assert(db.name === name)
+    assert(db.description === name)
+
+    intercept[AnalysisException](spark.catalog.getDatabase("randomcat.db10"))
+  }
+
+  test("three layer namespace compatibility - get database, same in hive and testcat") {
+    // create 'testdb' in hive and testcat
+    val dbName = "testdb"
+    sql(s"CREATE NAMESPACE spark_catalog.$dbName COMMENT 'hive database'")
+    sql(s"CREATE NAMESPACE testcat.$dbName COMMENT 'testcat namespace'")
+    sql("SET CATALOG testcat")
+    // should still return the database in Hive
+    val db = spark.catalog.getDatabase(dbName)
+    assert(db.name === dbName)
+    assert(db.description === "hive database")
+  }
+
+  test("get database when there is `default` catalog") {
+    spark.conf.set("spark.sql.catalog.default", classOf[InMemoryCatalog].getName)
+    val db = "testdb"
+    val qualified = s"default.$db"
+    sql(s"CREATE NAMESPACE $qualified")
+    assert(spark.catalog.getDatabase(qualified).name === db)
   }
 }

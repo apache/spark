@@ -37,9 +37,9 @@ import org.apache.parquet.schema.Type;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
-import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -243,18 +243,17 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (StructField f: sparkSchema.fields()) {
       batchSchema = batchSchema.add(f);
     }
+    int constantColumnLength = 0;
     if (partitionColumns != null) {
       for (StructField f : partitionColumns.fields()) {
         batchSchema = batchSchema.add(f);
       }
+      constantColumnLength = partitionColumns.fields().length;
     }
 
-    WritableColumnVector[] vectors;
-    if (memMode == MemoryMode.OFF_HEAP) {
-      vectors = OffHeapColumnVector.allocateColumns(capacity, batchSchema);
-    } else {
-      vectors = OnHeapColumnVector.allocateColumns(capacity, batchSchema);
-    }
+    ColumnVector[] vectors = ColumnVectorUtils.allocateColumns(
+      capacity, batchSchema, memMode == MemoryMode.OFF_HEAP, constantColumnLength);
+
     columnarBatch = new ColumnarBatch(vectors);
 
     columnVectors = new ParquetColumnVector[sparkSchema.fields().length];
@@ -264,14 +263,14 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         defaultValue = sparkRequestedSchema.existenceDefaultValues()[i];
       }
       columnVectors[i] = new ParquetColumnVector(parquetColumn.children().apply(i),
-        vectors[i], capacity, memMode, missingColumns, true, defaultValue);
+        (WritableColumnVector) vectors[i], capacity, memMode, missingColumns, true, defaultValue);
     }
 
     if (partitionColumns != null) {
       int partitionIdx = sparkSchema.fields().length;
       for (int i = 0; i < partitionColumns.fields().length; i++) {
-        ColumnVectorUtils.populate(vectors[i + partitionIdx], partitionValues, i);
-        vectors[i + partitionIdx].setIsConstant();
+        ColumnVectorUtils.populate(
+          (ConstantColumnVector) vectors[i + partitionIdx], partitionValues, i);
       }
     }
   }

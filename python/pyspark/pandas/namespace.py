@@ -238,7 +238,7 @@ def read_csv(
     path : str
         The path string storing the CSV file to be read.
     sep : str, default ‘,’
-        Delimiter to use. Must be a single character.
+        Delimiter to use. Non empty string.
     header : int, default ‘infer’
         Whether to to use as the column names, and the start of the data.
         Default behavior is to infer the column names: if no names are passed
