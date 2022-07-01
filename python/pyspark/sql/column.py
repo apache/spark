@@ -157,13 +157,16 @@ def _bin_op(
     """Create a method for given binary operator"""
 
     if is_other_str:
+
         def _(
             self: "Column",
             other: str,
         ) -> "Column":
             njc = getattr(self._jc, name)(other)
             return Column(njc)
+
     else:
+
         def _(
             self: "Column",
             other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
