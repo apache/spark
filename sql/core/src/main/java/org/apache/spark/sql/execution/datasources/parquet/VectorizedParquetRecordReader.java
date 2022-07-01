@@ -38,6 +38,8 @@ import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
+import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -251,7 +253,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       constantColumnLength = partitionColumns.fields().length;
     }
 
-    ColumnVector[] vectors = ColumnVectorUtils.allocateColumns(
+    ColumnVector[] vectors = allocateColumns(
       capacity, batchSchema, memMode == MemoryMode.OFF_HEAP, constantColumnLength);
 
     columnarBatch = new ColumnarBatch(vectors);
@@ -414,5 +416,37 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         }
       }
     }
+  }
+
+  /**
+   * <b>This method assumes that all constant column are at the end of schema
+   * and `constantColumnLength` represents the number of constant column.<b/>
+   *
+   * This method allocates columns to store elements of each field of the schema,
+   * the data columns use `OffHeapColumnVector` when `useOffHeap` is true and
+   * use `OnHeapColumnVector` when `useOffHeap` is false, the constant columns
+   * always use `ConstantColumnVector`.
+   *
+   * Capacity is the initial capacity of the vector, and it will grow as necessary.
+   * Capacity is in number of elements, not number of bytes.
+   */
+  private ColumnVector[] allocateColumns(
+      int capacity, StructType schema, boolean useOffHeap, int constantColumnLength) {
+    StructField[] fields = schema.fields();
+    int fieldsLength = fields.length;
+    ColumnVector[] vectors = new ColumnVector[fieldsLength];
+    if (useOffHeap) {
+      for (int i = 0; i < fieldsLength - constantColumnLength; i++) {
+        vectors[i] = new OffHeapColumnVector(capacity, fields[i].dataType());
+      }
+    } else {
+      for (int i = 0; i < fieldsLength - constantColumnLength; i++) {
+        vectors[i] = new OnHeapColumnVector(capacity, fields[i].dataType());
+      }
+    }
+    for (int i = fieldsLength - constantColumnLength; i < fieldsLength; i++) {
+      vectors[i] = new ConstantColumnVector(capacity, fields[i].dataType());
+    }
+    return vectors;
   }
 }
