@@ -1098,6 +1098,14 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val HADOOP_RDD_METADATA_CACHE_SIZE =
+    ConfigBuilder("spark.hadoopRDD.metadataCacheSize")
+      .internal()
+      .doc("The maximum size of cache to store required metadata during HadoopRDD split computation")
+      .intConf
+      .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
+      .createWithDefault(1000)
+
   private[spark] val SECRET_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.regex")
       .doc("Regex to decide which Spark configuration properties and environment variables in " +
