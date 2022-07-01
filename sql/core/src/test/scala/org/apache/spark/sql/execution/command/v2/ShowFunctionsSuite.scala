@@ -17,9 +17,34 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenNoImpl
+
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `SHOW FUNCTIONS` command to check V2 table catalogs.
  */
-class ShowFunctionsSuite extends command.ShowFunctionsSuiteBase with CommandSuiteBase
+class ShowFunctionsSuite extends command.ShowFunctionsSuiteBase with CommandSuiteBase {
+  override protected def funCatalog: String = s"fun_$catalog"
+
+  private def getFunCatalog(): InMemoryCatalog = {
+    spark.sessionState.catalogManager.catalog(funCatalog).asInstanceOf[InMemoryCatalog]
+  }
+
+  private def funNameToId(name: String): Identifier = {
+    val parts = name.split('.')
+    assert(parts.head == funCatalog, s"${parts.head} is wrong catalog. Expected: $funCatalog.")
+    new MultipartIdentifierHelper(parts.tail).asIdentifier
+  }
+
+  override protected def createFunction(name: String): Unit = {
+    getFunCatalog().createFunction(funNameToId(name), new JavaStrLen(new JavaStrLenNoImpl))
+  }
+
+  override protected def dropFunction(name: String): Unit = {
+    getFunCatalog().dropFunction(funNameToId(name))
+  }
+}

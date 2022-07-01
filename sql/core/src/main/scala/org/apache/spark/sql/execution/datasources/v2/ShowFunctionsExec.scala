@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.LeafExecNode
  */
 case class ShowFunctionsExec(
     output: Seq[Attribute],
-    catalog: SupportsNamespaces,
+    catalog: FunctionCatalog,
     namespace: Seq[String],
     userScope: Boolean,
     systemScope: Boolean,
@@ -39,24 +39,15 @@ case class ShowFunctionsExec(
 
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
+    val systemFunctions = if (systemScope) {
+      StringUtils.filterPattern(
+        FunctionRegistry.builtinOperators.keys.toSeq, pattern.getOrElse("*"))
+    } else Seq.empty
+    val userFunctions = if (userScope) {
+      catalog.listFunctions(namespace.toArray).map(_.name()).toSeq
+    } else Seq.empty
 
-    // If pattern is not specified, we use '*', which is used to
-    // match any sequence of characters (including no characters).
-    val functionNames = Seq.empty[String]
-    // Hard code "<>", "!=", "between", "case", and "||"
-    // for now as there is no corresponding functions.
-    // "<>", "!=", "between", "case", and "||" is SystemFunctions,
-    // only show when showSystemFunctions=true
-    val result = if (systemScope) {
-      (functionNames ++
-        StringUtils.filterPattern(
-          FunctionRegistry.builtinOperators.keys.toSeq, pattern.getOrElse("*")))
-        .sorted
-    } else {
-      functionNames.sorted
-    }
-
-    result.foreach { fn =>
+    (userFunctions ++ systemFunctions).sorted.foreach { fn =>
       rows += toCatalystRow(fn)
     }
 

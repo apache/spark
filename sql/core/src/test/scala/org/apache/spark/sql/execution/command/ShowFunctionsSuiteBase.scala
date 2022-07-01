@@ -38,6 +38,7 @@ import org.apache.spark.util.Utils
 trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW FUNCTIONS"
 
+  protected def funCatalog: String = catalog
   protected def createFunction(name: String): Unit = {}
   protected def dropFunction(name: String): Unit = {}
   protected def showFun(ns: String, name: String): String = s"$ns.$name".toLowerCase(Locale.ROOT)
@@ -51,7 +52,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  protected def withNamespaceAndFuns(ns: String, funNames: Seq[String], cat: String = catalog)
+  protected def withNamespaceAndFuns(ns: String, funNames: Seq[String], cat: String = funCatalog)
       (f: (String, Seq[String]) => Unit): Unit = {
     val nsCat = s"$cat.$ns"
     withNamespace(nsCat) {
@@ -63,10 +64,19 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  protected def withNamespaceAndFun(ns: String, funName: String, cat: String = catalog)
+  protected def withNamespaceAndFun(ns: String, funName: String, cat: String = funCatalog)
       (f: (String, String) => Unit): Unit = {
     withNamespaceAndFuns(ns, Seq(funName), cat) { case (ns, Seq(name)) =>
       f(ns, name)
+    }
+  }
+
+  test("show a function") {
+    withNamespaceAndFun("ns", "iiilog") { (ns, f) =>
+      val totalFuns = sql(s"SHOW FUNCTIONS IN $ns").count()
+      createFunction(f)
+      assert(sql(s"SHOW FUNCTIONS IN $ns").count() - totalFuns === 1)
+      assert(!sql(s"SHOW FUNCTIONS IN $ns").filter("contains(function, 'iiilog')").isEmpty)
     }
   }
 

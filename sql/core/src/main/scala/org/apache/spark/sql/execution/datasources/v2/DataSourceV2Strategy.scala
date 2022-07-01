@@ -488,7 +488,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowFunctions(ResolvedNamespace(catalog, ns), userScope, systemScope, pattern, output) =>
       ShowFunctionsExec(
         output,
-        catalog.asNamespaceCatalog,
+        catalog.asFunctionCatalog,
         ns,
         userScope,
         systemScope,
