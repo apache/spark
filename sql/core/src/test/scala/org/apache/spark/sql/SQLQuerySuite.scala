@@ -2089,7 +2089,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-15327: fail to compile generated code with complex data structure") {
-    withTempDir{ dir =>
+    withTempDir { dir =>
       val json =
         """
           |{"h": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],

@@ -19,7 +19,7 @@ package org.apache.spark.streaming.api.java
 
 import org.apache.spark.streaming.Time
 
-private[streaming] trait PythonStreamingListener{
+private[streaming] trait PythonStreamingListener {
 
   /** Called when the streaming has been started */
   def onStreamingStarted(streamingStarted: JavaStreamingListenerStreamingStarted): Unit = { }
