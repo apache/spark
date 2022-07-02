@@ -377,13 +377,15 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       generateExpression(child).map(v => new V2Extract("QUARTER", v))
     case Year(child) =>
       generateExpression(child).map(v => new V2Extract("YEAR", v))
-    // translate the DayOfWeek function in Spark using ISO standards
+    // DayOfWeek uses 1 = Sunday, 2 = Monday, ... and ISO standard is Monday=1, ...,
+    // so we use the formula ((ISO_standard % 7) + 1) to do translation.
     case DayOfWeek(child) =>
       generateExpression(child).map(v => new GeneralScalarExpression("+",
         Array[V2Expression](new GeneralScalarExpression("%",
           Array[V2Expression](new V2Extract("DAY_OF_WEEK", v), LiteralValue(7, IntegerType))),
           LiteralValue(1, IntegerType))))
-    // translate the WeekDay function in Spark using ISO standards
+    // WeekDay uses 0 = Monday, 1 = Tuesday, ... and ISO standard is Monday=1, ...,
+    // so we use the formula (ISO_standard - 1) to do translation.
     case WeekDay(child) =>
       generateExpression(child).map(v => new GeneralScalarExpression("-",
         Array[V2Expression](new V2Extract("DAY_OF_WEEK", v), LiteralValue(1, IntegerType))))
