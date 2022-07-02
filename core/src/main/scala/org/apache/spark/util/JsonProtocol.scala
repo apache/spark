@@ -697,6 +697,11 @@ private[spark] object JsonProtocol {
     writeMapField("Log Urls", executorInfo.logUrlMap, g)
     writeMapField("Attributes", executorInfo.attributes, g)
     g.writeObjectFieldStart("Resources")
+    // TODO(SPARK-39658): here we are taking a Json4s JValue and are converting it to
+    // a JSON string then are combining that string with Jackson-generated JSON. This is
+    // done because ResourceInformation.toJson is a public class and exposes Json4s
+    // JValues as part of its public API. We should reconsider the design of that interface
+    // and explore whether we can avoid exposing third-party symbols in this public API.
     executorInfo.resourcesInfo.foreach { case (k, v) =>
       g.writeFieldName(k)
       g.writeRawValue(compact(v.toJson()))
