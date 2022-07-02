@@ -75,12 +75,12 @@ jobs:
       SPARK_HOME: ${{ github.workspace }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       # In order to get diff files
       with:
         fetch-depth: 0
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: |
           build/apache-maven-*
@@ -91,14 +91,14 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
         key: benchmark-coursier-${{ github.event.inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           benchmark-coursier-${{ github.event.inputs.jdk }}
     - name: Install Java ${{ github.event.inputs.jdk }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
         java-version: ${{ github.event.inputs.jdk }}
     - name: Run benchmarks
@@ -121,7 +121,7 @@ jobs:
         echo "Preparing the benchmark results:"
         tar -cvf benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude-standard`
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}-${{ matrix.split }}
         path: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar
