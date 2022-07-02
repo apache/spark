@@ -907,8 +907,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
     val functions1a = spark.catalog.listFunctions("my_db1").collect().map(_.name)
     val functions1b = spark.catalog.listFunctions("spark_catalog.my_db1").collect().map(_.name)
-    assert(functions1a.contains("my_func1"))
-    assert(functions1b.contains("my_func1"))
+    assert(functions1a.length > 200 && functions1a.contains("my_func1"))
+    assert(functions1b.length > 200 && functions1b.contains("my_func1"))
     // functions1b contains 5 more functions: [<>, ||, !=, case, between]
     assert(functions1a.intersect(functions1b) === functions1a)
 
@@ -936,7 +936,11 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       spark.sessionState.catalogManager.catalog("testcat").asInstanceOf[InMemoryCatalog]
     testCatalog.createFunction(Identifier.of(Array("my_db2"), "my_func2"), function)
 
+    val functions2 = spark.catalog.listFunctions("testcat.my_db2").collect().map(_.name)
+    assert(functions2.length > 200 && functions2.contains("my_func2"))
+
     assert(spark.catalog.functionExists("testcat.my_db2.my_func2"))
+    assert(!spark.catalog.functionExists("testcat.my_db2.my_func3"))
 
     val func2 = spark.catalog.getFunction("testcat.my_db2.my_func2")
     assert(func2.name === "my_func2" && func2.namespace === Array("my_db2") &&
