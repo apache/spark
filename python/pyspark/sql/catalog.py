@@ -128,11 +128,7 @@ class Catalog:
 
     @since(2.0)
     def setCurrentDatabase(self, dbName: str) -> None:
-        """Sets the current default database in this session.
-
-        .. versionchanged:: 3.4
-           Allowed ``dbName`` to be qualified with catalog name.
-        """
+        """Sets the current default database in this session."""
         return self._jcatalog.setCurrentDatabase(dbName)
 
     @since(2.0)
