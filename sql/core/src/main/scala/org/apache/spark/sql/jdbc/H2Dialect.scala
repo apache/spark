@@ -140,12 +140,13 @@ private[sql] object H2Dialect extends JdbcDialect {
   class H2JDBCSQLBuilder extends JDBCSQLBuilder {
 
     override def visitExtract(field: String, source: String): String = {
-      field match {
-        case "DAY_OF_WEEK" => s"EXTRACT(ISO_DAY_OF_WEEK FROM $source)"
-        case "WEEK" => s"EXTRACT(ISO_WEEK FROM $source)"
-        case "YEAR_OF_WEEK" => s"EXTRACT(ISO_WEEK_YEAR FROM $source)"
-        case _ => super.visitExtract(field, source)
+      val newField = field match {
+        case "DAY_OF_WEEK" => "ISO_DAY_OF_WEEK"
+        case "WEEK" => "ISO_WEEK"
+        case "YEAR_OF_WEEK" => "ISO_WEEK_YEAR"
+        case _ => field
       }
+      s"EXTRACT($newField FROM $source)"
     }
   }
 }
