@@ -91,15 +91,20 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val identicalEdges = List((0L, 1L), (0L, 1L))
       val canonicalEdges = List((0L, 1L), (1L, 0L))
       val sameSrcEdges = List((0L, 1L), (0L, 2L))
+      val sameDstEdges = List((1L, 0L), (2L, 0L))
 
       // The two edges start out in different partitions
-      for (edges <- List(identicalEdges, canonicalEdges, sameSrcEdges)) {
+      for (edges <- List(identicalEdges, canonicalEdges, sameSrcEdges, sameDstEdges)) {
         assert(nonemptyParts(mkGraph(edges)).count === 2)
       }
       // partitionBy(RandomVertexCut) puts identical edges in the same partition
       assert(nonemptyParts(mkGraph(identicalEdges).partitionBy(RandomVertexCut)).count === 1)
       // partitionBy(EdgePartition1D) puts same-source edges in the same partition
       assert(nonemptyParts(mkGraph(sameSrcEdges).partitionBy(EdgePartition1D)).count === 1)
+      // partitionBy(EdgePartition1DSrc) puts same-source edges in the same partition
+      assert(nonemptyParts(mkGraph(sameSrcEdges).partitionBy(EdgePartition1DSrc)).count === 1)
+      // partitionBy(EdgePartition1DDst) puts same-destination edges in the same partition
+      assert(nonemptyParts(mkGraph(sameDstEdges).partitionBy(EdgePartition1DDst)).count === 1)
       // partitionBy(CanonicalRandomVertexCut) puts edges that are identical modulo direction into
       // the same partition
       assert(

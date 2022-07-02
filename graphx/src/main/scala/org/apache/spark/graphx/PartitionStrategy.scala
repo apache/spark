@@ -98,10 +98,36 @@ object PartitionStrategy {
    * Assigns edges to partitions using only the source vertex ID, colocating edges with the same
    * source.
    */
+  @deprecated("Use more specific partition type EdgePartition1DSrc or EdgePartition1DDst", "3.4.0")
   case object EdgePartition1D extends PartitionStrategy {
     override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
       val mixingPrime: VertexId = 1125899906842597L
       (math.abs(src * mixingPrime) % numParts).toInt
+    }
+  }
+
+  def edgePartition1D(vertexIdProvider: VertexId, numParts: PartitionID): PartitionID = {
+    val mixingPrime: VertexId = 1125899906842597L
+    (math.abs(vertexIdProvider * mixingPrime) % numParts).toInt
+  }
+
+  /**
+   * Assigns edges to partitions using only the source vertex ID,
+   * collocating edges with the same source.
+   */
+  case object EdgePartition1DSrc extends PartitionStrategy {
+    override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
+      edgePartition1D(src, numParts)
+    }
+  }
+
+  /**
+   * Assigns edges to partitions using only the destination vertex ID,
+   * collocating edges with the same source.
+   */
+  case object EdgePartition1DDst extends PartitionStrategy {
+    override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
+      edgePartition1D(dst, numParts)
     }
   }
 
@@ -136,6 +162,8 @@ object PartitionStrategy {
   def fromString(s: String): PartitionStrategy = s match {
     case "RandomVertexCut" => RandomVertexCut
     case "EdgePartition1D" => EdgePartition1D
+    case "EdgePartition1DSrc" => EdgePartition1DSrc
+    case "EdgePartition1DDst" => EdgePartition1DDst
     case "EdgePartition2D" => EdgePartition2D
     case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut
     case _ => throw new IllegalArgumentException("Invalid PartitionStrategy: " + s)
