@@ -4059,15 +4059,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           isExtended)
       }
     } else {
-      val partitionSpec = if (ctx.partitionSpec != null) {
-        // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
-        visitPartitionSpec(ctx.partitionSpec).map {
-          case (key, Some(value)) => key -> value
-          case (key, _) =>
-            throw QueryParsingErrors.incompletePartitionSpecificationError(key, ctx)
-        }
-      } else {
-        Map.empty[String, String]
+      val partitionSpec = Option(ctx.partitionSpec).map { specCtx =>
+        UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
       }
       DescribeRelation(relation, partitionSpec, isExtended)
     }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.DescribeRelation
 
@@ -25,15 +25,29 @@ class DescribeTableParserSuite extends AnalysisTest {
   test("SPARK-17328: Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), None, isExtended = false))
     comparePlans(parsePlan("describe table t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), None, isExtended = false))
     comparePlans(parsePlan("describe table extended t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), None, isExtended = true))
     comparePlans(parsePlan("describe table formatted t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), None, isExtended = true))
+  }
+
+  test("describe table partition") {
+    comparePlans(parsePlan("describe t PARTITION(ds='2022-07-02')"),
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        Some(UnresolvedPartitionSpec(Map("ds" -> "2022-07-02"))),
+        isExtended = false))
+    comparePlans(
+      parsePlan("DESCRIBE TABLE EXTENDED t PARTITION(partcol1='partvalue', partcol2='partvalue')"),
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        Some(UnresolvedPartitionSpec(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue"))),
+        isExtended = true))
   }
 }

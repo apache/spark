@@ -127,8 +127,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
-         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
-      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended, output)
+        ResolvedV1TableOrViewIdentifier(ident),
+        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _))),
+        isExtended,
+        output) =>
+      DescribeTableCommand(
+        ident.asTableIdentifier,
+        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec),
+        isExtended,
+        output)
 
     case DescribeColumn(
          ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>

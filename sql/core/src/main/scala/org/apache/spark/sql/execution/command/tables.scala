@@ -612,7 +612,7 @@ abstract class DescribeCommandBase extends LeafRunnableCommand {
  */
 case class DescribeTableCommand(
     table: TableIdentifier,
-    partitionSpec: TablePartitionSpec,
+    partitionSpec: Option[TablePartitionSpec],
     isExtended: Boolean,
     override val output: Seq[Attribute])
   extends DescribeCommandBase {
@@ -681,7 +681,7 @@ case class DescribeTableCommand(
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
-      partitionSpec,
+      partitionSpec.get,
       metadata.partitionSchema,
       table.quotedString,
       spark.sessionState.conf.resolver)
