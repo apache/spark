@@ -20,7 +20,6 @@ package org.apache.spark.sql.jdbc
 import java.sql.Types
 import java.util.Locale
 
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.types._
 
 

@@ -21,7 +21,6 @@ import java.sql.{Date, Timestamp, Types}
 import java.util.{Locale, TimeZone}
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
