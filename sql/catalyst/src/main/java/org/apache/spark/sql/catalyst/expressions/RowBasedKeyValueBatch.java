@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Closeable {
-  protected final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
+  protected static final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
 
   private static final int DEFAULT_CAPACITY = 1 << 16;
 

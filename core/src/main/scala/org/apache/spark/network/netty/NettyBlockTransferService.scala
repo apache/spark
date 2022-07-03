@@ -30,7 +30,7 @@ import com.codahale.metrics.{Metric, MetricSet}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ExecutorDeadException
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap}
@@ -56,7 +56,7 @@ private[spark] class NettyBlockTransferService(
     _port: Int,
     numCores: Int,
     driverEndPointRef: RpcEndpointRef = null)
-  extends BlockTransferService {
+  extends BlockTransferService with Logging {
 
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
   private val serializer = new JavaSerializer(conf)
@@ -80,9 +80,9 @@ private[spark] class NettyBlockTransferService(
     appId = conf.getAppId
 
     if (hostName.equals(bindAddress)) {
-      logger.info(s"Server created on $hostName:${server.getPort}")
+      logInfo(s"Server created on $hostName:${server.getPort}")
     } else {
-      logger.info(s"Server created on $hostName $bindAddress:${server.getPort}")
+      logInfo(s"Server created on $hostName $bindAddress:${server.getPort}")
     }
   }
 
@@ -116,9 +116,7 @@ private[spark] class NettyBlockTransferService(
       blockIds: Array[String],
       listener: BlockFetchingListener,
       tempFileManager: DownloadFileManager): Unit = {
-    if (logger.isTraceEnabled) {
-      logger.trace(s"Fetch blocks from $host:$port (executor id $execId)")
-    }
+    logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val maxRetries = transportConf.maxIORetries()
       val blockFetchStarter = new RetryingBlockTransferor.BlockTransferStarter {
@@ -153,7 +151,7 @@ private[spark] class NettyBlockTransferService(
       }
     } catch {
       case e: Exception =>
-        logger.error("Exception while beginning fetchBlocks", e)
+        logError("Exception while beginning fetchBlocks", e)
         blockIds.foreach(listener.onBlockFetchFailure(_, e))
     }
   }
@@ -181,14 +179,12 @@ private[spark] class NettyBlockTransferService(
       blockId.isShuffle)
     val callback = new RpcResponseCallback {
       override def onSuccess(response: ByteBuffer): Unit = {
-        if (logger.isTraceEnabled) {
-          logger.trace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")
-        }
+        logTrace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")
         result.success((): Unit)
       }
 
       override def onFailure(e: Throwable): Unit = {
-        logger.error(s"Error while uploading $blockId${if (asStream) " as stream" else ""}", e)
+        logError(s"Error while uploading $blockId${if (asStream) " as stream" else ""}", e)
         result.failure(e)
       }
     }
