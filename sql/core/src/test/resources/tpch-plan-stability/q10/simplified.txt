@@ -14,7 +14,7 @@ TakeOrderedAndProject [revenue,c_custkey,c_name,c_acctbal,n_name,c_address,c_pho
                           Filter [c_custkey,c_nationkey]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.customer [c_custkey,c_name,c_address,c_nationkey,c_phone,c_acctbal,c_comment]
+                                Scan parquet spark_catalog.default.customer [c_custkey,c_name,c_address,c_nationkey,c_phone,c_acctbal,c_comment]
                           InputAdapter
                             BroadcastExchange #2
                               WholeStageCodegen (1)
@@ -22,7 +22,7 @@ TakeOrderedAndProject [revenue,c_custkey,c_name,c_acctbal,n_name,c_address,c_pho
                                   Filter [o_orderdate,o_custkey,o_orderkey]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.orders [o_orderkey,o_custkey,o_orderdate]
+                                        Scan parquet spark_catalog.default.orders [o_orderkey,o_custkey,o_orderdate]
                       InputAdapter
                         BroadcastExchange #3
                           WholeStageCodegen (2)
@@ -30,11 +30,11 @@ TakeOrderedAndProject [revenue,c_custkey,c_name,c_acctbal,n_name,c_address,c_pho
                               Filter [l_returnflag,l_orderkey]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.lineitem [l_orderkey,l_extendedprice,l_discount,l_returnflag]
+                                    Scan parquet spark_catalog.default.lineitem [l_orderkey,l_extendedprice,l_discount,l_returnflag]
                   InputAdapter
                     BroadcastExchange #4
                       WholeStageCodegen (3)
                         Filter [n_nationkey]
                           ColumnarToRow
                             InputAdapter
-                              Scan parquet default.nation [n_nationkey,n_name]
+                              Scan parquet spark_catalog.default.nation [n_nationkey,n_name]

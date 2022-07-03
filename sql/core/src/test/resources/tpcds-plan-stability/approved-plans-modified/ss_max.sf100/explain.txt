@@ -6,10 +6,10 @@
          +- Exchange (4)
             +- * HashAggregate (3)
                +- * ColumnarToRow (2)
-                  +- Scan parquet default.store_sales (1)
+                  +- Scan parquet spark_catalog.default.store_sales (1)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [9]: [ss_sold_time_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_store_sk#7, ss_promo_sk#8, ss_sold_date_sk#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]

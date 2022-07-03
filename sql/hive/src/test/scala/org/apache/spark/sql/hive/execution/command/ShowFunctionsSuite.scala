@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.Row
+import java.util.Locale
+
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.hive.execution.UDFToListInt
 
@@ -26,46 +28,13 @@ import org.apache.spark.sql.hive.execution.UDFToListInt
  */
 class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
+  override protected def showFun(ns: String, name: String): String =
+    s"$SESSION_CATALOG_NAME.$ns.$name".toLowerCase(Locale.ROOT)
 
   override protected def createFunction(name: String): Unit = {
     sql(s"CREATE FUNCTION $name AS '${classOf[UDFToListInt].getName}'")
   }
   override protected def dropFunction(name: String): Unit = {
     sql(s"DROP FUNCTION IF EXISTS $name")
-  }
-
-  test("show a function by its string name") {
-    val testFuns = Seq("crc32i", "crc16j")
-    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      funs.foreach(createFunction)
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns 'crc32i'"),
-        Row(showFun("ns", "crc32i")))
-    }
-  }
-
-  test("show functions matched to the '|' pattern") {
-    val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
-    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      funs.foreach(createFunction)
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date1900'"),
-        Seq("crc32i", "date1900").map(testFun => Row(showFun("ns", testFun))))
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date*'"),
-        Seq("crc32i", "date1900", "Date1").map(testFun => Row(showFun("ns", testFun))))
-    }
-  }
-
-  test("show a function by its id") {
-    withNamespaceAndFun("ns", "crc32i") { (ns, fun) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      createFunction(fun)
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS $fun"),
-        Row(showFun("ns", "crc32i")))
-    }
   }
 }

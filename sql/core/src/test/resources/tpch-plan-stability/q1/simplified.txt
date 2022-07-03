@@ -12,4 +12,4 @@ WholeStageCodegen (3)
                       Filter [l_shipdate]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.lineitem [l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus,l_shipdate]
+                            Scan parquet spark_catalog.default.lineitem [l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus,l_shipdate]

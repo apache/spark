@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v1
 
 import java.util.Locale
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 
 /**
@@ -33,65 +32,14 @@ import org.apache.spark.sql.execution.command
  *     `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
  */
 trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
-  with command.TestsV1AndV2Commands {
-
-  test("show a function") {
-    withNamespaceAndFun("ns", "iiilog") { (ns, f) =>
-      val totalFuns = sql(s"SHOW FUNCTIONS IN $ns").count()
-      createFunction(f)
-      assert(sql(s"SHOW FUNCTIONS IN $ns").count() - totalFuns === 1)
-      assert(!sql(s"SHOW FUNCTIONS IN $ns").filter("contains(function, 'iiilog')").isEmpty)
-    }
-  }
-
-  test("show a function in the USER name space") {
-    withNamespaceAndFun("ns", "logiii") { (ns, f) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").count() === 0)
-      createFunction(f)
-      checkAnswer(sql(s"SHOW USER FUNCTIONS IN $ns"), Row(showFun("ns", "logiii")))
-    }
-  }
-
-  test("show functions in the SYSTEM name space") {
-    withNamespaceAndFun("ns", "date_addi") { (ns, f) =>
-      val systemFuns = sql(s"SHOW SYSTEM FUNCTIONS IN $ns").count()
-      assert(systemFuns > 0)
-      createFunction(f)
-      assert(sql(s"SHOW SYSTEM FUNCTIONS IN $ns").count() === systemFuns)
-    }
-  }
-
-  test("show functions among both user and system defined functions") {
-    withNamespaceAndFun("ns", "current_datei") { (ns, f) =>
-      val allFuns = sql(s"SHOW ALL FUNCTIONS IN $ns").collect()
-      assert(allFuns.nonEmpty)
-      createFunction(f)
-      checkAnswer(
-        sql(s"SHOW ALL FUNCTIONS IN $ns"),
-        allFuns :+ Row(showFun("ns", "current_datei")))
-    }
-  }
-
-  test("show functions matched to the wildcard pattern") {
-    val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
-    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      funs.foreach(createFunction)
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*'"),
-        testFuns.map(testFun => Row(showFun("ns", testFun))))
-      checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*rc*'"),
-        Seq("crc32i", "crc16j").map(testFun => Row(showFun("ns", testFun))))
-    }
-  }
-}
+  with command.TestsV1AndV2Commands
 
 /**
  * The class contains tests for the `SHOW FUNCTIONS` command to check temporary functions.
  */
 class ShowTempFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
+  override protected def isTempFunctions(): Boolean = true
 
   override protected def createFunction(name: String): Unit = {
     spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)

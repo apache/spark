@@ -18,22 +18,22 @@
 :  :  :  :  :  :  :              :     :     :- * Project (4)
 :  :  :  :  :  :  :              :     :     :  +- * Filter (3)
 :  :  :  :  :  :  :              :     :     :     +- * ColumnarToRow (2)
-:  :  :  :  :  :  :              :     :     :        +- Scan parquet default.store_sales (1)
+:  :  :  :  :  :  :              :     :     :        +- Scan parquet spark_catalog.default.store_sales (1)
 :  :  :  :  :  :  :              :     :     +- BroadcastExchange (9)
 :  :  :  :  :  :  :              :     :        +- * Project (8)
 :  :  :  :  :  :  :              :     :           +- * Filter (7)
 :  :  :  :  :  :  :              :     :              +- * ColumnarToRow (6)
-:  :  :  :  :  :  :              :     :                 +- Scan parquet default.time_dim (5)
+:  :  :  :  :  :  :              :     :                 +- Scan parquet spark_catalog.default.time_dim (5)
 :  :  :  :  :  :  :              :     +- BroadcastExchange (16)
 :  :  :  :  :  :  :              :        +- * Project (15)
 :  :  :  :  :  :  :              :           +- * Filter (14)
 :  :  :  :  :  :  :              :              +- * ColumnarToRow (13)
-:  :  :  :  :  :  :              :                 +- Scan parquet default.store (12)
+:  :  :  :  :  :  :              :                 +- Scan parquet spark_catalog.default.store (12)
 :  :  :  :  :  :  :              +- BroadcastExchange (23)
 :  :  :  :  :  :  :                 +- * Project (22)
 :  :  :  :  :  :  :                    +- * Filter (21)
 :  :  :  :  :  :  :                       +- * ColumnarToRow (20)
-:  :  :  :  :  :  :                          +- Scan parquet default.household_demographics (19)
+:  :  :  :  :  :  :                          +- Scan parquet spark_catalog.default.household_demographics (19)
 :  :  :  :  :  :  +- BroadcastExchange (49)
 :  :  :  :  :  :     +- * HashAggregate (48)
 :  :  :  :  :  :        +- Exchange (47)
@@ -47,12 +47,12 @@
 :  :  :  :  :  :                    :     :     :- * Project (32)
 :  :  :  :  :  :                    :     :     :  +- * Filter (31)
 :  :  :  :  :  :                    :     :     :     +- * ColumnarToRow (30)
-:  :  :  :  :  :                    :     :     :        +- Scan parquet default.store_sales (29)
+:  :  :  :  :  :                    :     :     :        +- Scan parquet spark_catalog.default.store_sales (29)
 :  :  :  :  :  :                    :     :     +- BroadcastExchange (37)
 :  :  :  :  :  :                    :     :        +- * Project (36)
 :  :  :  :  :  :                    :     :           +- * Filter (35)
 :  :  :  :  :  :                    :     :              +- * ColumnarToRow (34)
-:  :  :  :  :  :                    :     :                 +- Scan parquet default.time_dim (33)
+:  :  :  :  :  :                    :     :                 +- Scan parquet spark_catalog.default.time_dim (33)
 :  :  :  :  :  :                    :     +- ReusedExchange (40)
 :  :  :  :  :  :                    +- ReusedExchange (43)
 :  :  :  :  :  +- BroadcastExchange (71)
@@ -68,12 +68,12 @@
 :  :  :  :  :                    :     :     :- * Project (54)
 :  :  :  :  :                    :     :     :  +- * Filter (53)
 :  :  :  :  :                    :     :     :     +- * ColumnarToRow (52)
-:  :  :  :  :                    :     :     :        +- Scan parquet default.store_sales (51)
+:  :  :  :  :                    :     :     :        +- Scan parquet spark_catalog.default.store_sales (51)
 :  :  :  :  :                    :     :     +- BroadcastExchange (59)
 :  :  :  :  :                    :     :        +- * Project (58)
 :  :  :  :  :                    :     :           +- * Filter (57)
 :  :  :  :  :                    :     :              +- * ColumnarToRow (56)
-:  :  :  :  :                    :     :                 +- Scan parquet default.time_dim (55)
+:  :  :  :  :                    :     :                 +- Scan parquet spark_catalog.default.time_dim (55)
 :  :  :  :  :                    :     +- ReusedExchange (62)
 :  :  :  :  :                    +- ReusedExchange (65)
 :  :  :  :  +- BroadcastExchange (93)
@@ -89,12 +89,12 @@
 :  :  :  :                    :     :     :- * Project (76)
 :  :  :  :                    :     :     :  +- * Filter (75)
 :  :  :  :                    :     :     :     +- * ColumnarToRow (74)
-:  :  :  :                    :     :     :        +- Scan parquet default.store_sales (73)
+:  :  :  :                    :     :     :        +- Scan parquet spark_catalog.default.store_sales (73)
 :  :  :  :                    :     :     +- BroadcastExchange (81)
 :  :  :  :                    :     :        +- * Project (80)
 :  :  :  :                    :     :           +- * Filter (79)
 :  :  :  :                    :     :              +- * ColumnarToRow (78)
-:  :  :  :                    :     :                 +- Scan parquet default.time_dim (77)
+:  :  :  :                    :     :                 +- Scan parquet spark_catalog.default.time_dim (77)
 :  :  :  :                    :     +- ReusedExchange (84)
 :  :  :  :                    +- ReusedExchange (87)
 :  :  :  +- BroadcastExchange (115)
@@ -110,12 +110,12 @@
 :  :  :                    :     :     :- * Project (98)
 :  :  :                    :     :     :  +- * Filter (97)
 :  :  :                    :     :     :     +- * ColumnarToRow (96)
-:  :  :                    :     :     :        +- Scan parquet default.store_sales (95)
+:  :  :                    :     :     :        +- Scan parquet spark_catalog.default.store_sales (95)
 :  :  :                    :     :     +- BroadcastExchange (103)
 :  :  :                    :     :        +- * Project (102)
 :  :  :                    :     :           +- * Filter (101)
 :  :  :                    :     :              +- * ColumnarToRow (100)
-:  :  :                    :     :                 +- Scan parquet default.time_dim (99)
+:  :  :                    :     :                 +- Scan parquet spark_catalog.default.time_dim (99)
 :  :  :                    :     +- ReusedExchange (106)
 :  :  :                    +- ReusedExchange (109)
 :  :  +- BroadcastExchange (137)
@@ -131,12 +131,12 @@
 :  :                    :     :     :- * Project (120)
 :  :                    :     :     :  +- * Filter (119)
 :  :                    :     :     :     +- * ColumnarToRow (118)
-:  :                    :     :     :        +- Scan parquet default.store_sales (117)
+:  :                    :     :     :        +- Scan parquet spark_catalog.default.store_sales (117)
 :  :                    :     :     +- BroadcastExchange (125)
 :  :                    :     :        +- * Project (124)
 :  :                    :     :           +- * Filter (123)
 :  :                    :     :              +- * ColumnarToRow (122)
-:  :                    :     :                 +- Scan parquet default.time_dim (121)
+:  :                    :     :                 +- Scan parquet spark_catalog.default.time_dim (121)
 :  :                    :     +- ReusedExchange (128)
 :  :                    +- ReusedExchange (131)
 :  +- BroadcastExchange (159)
@@ -152,12 +152,12 @@
 :                    :     :     :- * Project (142)
 :                    :     :     :  +- * Filter (141)
 :                    :     :     :     +- * ColumnarToRow (140)
-:                    :     :     :        +- Scan parquet default.store_sales (139)
+:                    :     :     :        +- Scan parquet spark_catalog.default.store_sales (139)
 :                    :     :     +- BroadcastExchange (147)
 :                    :     :        +- * Project (146)
 :                    :     :           +- * Filter (145)
 :                    :     :              +- * ColumnarToRow (144)
-:                    :     :                 +- Scan parquet default.time_dim (143)
+:                    :     :                 +- Scan parquet spark_catalog.default.time_dim (143)
 :                    :     +- ReusedExchange (150)
 :                    +- ReusedExchange (153)
 +- BroadcastExchange (181)
@@ -173,17 +173,17 @@
                   :     :     :- * Project (164)
                   :     :     :  +- * Filter (163)
                   :     :     :     +- * ColumnarToRow (162)
-                  :     :     :        +- Scan parquet default.store_sales (161)
+                  :     :     :        +- Scan parquet spark_catalog.default.store_sales (161)
                   :     :     +- BroadcastExchange (169)
                   :     :        +- * Project (168)
                   :     :           +- * Filter (167)
                   :     :              +- * ColumnarToRow (166)
-                  :     :                 +- Scan parquet default.time_dim (165)
+                  :     :                 +- Scan parquet spark_catalog.default.time_dim (165)
                   :     +- ReusedExchange (172)
                   +- ReusedExchange (175)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -201,7 +201,7 @@ Condition : ((isnotnull(ss_hdemo_sk#2) AND isnotnull(ss_sold_time_sk#1)) AND isn
 Output [3]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3]
 Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
 
-(5) Scan parquet default.time_dim
+(5) Scan parquet spark_catalog.default.time_dim
 Output [3]: [t_time_sk#5, t_hour#6, t_minute#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
@@ -232,7 +232,7 @@ Join condition: None
 Output [2]: [ss_hdemo_sk#2, ss_store_sk#3]
 Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, t_time_sk#5]
 
-(12) Scan parquet default.store
+(12) Scan parquet spark_catalog.default.store
 Output [2]: [s_store_sk#8, s_store_name#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -263,7 +263,7 @@ Join condition: None
 Output [1]: [ss_hdemo_sk#2]
 Input [3]: [ss_hdemo_sk#2, ss_store_sk#3, s_store_sk#8]
 
-(19) Scan parquet default.household_demographics
+(19) Scan parquet spark_catalog.default.household_demographics
 Output [3]: [hd_demo_sk#10, hd_dep_count#11, hd_vehicle_count#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
@@ -312,7 +312,7 @@ Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#15]
 Results [1]: [count(1)#15 AS h8_30_to_9#16]
 
-(29) Scan parquet default.store_sales
+(29) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#17, ss_hdemo_sk#18, ss_store_sk#19, ss_sold_date_sk#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -330,7 +330,7 @@ Condition : ((isnotnull(ss_hdemo_sk#18) AND isnotnull(ss_sold_time_sk#17)) AND i
 Output [3]: [ss_sold_time_sk#17, ss_hdemo_sk#18, ss_store_sk#19]
 Input [4]: [ss_sold_time_sk#17, ss_hdemo_sk#18, ss_store_sk#19, ss_sold_date_sk#20]
 
-(33) Scan parquet default.time_dim
+(33) Scan parquet spark_catalog.default.time_dim
 Output [3]: [t_time_sk#21, t_hour#22, t_minute#23]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
@@ -410,7 +410,7 @@ Arguments: IdentityBroadcastMode, [plan_id=7]
 (50) BroadcastNestedLoopJoin [codegen id : 40]
 Join condition: None
 
-(51) Scan parquet default.store_sales
+(51) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#30, ss_hdemo_sk#31, ss_store_sk#32, ss_sold_date_sk#33]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -428,7 +428,7 @@ Condition : ((isnotnull(ss_hdemo_sk#31) AND isnotnull(ss_sold_time_sk#30)) AND i
 Output [3]: [ss_sold_time_sk#30, ss_hdemo_sk#31, ss_store_sk#32]
 Input [4]: [ss_sold_time_sk#30, ss_hdemo_sk#31, ss_store_sk#32, ss_sold_date_sk#33]
 
-(55) Scan parquet default.time_dim
+(55) Scan parquet spark_catalog.default.time_dim
 Output [3]: [t_time_sk#34, t_hour#35, t_minute#36]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
@@ -508,7 +508,7 @@ Arguments: IdentityBroadcastMode, [plan_id=10]
 (72) BroadcastNestedLoopJoin [codegen id : 40]
 Join condition: None
 
-(73) Scan parquet default.store_sales
+(73) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#43, ss_hdemo_sk#44, ss_store_sk#45, ss_sold_date_sk#46]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -526,7 +526,7 @@ Condition : ((isnotnull(ss_hdemo_sk#44) AND isnotnull(ss_sold_time_sk#43)) AND i
 Output [3]: [ss_sold_time_sk#43, ss_hdemo_sk#44, ss_store_sk#45]
 Input [4]: [ss_sold_time_sk#43, ss_hdemo_sk#44, ss_store_sk#45, ss_sold_date_sk#46]
 
-(77) Scan parquet default.time_dim
+(77) Scan parquet spark_catalog.default.time_dim
 Output [3]: [t_time_sk#47, t_hour#48, t_minute#49]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
@@ -606,7 +606,7 @@ Arguments: IdentityBroadcastMode, [plan_id=13]
 (94) BroadcastNestedLoopJoin [codegen id : 40]
 Join condition: None
 
-(95) Scan parquet default.store_sales
+(95) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#56, ss_hdemo_sk#57, ss_store_sk#58, ss_sold_date_sk#59]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -624,7 +624,7 @@ Condition : ((isnotnull(ss_hdemo_sk#57) AND isnotnull(ss_sold_time_sk#56)) AND i
 Output [3]: [ss_sold_time_sk#56, ss_hdemo_sk#57, ss_store_sk#58]
 Input [4]: [ss_sold_time_sk#56, ss_hdemo_sk#57, ss_store_sk#58, ss_sold_date_sk#59]
 
-(99) Scan parquet default.time_dim
+(99) Scan parquet spark_catalog.default.time_dim
 Output [3]: [t_time_sk#60, t_hour#61, t_minute#62]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
@@ -704,7 +704,7 @@ Arguments: IdentityBroadcastMode, [plan_id=16]
 (116) BroadcastNestedLoopJoin [codegen id : 40]
 Join condition: None
 
-(117) Scan parquet default.store_sales
+(117) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#69, ss_hdemo_sk#70, ss_store_sk#71, ss_sold_date_sk#72]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -722,7 +722,7 @@ Condition : ((isnotnull(ss_hdemo_sk#70) AND isnotnull(ss_sold_time_sk#69)) AND i
 Output [3]: [ss_sold_time_sk#69, ss_hdemo_sk#70, ss_store_sk#71]
 Input [4]: [ss_sold_time_sk#69, ss_hdemo_sk#70, ss_store_sk#71, ss_sold_date_sk#72]
 
-(121) Scan parquet default.time_dim
+(121) Scan parquet spark_catalog.default.time_dim
 Output [3]: [t_time_sk#73, t_hour#74, t_minute#75]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
@@ -802,7 +802,7 @@ Arguments: IdentityBroadcastMode, [plan_id=19]
 (138) BroadcastNestedLoopJoin [codegen id : 40]
 Join condition: None
 
-(139) Scan parquet default.store_sales
+(139) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#82, ss_hdemo_sk#83, ss_store_sk#84, ss_sold_date_sk#85]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -820,7 +820,7 @@ Condition : ((isnotnull(ss_hdemo_sk#83) AND isnotnull(ss_sold_time_sk#82)) AND i
 Output [3]: [ss_sold_time_sk#82, ss_hdemo_sk#83, ss_store_sk#84]
 Input [4]: [ss_sold_time_sk#82, ss_hdemo_sk#83, ss_store_sk#84, ss_sold_date_sk#85]
 
-(143) Scan parquet default.time_dim
+(143) Scan parquet spark_catalog.default.time_dim
 Output [3]: [t_time_sk#86, t_hour#87, t_minute#88]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
@@ -900,7 +900,7 @@ Arguments: IdentityBroadcastMode, [plan_id=22]
 (160) BroadcastNestedLoopJoin [codegen id : 40]
 Join condition: None
 
-(161) Scan parquet default.store_sales
+(161) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#95, ss_hdemo_sk#96, ss_store_sk#97, ss_sold_date_sk#98]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -918,7 +918,7 @@ Condition : ((isnotnull(ss_hdemo_sk#96) AND isnotnull(ss_sold_time_sk#95)) AND i
 Output [3]: [ss_sold_time_sk#95, ss_hdemo_sk#96, ss_store_sk#97]
 Input [4]: [ss_sold_time_sk#95, ss_hdemo_sk#96, ss_store_sk#97, ss_sold_date_sk#98]
 
-(165) Scan parquet default.time_dim
+(165) Scan parquet spark_catalog.default.time_dim
 Output [3]: [t_time_sk#99, t_hour#100, t_minute#101]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]

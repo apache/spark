@@ -866,4 +866,33 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     sql(s"CREATE NAMESPACE $qualified")
     assert(spark.catalog.getDatabase(qualified).name === db)
   }
+
+  test("three layer namespace compatibility - set current database") {
+    spark.catalog.setCurrentCatalog("testcat")
+    // namespace with the same name as catalog
+    sql("CREATE NAMESPACE testcat.testcat.my_db")
+    spark.catalog.setCurrentDatabase("testcat.my_db")
+    assert(spark.catalog.currentDatabase == "testcat.my_db")
+    // sessionCatalog still reports 'default' as current database
+    assert(sessionCatalog.getCurrentDatabase == "default")
+    val e = intercept[AnalysisException] {
+      spark.catalog.setCurrentDatabase("my_db")
+    }.getMessage
+    assert(e.contains("my_db"))
+
+    // check that we can fall back to old sessionCatalog
+    createDatabase("hive_db")
+    val err = intercept[AnalysisException] {
+      spark.catalog.setCurrentDatabase("hive_db")
+    }.getMessage
+    assert(err.contains("hive_db"))
+    spark.catalog.setCurrentCatalog("spark_catalog")
+    spark.catalog.setCurrentDatabase("hive_db")
+    assert(spark.catalog.currentDatabase == "hive_db")
+    assert(sessionCatalog.getCurrentDatabase == "hive_db")
+    val e3 = intercept[AnalysisException] {
+      spark.catalog.setCurrentDatabase("unknown_db")
+    }.getMessage
+    assert(e3.contains("unknown_db"))
+  }
 }

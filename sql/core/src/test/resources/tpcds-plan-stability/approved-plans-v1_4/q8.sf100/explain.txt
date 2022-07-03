@@ -13,12 +13,12 @@ TakeOrderedAndProject (49)
                :           :  +- * BroadcastHashJoin Inner BuildRight (5)
                :           :     :- * Filter (3)
                :           :     :  +- * ColumnarToRow (2)
-               :           :     :     +- Scan parquet default.store_sales (1)
+               :           :     :     +- Scan parquet spark_catalog.default.store_sales (1)
                :           :     +- ReusedExchange (4)
                :           +- BroadcastExchange (10)
                :              +- * Filter (9)
                :                 +- * ColumnarToRow (8)
-               :                    +- Scan parquet default.store (7)
+               :                    +- Scan parquet spark_catalog.default.store (7)
                +- * Sort (43)
                   +- Exchange (42)
                      +- * HashAggregate (41)
@@ -28,7 +28,7 @@ TakeOrderedAndProject (49)
                                  +- * BroadcastHashJoin LeftSemi BuildRight (37)
                                     :- * Filter (17)
                                     :  +- * ColumnarToRow (16)
-                                    :     +- Scan parquet default.customer_address (15)
+                                    :     +- Scan parquet spark_catalog.default.customer_address (15)
                                     +- BroadcastExchange (36)
                                        +- * Project (35)
                                           +- * Filter (34)
@@ -41,16 +41,16 @@ TakeOrderedAndProject (49)
                                                             :  +- Exchange (21)
                                                             :     +- * Filter (20)
                                                             :        +- * ColumnarToRow (19)
-                                                            :           +- Scan parquet default.customer_address (18)
+                                                            :           +- Scan parquet spark_catalog.default.customer_address (18)
                                                             +- * Sort (28)
                                                                +- Exchange (27)
                                                                   +- * Project (26)
                                                                      +- * Filter (25)
                                                                         +- * ColumnarToRow (24)
-                                                                           +- Scan parquet default.customer (23)
+                                                                           +- Scan parquet spark_catalog.default.customer (23)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_store_sk#1, ss_net_profit#2, ss_sold_date_sk#3]
 Batched: true
 Location: InMemoryFileIndex []
@@ -77,7 +77,7 @@ Join condition: None
 Output [2]: [ss_store_sk#1, ss_net_profit#2]
 Input [4]: [ss_store_sk#1, ss_net_profit#2, ss_sold_date_sk#3, d_date_sk#5]
 
-(7) Scan parquet default.store
+(7) Scan parquet spark_catalog.default.store
 Output [3]: [s_store_sk#6, s_store_name#7, s_zip#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -112,7 +112,7 @@ Arguments: hashpartitioning(substr(s_zip#8, 1, 2), 5), ENSURE_REQUIREMENTS, [pla
 Input [3]: [ss_net_profit#2, s_store_name#7, s_zip#8]
 Arguments: [substr(s_zip#8, 1, 2) ASC NULLS FIRST], false, 0
 
-(15) Scan parquet default.customer_address
+(15) Scan parquet spark_catalog.default.customer_address
 Output [1]: [ca_zip#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -125,7 +125,7 @@ Input [1]: [ca_zip#9]
 Input [1]: [ca_zip#9]
 Condition : (substr(ca_zip#9, 1, 5) INSET 10144, 10336, 10390, 10445, 10516, 10567, 11101, 11356, 11376, 11489, 11634, 11928, 12305, 13354, 13375, 13376, 13394, 13595, 13695, 13955, 14060, 14089, 14171, 14328, 14663, 14867, 14922, 15126, 15146, 15371, 15455, 15559, 15723, 15734, 15765, 15798, 15882, 16021, 16725, 16807, 17043, 17183, 17871, 17879, 17920, 18119, 18270, 18376, 18383, 18426, 18652, 18767, 18799, 18840, 18842, 18845, 18906, 19430, 19505, 19512, 19515, 19736, 19769, 19849, 20004, 20260, 20548, 21076, 21195, 21286, 21309, 21337, 21756, 22152, 22245, 22246, 22351, 22437, 22461, 22685, 22744, 22752, 22927, 23006, 23470, 23932, 23968, 24128, 24206, 24317, 24610, 24671, 24676, 24996, 25003, 25103, 25280, 25486, 25631, 25733, 25782, 25858, 25989, 26065, 26105, 26231, 26233, 26653, 26689, 26859, 27068, 27156, 27385, 27700, 28286, 28488, 28545, 28577, 28587, 28709, 28810, 28898, 28915, 29178, 29741, 29839, 30010, 30122, 30431, 30450, 30469, 30625, 30903, 31016, 31029, 31387, 31671, 31880, 32213, 32754, 33123, 33282, 33515, 33786, 34102, 34322, 34425, 35258, 35458, 35474, 35576, 35850, 35942, 36233, 36420, 36446, 36495, 36634, 37125, 37126, 37930, 38122, 38193, 38415, 38607, 38935, 39127, 39192, 39371, 39516, 39736, 39861, 39972, 40081, 40162, 40558, 40604, 41248, 41367, 41368, 41766, 41918, 42029, 42666, 42961, 43285, 43848, 43933, 44165, 44438, 45200, 45266, 45375, 45549, 45692, 45721, 45748, 46081, 46136, 46820, 47305, 47537, 47770, 48033, 48425, 48583, 49130, 49156, 49448, 50016, 50298, 50308, 50412, 51061, 51103, 51200, 51211, 51622, 51649, 51650, 51798, 51949, 52867, 53179, 53268, 53535, 53672, 54364, 54601, 54917, 55253, 55307, 55565, 56240, 56458, 56529, 56571, 56575, 56616, 56691, 56910, 57047, 57647, 57665, 57834, 57855, 58048, 58058, 58078, 58263, 58470, 58943, 59166, 59402, 60099, 60279, 60576, 61265, 61547, 61810, 61860, 62377, 62496, 62878, 62971, 63089, 63193, 63435, 63792, 63837, 63981, 64034, 64147, 64457, 64528, 64544, 65084, 65164, 66162, 66708, 66864, 67030, 67301, 67467, 67473, 67853, 67875, 67897, 68014, 68100, 68101, 68309, 68341, 68621, 68786, 68806, 68880, 68893, 68908, 69035, 69399, 69913, 69952, 70372, 70466, 70738, 71256, 71286, 71791, 71954, 72013, 72151, 72175, 72305, 72325, 72425, 72550, 72823, 73134, 73171, 73241, 73273, 73520, 73650, 74351, 75691, 76107, 76231, 76232, 76614, 76638, 76698, 77191, 77556, 77610, 77721, 78451, 78567, 78668, 78890, 79077, 79777, 79994, 81019, 81096, 81312, 81426, 82136, 82276, 82636, 83041, 83144, 83444, 83849, 83921, 83926, 83933, 84093, 84935, 85816, 86057, 86198, 86284, 86379, 87343, 87501, 87816, 88086, 88190, 88424, 88885, 89091, 89360, 90225, 90257, 90578, 91068, 91110, 91137, 91393, 92712, 94167, 94627, 94898, 94945, 94983, 96451, 96576, 96765, 96888, 96976, 97189, 97789, 98025, 98235, 98294, 98359, 98569, 99076, 99543 AND isnotnull(substr(ca_zip#9, 1, 5)))
 
-(18) Scan parquet default.customer_address
+(18) Scan parquet spark_catalog.default.customer_address
 Output [2]: [ca_address_sk#10, ca_zip#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -147,7 +147,7 @@ Arguments: hashpartitioning(ca_address_sk#10, 5), ENSURE_REQUIREMENTS, [plan_id=
 Input [2]: [ca_address_sk#10, ca_zip#11]
 Arguments: [ca_address_sk#10 ASC NULLS FIRST], false, 0
 
-(23) Scan parquet default.customer
+(23) Scan parquet spark_catalog.default.customer
 Output [2]: [c_current_addr_sk#12, c_preferred_cust_flag#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -285,10 +285,10 @@ BroadcastExchange (54)
 +- * Project (53)
    +- * Filter (52)
       +- * ColumnarToRow (51)
-         +- Scan parquet default.date_dim (50)
+         +- Scan parquet spark_catalog.default.date_dim (50)
 
 
-(50) Scan parquet default.date_dim
+(50) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#5, d_year#24, d_qoy#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

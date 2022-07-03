@@ -59,15 +59,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns the current default database in this session.
    */
-  override def currentDatabase: String = sessionCatalog.getCurrentDatabase
+  override def currentDatabase: String =
+    sparkSession.sessionState.catalogManager.currentNamespace.toSeq.quoted
 
   /**
    * Sets the current default database in this session.
    */
   @throws[AnalysisException]("database does not exist")
   override def setCurrentDatabase(dbName: String): Unit = {
-    requireDatabaseExists(dbName)
-    sessionCatalog.setCurrentDatabase(dbName)
+    // we assume dbName will not include the catalog prefix. e.g. if you call
+    // setCurrentDatabase("catalog.db") it will search for a database catalog.db in the catalog.
+    val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+    sparkSession.sessionState.catalogManager.setCurrentNamespace(ident.toArray)
   }
 
   /**
