@@ -1534,45 +1534,45 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
       if (remainingPredicates.isEmpty) {
         p
       } else {
-        val newCond = remainingPredicates.map { predicate =>
-          val (newPredicate, literal) = prunePredicateWithRand(predicate)
-          if (eval(newPredicate)) {
-            literal
-          } else {
-            predicate
-          }
-        }.reduce(And)
+        val newCond = remainingPredicates.map(simplifyPredicateWithRand).reduce(And)
         Filter(newCond, p)
       }
   }
 
-  private def prunePredicateWithRand(
-      predicate: Expression): (Expression, Literal) = predicate match {
+  private def simplifyPredicateWithRand(predicate: Expression): Expression = predicate match {
     case GreaterThan(left, rand @ Rand(child, _))
-      if left.foldable && left.deterministic && child.foldable =>
-      (GreaterThan(left, Cast(child, rand.dataType)), trueLiteral)
+      if left.foldable && left.deterministic && child.foldable &&
+        eval(GreaterThan(left, Cast(child, rand.dataType))) =>
+      trueLiteral
     case GreaterThanOrEqual(left, rand @ Rand(child, _))
-      if left.foldable && left.deterministic && child.foldable =>
-      (GreaterThanOrEqual(left, Cast(child, rand.dataType)), trueLiteral)
+      if left.foldable && left.deterministic && child.foldable &&
+        eval(GreaterThanOrEqual(left, Cast(child, rand.dataType))) =>
+      trueLiteral
     case LessThan(rand @ Rand(child, _), right)
-      if right.foldable && right.deterministic && child.foldable =>
-      (LessThan(Cast(child, rand.dataType), right), trueLiteral)
+      if right.foldable && right.deterministic && child.foldable &&
+        eval(LessThan(Cast(child, rand.dataType), right)) =>
+      trueLiteral
     case LessThanOrEqual(rand @ Rand(child, _), right)
-      if right.foldable && right.deterministic && child.foldable =>
-      (LessThan(Cast(child, rand.dataType), right), trueLiteral)
+      if right.foldable && right.deterministic && child.foldable &&
+        eval(LessThan(Cast(child, rand.dataType), right)) =>
+      trueLiteral
     case LessThanOrEqual(left, rand @ Rand(child, _))
-      if left.foldable && left.deterministic && child.foldable =>
-      (GreaterThan(left, Cast(child, rand.dataType)), falseLiteral)
+      if left.foldable && left.deterministic && child.foldable &&
+        eval(GreaterThan(left, Cast(child, rand.dataType))) =>
+      falseLiteral
     case LessThan(left, rand @ Rand(child, _))
-      if left.foldable && left.deterministic && child.foldable =>
-      (GreaterThanOrEqual(left, Cast(child, rand.dataType)), falseLiteral)
+      if left.foldable && left.deterministic && child.foldable &&
+        eval(GreaterThanOrEqual(left, Cast(child, rand.dataType))) =>
+      falseLiteral
     case GreaterThanOrEqual(rand @ Rand(child, _), right)
-      if right.foldable && right.deterministic && child.foldable =>
-      (LessThan(Cast(child, rand.dataType), right), falseLiteral)
+      if right.foldable && right.deterministic && child.foldable &&
+        eval(LessThan(Cast(child, rand.dataType), right)) =>
+      falseLiteral
     case GreaterThan(rand @ Rand(child, _), right)
-      if right.foldable && right.deterministic && child.foldable =>
-      (LessThanOrEqual(Cast(child, rand.dataType), right), falseLiteral)
-    case other => (other, falseLiteral)
+      if right.foldable && right.deterministic && child.foldable &&
+        eval(LessThanOrEqual(Cast(child, rand.dataType), right)) =>
+      falseLiteral
+    case other => other
   }
 
   private def eval(cond: Expression): Boolean = if (cond.foldable) {
