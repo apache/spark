@@ -23,6 +23,11 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
  * The builder to generate `toString` information of V2 expressions.
  */
 class ToStringSQLBuilder extends V2ExpressionSQLBuilder {
+  override protected def visitGeneralAggregateFunction(
+      funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
+    super.visitAggregateFunction(funcName, isDistinct, inputs)
+  }
+
   override protected def visitUserDefinedScalarFunction(
       funcName: String, canonicalName: String, inputs: Array[String]) =
     s"""$funcName(${inputs.mkString(", ")})"""

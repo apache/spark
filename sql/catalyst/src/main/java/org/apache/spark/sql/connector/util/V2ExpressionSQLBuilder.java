@@ -196,7 +196,7 @@ public class V2ExpressionSQLBuilder {
       }
     } else if (expr instanceof GeneralAggregateFunc) {
       GeneralAggregateFunc f = (GeneralAggregateFunc) expr;
-      return visitAggregateFunction(f.name(), f.isDistinct(),
+      return visitGeneralAggregateFunction(f.name(), f.isDistinct(),
         Arrays.stream(f.children()).map(c -> build(c)).toArray(String[]::new));
     } else if (expr instanceof UserDefinedScalarFunc) {
       UserDefinedScalarFunc f = (UserDefinedScalarFunc) expr;
@@ -326,6 +326,12 @@ public class V2ExpressionSQLBuilder {
     } else {
       return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
     }
+  }
+
+  protected String visitGeneralAggregateFunction(
+      String funcName, boolean isDistinct, String[] inputs) {
+    throw new UnsupportedOperationException(
+      this.getClass().getSimpleName() + " does not support aggregate function: " + funcName);
   }
 
   protected String visitUserDefinedScalarFunction(
