@@ -23,7 +23,9 @@ import "spark/connect/commands.proto";
 import "spark/connect/relations.proto";
 
 option java_multiple_files = true;
-option java_package = "org.apache.spark.connect.protobuf";
+option java_package = "org.apache.spark.connect.proto";
+option go_package = "github.com/databricks/spark-connect/proto";
+
 
 // A [[Plan]] is the structure that carries the runtime information for the execution from the
 // client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
@@ -58,11 +60,16 @@ message Request {
 // same input query, carry the same `client_id`.
 message Response {
   string client_id = 1;
-  ArrowBatch batch = 2;
+
+  // Result type
+  oneof result_type {
+    ArrowBatch batch = 2;
+    CSVBatch csv_batch = 3;
+  }
 
   // Metrics for the query execution. Typically, this field is only present in the last
   // batch of results and then represent the overall state of the query execution.
-  Metrics metrics = 3;
+  Metrics metrics = 4;
 
   // Batch results of metrics.
   message ArrowBatch {
@@ -71,6 +78,11 @@ message Response {
     int64 compressed_bytes = 3;
     bytes data = 4;
     bytes schema = 5;
+  }
+
+  message CSVBatch {
+    int64 row_count = 1;
+    string data = 2;
   }
 
   message Metrics {

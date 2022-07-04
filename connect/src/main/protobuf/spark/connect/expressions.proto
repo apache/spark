@@ -23,7 +23,8 @@ import "google/protobuf/any.proto";
 package spark.connect;
 
 option java_multiple_files = true;
-option java_package = "org.apache.spark.connect.protobuf";
+option java_package = "org.apache.spark.connect.proto";
+option go_package = "github.com/databricks/spark-connect/proto";
 
 /*
  Expression used to refer to fields, functions and similar. This can be used everywhere

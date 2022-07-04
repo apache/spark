@@ -185,7 +185,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>14.0.1</guava.version>
+    <guava.version>31.0.1-jre</guava.version>
     <janino.version>3.1.7</janino.version>
     <jersey.version>2.36</jersey.version>
     <joda.version>2.10.14</joda.version>
@@ -548,7 +548,11 @@
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>${guava.version}</version>
-        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>failureaccess</artifactId>
+        <version>1.0.1</version>
       </dependency>
       <dependency>
         <groupId>org.jpmml</groupId>
@@ -830,11 +834,15 @@
         <groupId>io.grpc</groupId>
         <artifactId>grpc-netty-shaded</artifactId>
         <version>${io.grpc.version}</version>
-        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>io.grpc</groupId>
         <artifactId>grpc-protobuf</artifactId>
+        <version>${io.grpc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-services</artifactId>
         <version>${io.grpc.version}</version>
       </dependency>
       <dependency>
@@ -3273,7 +3281,7 @@
               <include>org.eclipse.jetty:jetty-security</include>
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
-              <include>com.google.guava:guava</include>
+              <include>com.google.guava:*</include>
               <include>org.jpmml:*</include>
             </includes>
           </artifactSet>

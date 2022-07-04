@@ -22,7 +22,8 @@ import "spark/connect/types.proto";
 package spark.connect;
 
 option java_multiple_files = true;
-option java_package = "org.apache.spark.connect.protobuf";
+option java_package = "org.apache.spark.connect.proto";
+option go_package = "github.com/databricks/spark-connect/proto";
 
 // A [[Command]] is an operation that is executed by the server that does not directly consume or
 // produce a relational result.

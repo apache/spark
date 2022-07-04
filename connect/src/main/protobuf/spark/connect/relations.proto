@@ -22,7 +22,8 @@ package spark.connect;
 import "spark/connect/expressions.proto";
 
 option java_multiple_files = true;
-option java_package = "org.apache.spark.connect.protobuf";
+option java_package = "org.apache.spark.connect.proto";
+option go_package = "github.com/databricks/spark-connect/proto";
 
 /*
  The main [[Relation]] type. Fundamentally, a relation is a typed container

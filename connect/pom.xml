@@ -45,6 +45,11 @@
             <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_${scala.binary.version}</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- #if scala-2.13 --><!--
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
@@ -52,17 +57,25 @@
     </dependency>
     --><!-- #endif scala-2.13 -->
         <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>31.0.1-jre</version>
+        </dependency>
+        <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-servlet</artifactId>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty-shaded</artifactId>
-            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-protobuf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-services</artifactId>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
