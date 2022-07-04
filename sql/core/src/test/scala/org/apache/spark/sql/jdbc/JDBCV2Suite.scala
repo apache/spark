@@ -44,7 +44,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
-  var conn: java.sql.Connection = null
 
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String): Boolean = H2Dialect.canHandle(url)
