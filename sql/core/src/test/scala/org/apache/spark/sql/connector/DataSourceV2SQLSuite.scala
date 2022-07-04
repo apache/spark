@@ -1301,7 +1301,7 @@ class DataSourceV2SQLSuite
       sql("ALTER NAMESPACE testcat.ns1.ns2 SET PROPERTIES ('a'='b','b'='a')")
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
-        Row("Namespace Name", "ns2"),
+        Row("Namespace Name", "ns1.ns2"),
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
         Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
@@ -1348,7 +1348,7 @@ class DataSourceV2SQLSuite
       sql("ALTER NAMESPACE testcat.ns1.ns2 SET LOCATION '/tmp/ns_test_2'")
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
-        Row("Namespace Name", "ns2"),
+        Row("Namespace Name", "ns1.ns2"),
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
         Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
