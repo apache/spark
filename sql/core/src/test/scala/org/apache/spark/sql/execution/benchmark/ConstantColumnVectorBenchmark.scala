@@ -22,7 +22,7 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.benchmark.BenchmarkBase
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -40,6 +40,22 @@ import org.apache.spark.unsafe.UTF8StringBuilder
  * }}}
  */
 object ConstantColumnVectorBenchmark extends BenchmarkBase {
+
+  private def populate(
+      col: WritableColumnVector, batchSize: Int, row: InternalRow, fieldIdx: Int): Unit = {
+    col.dataType() match {
+      case IntegerType => col.putInts(0, batchSize, row.getInt(fieldIdx))
+      case LongType => col.putLongs(0, batchSize, row.getLong(fieldIdx))
+      case FloatType => col.putFloats(0, batchSize, row.getFloat(fieldIdx))
+      case DoubleType => col.putDoubles(0, batchSize, row.getDouble(fieldIdx))
+      case StringType =>
+        val v = row.getUTF8String(fieldIdx)
+        val bytes = v.getBytes
+        (0 until batchSize).foreach { i =>
+          col.putByteArray(i, bytes)
+        }
+    }
+  }
 
   private def readValues(dataType: DataType, batchSize: Int, vector: ColumnVector): Unit = {
     dataType match {
@@ -86,14 +102,14 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
     benchmark.addCase("OnHeapColumnVector") { _: Int =>
       for (_ <- 0 until valuesPerIteration) {
         onHeapColumnVector.reset()
-        ColumnVectorUtils.populate(onHeapColumnVector, row, 0)
+        populate(onHeapColumnVector, batchSize, row, 0)
       }
     }
 
     benchmark.addCase("OffHeapColumnVector") { _: Int =>
       for (_ <- 0 until valuesPerIteration) {
         offHeapColumnVector.reset()
-        ColumnVectorUtils.populate(offHeapColumnVector, row, 0)
+        populate(offHeapColumnVector, batchSize, row, 0)
       }
     }
 
@@ -114,9 +130,9 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
     val constantColumnVector = new ConstantColumnVector(batchSize, dataType)
 
     onHeapColumnVector.reset()
-    ColumnVectorUtils.populate(onHeapColumnVector, row, 0)
+    populate(onHeapColumnVector, batchSize, row, 0)
     offHeapColumnVector.reset()
-    ColumnVectorUtils.populate(offHeapColumnVector, row, 0)
+    populate(offHeapColumnVector, batchSize, row, 0)
     ColumnVectorUtils.populate(constantColumnVector, row, 0)
 
     val other = if (dataType == StringType) {
@@ -184,7 +200,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
     benchmark.addCase("OnHeapColumnVector") { _: Int =>
       onHeapColumnVector.reset()
-      ColumnVectorUtils.populate(onHeapColumnVector, row, 0)
+      populate(onHeapColumnVector, batchSize, row, 0)
       for (_ <- 0 until valuesPerIteration) {
         readValues(dataType, batchSize, onHeapColumnVector)
       }
@@ -192,7 +208,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
     benchmark.addCase("OffHeapColumnVector") { _: Int =>
       offHeapColumnVector.reset()
-      ColumnVectorUtils.populate(offHeapColumnVector, row, 0)
+      populate(offHeapColumnVector, batchSize, row, 0)
       for (_ <- 0 until valuesPerIteration) {
         readValues(dataType, batchSize, offHeapColumnVector)
       }
@@ -229,13 +245,13 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
     }
 
     benchmark.addCase("OnHeapColumnVector") { _: Int =>
-      for (i <- 0 until valuesPerIteration) {
+      for (_ <- 0 until valuesPerIteration) {
         (0 until batchSize).foreach(onHeapColumnVector.isNullAt)
       }
     }
 
     benchmark.addCase("OffHeapColumnVector") { _: Int =>
-      for (i <- 0 until valuesPerIteration) {
+      for (_ <- 0 until valuesPerIteration) {
         (0 until batchSize).foreach(offHeapColumnVector.isNullAt)
       }
     }
