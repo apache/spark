@@ -742,10 +742,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
    * order, otherwise lower Projects can be missed.
    */
   private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
+    case p1 @ Project(_, f @ Filter(e, p2 @ Project(_, child)))
       if p2.outputSet.subsetOf(child.outputSet) &&
         // We only remove attribute-only project.
-        p2.projectList.forall(_.isInstanceOf[AttributeReference]) =>
+        p2.projectList.forall(_.isInstanceOf[AttributeReference]) &&
+        !SubqueryExpression.hasInOrCorrelatedExistsSubquery(e) =>
       p1.copy(child = f.copy(child = child))
   }
 }

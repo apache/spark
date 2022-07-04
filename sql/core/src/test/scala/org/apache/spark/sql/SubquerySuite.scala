@@ -1788,4 +1788,28 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }.getMessage.contains("Correlated column is not allowed in predicate"))
     }
   }
+
+  test("SPARK-39672: Don't remove project before filter for in or correlated exists subquery") {
+    withTempView("v1", "v2") {
+      Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c").createTempView("v1")
+      Seq((1, 3, 5), (4, 5, 6)).toDF("a", "b", "c").createTempView("v2")
+      checkAnswer(sql(
+        """
+         |select * from
+         |(
+         |select
+         |v1.a,
+         |v1.b,
+         |v2.c
+         |from v1
+         |inner join v2
+         |on v1.a=v2.a) t3
+         |where not exists (
+         |  select 1
+         |  from v2
+         |  where t3.a=v2.a and t3.b=v2.b and t3.c=v2.c
+         |)
+         |""".stripMargin), Row(1, 2, 5))
+    }
+  }
 }
