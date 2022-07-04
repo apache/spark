@@ -198,7 +198,7 @@
     <antlr4.version>4.8</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
-    <htmlunit.version>2.50.0</htmlunit.version>
+    <htmlunit.version>2.62.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
