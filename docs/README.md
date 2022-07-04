@@ -69,7 +69,6 @@ Alternatively, for packages strictly related to documentation:
 $ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc sphinx-plotly-directive pyarrow 'jinja2<3.0.0' 'markupsafe==2.0.1' 'docutils<0.18.0'
 ```
 
-
 ### R API Documentation (Optional)
 
 If you'd like to generate R API documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
