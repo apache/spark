@@ -42,7 +42,7 @@ import org.apache.spark.network.util.TransportConf;
  * or external service.
  */
 public abstract class BlockStoreClient implements Closeable {
-  protected static final Logger logger = LoggerFactory.getLogger(BlockStoreClient.class);
+  protected final Logger logger = LoggerFactory.getLogger(BlockStoreClient.class);
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
