@@ -362,6 +362,26 @@ class CatalogTests(ReusedSQLTestCase):
                 self.assertEqual(spark.catalog.getTable("default.tab1").catalog, "spark_catalog")
                 self.assertEqual(spark.catalog.getTable("spark_catalog.default.tab1").name, "tab1")
 
+    def test_refresh_table(self):
+        import os
+        import tempfile
+
+        spark = self.spark
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.table("my_tab"):
+                spark.sql(
+                    "CREATE TABLE my_tab (col STRING) USING TEXT LOCATION '{}'".format(tmp_dir)
+                )
+                spark.sql("INSERT INTO my_tab SELECT 'abc'")
+                spark.catalog.cacheTable("my_tab")
+                self.assertEqual(spark.table("my_tab").count(), 1)
+
+                os.system("rm -rf {}/*".format(tmp_dir))
+                self.assertEqual(spark.table("my_tab").count(), 1)
+
+                spark.catalog.refreshTable("spark_catalog.default.my_tab")
+                self.assertEqual(spark.table("my_tab").count(), 0)
+
 
 if __name__ == "__main__":
     import unittest
