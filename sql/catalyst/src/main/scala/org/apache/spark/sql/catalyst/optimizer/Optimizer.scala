@@ -1535,12 +1535,12 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
       if (remainingPredicates.isEmpty) {
         p
       } else {
-        val newCond = remainingPredicates.map(simplifyPredicateWithRand).reduce(And)
+        val newCond = remainingPredicates.map(pruneDeterministicPredicate).reduce(And)
         Filter(newCond, p)
       }
   }
 
-  private def simplifyPredicateWithRand(predicate: Expression): Expression = predicate match {
+  private def pruneDeterministicPredicate(predicate: Expression): Expression = predicate match {
     case GreaterThan(left, Rand(_, _))
       if left.foldable && left.deterministic && eval(GreaterThanOrEqual(left, oneLiteral)) =>
       trueLiteral

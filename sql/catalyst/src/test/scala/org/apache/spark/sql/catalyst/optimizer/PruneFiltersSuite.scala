@@ -129,9 +129,11 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("Nondeterministic predicate is not pruned") {
-    val originalQuery = testRelation.where(Rand(10) > 5).select($"a").where(Rand(10) > 5).analyze
+    val originalQuery =
+      testRelation.where(Rand(10) > 0.5).select($"a").where(Rand(10) > 0.5).analyze
     val optimized = Optimize.execute(originalQuery)
-    val correctAnswer = testRelation.where(Rand(10) > 5).where(Rand(10) > 5).select($"a").analyze
+    val correctAnswer =
+      testRelation.where(Rand(10) > 0.5).where(Rand(10) > 0.5).select($"a").analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -198,8 +200,8 @@ class PruneFiltersSuite extends PlanTest {
 
     comparePlans(
       Optimize.execute(
-        x.where($"a".attr === 7 && Rand(10) > 0.1 && $"b".attr === 1 && Rand(10) < 1.1).analyze),
+        x.where($"a".attr === 7 && Rand(10) > 0.1 && $"b".attr === 1 && Rand(10) < 0.9).analyze),
       testRelation.where(!$"a".attr.in(1, 3, 5) && $"a".attr === 7 && $"b".attr === 1)
-        .where(Rand(10) > 0.1 && Rand(10) < 1.1).analyze)
+        .where(Rand(10) > 0.1 && Rand(10) < 0.9).analyze)
   }
 }
