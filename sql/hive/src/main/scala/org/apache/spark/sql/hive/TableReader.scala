@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.{PartitionDesc, TableDesc}
-import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
 import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.AvroTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
@@ -135,7 +135,8 @@ class HadoopTableReader(
       DeserializerLock.synchronized {
         deserializer.initialize(hconf, localTableDesc.getProperties)
       }
-      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
+      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer,
+        conf)
     }
 
     deserializedHadoopRDD
@@ -273,7 +274,7 @@ class HadoopTableReader(
 
         // fill the non partition key attributes
         HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs,
-          mutableRow, tableSerDe)
+          mutableRow, tableSerDe, conf)
       }
     }.toSeq
 
@@ -465,7 +466,8 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
       rawDeser: Deserializer,
       nonPartitionKeyAttrs: Seq[(Attribute, Int)],
       mutableRow: InternalRow,
-      tableDeser: Deserializer): Iterator[InternalRow] = {
+      tableDeser: Deserializer,
+      conf: SQLConf): Iterator[InternalRow] = {
 
     val soi = if (rawDeser.getObjectInspector.equals(tableDeser.getObjectInspector)) {
       rawDeser.getObjectInspector.asInstanceOf[StructObjectInspector]
@@ -528,27 +530,39 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
     val converter = ObjectInspectorConverters.getConverter(rawDeser.getObjectInspector, soi)
 
     // Map each tuple to a row object
-    iterator.map { value =>
-      val raw = converter.convert(rawDeser.deserialize(value))
-      var i = 0
-      val length = fieldRefs.length
-      while (i < length) {
-        try {
-          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-          if (fieldValue == null) {
-            mutableRow.setNullAt(fieldOrdinals(i))
-          } else {
-            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
-          }
-          i += 1
-        } catch {
-          case ex: Throwable =>
-            logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
-            throw ex
-        }
+    val internalRows = iterator.map { value =>
+      var raw: AnyRef = null
+      try {
+        raw = converter.convert(rawDeser.deserialize(value))
+      } catch {
+        case _: SerDeException if conf.ignoreCorruptRows =>
+          logWarning(s"Ignore a corrupt row when deserializing.")
       }
 
-      mutableRow: InternalRow
-    }
+      if (raw != null) {
+        var i = 0
+        val length = fieldRefs.length
+        while (i < length) {
+          try {
+            val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+            if (fieldValue == null) {
+              mutableRow.setNullAt(fieldOrdinals(i))
+            } else {
+              unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+            }
+            i += 1
+          } catch {
+            case ex: Throwable =>
+              logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
+              throw ex
+          }
+        }
+
+        mutableRow: InternalRow
+      } else {
+        null
+      }
+    }.filter(r => r != null)
+    internalRows
   }
 }

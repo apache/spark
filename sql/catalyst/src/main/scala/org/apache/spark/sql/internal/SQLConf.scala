@@ -552,6 +552,12 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.leafNodeDefaultParallelism must be positive.")
     .createOptional
 
+    val IGNORE_CORRUPT_ROWS = buildConf("spark.sql.hive.ignoreCorruptRows")
+    .doc("Whether to ignore corrupt rows. If true, the Spark jobs will continue to run when " +
+      "encountering corrupted row and the contents that have been read will be returned.")
+    .booleanConf
+    .createWithDefault(false)
+
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
       "Note: For structured streaming, this configuration cannot be changed between query " +
@@ -4287,6 +4293,8 @@ class SQLConf extends Serializable with Logging {
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
+
+  def ignoreCorruptRows: Boolean = getConf(IGNORE_CORRUPT_ROWS)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
