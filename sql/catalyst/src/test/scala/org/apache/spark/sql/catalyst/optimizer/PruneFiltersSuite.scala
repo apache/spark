@@ -163,7 +163,7 @@ class PruneFiltersSuite extends PlanTest {
     }
   }
 
-  test("Pruning filter conditions with rand") {
+  test("Pruning deterministic filter conditions with rand") {
     val tr = LocalRelation($"a".int, $"b".int, $"c".int)
     val trueFilter = tr.where(booleanToLiteral(true))
     val falseFilter = tr.where(booleanToLiteral(false))
