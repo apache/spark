@@ -1511,9 +1511,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
-  val trueLiteral = Literal.create(true, BooleanType)
-  val falseLiteral = Literal.create(false, BooleanType)
-  val oneLiteral = Literal.create(1d, DoubleType)
+  val oneLiteral = Literal(1d)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(FILTER), ruleId) {
@@ -1527,45 +1525,45 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
       LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
-    case Filter(fc, p: LogicalPlan) =>
-      val (_, remainingPredicates) =
+    case f @ Filter(fc, p: LogicalPlan) =>
+      val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
-          cond.deterministic && p.constraints.contains(cond)
+          cond.deterministic && p.constraints.contains(cond) || pruneDeterministicPredicate(cond)
         }
       if (remainingPredicates.isEmpty) {
         p
+      } else if (remainingPredicates.exists(isDeterministicFalsePredicate)) {
+        LocalRelation(p.output, data = Seq.empty, isStreaming = plan.isStreaming)
+      } else if (prunedPredicates.isEmpty) {
+        f
       } else {
-        val newCond = remainingPredicates.map(pruneDeterministicPredicate).reduce(And)
+        val newCond = remainingPredicates.reduce(And)
         Filter(newCond, p)
       }
   }
 
-  private def pruneDeterministicPredicate(predicate: Expression): Expression = predicate match {
-    case GreaterThan(left, Rand(_, _))
-      if left.foldable && left.deterministic && eval(GreaterThanOrEqual(left, oneLiteral)) =>
-      trueLiteral
-    case GreaterThanOrEqual(left, Rand(_, _))
-      if left.foldable && left.deterministic && eval(GreaterThanOrEqual(left, oneLiteral)) =>
-      trueLiteral
-    case LessThan(Rand(_, _), right)
-      if right.foldable && right.deterministic && eval(LessThanOrEqual(oneLiteral, right)) =>
-      trueLiteral
-    case LessThanOrEqual(Rand(_, _), right)
-      if right.foldable && right.deterministic && eval(LessThanOrEqual(oneLiteral, right)) =>
-      trueLiteral
-    case LessThanOrEqual(left, Rand(_, _))
-      if left.foldable && left.deterministic && eval(GreaterThanOrEqual(left, oneLiteral)) =>
-      falseLiteral
-    case LessThan(left, Rand(_, _))
-      if left.foldable && left.deterministic && eval(GreaterThanOrEqual(left, oneLiteral)) =>
-      falseLiteral
-    case GreaterThanOrEqual(Rand(_, _), right)
-      if right.foldable && right.deterministic && eval(LessThanOrEqual(oneLiteral, right)) =>
-      falseLiteral
-    case GreaterThan(Rand(_, _), right)
-      if right.foldable && right.deterministic && eval(LessThanOrEqual(oneLiteral, right)) =>
-      falseLiteral
-    case other => other
+  private def pruneDeterministicPredicate(predicate: Expression): Boolean = predicate match {
+    case GreaterThan(left, Rand(_, _)) if left.foldable && left.deterministic =>
+      eval(GreaterThanOrEqual(left, oneLiteral))
+    case GreaterThanOrEqual(left, Rand(_, _)) if left.foldable && left.deterministic =>
+      eval(GreaterThanOrEqual(left, oneLiteral))
+    case LessThan(Rand(_, _), right) if right.foldable && right.deterministic =>
+      eval(LessThanOrEqual(oneLiteral, right))
+    case LessThanOrEqual(Rand(_, _), right) if right.foldable && right.deterministic =>
+      eval(LessThanOrEqual(oneLiteral, right))
+    case _ => false
+  }
+
+  private def isDeterministicFalsePredicate(predicate: Expression): Boolean = predicate match {
+    case LessThanOrEqual(left, Rand(_, _)) if left.foldable && left.deterministic =>
+      eval(GreaterThanOrEqual(left, oneLiteral))
+    case LessThan(left, Rand(_, _)) if left.foldable && left.deterministic =>
+      eval(GreaterThanOrEqual(left, oneLiteral))
+    case GreaterThanOrEqual(Rand(_, _), right) if right.foldable && right.deterministic =>
+      eval(LessThanOrEqual(oneLiteral, right))
+    case GreaterThan(Rand(_, _), right) if right.foldable && right.deterministic =>
+      eval(LessThanOrEqual(oneLiteral, right))
+    case _ => false
   }
 
   private def eval(cond: Expression): Boolean = if (cond.foldable) {

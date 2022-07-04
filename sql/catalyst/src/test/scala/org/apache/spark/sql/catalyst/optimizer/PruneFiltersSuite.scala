@@ -165,9 +165,7 @@ class PruneFiltersSuite extends PlanTest {
 
   test("Pruning deterministic filter conditions with rand") {
     val tr = LocalRelation($"a".int, $"b".int, $"c".int)
-    val trueFilter = tr.where(booleanToLiteral(true))
-    val falseFilter = tr.where(booleanToLiteral(false))
-    val literal1d = doubleToLiteral(1d)
+    val literal1d = Literal(1d)
     val rand1 = rand(1)
 
     Seq(
@@ -177,7 +175,7 @@ class PruneFiltersSuite extends PlanTest {
       rand1 <= literal1d).foreach { condition =>
       val queryWithUselessFilter = tr.where(condition)
       val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-      comparePlans(optimized, trueFilter)
+      comparePlans(optimized, tr)
     }
 
     Seq(
@@ -187,7 +185,7 @@ class PruneFiltersSuite extends PlanTest {
       rand1 > literal1d).foreach { condition =>
       val queryWithUselessFilter = tr.where(condition)
       val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-      comparePlans(optimized, falseFilter)
+      comparePlans(optimized, tr)
     }
   }
 
