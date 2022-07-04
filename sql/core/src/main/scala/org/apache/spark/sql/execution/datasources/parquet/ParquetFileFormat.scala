@@ -167,9 +167,13 @@ class ParquetFileFormat
    */
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
-    conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      ParquetUtils.isBatchReadSupportedForSchema(conf, schema) &&
-        !WholeStageCodegenExec.isTooManyFields(conf, schema)
+    val support = conf.parquetVectorizedReaderEnabled &&
+      ParquetUtils.isBatchReadSupportedForSchema(conf, schema)
+    if (conf.wholeStageEnabled) {
+      support && !WholeStageCodegenExec.isTooManyFields(conf, schema)
+    } else {
+      support
+    }
   }
 
   override def vectorTypes(

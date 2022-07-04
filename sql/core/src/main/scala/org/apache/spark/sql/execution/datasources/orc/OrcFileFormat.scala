@@ -102,10 +102,14 @@ class OrcFileFormat
 
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
-    conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      !WholeStageCodegenExec.isTooManyFields(conf, schema) &&
+    val support = conf.orcVectorizedReaderEnabled &&
       schema.forall(s => OrcUtils.supportColumnarReads(
         s.dataType, sparkSession.sessionState.conf.orcVectorizedReaderNestedColumnEnabled))
+    if (conf.wholeStageEnabled) {
+       support && !WholeStageCodegenExec.isTooManyFields(conf, schema)
+    } else {
+      support
+    }
   }
 
   override def isSplitable(
