@@ -16,7 +16,7 @@ CollectLimit
                               Filter [i_manufact_id,i_item_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.item [i_item_sk,i_manufact_id]
+                                    Scan parquet spark_catalog.default.item [i_item_sk,i_manufact_id]
                       Filter [(1.3 * avg(cs_ext_discount_amt))]
                         HashAggregate [cs_item_sk,sum,count] [avg(UnscaledValue(cs_ext_discount_amt)),(1.3 * avg(cs_ext_discount_amt)),sum,count]
                           InputAdapter
@@ -35,10 +35,10 @@ CollectLimit
                                                     Filter [i_manufact_id,i_item_sk]
                                                       ColumnarToRow
                                                         InputAdapter
-                                                          Scan parquet default.item [i_item_sk,i_manufact_id]
+                                                          Scan parquet spark_catalog.default.item [i_item_sk,i_manufact_id]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.catalog_sales [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]
+                                            Scan parquet spark_catalog.default.catalog_sales [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]
                                               SubqueryBroadcast [d_date_sk] #1
                                                 BroadcastExchange #4
                                                   WholeStageCodegen (1)
@@ -46,13 +46,13 @@ CollectLimit
                                                       Filter [d_date,d_date_sk]
                                                         ColumnarToRow
                                                           InputAdapter
-                                                            Scan parquet default.date_dim [d_date_sk,d_date]
+                                                            Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #4
             Filter [cs_item_sk,cs_ext_discount_amt]
               ColumnarToRow
                 InputAdapter
-                  Scan parquet default.catalog_sales [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]
+                  Scan parquet spark_catalog.default.catalog_sales [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]
                     ReusedSubquery [d_date_sk] #1
         InputAdapter
           ReusedExchange [d_date_sk] #4

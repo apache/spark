@@ -17,19 +17,19 @@ TakeOrderedAndProject (28)
                               :     :     :- * Project (4)
                               :     :     :  +- * Filter (3)
                               :     :     :     +- * ColumnarToRow (2)
-                              :     :     :        +- Scan parquet default.item (1)
+                              :     :     :        +- Scan parquet spark_catalog.default.item (1)
                               :     :     +- BroadcastExchange (8)
                               :     :        +- * Filter (7)
                               :     :           +- * ColumnarToRow (6)
-                              :     :              +- Scan parquet default.store_sales (5)
+                              :     :              +- Scan parquet spark_catalog.default.store_sales (5)
                               :     +- ReusedExchange (11)
                               +- BroadcastExchange (17)
                                  +- * Filter (16)
                                     +- * ColumnarToRow (15)
-                                       +- Scan parquet default.store (14)
+                                       +- Scan parquet spark_catalog.default.store (14)
 
 
-(1) Scan parquet default.item
+(1) Scan parquet spark_catalog.default.item
 Output [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manufact_id#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -47,7 +47,7 @@ Condition : ((((i_category#4 IN (Books                                          
 Output [2]: [i_item_sk#1, i_manufact_id#5]
 Input [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manufact_id#5]
 
-(5) Scan parquet default.store_sales
+(5) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_item_sk#10, ss_store_sk#11, ss_sales_price#12, ss_sold_date_sk#13]
 Batched: true
 Location: InMemoryFileIndex []
@@ -87,7 +87,7 @@ Join condition: None
 Output [4]: [i_manufact_id#5, ss_store_sk#11, ss_sales_price#12, d_qoy#16]
 Input [6]: [i_manufact_id#5, ss_store_sk#11, ss_sales_price#12, ss_sold_date_sk#13, d_date_sk#15, d_qoy#16]
 
-(14) Scan parquet default.store
+(14) Scan parquet spark_catalog.default.store
 Output [1]: [s_store_sk#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -163,10 +163,10 @@ BroadcastExchange (33)
 +- * Project (32)
    +- * Filter (31)
       +- * ColumnarToRow (30)
-         +- Scan parquet default.date_dim (29)
+         +- Scan parquet spark_catalog.default.date_dim (29)
 
 
-(29) Scan parquet default.date_dim
+(29) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#15, d_month_seq#24, d_qoy#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

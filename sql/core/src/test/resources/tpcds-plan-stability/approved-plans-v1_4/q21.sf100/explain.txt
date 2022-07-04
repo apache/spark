@@ -12,20 +12,20 @@ TakeOrderedAndProject (24)
                   :     :  +- * BroadcastHashJoin Inner BuildRight (9)
                   :     :     :- * Filter (3)
                   :     :     :  +- * ColumnarToRow (2)
-                  :     :     :     +- Scan parquet default.inventory (1)
+                  :     :     :     +- Scan parquet spark_catalog.default.inventory (1)
                   :     :     +- BroadcastExchange (8)
                   :     :        +- * Project (7)
                   :     :           +- * Filter (6)
                   :     :              +- * ColumnarToRow (5)
-                  :     :                 +- Scan parquet default.item (4)
+                  :     :                 +- Scan parquet spark_catalog.default.item (4)
                   :     +- ReusedExchange (11)
                   +- BroadcastExchange (17)
                      +- * Filter (16)
                         +- * ColumnarToRow (15)
-                           +- Scan parquet default.warehouse (14)
+                           +- Scan parquet spark_catalog.default.warehouse (14)
 
 
-(1) Scan parquet default.inventory
+(1) Scan parquet spark_catalog.default.inventory
 Output [4]: [inv_item_sk#1, inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_sk#4]
 Batched: true
 Location: InMemoryFileIndex []
@@ -40,7 +40,7 @@ Input [4]: [inv_item_sk#1, inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_
 Input [4]: [inv_item_sk#1, inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_sk#4]
 Condition : (isnotnull(inv_warehouse_sk#2) AND isnotnull(inv_item_sk#1))
 
-(4) Scan parquet default.item
+(4) Scan parquet spark_catalog.default.item
 Output [3]: [i_item_sk#6, i_item_id#7, i_current_price#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -83,7 +83,7 @@ Join condition: None
 Output [4]: [inv_warehouse_sk#2, inv_quantity_on_hand#3, i_item_id#7, d_date#10]
 Input [6]: [inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_sk#4, i_item_id#7, d_date_sk#9, d_date#10]
 
-(14) Scan parquet default.warehouse
+(14) Scan parquet spark_catalog.default.warehouse
 Output [2]: [w_warehouse_sk#11, w_warehouse_name#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/warehouse]
@@ -142,10 +142,10 @@ Subquery:1 Hosting operator id = 1 Hosting Expression = inv_date_sk#4 IN dynamic
 BroadcastExchange (28)
 +- * Filter (27)
    +- * ColumnarToRow (26)
-      +- Scan parquet default.date_dim (25)
+      +- Scan parquet spark_catalog.default.date_dim (25)
 
 
-(25) Scan parquet default.date_dim
+(25) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_date_sk#9, d_date#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

@@ -15,16 +15,16 @@ TakeOrderedAndProject (23)
                            :     :  +- Exchange (4)
                            :     :     +- * Filter (3)
                            :     :        +- * ColumnarToRow (2)
-                           :     :           +- Scan parquet default.catalog_sales (1)
+                           :     :           +- Scan parquet spark_catalog.default.catalog_sales (1)
                            :     +- * Sort (10)
                            :        +- Exchange (9)
                            :           +- * Filter (8)
                            :              +- * ColumnarToRow (7)
-                           :                 +- Scan parquet default.item (6)
+                           :                 +- Scan parquet spark_catalog.default.item (6)
                            +- ReusedExchange (13)
 
 
-(1) Scan parquet default.catalog_sales
+(1) Scan parquet spark_catalog.default.catalog_sales
 Output [3]: [cs_item_sk#1, cs_ext_sales_price#2, cs_sold_date_sk#3]
 Batched: true
 Location: InMemoryFileIndex []
@@ -47,7 +47,7 @@ Arguments: hashpartitioning(cs_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=1]
 Input [3]: [cs_item_sk#1, cs_ext_sales_price#2, cs_sold_date_sk#3]
 Arguments: [cs_item_sk#1 ASC NULLS FIRST], false, 0
 
-(6) Scan parquet default.item
+(6) Scan parquet spark_catalog.default.item
 Output [6]: [i_item_sk#5, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -135,10 +135,10 @@ BroadcastExchange (28)
 +- * Project (27)
    +- * Filter (26)
       +- * ColumnarToRow (25)
-         +- Scan parquet default.date_dim (24)
+         +- Scan parquet spark_catalog.default.date_dim (24)
 
 
-(24) Scan parquet default.date_dim
+(24) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_date_sk#11, d_date#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

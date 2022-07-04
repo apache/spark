@@ -34,7 +34,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                                   Filter [ws_item_sk,ws_order_number,ws_web_page_sk,ws_sales_price,ws_net_profit]
                                                                     ColumnarToRow
                                                                       InputAdapter
-                                                                        Scan parquet default.web_sales [ws_item_sk,ws_web_page_sk,ws_order_number,ws_quantity,ws_sales_price,ws_net_profit,ws_sold_date_sk]
+                                                                        Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_web_page_sk,ws_order_number,ws_quantity,ws_sales_price,ws_net_profit,ws_sold_date_sk]
                                                                           SubqueryBroadcast [d_date_sk] #1
                                                                             BroadcastExchange #4
                                                                               WholeStageCodegen (1)
@@ -42,14 +42,14 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                                                   Filter [d_year,d_date_sk]
                                                                                     ColumnarToRow
                                                                                       InputAdapter
-                                                                                        Scan parquet default.date_dim [d_date_sk,d_year]
+                                                                                        Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
                                                                   InputAdapter
                                                                     BroadcastExchange #5
                                                                       WholeStageCodegen (1)
                                                                         Filter [wp_web_page_sk]
                                                                           ColumnarToRow
                                                                             InputAdapter
-                                                                              Scan parquet default.web_page [wp_web_page_sk]
+                                                                              Scan parquet spark_catalog.default.web_page [wp_web_page_sk]
                                                   InputAdapter
                                                     WholeStageCodegen (5)
                                                       Sort [wr_item_sk,wr_order_number]
@@ -67,7 +67,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                                               Filter [cd_demo_sk,cd_marital_status,cd_education_status]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
-                                                                                    Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                                                                                    Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                                                                   Subquery #3
                                                                     ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 152837, 1222696, 0, 0),bloomFilter,buf]
                                                                       Exchange #8
@@ -77,17 +77,17 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                                               Filter [ca_country,ca_address_sk,ca_state]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
-                                                                                    Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
+                                                                                    Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state,ca_country]
                                                                   ColumnarToRow
                                                                     InputAdapter
-                                                                      Scan parquet default.web_returns [wr_item_sk,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_order_number,wr_fee,wr_refunded_cash,wr_returned_date_sk]
+                                                                      Scan parquet spark_catalog.default.web_returns [wr_item_sk,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_order_number,wr_fee,wr_refunded_cash,wr_returned_date_sk]
                                               InputAdapter
                                                 BroadcastExchange #9
                                                   WholeStageCodegen (6)
                                                     Filter [cd_demo_sk,cd_marital_status,cd_education_status]
                                                       ColumnarToRow
                                                         InputAdapter
-                                                          Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                                                          Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                               InputAdapter
                                 WholeStageCodegen (10)
                                   Sort [cd_demo_sk,cd_marital_status,cd_education_status]
@@ -97,7 +97,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                           Filter [cd_demo_sk,cd_marital_status,cd_education_status]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                                                Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                           InputAdapter
                             BroadcastExchange #11
                               WholeStageCodegen (11)
@@ -105,7 +105,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                   Filter [ca_country,ca_address_sk,ca_state]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
+                                        Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state,ca_country]
                       InputAdapter
                         ReusedExchange [d_date_sk] #4
                   InputAdapter
@@ -114,4 +114,4 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                         Filter [r_reason_sk]
                           ColumnarToRow
                             InputAdapter
-                              Scan parquet default.reason [r_reason_sk,r_reason_desc]
+                              Scan parquet spark_catalog.default.reason [r_reason_sk,r_reason_desc]

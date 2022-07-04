@@ -158,11 +158,19 @@ object DateTimeUtils {
    * @param micros The number of microseconds since 1970-01-01T00:00:00.000000Z.
    * @return A `java.sql.Timestamp` from number of micros since epoch.
    */
-  def toJavaTimestamp(micros: Long): Timestamp = {
-    val rebasedMicros = rebaseGregorianToJulianMicros(micros)
-    val seconds = Math.floorDiv(rebasedMicros, MICROS_PER_SECOND)
+  def toJavaTimestamp(micros: Long): Timestamp =
+    toJavaTimestampNoRebase(rebaseGregorianToJulianMicros(micros))
+
+  /**
+   * Converts microseconds since the epoch to an instance of `java.sql.Timestamp`.
+   *
+   * @param micros The number of microseconds since 1970-01-01T00:00:00.000000Z.
+   * @return A `java.sql.Timestamp` from number of micros since epoch.
+   */
+  def toJavaTimestampNoRebase(micros: Long): Timestamp = {
+    val seconds = Math.floorDiv(micros, MICROS_PER_SECOND)
     val ts = new Timestamp(seconds * MILLIS_PER_SECOND)
-    val nanos = (rebasedMicros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
+    val nanos = (micros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
     ts.setNanos(nanos.toInt)
     ts
   }
@@ -186,10 +194,18 @@ object DateTimeUtils {
    *          Gregorian calendars.
    * @return The number of micros since epoch from `java.sql.Timestamp`.
    */
-  def fromJavaTimestamp(t: Timestamp): Long = {
-    val micros = millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
-    rebaseJulianToGregorianMicros(micros)
-  }
+  def fromJavaTimestamp(t: Timestamp): Long =
+    rebaseJulianToGregorianMicros(fromJavaTimestampNoRebase(t))
+
+  /**
+   * Converts an instance of `java.sql.Timestamp` to the number of microseconds since
+   * 1970-01-01T00:00:00.000000Z.
+   *
+   * @param t an instance of `java.sql.Timestamp`.
+   * @return The number of micros since epoch from `java.sql.Timestamp`.
+   */
+  def fromJavaTimestampNoRebase(t: Timestamp): Long =
+    millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
 
   /**
    * Converts an Java object to microseconds.

@@ -15,15 +15,15 @@
       :                    :     :  +- * BroadcastHashJoin Inner BuildRight (8)
       :                    :     :     :- * Filter (3)
       :                    :     :     :  +- * ColumnarToRow (2)
-      :                    :     :     :     +- Scan parquet default.inventory (1)
+      :                    :     :     :     +- Scan parquet spark_catalog.default.inventory (1)
       :                    :     :     +- BroadcastExchange (7)
       :                    :     :        +- * Filter (6)
       :                    :     :           +- * ColumnarToRow (5)
-      :                    :     :              +- Scan parquet default.item (4)
+      :                    :     :              +- Scan parquet spark_catalog.default.item (4)
       :                    :     +- BroadcastExchange (13)
       :                    :        +- * Filter (12)
       :                    :           +- * ColumnarToRow (11)
-      :                    :              +- Scan parquet default.warehouse (10)
+      :                    :              +- Scan parquet spark_catalog.default.warehouse (10)
       :                    +- ReusedExchange (16)
       +- BroadcastExchange (41)
          +- * Project (40)
@@ -39,13 +39,13 @@
                               :     :  +- * BroadcastHashJoin Inner BuildRight (28)
                               :     :     :- * Filter (26)
                               :     :     :  +- * ColumnarToRow (25)
-                              :     :     :     +- Scan parquet default.inventory (24)
+                              :     :     :     +- Scan parquet spark_catalog.default.inventory (24)
                               :     :     +- ReusedExchange (27)
                               :     +- ReusedExchange (30)
                               +- ReusedExchange (33)
 
 
-(1) Scan parquet default.inventory
+(1) Scan parquet spark_catalog.default.inventory
 Output [4]: [inv_item_sk#1, inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_sk#4]
 Batched: true
 Location: InMemoryFileIndex []
@@ -60,7 +60,7 @@ Input [4]: [inv_item_sk#1, inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_
 Input [4]: [inv_item_sk#1, inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_sk#4]
 Condition : (isnotnull(inv_item_sk#1) AND isnotnull(inv_warehouse_sk#2))
 
-(4) Scan parquet default.item
+(4) Scan parquet spark_catalog.default.item
 Output [1]: [i_item_sk#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -87,7 +87,7 @@ Join condition: None
 Output [4]: [inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_sk#4, i_item_sk#6]
 Input [5]: [inv_item_sk#1, inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_sk#4, i_item_sk#6]
 
-(10) Scan parquet default.warehouse
+(10) Scan parquet spark_catalog.default.warehouse
 Output [2]: [w_warehouse_sk#7, w_warehouse_name#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/warehouse]
@@ -152,7 +152,7 @@ Condition : ((isnotnull(stdev#23) AND isnotnull(mean#24)) AND (NOT coalesce((mea
 Output [5]: [w_warehouse_sk#7, i_item_sk#6, d_moy#10, mean#24, CASE WHEN (mean#24 = 0.0) THEN null ELSE (stdev#23 / mean#24) END AS cov#25]
 Input [5]: [w_warehouse_sk#7, i_item_sk#6, d_moy#10, stdev#23, mean#24]
 
-(24) Scan parquet default.inventory
+(24) Scan parquet spark_catalog.default.inventory
 Output [4]: [inv_item_sk#26, inv_warehouse_sk#27, inv_quantity_on_hand#28, inv_date_sk#29]
 Batched: true
 Location: InMemoryFileIndex []
@@ -253,10 +253,10 @@ BroadcastExchange (49)
 +- * Project (48)
    +- * Filter (47)
       +- * ColumnarToRow (46)
-         +- Scan parquet default.date_dim (45)
+         +- Scan parquet spark_catalog.default.date_dim (45)
 
 
-(45) Scan parquet default.date_dim
+(45) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#9, d_year#48, d_moy#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -283,10 +283,10 @@ BroadcastExchange (54)
 +- * Project (53)
    +- * Filter (52)
       +- * ColumnarToRow (51)
-         +- Scan parquet default.date_dim (50)
+         +- Scan parquet spark_catalog.default.date_dim (50)
 
 
-(50) Scan parquet default.date_dim
+(50) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#34, d_year#49, d_moy#35]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

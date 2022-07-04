@@ -16,7 +16,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                               BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.store_sales [ss_quantity,ss_list_price,ss_sold_date_sk]
+                                    Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_list_price,ss_sold_date_sk]
                                       ReusedSubquery [d_date_sk] #3
                                 InputAdapter
                                   ReusedExchange [d_date_sk] #8
@@ -25,7 +25,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                               BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.catalog_sales [cs_quantity,cs_list_price,cs_sold_date_sk]
+                                    Scan parquet spark_catalog.default.catalog_sales [cs_quantity,cs_list_price,cs_sold_date_sk]
                                       ReusedSubquery [d_date_sk] #3
                                 InputAdapter
                                   ReusedExchange [d_date_sk] #8
@@ -34,7 +34,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                               BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.web_sales [ws_quantity,ws_list_price,ws_sold_date_sk]
+                                    Scan parquet spark_catalog.default.web_sales [ws_quantity,ws_list_price,ws_sold_date_sk]
                                       ReusedSubquery [d_date_sk] #3
                                 InputAdapter
                                   ReusedExchange [d_date_sk] #8
@@ -57,7 +57,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                         Filter [ss_item_sk]
                                           ColumnarToRow
                                             InputAdapter
-                                              Scan parquet default.store_sales [ss_item_sk,ss_quantity,ss_list_price,ss_sold_date_sk]
+                                              Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_quantity,ss_list_price,ss_sold_date_sk]
                                                 SubqueryBroadcast [d_date_sk] #1
                                                   BroadcastExchange #3
                                                     WholeStageCodegen (1)
@@ -69,10 +69,10 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                 Filter [d_year,d_moy,d_dom]
                                                                   ColumnarToRow
                                                                     InputAdapter
-                                                                      Scan parquet default.date_dim [d_week_seq,d_year,d_moy,d_dom]
+                                                                      Scan parquet spark_catalog.default.date_dim [d_week_seq,d_year,d_moy,d_dom]
                                                           ColumnarToRow
                                                             InputAdapter
-                                                              Scan parquet default.date_dim [d_date_sk,d_week_seq]
+                                                              Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq]
                             InputAdapter
                               WholeStageCodegen (20)
                                 Sort [ss_item_sk]
@@ -84,7 +84,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                             Filter [i_brand_id,i_class_id,i_category_id]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                                  Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                             InputAdapter
                                               BroadcastExchange #5
                                                 WholeStageCodegen (18)
@@ -107,7 +107,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                                   Filter [ss_item_sk]
                                                                                     ColumnarToRow
                                                                                       InputAdapter
-                                                                                        Scan parquet default.store_sales [ss_item_sk,ss_sold_date_sk]
+                                                                                        Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_sold_date_sk]
                                                                                           SubqueryBroadcast [d_date_sk] #3
                                                                                             BroadcastExchange #8
                                                                                               WholeStageCodegen (1)
@@ -115,7 +115,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                                                   Filter [d_year,d_date_sk]
                                                                                                     ColumnarToRow
                                                                                                       InputAdapter
-                                                                                                        Scan parquet default.date_dim [d_date_sk,d_year]
+                                                                                                        Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
                                                                                   InputAdapter
                                                                                     ReusedExchange [d_date_sk] #8
                                                                               InputAdapter
@@ -131,7 +131,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                                                   Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                                                                                     ColumnarToRow
                                                                                                       InputAdapter
-                                                                                                        Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                                                                                        Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                                                                       InputAdapter
                                                                                         WholeStageCodegen (9)
                                                                                           Sort [i_brand_id,i_class_id,i_category_id]
@@ -145,7 +145,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                                                           Filter [cs_item_sk]
                                                                                                             ColumnarToRow
                                                                                                               InputAdapter
-                                                                                                                Scan parquet default.catalog_sales [cs_item_sk,cs_sold_date_sk]
+                                                                                                                Scan parquet spark_catalog.default.catalog_sales [cs_item_sk,cs_sold_date_sk]
                                                                                                                   ReusedSubquery [d_date_sk] #3
                                                                                                           InputAdapter
                                                                                                             ReusedExchange [d_date_sk] #8
@@ -155,7 +155,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                                                             Filter [i_item_sk]
                                                                                                               ColumnarToRow
                                                                                                                 InputAdapter
-                                                                                                                  Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                                                                                                  Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                                     InputAdapter
                                                       WholeStageCodegen (17)
                                                         Sort [i_brand_id,i_class_id,i_category_id]
@@ -169,7 +169,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                         Filter [ws_item_sk]
                                                                           ColumnarToRow
                                                                             InputAdapter
-                                                                              Scan parquet default.web_sales [ws_item_sk,ws_sold_date_sk]
+                                                                              Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_sold_date_sk]
                                                                                 ReusedSubquery [d_date_sk] #3
                                                                         InputAdapter
                                                                           ReusedExchange [d_date_sk] #8
@@ -190,7 +190,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                           Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                                Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
                               InputAdapter
                                 WholeStageCodegen (41)
                                   Sort [ss_item_sk]
@@ -220,7 +220,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                               Filter [ss_item_sk]
                                                 ColumnarToRow
                                                   InputAdapter
-                                                    Scan parquet default.store_sales [ss_item_sk,ss_quantity,ss_list_price,ss_sold_date_sk]
+                                                    Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_quantity,ss_list_price,ss_sold_date_sk]
                                                       SubqueryBroadcast [d_date_sk] #5
                                                         BroadcastExchange #20
                                                           WholeStageCodegen (1)
@@ -232,10 +232,10 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                       Filter [d_year,d_moy,d_dom]
                                                                         ColumnarToRow
                                                                           InputAdapter
-                                                                            Scan parquet default.date_dim [d_week_seq,d_year,d_moy,d_dom]
+                                                                            Scan parquet spark_catalog.default.date_dim [d_week_seq,d_year,d_moy,d_dom]
                                                                 ColumnarToRow
                                                                   InputAdapter
-                                                                    Scan parquet default.date_dim [d_date_sk,d_week_seq]
+                                                                    Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq]
                                   InputAdapter
                                     WholeStageCodegen (63)
                                       Sort [ss_item_sk]

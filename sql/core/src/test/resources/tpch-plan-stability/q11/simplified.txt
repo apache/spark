@@ -18,7 +18,7 @@ WholeStageCodegen (5)
                                   Filter [ps_suppkey]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.partsupp [ps_suppkey,ps_availqty,ps_supplycost]
+                                        Scan parquet spark_catalog.default.partsupp [ps_suppkey,ps_availqty,ps_supplycost]
                                   InputAdapter
                                     ReusedExchange [s_suppkey,s_nationkey] #3
                               InputAdapter
@@ -35,14 +35,14 @@ WholeStageCodegen (5)
                               Filter [ps_suppkey]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.partsupp [ps_partkey,ps_suppkey,ps_availqty,ps_supplycost]
+                                    Scan parquet spark_catalog.default.partsupp [ps_partkey,ps_suppkey,ps_availqty,ps_supplycost]
                               InputAdapter
                                 BroadcastExchange #3
                                   WholeStageCodegen (1)
                                     Filter [s_suppkey,s_nationkey]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.supplier [s_suppkey,s_nationkey]
+                                          Scan parquet spark_catalog.default.supplier [s_suppkey,s_nationkey]
                           InputAdapter
                             BroadcastExchange #4
                               WholeStageCodegen (2)
@@ -50,4 +50,4 @@ WholeStageCodegen (5)
                                   Filter [n_name,n_nationkey]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.nation [n_nationkey,n_name]
+                                        Scan parquet spark_catalog.default.nation [n_nationkey,n_name]

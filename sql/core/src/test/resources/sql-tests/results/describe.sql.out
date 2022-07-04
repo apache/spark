@@ -116,6 +116,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Created Time [not included in comparison]
@@ -148,6 +149,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Created Time [not included in comparison]
@@ -188,6 +190,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Created Time [not included in comparison]
@@ -228,6 +231,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	t                   	                    
 Created Time [not included in comparison]
@@ -369,7 +373,7 @@ DESC t PARTITION (c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`default`.`t`'
+Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`default`.`t`'
 
 
 -- !query
@@ -495,6 +499,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	v                   	                    
 Created Time [not included in comparison]
@@ -518,6 +523,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	v                   	                    
 Created Time [not included in comparison]
@@ -546,7 +552,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeTableCommand
-   +- DescribeTableCommand `default`.`t`, false, [col_name#x, data_type#x, comment#x]
+   +- DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
@@ -556,7 +562,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeTableCommand
-   +- DescribeTableCommand `default`.`t`, true, [col_name#x, data_type#x, comment#x]
+   +- DescribeTableCommand `spark_catalog`.`default`.`t`, true, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
@@ -570,14 +576,14 @@ struct<plan:string>
 
 == Analyzed Logical Plan ==
 col_name: string, data_type: string, comment: string
-DescribeTableCommand `default`.`t`, false, [col_name#x, data_type#x, comment#x]
+DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
 
 == Optimized Logical Plan ==
-DescribeTableCommand `default`.`t`, false, [col_name#x, data_type#x, comment#x]
+DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
 
 == Physical Plan ==
 Execute DescribeTableCommand
-   +- DescribeTableCommand `default`.`t`, false, [col_name#x, data_type#x, comment#x]
+   +- DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
@@ -587,7 +593,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeColumnCommand
-   +- DescribeColumnCommand `default`.`t`, [spark_catalog, default, t, b], false, [info_name#x, info_value#x]
+   +- DescribeColumnCommand `spark_catalog`.`default`.`t`, [spark_catalog, default, t, b], false, [info_name#x, info_value#x]
 
 
 -- !query
@@ -597,7 +603,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeTableCommand
-   +- DescribeTableCommand `default`.`t`, [c=Us, d=2], false, [col_name#x, data_type#x, comment#x]
+   +- DescribeTableCommand `spark_catalog`.`default`.`t`, [c=Us, d=2], false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query

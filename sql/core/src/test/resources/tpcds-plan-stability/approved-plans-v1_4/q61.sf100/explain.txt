@@ -16,34 +16,34 @@
    :              :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (5)
    :              :     :     :     :     :- * Filter (3)
    :              :     :     :     :     :  +- * ColumnarToRow (2)
-   :              :     :     :     :     :     +- Scan parquet default.store_sales (1)
+   :              :     :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (1)
    :              :     :     :     :     +- ReusedExchange (4)
    :              :     :     :     +- BroadcastExchange (11)
    :              :     :     :        +- * Project (10)
    :              :     :     :           +- * Filter (9)
    :              :     :     :              +- * ColumnarToRow (8)
-   :              :     :     :                 +- Scan parquet default.item (7)
+   :              :     :     :                 +- Scan parquet spark_catalog.default.item (7)
    :              :     :     +- BroadcastExchange (18)
    :              :     :        +- * Project (17)
    :              :     :           +- * Filter (16)
    :              :     :              +- * ColumnarToRow (15)
-   :              :     :                 +- Scan parquet default.promotion (14)
+   :              :     :                 +- Scan parquet spark_catalog.default.promotion (14)
    :              :     +- BroadcastExchange (25)
    :              :        +- * Project (24)
    :              :           +- * Filter (23)
    :              :              +- * ColumnarToRow (22)
-   :              :                 +- Scan parquet default.store (21)
+   :              :                 +- Scan parquet spark_catalog.default.store (21)
    :              +- BroadcastExchange (38)
    :                 +- * Project (37)
    :                    +- * BroadcastHashJoin Inner BuildRight (36)
    :                       :- * Filter (30)
    :                       :  +- * ColumnarToRow (29)
-   :                       :     +- Scan parquet default.customer (28)
+   :                       :     +- Scan parquet spark_catalog.default.customer (28)
    :                       +- BroadcastExchange (35)
    :                          +- * Project (34)
    :                             +- * Filter (33)
    :                                +- * ColumnarToRow (32)
-   :                                   +- Scan parquet default.customer_address (31)
+   :                                   +- Scan parquet spark_catalog.default.customer_address (31)
    +- BroadcastExchange (62)
       +- * HashAggregate (61)
          +- Exchange (60)
@@ -58,14 +58,14 @@
                      :     :     :  +- * BroadcastHashJoin Inner BuildRight (48)
                      :     :     :     :- * Filter (46)
                      :     :     :     :  +- * ColumnarToRow (45)
-                     :     :     :     :     +- Scan parquet default.store_sales (44)
+                     :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (44)
                      :     :     :     +- ReusedExchange (47)
                      :     :     +- ReusedExchange (50)
                      :     +- ReusedExchange (53)
                      +- ReusedExchange (56)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6]
 Batched: true
 Location: InMemoryFileIndex []
@@ -92,7 +92,7 @@ Join condition: None
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5]
 Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6, d_date_sk#8]
 
-(7) Scan parquet default.item
+(7) Scan parquet spark_catalog.default.item
 Output [2]: [i_item_sk#9, i_category#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -123,7 +123,7 @@ Join condition: None
 Output [4]: [ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5]
 Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5, i_item_sk#9]
 
-(14) Scan parquet default.promotion
+(14) Scan parquet spark_catalog.default.promotion
 Output [4]: [p_promo_sk#11, p_channel_dmail#12, p_channel_email#13, p_channel_tv#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/promotion]
@@ -154,7 +154,7 @@ Join condition: None
 Output [3]: [ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5]
 Input [5]: [ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5, p_promo_sk#11]
 
-(21) Scan parquet default.store
+(21) Scan parquet spark_catalog.default.store
 Output [2]: [s_store_sk#15, s_gmt_offset#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -185,7 +185,7 @@ Join condition: None
 Output [2]: [ss_customer_sk#2, ss_ext_sales_price#5]
 Input [4]: [ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5, s_store_sk#15]
 
-(28) Scan parquet default.customer
+(28) Scan parquet spark_catalog.default.customer
 Output [2]: [c_customer_sk#17, c_current_addr_sk#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -199,7 +199,7 @@ Input [2]: [c_customer_sk#17, c_current_addr_sk#18]
 Input [2]: [c_customer_sk#17, c_current_addr_sk#18]
 Condition : (isnotnull(c_customer_sk#17) AND isnotnull(c_current_addr_sk#18))
 
-(31) Scan parquet default.customer_address
+(31) Scan parquet spark_catalog.default.customer_address
 Output [2]: [ca_address_sk#19, ca_gmt_offset#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -261,7 +261,7 @@ Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#5))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#5))#23]
 Results [1]: [MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#5))#23,17,2) AS promotions#24]
 
-(44) Scan parquet default.store_sales
+(44) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_item_sk#25, ss_customer_sk#26, ss_store_sk#27, ss_ext_sales_price#28, ss_sold_date_sk#29]
 Batched: true
 Location: InMemoryFileIndex []
@@ -360,10 +360,10 @@ BroadcastExchange (69)
 +- * Project (68)
    +- * Filter (67)
       +- * ColumnarToRow (66)
-         +- Scan parquet default.date_dim (65)
+         +- Scan parquet spark_catalog.default.date_dim (65)
 
 
-(65) Scan parquet default.date_dim
+(65) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#8, d_year#39, d_moy#40]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
