@@ -165,24 +165,24 @@ class PruneFiltersSuite extends PlanTest {
     val tr = LocalRelation($"a".int, $"b".int, $"c".int)
     val trueFilter = tr.where(booleanToLiteral(true))
     val falseFilter = tr.where(booleanToLiteral(false))
-    val literal10d = doubleToLiteral(10d)
-    val rand5 = rand(5)
+    val literal1d = doubleToLiteral(1d)
+    val rand1 = rand(1)
 
     Seq(
-      literal10d > rand5,
-      literal10d >= rand5,
-      rand5 < literal10d,
-      rand5 <= literal10d).foreach { condition =>
+      literal1d > rand1,
+      literal1d >= rand1,
+      rand1 < literal1d,
+      rand1 <= literal1d).foreach { condition =>
       val queryWithUselessFilter = tr.where(condition)
       val optimized = Optimize.execute(queryWithUselessFilter.analyze)
       comparePlans(optimized, trueFilter)
     }
 
     Seq(
-      literal10d <= rand5,
-      literal10d < rand5,
-      rand5 >= literal10d,
-      rand5 > literal10d).foreach { condition =>
+      literal1d <= rand1,
+      literal1d < rand1,
+      rand1 >= literal1d,
+      rand1 > literal1d).foreach { condition =>
       val queryWithUselessFilter = tr.where(condition)
       val optimized = Optimize.execute(queryWithUselessFilter.analyze)
       comparePlans(optimized, falseFilter)
