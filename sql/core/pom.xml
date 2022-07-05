@@ -166,7 +166,7 @@
     <!-- TODO(grundprinzip) fix the scala pb version -->
     <dependency>
       <groupId>com.thesamet.scalapb</groupId>
-      <artifactId>scalapb-runtime-grpc_2.12</artifactId>
+      <artifactId>scalapb-runtime-grpc_${scala.binary.version}</artifactId>
       <version>0.11.11</version>
     </dependency>
     <dependency>
@@ -311,6 +311,7 @@
           </execution>
         </executions>
         <configuration>
+          <protocArtifact>com.google.protobuf:protoc:3.21.1</protocArtifact>
           <includeMavenTypes>transitive</includeMavenTypes>
           <inputDirectories>
             <include>src/main/protobuf</include>
