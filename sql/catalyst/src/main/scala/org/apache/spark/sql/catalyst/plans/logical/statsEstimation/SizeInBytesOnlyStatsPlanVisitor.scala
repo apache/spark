@@ -54,8 +54,13 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()
     case _: LogicalPlan =>
-      Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 0L).product,
-        rowCount = Some(p.children.flatMap(p => p.stats.rowCount).filter(_ > 0L).product))
+      val stats = p.children.map(_.stats)
+      val rowCount = if (stats.exists(_.rowCount.isEmpty)) {
+        None
+      } else {
+        Some(stats.map(_.rowCount.get).filter(_ > 0L).product)
+      }
+      Statistics(sizeInBytes = stats.map(_.sizeInBytes).filter(_ > 0L).product, rowCount = rowCount)
   }
 
   override def visitAggregate(p: Aggregate): Statistics = {
@@ -158,9 +163,13 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitScriptTransform(p: ScriptTransformation): Statistics = default(p)
 
   override def visitUnion(p: Union): Statistics = {
-    Statistics(
-      sizeInBytes = p.children.map(_.stats.sizeInBytes).sum,
-      rowCount = Some(p.children.flatMap(p => p.stats.rowCount).sum))
+    val stats = p.children.map(_.stats)
+    val rowCount = if (stats.exists(_.rowCount.isEmpty)) {
+      None
+    } else {
+      Some(stats.map(_.rowCount.get).filter(_ > 0L).sum)
+    }
+    Statistics(sizeInBytes = stats.map(_.sizeInBytes).filter(_ > 0L).product, rowCount = rowCount)
   }
 
   override def visitWindow(p: Window): Statistics = visitUnaryNode(p)
