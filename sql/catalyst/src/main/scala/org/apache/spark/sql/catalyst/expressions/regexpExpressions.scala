@@ -83,16 +83,12 @@ abstract class StringRegexExpression extends BinaryExpression
     Arguments:
       * str - a string expression
       * pattern - a string expression. The pattern is a string which is matched literally, with
-          exception to the following special symbols:
-
-          _ matches any one character in the input (similar to . in posix regular expressions)
-
+          exception to the following special symbols:<br><br>
+          _ matches any one character in the input (similar to . in posix regular expressions)\
           % matches zero or more characters in the input (similar to .* in posix regular
-          expressions)
-
+          expressions)<br><br>
           Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
-          to match "\abc", the pattern should be "\\abc".
-
+          to match "\abc", the pattern should be "\\abc".<br><br>
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
@@ -334,12 +330,10 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
   arguments = """
     Arguments:
       * str - a string expression
-      * regexp - a string expression. The regex string should be a Java regular expression.
-
+      * regexp - a string expression. The regex string should be a Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -475,12 +469,10 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
     Arguments:
       * str - a string expression to search for a regular expression pattern match.
       * regexp - a string representing a regular expression. The regex string should be a
-          Java regular expression.
-
+          Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -666,12 +658,10 @@ abstract class RegExpExtractBase
     Arguments:
       * str - a string expression.
       * regexp - a string representing a regular expression. The regex string should be a
-          Java regular expression.
-
+          Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -766,12 +756,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     Arguments:
       * str - a string expression.
       * regexp - a string representing a regular expression. The regex string should be a
-          Java regular expression.
-
+          Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
