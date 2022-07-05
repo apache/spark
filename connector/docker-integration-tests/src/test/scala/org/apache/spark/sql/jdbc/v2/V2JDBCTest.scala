@@ -221,7 +221,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           s" The supported Index Types are:"))
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
-        assert(jdbcTable.indexExists("i1") == true)
+        assert(jdbcTable.indexExists("i1"))
         if (supportListIndexes) {
           val indexes = jdbcTable.listIndexes()
           assert(indexes.size == 1)
@@ -230,9 +230,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
         sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
           s" OPTIONS ($indexOptions)")
-        assert(jdbcTable.indexExists("i2") == true)
+        assert(jdbcTable.indexExists("i2"))
         if (supportListIndexes) {
-          assert(jdbcTable.listIndexes().size == 2)
+          val indexes = jdbcTable.listIndexes()
+          assert(indexes.size == 2)
+          assert(indexes.map(_ => _.indexName()).sortWith(_ < _) === Array("i1", "i2"))
         }
 
         // This should pass without exception
