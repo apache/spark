@@ -20,6 +20,7 @@ package org.apache.spark.ml.regression
 import java.util.Locale
 
 import breeze.stats.{distributions => dist}
+import breeze.stats.distributions.Rand.FixedSeed.randBasis
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
