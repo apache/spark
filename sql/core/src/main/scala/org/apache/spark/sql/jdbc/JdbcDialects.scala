@@ -244,7 +244,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       if (isSupportedFunction(funcName)) {
-        s"""$funcName(${inputs.mkString(", ")})"""
+        s"""${dialectFunctionName(funcName).getOrElse(funcName)}(${inputs.mkString(", ")})"""
       } else {
         // The framework will catch the error and give up the push-down.
         // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
@@ -316,6 +316,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return Converted value.
    */
   @Since("3.3.0")
+  @deprecated("use org.apache.spark.sql.jdbc.JdbcDialect.compileExpression instead.", "3.4.0")
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = compileExpression(aggFunction)
 
   /**
