@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
+import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
@@ -316,13 +316,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return Converted value.
    */
   @Since("3.3.0")
-  def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    aggFunction match {
-      case f: GeneralAggregateFunc if isSupportedFunction(f.name()) =>
-        compileExpression(f)
-      case _ => compileExpression(aggFunction)
-    }
-  }
+  def compileAggregate(aggFunction: AggregateFunc): Option[String] = compileExpression(aggFunction)
 
   /**
    * List the user-defined functions in jdbc dialect.
