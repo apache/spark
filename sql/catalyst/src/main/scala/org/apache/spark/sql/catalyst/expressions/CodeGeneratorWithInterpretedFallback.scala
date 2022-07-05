@@ -43,9 +43,9 @@ abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] extends Logging {
     val fallbackMode = CodegenObjectFactoryMode.withName(config)
 
     fallbackMode match {
-      case CodegenObjectFactoryMode.CODEGEN_ONLY if Utils.isTesting =>
+      case CodegenObjectFactoryMode.CODEGEN_ONLY =>
         createCodeGeneratedObject(in)
-      case CodegenObjectFactoryMode.NO_CODEGEN if Utils.isTesting =>
+      case CodegenObjectFactoryMode.NO_CODEGEN =>
         createInterpretedObject(in)
       case _ =>
         try {
