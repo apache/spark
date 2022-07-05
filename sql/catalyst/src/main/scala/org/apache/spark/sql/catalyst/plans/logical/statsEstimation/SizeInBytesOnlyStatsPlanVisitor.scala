@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
@@ -43,18 +42,20 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
       sizeInBytes = 1
     }
 
-    // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes)
+    // v2 sources can bubble-up rowCount, so always propagate.
+    // Don't propagate attributeStats, since they are not estimated here.
+    Statistics(sizeInBytes = sizeInBytes, rowCount = p.child.stats.rowCount)
   }
 
   /**
-   * For leaf nodes, use its `computeStats`. For other nodes, we assume the size in bytes is the
-   * product of all of the children's `computeStats`.
+   * For leaf nodes, use its `computeStats`. For other nodes, we assume the size in bytes
+   * and rowCount is the product of all of the children's `computeStats`.
    */
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()
     case _: LogicalPlan =>
-      Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 0L).product)
+      Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 0L).product,
+        rowCount = Some(p.children.flatMap(p => p.stats.rowCount).filter(_ > 0L).product))
   }
 
   override def visitAggregate(p: Aggregate): Statistics = {
@@ -72,8 +73,10 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitExcept(p: Except): Statistics = p.left.stats.copy()
 
   override def visitExpand(p: Expand): Statistics = {
-    val sizeInBytes = visitUnaryNode(p).sizeInBytes * p.projections.length
-    Statistics(sizeInBytes = sizeInBytes)
+    val stats = visitUnaryNode(p)
+    val sizeInBytes = stats.sizeInBytes * p.projections.length
+    val rowCount = stats.rowCount.map(_ * p.projections.length)
+    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount)
   }
 
   override def visitFilter(p: Filter): Statistics = visitUnaryNode(p)
@@ -100,21 +103,19 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   }
 
   override def visitIntersect(p: Intersect): Statistics = {
-    val leftSize = p.left.stats.sizeInBytes
-    val rightSize = p.right.stats.sizeInBytes
-    val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    Statistics(
-      sizeInBytes = sizeInBytes)
+    val leftStats = p.left.stats
+    val rightStats = p.right.stats
+    val leftSize = leftStats.sizeInBytes
+    val rightSize = rightStats.sizeInBytes
+    if (leftSize < rightSize) {
+      Statistics(sizeInBytes = leftSize, rowCount = leftStats.rowCount)
+    } else {
+      Statistics(sizeInBytes = rightSize, rowCount = rightStats.rowCount)
+    }
   }
 
   override def visitJoin(p: Join): Statistics = {
-    p.joinType match {
-      case LeftAnti | LeftSemi =>
-        // LeftSemi and LeftAnti won't ever be bigger than left
-        p.left.stats
-      case _ =>
-        default(p)
-    }
+    JoinEstimation(p).estimate.getOrElse(default(p))
   }
 
   override def visitLocalLimit(p: LocalLimit): Statistics = {
@@ -157,7 +158,9 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitScriptTransform(p: ScriptTransformation): Statistics = default(p)
 
   override def visitUnion(p: Union): Statistics = {
-    Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).sum)
+    Statistics(
+      sizeInBytes = p.children.map(_.stats.sizeInBytes).sum,
+      rowCount = Some(p.children.flatMap(p => p.stats.rowCount).sum))
   }
 
   override def visitWindow(p: Window): Statistics = visitUnaryNode(p)

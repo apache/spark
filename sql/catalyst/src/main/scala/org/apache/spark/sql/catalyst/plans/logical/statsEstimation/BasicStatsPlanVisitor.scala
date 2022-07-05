@@ -27,17 +27,7 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   /** Falls back to the estimation computed by [[SizeInBytesOnlyStatsPlanVisitor]]. */
   private def fallback(p: LogicalPlan): Statistics = SizeInBytesOnlyStatsPlanVisitor.visit(p)
 
-  override def default(p: LogicalPlan): Statistics = p match {
-    case p: LeafNode => p.computeStats()
-    case _: LogicalPlan =>
-      val stats = p.children.map(_.stats)
-      val rowCount = if (stats.exists(_.rowCount.isEmpty)) {
-        None
-      } else {
-        Some(stats.map(_.rowCount.get).filter(_ > 0L).product)
-      }
-      Statistics(sizeInBytes = stats.map(_.sizeInBytes).filter(_ > 0L).product, rowCount = rowCount)
-  }
+  override def default(p: LogicalPlan): Statistics = fallback(p)
 
   override def visitAggregate(p: Aggregate): Statistics = {
     AggregateEstimation.estimate(p).getOrElse(fallback(p))
@@ -63,15 +53,7 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitOffset(p: Offset): Statistics = fallback(p)
 
   override def visitIntersect(p: Intersect): Statistics = {
-    val leftStats = p.left.stats
-    val rightStats = p.right.stats
-    val leftSize = leftStats.sizeInBytes
-    val rightSize = rightStats.sizeInBytes
-    if (leftSize < rightSize) {
-      Statistics(sizeInBytes = leftSize, rowCount = leftStats.rowCount)
-    } else {
-      Statistics(sizeInBytes = rightSize, rowCount = rightStats.rowCount)
-    }
+    fallback(p)
   }
 
   override def visitJoin(p: Join): Statistics = {

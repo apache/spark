@@ -157,7 +157,7 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
         aggregateExpressions = attributes :+ Alias(Count(Literal(1)), "cnt")(), child)
       assert(hasGroupAgg.stats ==
         // From UnaryNode.computeStats, childSize * outputRowSize / childRowSize
-        Statistics(sizeInBytes = 48 * (8 + 4 + 8) / (8 + 4)))
+        Statistics(sizeInBytes = 48 * (8 + 4 + 8) / (8 + 4), rowCount = Some(4)))
     }
   }
 

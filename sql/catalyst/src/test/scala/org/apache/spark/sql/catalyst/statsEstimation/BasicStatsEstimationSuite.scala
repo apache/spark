@@ -178,7 +178,8 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("windows") {
     val windows = plan.window(Seq(min(attribute).as("sum_attr")), Seq(attribute), Nil)
-    val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
+    val windowsStats = Statistics(
+        sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8), rowCount = Some(plan.rowCount))
     checkStats(
       windows,
       expectedStatsCboOn = windowsStats,
@@ -306,7 +307,8 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes,
         rowCount = rowCount,
         attributeStats = attributeStats),
-      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes,
+        rowCount = rowCount))
   }
 
   test("SPARK-34121: Intersect operator missing rowCount when enable CBO") {
@@ -316,7 +318,7 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     checkStats(
       intersect,
       expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
-      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount))
   }
 
   test("SPARK-35185: Improve Distinct statistics estimation") {
@@ -325,7 +327,7 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     checkStats(
       distinct,
       expectedStatsCboOn = Statistics(sizeInBytes, Some(plan.rowCount), plan.attributeStats),
-      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes, Some(plan.rowCount)))
   }
 
   test("row size and column stats estimation for sort") {
