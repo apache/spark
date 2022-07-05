@@ -303,6 +303,7 @@ case class TakeOrderedAndProjectExec(
   override lazy val metrics = readMetrics ++ writeMetrics
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val orderingSatisfies = SortOrder.orderingSatisfies(child.outputOrdering, sortOrder)
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val childRDD = child.execute()
     if (childRDD.getNumPartitions == 0) {
@@ -311,8 +312,14 @@ case class TakeOrderedAndProjectExec(
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {
-        val localTopK = childRDD.mapPartitionsInternal { iter =>
-          Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+        val localTopK = if (orderingSatisfies) {
+          childRDD.mapPartitionsInternal { iter =>
+            iter.map(_.copy()).take(limit)
+          }
+        } else {
+          childRDD.mapPartitionsInternal { iter =>
+            Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+          }
         }
 
         new ShuffledRowRDD(
