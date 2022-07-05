@@ -204,6 +204,7 @@
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.6.1</tink.version>
+    <tomcat.version>9.0.63</tomcat.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -2615,12 +2616,12 @@
       <dependency>
         <groupId>org.apache.tomcat.embed</groupId>
         <artifactId>tomcat-embed-core</artifactId>
-        <version>8.5.75</version>
+        <version>${tomcat.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.tomcat</groupId>
         <artifactId>tomcat-annotations-api</artifactId>
-        <version>8.5.75</version>
+        <version>${tomcat.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>
