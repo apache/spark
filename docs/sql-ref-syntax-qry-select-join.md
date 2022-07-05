@@ -26,7 +26,7 @@ A SQL join is used to combine rows from two relations based on join criteria. Th
 ### Syntax
 
 ```sql
-relation { [ join_type ] JOIN relation [ join_criteria ] | NATURAL join_type JOIN relation }
+relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria ] | NATURAL join_type JOIN [ LATERAL ] relation }
 ```
 
 ### Parameters
