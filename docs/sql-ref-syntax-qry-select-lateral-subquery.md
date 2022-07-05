@@ -21,8 +21,8 @@ license: |
 
 ### Description
 
-`LATERAL SUBQUERY` is a subquety that is preceded by the keyword `LATERAL`. It provides a way to cross-reference items in the preceding FROM clause.
-Without the LATERAL keyword, each subquery is evaluated independently and cannot refer to items in the `FROM` clause. `LATERAL SUBQUERY` makes the complicated
+`LATERAL SUBQUERY` is a subquery that is preceded by the keyword `LATERAL`. It provides a way to cross-reference items in the preceding FROM clause.
+Without the `LATERAL` keyword, each subquery is evaluated independently and cannot refer to items in the `FROM` clause. `LATERAL SUBQUERY` makes the complicated
 queries simpler and more efficient.
 
 ### Syntax
