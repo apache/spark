@@ -234,7 +234,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         if (supportListIndexes) {
           val indexes = jdbcTable.listIndexes()
           assert(indexes.size == 2)
-          assert(indexes.map(_ => _.indexName()).sortWith(_ < _) === Array("i1", "i2"))
+          assert(indexes.map(index => index.indexName()).sortWith(_ < _) === Array("i1", "i2"))
         }
 
         // This should pass without exception
