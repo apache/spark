@@ -862,12 +862,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
       e.copy(child = prunedChild(child, e.references))
 
     // prune unrequired references
-    // There are 2 types of pruning here:
-    // 1. For attributes in g.child.outputSet that is not used by the generator nor the project,
-    //    we directly remove it from the output list of g.child.
-    // 2. For attributes that is not used by the project but it is used by the generator, we put
-    //    it in g.unrequiredChildIndex to save memory usage.
-    case GeneratorUnrequiredChildrenPruning(rewrittenPlan) => rewrittenPlan
+    case p @ Project(_, g: Generate) if p.references != g.outputSet =>
+      val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
+      val newChild = prunedChild(g.child, requiredAttrs)
+      val unrequired = g.generator.references -- p.references
+      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
+        .map(_._2)
+      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
@@ -928,7 +929,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
   })
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  def prunedChild(c: LogicalPlan, allReferences: AttributeSet): LogicalPlan =
+  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
     if (!c.outputSet.subsetOf(allReferences)) {
       Project(c.output.filter(allReferences.contains), c)
     } else {
