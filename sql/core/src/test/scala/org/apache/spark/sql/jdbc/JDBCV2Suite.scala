@@ -1042,77 +1042,85 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         }
         checkPushedInfo(df6, expectedPlanFragment6)
         checkAnswer(df6, Seq(Row(2, "david", 10000, 1300, true)))
+      }
+    }
+  }
 
-        val df7 = sql("SELECT name FROM h2.test.datetime WHERE " +
+  test("scan with filter push-down with date time functions") {
+    Seq(false, true).foreach { ansiMode =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString,
+        SQLConf.MAX_METADATA_STRING_LENGTH.key -> "200") {
+
+        val df1 = sql("SELECT name FROM h2.test.datetime WHERE " +
           "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
-        checkFiltersRemoved(df7)
-        val expectedPlanFragment7 =
+        checkFiltersRemoved(df1)
+        val expectedPlanFragment1 =
           "PushedFilters: [DATE1 IS NOT NULL, EXTRACT(DAY_OF_YEAR FROM DATE1) > 100, " +
-          "EXTRACT(DAY FROM DATE1) > 10]"
-        checkPushedInfo(df7, expectedPlanFragment7)
-        checkAnswer(df7, Seq(Row("amy"), Row("alex")))
+            "EXTRACT(DAY FROM DATE1) > 10]"
+        checkPushedInfo(df1, expectedPlanFragment1)
+        checkAnswer(df1, Seq(Row("amy"), Row("alex")))
 
-        val df8 = sql("SELECT name FROM h2.test.datetime WHERE " +
+        val df2 = sql("SELECT name FROM h2.test.datetime WHERE " +
           "year(date1) = 2022 AND quarter(date1) = 2")
-        checkFiltersRemoved(df8)
-        val expectedPlanFragment8 =
+        checkFiltersRemoved(df2)
+        val expectedPlanFragment2 =
           "[DATE1 IS NOT NULL, EXTRACT(YEAR FROM DATE1) = 2022, " +
-          "EXTRACT(QUARTER FROM DATE1) = 2]"
-        checkPushedInfo(df8, expectedPlanFragment8)
-        checkAnswer(df8, Seq(Row("amy"), Row("alex")))
+            "EXTRACT(QUARTER FROM DATE1) = 2]"
+        checkPushedInfo(df2, expectedPlanFragment2)
+        checkAnswer(df2, Seq(Row("amy"), Row("alex")))
 
-        val df9 = sql("SELECT name FROM h2.test.datetime WHERE " +
+        val df3 = sql("SELECT name FROM h2.test.datetime WHERE " +
           "second(time1) = 0 AND month(date1) = 5")
-        checkFiltersRemoved(df9)
-        val expectedPlanFragment9 =
-          "PushedFilters: [TIME1 IS NOT NULL, DATE1 IS NOT NULL, EXTRACT(SECOND FROM TIME1) = 0, " +
-          "EXTRACT(MONTH FROM DATE1) ..."
-        checkPushedInfo(df9, expectedPlanFragment9)
-        checkAnswer(df9, Seq(Row("amy"), Row("alex")))
+        checkFiltersRemoved(df3)
+        val expectedPlanFragment3 =
+          "PushedFilters: [TIME1 IS NOT NULL, DATE1 IS NOT NULL, " +
+            "EXTRACT(SECOND FROM TIME1) = 0, EXTRACT(MONTH FROM DATE1) = 5]"
+        checkPushedInfo(df3, expectedPlanFragment3)
+        checkAnswer(df3, Seq(Row("amy"), Row("alex")))
 
-        val df10 = sql("SELECT name FROM h2.test.datetime WHERE " +
+        val df4 = sql("SELECT name FROM h2.test.datetime WHERE " +
           "hour(time1) = 0 AND minute(time1) = 0")
-        checkFiltersRemoved(df10)
-        val expectedPlanFragment10 =
+        checkFiltersRemoved(df4)
+        val expectedPlanFragment4 =
           "PushedFilters: [TIME1 IS NOT NULL, EXTRACT(HOUR FROM TIME1) = 0, " +
             "EXTRACT(MINUTE FROM TIME1) = 0]"
-        checkPushedInfo(df10, expectedPlanFragment10)
-        checkAnswer(df10, Seq(Row("amy"), Row("alex")))
+        checkPushedInfo(df4, expectedPlanFragment4)
+        checkAnswer(df4, Seq(Row("amy"), Row("alex")))
 
-        val df11 = sql("SELECT name FROM h2.test.datetime WHERE " +
+        val df5 = sql("SELECT name FROM h2.test.datetime WHERE " +
           "extract(WEEk from date1) > 10 AND extract(YEAROFWEEK from date1) = 2022")
-        checkFiltersRemoved(df11)
-        val expectedPlanFragment11 =
+        checkFiltersRemoved(df5)
+        val expectedPlanFragment5 =
           "PushedFilters: [DATE1 IS NOT NULL, EXTRACT(WEEK FROM DATE1) > 10, " +
             "EXTRACT(YEAR_OF_WEEK FROM DATE1) = 2022]"
-        checkPushedInfo(df11, expectedPlanFragment11)
-        checkAnswer(df11, Seq(Row("alex"), Row("amy")))
+        checkPushedInfo(df5, expectedPlanFragment5)
+        checkAnswer(df5, Seq(Row("alex"), Row("amy")))
 
         // H2 does not support
-        val df12 = sql("SELECT name FROM h2.test.datetime WHERE " +
+        val df6 = sql("SELECT name FROM h2.test.datetime WHERE " +
           "trunc(date1, 'week') = date'2022-05-16' AND date_add(date1, 1) = date'2022-05-20' " +
           "AND datediff(date1, '2022-05-10') > 0")
-        checkFiltersRemoved(df12, false)
-        val expectedPlanFragment12 =
+        checkFiltersRemoved(df6, false)
+        val expectedPlanFragment6 =
           "PushedFilters: [DATE1 IS NOT NULL]"
-        checkPushedInfo(df12, expectedPlanFragment12)
-        checkAnswer(df12, Seq(Row("amy")))
+        checkPushedInfo(df6, expectedPlanFragment6)
+        checkAnswer(df6, Seq(Row("amy")))
 
-        val df13 = sql("SELECT name FROM h2.test.datetime WHERE " +
+        val df7 = sql("SELECT name FROM h2.test.datetime WHERE " +
           "weekday(date1) = 2")
-        checkFiltersRemoved(df13)
-        val expectedPlanFragment13 =
+        checkFiltersRemoved(df7)
+        val expectedPlanFragment7 =
           "PushedFilters: [DATE1 IS NOT NULL, (EXTRACT(DAY_OF_WEEK FROM DATE1) - 1) = 2]"
-        checkPushedInfo(df13, expectedPlanFragment13)
-        checkAnswer(df13, Seq(Row("alex")))
+        checkPushedInfo(df7, expectedPlanFragment7)
+        checkAnswer(df7, Seq(Row("alex")))
 
-        val df14 = sql("SELECT name FROM h2.test.datetime WHERE " +
+        val df8 = sql("SELECT name FROM h2.test.datetime WHERE " +
           "dayofweek(date1) = 4")
-        checkFiltersRemoved(df14)
-        val expectedPlanFragment14 =
+        checkFiltersRemoved(df8)
+        val expectedPlanFragment8 =
           "PushedFilters: [DATE1 IS NOT NULL, ((EXTRACT(DAY_OF_WEEK FROM DATE1) % 7) + 1) = 4]"
-        checkPushedInfo(df14, expectedPlanFragment14)
-        checkAnswer(df14, Seq(Row("alex")))
+        checkPushedInfo(df8, expectedPlanFragment8)
+        checkAnswer(df8, Seq(Row("alex")))
       }
     }
   }
