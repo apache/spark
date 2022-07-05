@@ -256,7 +256,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         sql(s"DROP index i2 ON $catalogName.new_table")
         assert(jdbcTable.indexExists("i2") == false)
         if (supportListIndexes) {
-          assert(jdbcTable.listIndexes().size == 0)
+          assert(jdbcTable.listIndexes().isEmpty)
         }
 
         // This should pass without exception
