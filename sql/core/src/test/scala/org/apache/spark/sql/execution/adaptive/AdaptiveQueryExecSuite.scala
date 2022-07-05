@@ -2604,11 +2604,11 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-39624 Support coalesce partition through CartesianProduct") {
-    def checkResultPartition(df: Dataset[Row],
-                             numShuffleReader: Int,
-                             numPartition: Int): Unit = {
+    def checkResultPartition(
+       df: Dataset[Row],
+       numShuffleReader: Int,
+       numPartition: Int): Unit = {
       df.collect()
-      print(df.queryExecution.executedPlan)
       assert(collect(df.queryExecution.executedPlan) {
         case r: AQEShuffleReadExec => r
       }.size === numShuffleReader)
