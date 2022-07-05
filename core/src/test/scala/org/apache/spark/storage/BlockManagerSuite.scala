@@ -2186,15 +2186,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
           callback: RpcResponseCallback): Unit = {
         val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
         msgObj match {
-
-          case exec: RegisterExecutor if exec.execId == timeoutExec =>
-            () // No reply to generate client-side timeout
+          case exec: RegisterExecutor => () // No reply to generate client-side timeout
         }
       }
     }
-    val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 0)
+    val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
     Utils.tryWithResource(new TransportContext(transConf, handler, true)) { transCtx =>
-      // a server which delays response 50ms and must try twice for success.
       def newShuffleServer(port: Int): (TransportServer, Int) = {
         (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
       }
@@ -2207,7 +2204,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       conf.set(SHUFFLE_SERVICE_PORT.key, shufflePort.toString)
       conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
       conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
-      var e = intercept[SparkException] {
+      val e = intercept[SparkException] {
         makeBlockManager(8000, timeoutExec)
       }.getMessage
       assert(e.contains("TimeoutException"))
