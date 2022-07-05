@@ -995,6 +995,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(info1.taskId === info2.taskId)
     assert(info1.index === info2.index)
     assert(info1.attemptNumber === info2.attemptNumber)
+    // The "Partition ID" field was added in Spark 3.3.0
+    assert(info1.partitionId === info2.partitionId)
     assert(info1.launchTime === info2.launchTime)
     assert(info1.executorId === info2.executorId)
     assert(info1.host === info2.host)
