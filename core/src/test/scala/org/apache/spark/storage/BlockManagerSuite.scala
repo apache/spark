@@ -2178,7 +2178,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("SPARK-39647: Failure to register with ESS should prevent registering the BM") {
-    val timeoutExec = "timeoutExec"
     val handler = new NoOpRpcHandler {
       override def receive(
           client: TransportClient,
@@ -2186,7 +2185,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
           callback: RpcResponseCallback): Unit = {
         val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
         msgObj match {
-          case exec: RegisterExecutor => () // No reply to generate client-side timeout
+          case _: RegisterExecutor => () // No reply to generate client-side timeout
         }
       }
     }
@@ -2205,7 +2204,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
       conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
       val e = intercept[SparkException] {
-        makeBlockManager(8000, timeoutExec)
+        makeBlockManager(8000, "timeoutExec")
       }.getMessage
       assert(e.contains("TimeoutException"))
       verify(master, times(0))
