@@ -886,7 +886,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 
   private def stringArgsForCatalogTable(table: CatalogTable): Seq[Any] = {
     table.storage.serde match {
-      case Some(serde) => table.identifier :: serde :: Nil
+      case Some(serde)
+        // SPARK-39564: don't print out serde to avoid introducing complicated and error-prone
+        // regex magic.
+        if !SQLConf.get.getConfString("spark.test.noSerdeInExplain", "false").toBoolean =>
+        table.identifier :: serde :: Nil
       case _ => table.identifier :: Nil
     }
   }
