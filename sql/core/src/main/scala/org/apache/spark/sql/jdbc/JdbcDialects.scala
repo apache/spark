@@ -253,15 +253,18 @@ abstract class JdbcDialect extends Serializable with Logging {
       }
     }
 
-    override def visitGeneralAggregateFunction(
+    override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
       if (isSupportedFunction(funcName)) {
-        super.visitGeneralAggregateFunction(funcName, isDistinct, inputs)
+        super.visitAggregateFunction(
+          dialectFunctionName(funcName).getOrElse(funcName), isDistinct, inputs)
       } else {
         throw new UnsupportedOperationException(
           s"${this.getClass.getSimpleName} does not support aggregate function: $funcName");
       }
     }
+
+    protected def dialectFunctionName(funcName: String): Option[String] = None
 
     override def visitOverlay(inputs: Array[String]): String = {
       if (isSupportedFunction("OVERLAY")) {

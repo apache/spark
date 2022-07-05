@@ -33,31 +33,22 @@ private object DB2Dialect extends JdbcDialect {
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
 
   // See https://www.ibm.com/docs/en/db2/11.5?topic=functions-aggregate
-  private val supportedAggregateFunctions =
-    Set("VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP")
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP")
   private val supportedFunctions = supportedAggregateFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
   class DB2SQLBuilder extends JDBCSQLBuilder {
-    override def visitAggregateFunction(
-        funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
-      funcName match {
-        case "VAR_POP" =>
-          super.visitAggregateFunction("VARIANCE", isDistinct, inputs)
-        case "VAR_SAMP" =>
-          super.visitAggregateFunction("VARIANCE_SAMP", isDistinct, inputs)
-        case "STDDEV_POP" =>
-          super.visitAggregateFunction("STDDEV", isDistinct, inputs)
-        case "STDDEV_SAMP" =>
-          super.visitAggregateFunction("STDDEV_SAMP", isDistinct, inputs)
-        case "COVAR_POP" =>
-          super.visitAggregateFunction("COVARIANCE", isDistinct, inputs)
-        case "COVAR_SAMP" =>
-          super.visitAggregateFunction("COVARIANCE_SAMP", isDistinct, inputs)
-        case _ => super.visitAggregateFunction(funcName, isDistinct, inputs)
-      }
+    override def dialectFunctionName(funcName: String): Option[String] = funcName match {
+      case "VAR_POP" => Some("VARIANCE")
+      case "VAR_SAMP" => Some("VARIANCE_SAMP")
+      case "STDDEV_POP" => Some("STDDEV")
+      case "STDDEV_SAMP" => Some("STDDEV_SAMP")
+      case "COVAR_POP" => Some("COVARIANCE")
+      case "COVAR_SAMP" => Some("COVARIANCE_SAMP")
+      case _ => super.dialectFunctionName(funcName)
     }
   }
 

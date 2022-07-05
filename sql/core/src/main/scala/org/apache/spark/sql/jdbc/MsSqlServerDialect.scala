@@ -55,26 +55,20 @@ private object MsSqlServerDialect extends JdbcDialect {
   // scalastyle:off line.size.limit
   // See https://docs.microsoft.com/en-us/sql/t-sql/functions/aggregate-functions-transact-sql?view=sql-server-ver15
   // scalastyle:on line.size.limit
-  private val supportedAggregateFunctions = Set("VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
   private val supportedFunctions = supportedAggregateFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
   class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
-    override def visitAggregateFunction(
-         funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
-      funcName match {
-        case "VAR_POP" =>
-          super.visitAggregateFunction("VARP", isDistinct, inputs)
-        case "VAR_SAMP" =>
-          super.visitAggregateFunction("VAR", isDistinct, inputs)
-        case "STDDEV_POP" =>
-          super.visitAggregateFunction("STDEVP", isDistinct, inputs)
-        case "STDDEV_SAMP" =>
-          super.visitAggregateFunction("STDEV", isDistinct, inputs)
-        case _ => super.visitAggregateFunction(funcName, isDistinct, inputs)
-      }
+    override def dialectFunctionName(funcName: String): Option[String] = funcName match {
+      case "VAR_POP" => Some("VARP")
+      case "VAR_SAMP" => Some("VAR")
+      case "STDDEV_POP" => Some("STDEVP")
+      case "STDDEV_SAMP" => Some("STDEV")
+      case _ => super.dialectFunctionName(funcName)
     }
   }
 

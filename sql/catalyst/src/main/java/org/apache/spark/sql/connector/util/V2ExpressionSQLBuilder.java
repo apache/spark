@@ -196,7 +196,7 @@ public class V2ExpressionSQLBuilder {
         Arrays.stream(avg.children()).map(c -> build(c)).toArray(String[]::new));
     } else if (expr instanceof GeneralAggregateFunc) {
       GeneralAggregateFunc f = (GeneralAggregateFunc) expr;
-      return visitGeneralAggregateFunction(f.name(), f.isDistinct(),
+      return visitAggregateFunction(f.name(), f.isDistinct(),
         Arrays.stream(f.children()).map(c -> build(c)).toArray(String[]::new));
     } else if (expr instanceof UserDefinedScalarFunc) {
       UserDefinedScalarFunc f = (UserDefinedScalarFunc) expr;
@@ -326,11 +326,6 @@ public class V2ExpressionSQLBuilder {
     } else {
       return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
     }
-  }
-
-  protected String visitGeneralAggregateFunction(
-      String funcName, boolean isDistinct, String[] inputs) {
-    return visitAggregateFunction(funcName, isDistinct, inputs);
   }
 
   protected String visitUserDefinedScalarFunction(

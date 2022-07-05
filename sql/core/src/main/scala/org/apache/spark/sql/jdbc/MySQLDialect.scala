@@ -38,7 +38,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
 
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
-  private val supportedAggregateFunctions = Set("VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
   private val supportedFunctions = supportedAggregateFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =

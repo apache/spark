@@ -30,7 +30,8 @@ private object DerbyDialect extends JdbcDialect {
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
 
   // See https://db.apache.org/derby/docs/10.15/ref/index.html
-  private val supportedAggregateFunctions = Set("VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
   private val supportedFunctions = supportedAggregateFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
