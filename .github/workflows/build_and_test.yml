@@ -294,9 +294,8 @@ jobs:
         with:
           context: ./dev/infra/
           push: true
-          # TODO: Cleanup the latest image
           tags: |
-            ghcr.io/${{ needs.precondition.outputs.user }}/apache-spark-github-action-image:pyspark-${{ needs.precondition.outputs.img_tag }}
+            ghcr.io/${{ needs.precondition.outputs.user }}/apache-spark-ci-image-pyspark-${{ needs.precondition.outputs.img_tag }}
           # TODO: Change yikun cache to apache cache
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/yikun/apache-spark-github-action-image-cache:${{ inputs.branch }}
@@ -307,7 +306,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: ghcr.io/${{ needs.precondition.outputs.user }}/apache-spark-github-action-image:pyspark-${{ needs.precondition.outputs.img_tag }}
+      image: ghcr.io/${{ needs.precondition.outputs.user }}/apache-spark-ci-image-pyspark-${{ needs.precondition.outputs.img_tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -331,6 +330,7 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
+      GHCR_DEL_SECRET: ${{ secrets.GHCR_DEL }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -848,3 +848,23 @@ jobs:
       with:
         name: unit-tests-log-docker-integration--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
+
+  infra-image-post:
+    # Note that: there are only GHCR creation permission for secrets.GITHUB_TOKEN
+    # If you want to clean up the CI images, you need to:
+    # - 1. Generate the token from https://github.com/settings/tokens with `write:packages` and `delete:packages`
+    # - 2. Add the the token as secrets `GHCR_DEL` in https://github.com/{username}}/spark/settings/secrets/actions
+    # Consider there are no limit of GHCR, this step is not required.
+    # https://docs.github.com/en/billing/managing-billing-for-github-packages/about-billing-for-github-packages#about-billing-for-github-packages
+    # TODO: Switch to actions/delete-package-versions when it supported:
+    # https://github.com/actions/delete-package-versions/issues/74
+    - name: Cleanup docker image
+      # Only cleanup the ci images when users set the secrets in fork repo
+      if: always() && ${{ env.GHCR_DEL_SECRET }}
+      needs: [ pyspark, sparkr, lint ]
+      run: >
+        curl
+        -X DELETE
+        -H "Accept: application/vnd.github+json"
+        -H "Authorization: token ${{ secrets.GHCR_DEL }}"
+        https://api.github.com/user/packages/container/apache-spark-github-action-image-pyspark-${{ needs.precondition.outputs.img_tag }}
