@@ -12,19 +12,19 @@
                            :- * BroadcastHashJoin LeftAnti BuildRight (9)
                            :  :- * Filter (3)
                            :  :  +- * ColumnarToRow (2)
-                           :  :     +- Scan parquet default.partsupp (1)
+                           :  :     +- Scan parquet spark_catalog.default.partsupp (1)
                            :  +- BroadcastExchange (8)
                            :     +- * Project (7)
                            :        +- * Filter (6)
                            :           +- * ColumnarToRow (5)
-                           :              +- Scan parquet default.supplier (4)
+                           :              +- Scan parquet spark_catalog.default.supplier (4)
                            +- BroadcastExchange (13)
                               +- * Filter (12)
                                  +- * ColumnarToRow (11)
-                                    +- Scan parquet default.part (10)
+                                    +- Scan parquet spark_catalog.default.part (10)
 
 
-(1) Scan parquet default.partsupp
+(1) Scan parquet spark_catalog.default.partsupp
 Output [2]: [ps_partkey#1, ps_suppkey#2]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/partsupp]
@@ -38,7 +38,7 @@ Input [2]: [ps_partkey#1, ps_suppkey#2]
 Input [2]: [ps_partkey#1, ps_suppkey#2]
 Condition : isnotnull(ps_partkey#1)
 
-(4) Scan parquet default.supplier
+(4) Scan parquet spark_catalog.default.supplier
 Output [2]: [s_suppkey#3, s_comment#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/supplier]
@@ -65,7 +65,7 @@ Left keys [1]: [ps_suppkey#2]
 Right keys [1]: [s_suppkey#3]
 Join condition: None
 
-(10) Scan parquet default.part
+(10) Scan parquet spark_catalog.default.part
 Output [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/part]

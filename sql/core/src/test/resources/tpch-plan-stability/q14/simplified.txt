@@ -10,11 +10,11 @@ WholeStageCodegen (3)
                   Filter [l_shipdate,l_partkey]
                     ColumnarToRow
                       InputAdapter
-                        Scan parquet default.lineitem [l_partkey,l_extendedprice,l_discount,l_shipdate]
+                        Scan parquet spark_catalog.default.lineitem [l_partkey,l_extendedprice,l_discount,l_shipdate]
                 InputAdapter
                   BroadcastExchange #2
                     WholeStageCodegen (1)
                       Filter [p_partkey]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.part [p_partkey,p_type]
+                            Scan parquet spark_catalog.default.part [p_partkey,p_type]

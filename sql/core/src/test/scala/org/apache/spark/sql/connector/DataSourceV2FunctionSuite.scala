@@ -37,6 +37,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object IntAverage extends AggregateFunction[(Int, Int), Int] {
   override def name(): String = "iavg"
+  override def canonicalName(): String = "h2.iavg"
   override def inputTypes(): Array[DataType] = Array(IntegerType)
   override def resultType(): DataType = IntegerType
 
@@ -65,6 +66,7 @@ object IntAverage extends AggregateFunction[(Int, Int), Int] {
 
 object LongAverage extends AggregateFunction[(Long, Long), Long] {
   override def name(): String = "iavg"
+  override def canonicalName(): String = "h2.iavg"
   override def inputTypes(): Array[DataType] = Array(LongType)
   override def resultType(): DataType = LongType
 
@@ -113,6 +115,24 @@ object IntegralAverage extends UnboundFunction {
       |  iavg(bigint) -> bigint""".stripMargin
 }
 
+case class StrLen(impl: BoundFunction) extends UnboundFunction {
+  override def name(): String = "strlen"
+
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.fields.length != 1) {
+      throw new UnsupportedOperationException("Expect exactly one argument");
+    }
+    inputType.fields(0).dataType match {
+      case StringType => impl
+      case _ =>
+        throw new UnsupportedOperationException("Expect StringType")
+    }
+  }
+
+  override def description(): String =
+    "strlen: returns the length of the input string  strlen(string) -> int"
+}
+
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 
@@ -146,15 +166,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
     }
     assert(e1.message.contains("requires a single-part namespace"))
-  }
-
-  test("SHOW FUNCTIONS: only support session catalog") {
-    addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
-
-    val e = intercept[AnalysisException] {
-      sql(s"SHOW FUNCTIONS LIKE testcat.abc")
-    }
-    assert(e.message.contains("Catalog testcat does not support functions"))
   }
 
   test("DROP FUNCTION: only support session catalog") {
@@ -529,24 +540,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       addFunction(Identifier.of(Array("ns"), "rand_add"),
         new JavaRandomAdd(new JavaRandomAddDefault))
       checkDeterministic(sql("SELECT testcat.ns.add(10, testcat.ns.rand_add(42))"))
-    }
-  }
-
-  private case class StrLen(impl: BoundFunction) extends UnboundFunction {
-    override def description(): String =
-      """strlen: returns the length of the input string
-        |  strlen(string) -> int""".stripMargin
-    override def name(): String = "strlen"
-
-    override def bind(inputType: StructType): BoundFunction = {
-      if (inputType.fields.length != 1) {
-        throw new UnsupportedOperationException("Expect exactly one argument");
-      }
-      inputType.fields(0).dataType match {
-        case StringType => impl
-        case _ =>
-          throw new UnsupportedOperationException("Expect StringType")
-      }
     }
   }
 

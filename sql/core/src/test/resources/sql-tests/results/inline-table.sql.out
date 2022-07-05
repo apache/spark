@@ -71,6 +71,22 @@ two	4
 
 
 -- !query
+select * from values ("one", 1 as one) as data(a, b)
+-- !query schema
+struct<a:string,b:int>
+-- !query output
+one	1
+
+
+-- !query
+select a from values ("one", current_timestamp) as data(a, b)
+-- !query schema
+struct<a:string>
+-- !query output
+one
+
+
+-- !query
 select * from values ("one", array(0, 1)), ("two", array(2, 3)) as data(a, b)
 -- !query schema
 struct<a:string,b:array<int>>

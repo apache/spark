@@ -34,7 +34,7 @@ import org.apache.spark.util.CompletionIterator
 class ExternalAppendOnlyMapSuite extends SparkFunSuite
   with LocalSparkContext
   with Eventually
-  with Matchers{
+  with Matchers {
   import TestUtils.{assertNotSpilled, assertSpilled}
 
   private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS

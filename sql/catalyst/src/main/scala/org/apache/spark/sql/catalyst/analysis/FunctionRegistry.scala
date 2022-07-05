@@ -530,7 +530,6 @@ object FunctionRegistry {
     expression[ToNumber]("to_number"),
     expression[TryToNumber]("try_to_number"),
     expression[ToCharacter]("to_char"),
-    expression[TryToCharacter]("try_to_char"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
@@ -585,6 +584,7 @@ object FunctionRegistry {
     expression[XPathLong]("xpath_long"),
     expression[XPathShort]("xpath_short"),
     expression[XPathString]("xpath_string"),
+    expression[RegExpCount]("regexp_count"),
 
     // datetime functions
     expression[AddMonths]("add_months"),

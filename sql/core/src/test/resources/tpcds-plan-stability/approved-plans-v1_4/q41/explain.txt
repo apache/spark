@@ -8,7 +8,7 @@ TakeOrderedAndProject (20)
                :- * Project (4)
                :  +- * Filter (3)
                :     +- * ColumnarToRow (2)
-               :        +- Scan parquet default.item (1)
+               :        +- Scan parquet spark_catalog.default.item (1)
                +- BroadcastExchange (14)
                   +- * Project (13)
                      +- * Filter (12)
@@ -18,10 +18,10 @@ TakeOrderedAndProject (20)
                                  +- * Project (8)
                                     +- * Filter (7)
                                        +- * ColumnarToRow (6)
-                                          +- Scan parquet default.item (5)
+                                          +- Scan parquet spark_catalog.default.item (5)
 
 
-(1) Scan parquet default.item
+(1) Scan parquet spark_catalog.default.item
 Output [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -39,7 +39,7 @@ Condition : (((isnotnull(i_manufact_id#1) AND (i_manufact_id#1 >= 738)) AND (i_m
 Output [2]: [i_manufact#2, i_product_name#3]
 Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
 
-(5) Scan parquet default.item
+(5) Scan parquet spark_catalog.default.item
 Output [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]

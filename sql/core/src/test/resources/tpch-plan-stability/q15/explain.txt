@@ -5,7 +5,7 @@
       +- * BroadcastHashJoin Inner BuildRight (13)
          :- * Filter (3)
          :  +- * ColumnarToRow (2)
-         :     +- Scan parquet default.supplier (1)
+         :     +- Scan parquet spark_catalog.default.supplier (1)
          +- BroadcastExchange (12)
             +- * Filter (11)
                +- * HashAggregate (10)
@@ -14,10 +14,10 @@
                         +- * Project (7)
                            +- * Filter (6)
                               +- * ColumnarToRow (5)
-                                 +- Scan parquet default.lineitem (4)
+                                 +- Scan parquet spark_catalog.default.lineitem (4)
 
 
-(1) Scan parquet default.supplier
+(1) Scan parquet spark_catalog.default.supplier
 Output [4]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/supplier]
@@ -31,7 +31,7 @@ Input [4]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4]
 Input [4]: [s_suppkey#1, s_name#2, s_address#3, s_phone#4]
 Condition : isnotnull(s_suppkey#1)
 
-(4) Scan parquet default.lineitem
+(4) Scan parquet spark_catalog.default.lineitem
 Output [4]: [l_suppkey#5, l_extendedprice#6, l_discount#7, l_shipdate#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -104,10 +104,10 @@ Subquery:1 Hosting operator id = 11 Hosting Expression = Subquery scalar-subquer
                +- * Project (20)
                   +- * Filter (19)
                      +- * ColumnarToRow (18)
-                        +- Scan parquet default.lineitem (17)
+                        +- Scan parquet spark_catalog.default.lineitem (17)
 
 
-(17) Scan parquet default.lineitem
+(17) Scan parquet spark_catalog.default.lineitem
 Output [4]: [l_suppkey#5, l_extendedprice#6, l_discount#7, l_shipdate#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]

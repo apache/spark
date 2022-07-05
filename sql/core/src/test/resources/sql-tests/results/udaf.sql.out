@@ -31,7 +31,7 @@ SELECT default.myDoubleAvg(int_col1, 3) as my_avg from t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function default.myDoubleAvg. Expected: 1; Found: 2; line 1 pos 7
+Invalid number of arguments for function spark_catalog.default.myDoubleAvg. Expected: 1; Found: 2; line 1 pos 7
 
 
 -- !query
@@ -48,7 +48,7 @@ SELECT default.udaf1(int_col1) as udaf1 from t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Can not load class 'test.non.existent.udaf' when registering the function 'default.udaf1', please make sure it is on the classpath; line 1 pos 7
+Can not load class 'test.non.existent.udaf' when registering the function 'spark_catalog.default.udaf1', please make sure it is on the classpath; line 1 pos 7
 
 
 -- !query

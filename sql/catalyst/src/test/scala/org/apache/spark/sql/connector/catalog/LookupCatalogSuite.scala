@@ -26,6 +26,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FakeV2SessionCatalog
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -89,7 +90,8 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       case (sql, table, db) =>
         inside (parseMultipartIdentifier(sql)) {
           case AsTableIdentifier(ident) =>
-            ident shouldEqual TableIdentifier(table, db)
+            ident shouldEqual TableIdentifier(
+              table, db, if (db.isDefined) Some(SESSION_CATALOG_NAME) else None)
         }
     }
     Seq(

@@ -10,19 +10,19 @@ TakeOrderedAndProject (21)
                :     :- * Project (4)
                :     :  +- * Filter (3)
                :     :     +- * ColumnarToRow (2)
-               :     :        +- Scan parquet default.customer (1)
+               :     :        +- Scan parquet spark_catalog.default.customer (1)
                :     +- BroadcastExchange (8)
                :        +- * Filter (7)
                :           +- * ColumnarToRow (6)
-               :              +- Scan parquet default.orders (5)
+               :              +- Scan parquet spark_catalog.default.orders (5)
                +- BroadcastExchange (15)
                   +- * Project (14)
                      +- * Filter (13)
                         +- * ColumnarToRow (12)
-                           +- Scan parquet default.lineitem (11)
+                           +- Scan parquet spark_catalog.default.lineitem (11)
 
 
-(1) Scan parquet default.customer
+(1) Scan parquet spark_catalog.default.customer
 Output [2]: [c_custkey#1, c_mktsegment#2]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -40,7 +40,7 @@ Condition : ((isnotnull(c_mktsegment#2) AND (c_mktsegment#2 = BUILDING)) AND isn
 Output [1]: [c_custkey#1]
 Input [2]: [c_custkey#1, c_mktsegment#2]
 
-(5) Scan parquet default.orders
+(5) Scan parquet spark_catalog.default.orders
 Output [4]: [o_orderkey#3, o_custkey#4, o_orderdate#5, o_shippriority#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
@@ -67,7 +67,7 @@ Join condition: None
 Output [3]: [o_orderkey#3, o_orderdate#5, o_shippriority#6]
 Input [5]: [c_custkey#1, o_orderkey#3, o_custkey#4, o_orderdate#5, o_shippriority#6]
 
-(11) Scan parquet default.lineitem
+(11) Scan parquet spark_catalog.default.lineitem
 Output [4]: [l_orderkey#7, l_extendedprice#8, l_discount#9, l_shipdate#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]

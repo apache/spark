@@ -14,21 +14,21 @@ TakeOrderedAndProject (73)
    :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (9)
    :              :     :     :     :- * Filter (3)
    :              :     :     :     :  +- * ColumnarToRow (2)
-   :              :     :     :     :     +- Scan parquet default.store_sales (1)
+   :              :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (1)
    :              :     :     :     +- BroadcastExchange (8)
    :              :     :     :        +- * Project (7)
    :              :     :     :           +- * Filter (6)
    :              :     :     :              +- * ColumnarToRow (5)
-   :              :     :     :                 +- Scan parquet default.customer_demographics (4)
+   :              :     :     :                 +- Scan parquet spark_catalog.default.customer_demographics (4)
    :              :     :     +- ReusedExchange (11)
    :              :     +- BroadcastExchange (17)
    :              :        +- * Filter (16)
    :              :           +- * ColumnarToRow (15)
-   :              :              +- Scan parquet default.store (14)
+   :              :              +- Scan parquet spark_catalog.default.store (14)
    :              +- BroadcastExchange (23)
    :                 +- * Filter (22)
    :                    +- * ColumnarToRow (21)
-   :                       +- Scan parquet default.item (20)
+   :                       +- Scan parquet spark_catalog.default.item (20)
    :- * HashAggregate (50)
    :  +- Exchange (49)
    :     +- * HashAggregate (48)
@@ -42,13 +42,13 @@ TakeOrderedAndProject (73)
    :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (33)
    :              :     :     :     :- * Filter (31)
    :              :     :     :     :  +- * ColumnarToRow (30)
-   :              :     :     :     :     +- Scan parquet default.store_sales (29)
+   :              :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (29)
    :              :     :     :     +- ReusedExchange (32)
    :              :     :     +- BroadcastExchange (39)
    :              :     :        +- * Project (38)
    :              :     :           +- * Filter (37)
    :              :     :              +- * ColumnarToRow (36)
-   :              :     :                 +- Scan parquet default.store (35)
+   :              :     :                 +- Scan parquet spark_catalog.default.store (35)
    :              :     +- ReusedExchange (42)
    :              +- ReusedExchange (45)
    +- * HashAggregate (71)
@@ -64,17 +64,17 @@ TakeOrderedAndProject (73)
                   :     :     :  +- * BroadcastHashJoin Inner BuildRight (55)
                   :     :     :     :- * Filter (53)
                   :     :     :     :  +- * ColumnarToRow (52)
-                  :     :     :     :     +- Scan parquet default.store_sales (51)
+                  :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (51)
                   :     :     :     +- ReusedExchange (54)
                   :     :     +- ReusedExchange (57)
                   :     +- ReusedExchange (60)
                   +- BroadcastExchange (66)
                      +- * Filter (65)
                         +- * ColumnarToRow (64)
-                           +- Scan parquet default.item (63)
+                           +- Scan parquet spark_catalog.default.item (63)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
 Batched: true
 Location: InMemoryFileIndex []
@@ -89,7 +89,7 @@ Input [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_p
 Input [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
 Condition : ((isnotnull(ss_cdemo_sk#2) AND isnotnull(ss_store_sk#3)) AND isnotnull(ss_item_sk#1))
 
-(4) Scan parquet default.customer_demographics
+(4) Scan parquet spark_catalog.default.customer_demographics
 Output [4]: [cd_demo_sk#10, cd_gender#11, cd_marital_status#12, cd_education_status#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
@@ -132,7 +132,7 @@ Join condition: None
 Output [6]: [ss_item_sk#1, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7]
 Input [8]: [ss_item_sk#1, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8, d_date_sk#14]
 
-(14) Scan parquet default.store
+(14) Scan parquet spark_catalog.default.store
 Output [2]: [s_store_sk#15, s_state#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -159,7 +159,7 @@ Join condition: None
 Output [6]: [ss_item_sk#1, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, s_state#16]
 Input [8]: [ss_item_sk#1, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, s_store_sk#15, s_state#16]
 
-(20) Scan parquet default.item
+(20) Scan parquet spark_catalog.default.item
 Output [2]: [i_item_sk#17, i_item_id#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -204,7 +204,7 @@ Functions [4]: [avg(agg1#19), avg(UnscaledValue(agg2#20)), avg(UnscaledValue(agg
 Aggregate Attributes [4]: [avg(agg1#19)#39, avg(UnscaledValue(agg2#20))#40, avg(UnscaledValue(agg3#21))#41, avg(UnscaledValue(agg4#22))#42]
 Results [7]: [i_item_id#18, s_state#16, 0 AS g_state#43, avg(agg1#19)#39 AS agg1#44, cast((avg(UnscaledValue(agg2#20))#40 / 100.0) as decimal(11,6)) AS agg2#45, cast((avg(UnscaledValue(agg3#21))#41 / 100.0) as decimal(11,6)) AS agg3#46, cast((avg(UnscaledValue(agg4#22))#42 / 100.0) as decimal(11,6)) AS agg4#47]
 
-(29) Scan parquet default.store_sales
+(29) Scan parquet spark_catalog.default.store_sales
 Output [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
 Batched: true
 Location: InMemoryFileIndex []
@@ -231,7 +231,7 @@ Join condition: None
 Output [7]: [ss_item_sk#1, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
 Input [9]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8, cd_demo_sk#10]
 
-(35) Scan parquet default.store
+(35) Scan parquet spark_catalog.default.store
 Output [2]: [s_store_sk#15, s_state#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -304,7 +304,7 @@ Functions [4]: [avg(agg1#19), avg(UnscaledValue(agg2#20)), avg(UnscaledValue(agg
 Aggregate Attributes [4]: [avg(agg1#19)#64, avg(UnscaledValue(agg2#20))#65, avg(UnscaledValue(agg3#21))#66, avg(UnscaledValue(agg4#22))#67]
 Results [7]: [i_item_id#18, null AS s_state#68, 1 AS g_state#69, avg(agg1#19)#64 AS agg1#70, cast((avg(UnscaledValue(agg2#20))#65 / 100.0) as decimal(11,6)) AS agg2#71, cast((avg(UnscaledValue(agg3#21))#66 / 100.0) as decimal(11,6)) AS agg3#72, cast((avg(UnscaledValue(agg4#22))#67 / 100.0) as decimal(11,6)) AS agg4#73]
 
-(51) Scan parquet default.store_sales
+(51) Scan parquet spark_catalog.default.store_sales
 Output [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
 Batched: true
 Location: InMemoryFileIndex []
@@ -355,7 +355,7 @@ Join condition: None
 Output [5]: [ss_item_sk#1, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7]
 Input [7]: [ss_item_sk#1, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8, d_date_sk#14]
 
-(63) Scan parquet default.item
+(63) Scan parquet spark_catalog.default.item
 Output [1]: [i_item_sk#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -413,10 +413,10 @@ BroadcastExchange (78)
 +- * Project (77)
    +- * Filter (76)
       +- * ColumnarToRow (75)
-         +- Scan parquet default.date_dim (74)
+         +- Scan parquet spark_catalog.default.date_dim (74)
 
 
-(74) Scan parquet default.date_dim
+(74) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_date_sk#14, d_year#101]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
