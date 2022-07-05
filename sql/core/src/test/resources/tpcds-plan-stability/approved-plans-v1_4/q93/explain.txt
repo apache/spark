@@ -11,21 +11,21 @@ TakeOrderedAndProject (24)
                :     :  +- Exchange (4)
                :     :     +- * Project (3)
                :     :        +- * ColumnarToRow (2)
-               :     :           +- Scan parquet default.store_sales (1)
+               :     :           +- Scan parquet spark_catalog.default.store_sales (1)
                :     +- * Sort (11)
                :        +- Exchange (10)
                :           +- * Project (9)
                :              +- * Filter (8)
                :                 +- * ColumnarToRow (7)
-               :                    +- Scan parquet default.store_returns (6)
+               :                    +- Scan parquet spark_catalog.default.store_returns (6)
                +- BroadcastExchange (18)
                   +- * Project (17)
                      +- * Filter (16)
                         +- * ColumnarToRow (15)
-                           +- Scan parquet default.reason (14)
+                           +- Scan parquet spark_catalog.default.reason (14)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, ss_sold_date_sk#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -46,7 +46,7 @@ Arguments: hashpartitioning(ss_item_sk#1, ss_ticket_number#3, 5), ENSURE_REQUIRE
 Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
 Arguments: [ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#3 ASC NULLS FIRST], false, 0
 
-(6) Scan parquet default.store_returns
+(6) Scan parquet spark_catalog.default.store_returns
 Output [5]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10, sr_returned_date_sk#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
@@ -81,7 +81,7 @@ Join condition: None
 Output [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#8, sr_return_quantity#10]
 Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10]
 
-(14) Scan parquet default.reason
+(14) Scan parquet spark_catalog.default.reason
 Output [2]: [r_reason_sk#12, r_reason_desc#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/reason]

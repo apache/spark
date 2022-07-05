@@ -13,19 +13,19 @@
          :     :              :- Union (7)
          :     :              :  :- * Project (3)
          :     :              :  :  +- * ColumnarToRow (2)
-         :     :              :  :     +- Scan parquet default.web_sales (1)
+         :     :              :  :     +- Scan parquet spark_catalog.default.web_sales (1)
          :     :              :  +- * Project (6)
          :     :              :     +- * ColumnarToRow (5)
-         :     :              :        +- Scan parquet default.catalog_sales (4)
+         :     :              :        +- Scan parquet spark_catalog.default.catalog_sales (4)
          :     :              +- BroadcastExchange (11)
          :     :                 +- * Filter (10)
          :     :                    +- * ColumnarToRow (9)
-         :     :                       +- Scan parquet default.date_dim (8)
+         :     :                       +- Scan parquet spark_catalog.default.date_dim (8)
          :     +- BroadcastExchange (21)
          :        +- * Project (20)
          :           +- * Filter (19)
          :              +- * ColumnarToRow (18)
-         :                 +- Scan parquet default.date_dim (17)
+         :                 +- Scan parquet spark_catalog.default.date_dim (17)
          +- BroadcastExchange (33)
             +- * Project (32)
                +- * BroadcastHashJoin Inner BuildRight (31)
@@ -35,10 +35,10 @@
                      +- * Project (29)
                         +- * Filter (28)
                            +- * ColumnarToRow (27)
-                              +- Scan parquet default.date_dim (26)
+                              +- Scan parquet spark_catalog.default.date_dim (26)
 
 
-(1) Scan parquet default.web_sales
+(1) Scan parquet spark_catalog.default.web_sales
 Output [2]: [ws_ext_sales_price#1, ws_sold_date_sk#2]
 Batched: true
 Location: InMemoryFileIndex []
@@ -52,7 +52,7 @@ Input [2]: [ws_ext_sales_price#1, ws_sold_date_sk#2]
 Output [2]: [ws_sold_date_sk#2 AS sold_date_sk#3, ws_ext_sales_price#1 AS sales_price#4]
 Input [2]: [ws_ext_sales_price#1, ws_sold_date_sk#2]
 
-(4) Scan parquet default.catalog_sales
+(4) Scan parquet spark_catalog.default.catalog_sales
 Output [2]: [cs_ext_sales_price#5, cs_sold_date_sk#6]
 Batched: true
 Location: InMemoryFileIndex []
@@ -68,7 +68,7 @@ Input [2]: [cs_ext_sales_price#5, cs_sold_date_sk#6]
 
 (7) Union
 
-(8) Scan parquet default.date_dim
+(8) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -113,7 +113,7 @@ Functions [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sal
 Aggregate Attributes [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END))#26, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END))#27, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END))#28, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END))#29, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END))#30, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END))#31, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))#32]
 Results [8]: [d_week_seq#10, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END))#26,17,2) AS sun_sales#33, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END))#27,17,2) AS mon_sales#34, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END))#28,17,2) AS tue_sales#35, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END))#29,17,2) AS wed_sales#36, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END))#30,17,2) AS thu_sales#37, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END))#31,17,2) AS fri_sales#38, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))#32,17,2) AS sat_sales#39]
 
-(17) Scan parquet default.date_dim
+(17) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_week_seq#40, d_year#41]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -154,7 +154,7 @@ Functions [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sal
 Aggregate Attributes [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END))#26, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END))#27, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END))#28, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END))#29, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END))#30, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END))#31, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))#32]
 Results [8]: [d_week_seq#10, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END))#26,17,2) AS sun_sales#33, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END))#27,17,2) AS mon_sales#34, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END))#28,17,2) AS tue_sales#35, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END))#29,17,2) AS wed_sales#36, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END))#30,17,2) AS thu_sales#37, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END))#31,17,2) AS fri_sales#38, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))#32,17,2) AS sat_sales#39]
 
-(26) Scan parquet default.date_dim
+(26) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_week_seq#57, d_year#58]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

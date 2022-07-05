@@ -267,12 +267,22 @@ object RankingMetrics {
   /**
    * Creates a [[RankingMetrics]] instance (for Java users).
    * @param predictionAndLabels a JavaRDD of (predicted ranking, ground truth set) pairs
+   *                            or (predicted ranking, ground truth set,
+   *                            relevance value of ground truth set).
+   *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
    */
   @Since("1.4.0")
-  def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
+  def of[E, T <: jl.Iterable[E], A <: jl.Iterable[Double]](
+      predictionAndLabels: JavaRDD[_ <: Product]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]
-    val rdd = predictionAndLabels.rdd.map { case (predictions, labels) =>
-      (predictions.asScala.toArray, labels.asScala.toArray)
+    val rdd = predictionAndLabels.rdd.map {
+      case (predictions, labels) =>
+        (predictions.asInstanceOf[T].asScala.toArray, labels.asInstanceOf[T].asScala.toArray)
+      case (predictions, labels, rels) =>
+        (
+          predictions.asInstanceOf[T].asScala.toArray,
+          labels.asInstanceOf[T].asScala.toArray,
+          rels.asInstanceOf[A].asScala.toArray)
     }
     new RankingMetrics(rdd)
   }

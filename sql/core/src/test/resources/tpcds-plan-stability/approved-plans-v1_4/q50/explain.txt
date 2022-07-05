@@ -13,23 +13,23 @@ TakeOrderedAndProject (28)
                :     :     :  +- * BroadcastHashJoin Inner BuildRight (8)
                :     :     :     :- * Filter (3)
                :     :     :     :  +- * ColumnarToRow (2)
-               :     :     :     :     +- Scan parquet default.store_sales (1)
+               :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (1)
                :     :     :     +- BroadcastExchange (7)
                :     :     :        +- * Filter (6)
                :     :     :           +- * ColumnarToRow (5)
-               :     :     :              +- Scan parquet default.store_returns (4)
+               :     :     :              +- Scan parquet spark_catalog.default.store_returns (4)
                :     :     +- BroadcastExchange (13)
                :     :        +- * Filter (12)
                :     :           +- * ColumnarToRow (11)
-               :     :              +- Scan parquet default.store (10)
+               :     :              +- Scan parquet spark_catalog.default.store (10)
                :     +- BroadcastExchange (19)
                :        +- * Filter (18)
                :           +- * ColumnarToRow (17)
-               :              +- Scan parquet default.date_dim (16)
+               :              +- Scan parquet spark_catalog.default.date_dim (16)
                +- ReusedExchange (22)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
 Batched: true
 Location: InMemoryFileIndex []
@@ -44,7 +44,7 @@ Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, s
 Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
 Condition : (((isnotnull(ss_ticket_number#4) AND isnotnull(ss_item_sk#1)) AND isnotnull(ss_customer_sk#2)) AND isnotnull(ss_store_sk#3))
 
-(4) Scan parquet default.store_returns
+(4) Scan parquet spark_catalog.default.store_returns
 Output [4]: [sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
 Batched: true
 Location: InMemoryFileIndex []
@@ -72,7 +72,7 @@ Join condition: None
 Output [3]: [ss_store_sk#3, ss_sold_date_sk#5, sr_returned_date_sk#9]
 Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5, sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
 
-(10) Scan parquet default.store
+(10) Scan parquet spark_catalog.default.store
 Output [11]: [s_store_sk#11, s_store_name#12, s_company_id#13, s_street_number#14, s_street_name#15, s_street_type#16, s_suite_number#17, s_city#18, s_county#19, s_state#20, s_zip#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -99,7 +99,7 @@ Join condition: None
 Output [12]: [ss_sold_date_sk#5, sr_returned_date_sk#9, s_store_name#12, s_company_id#13, s_street_number#14, s_street_name#15, s_street_type#16, s_suite_number#17, s_city#18, s_county#19, s_state#20, s_zip#21]
 Input [14]: [ss_store_sk#3, ss_sold_date_sk#5, sr_returned_date_sk#9, s_store_sk#11, s_store_name#12, s_company_id#13, s_street_number#14, s_street_name#15, s_street_type#16, s_suite_number#17, s_city#18, s_county#19, s_state#20, s_zip#21]
 
-(16) Scan parquet default.date_dim
+(16) Scan parquet spark_catalog.default.date_dim
 Output [1]: [d_date_sk#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -167,10 +167,10 @@ BroadcastExchange (33)
 +- * Project (32)
    +- * Filter (31)
       +- * ColumnarToRow (30)
-         +- Scan parquet default.date_dim (29)
+         +- Scan parquet spark_catalog.default.date_dim (29)
 
 
-(29) Scan parquet default.date_dim
+(29) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#23, d_year#44, d_moy#45]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

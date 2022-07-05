@@ -26,30 +26,30 @@
                               :           :     :        :        :  +- * Project (4)
                               :           :     :        :        :     +- * Filter (3)
                               :           :     :        :        :        +- * ColumnarToRow (2)
-                              :           :     :        :        :           +- Scan parquet default.store (1)
+                              :           :     :        :        :           +- Scan parquet spark_catalog.default.store (1)
                               :           :     :        :        +- * Filter (8)
                               :           :     :        :           +- * ColumnarToRow (7)
-                              :           :     :        :              +- Scan parquet default.customer_address (6)
+                              :           :     :        :              +- Scan parquet spark_catalog.default.customer_address (6)
                               :           :     :        +- * Filter (14)
                               :           :     :           +- * ColumnarToRow (13)
-                              :           :     :              +- Scan parquet default.customer (12)
+                              :           :     :              +- Scan parquet spark_catalog.default.customer (12)
                               :           :     +- * Project (21)
                               :           :        +- * Filter (20)
                               :           :           +- * ColumnarToRow (19)
-                              :           :              +- Scan parquet default.store_sales (18)
+                              :           :              +- Scan parquet spark_catalog.default.store_sales (18)
                               :           +- BroadcastExchange (27)
                               :              +- * Filter (26)
                               :                 +- * ColumnarToRow (25)
-                              :                    +- Scan parquet default.item (24)
+                              :                    +- Scan parquet spark_catalog.default.item (24)
                               +- * Sort (37)
                                  +- Exchange (36)
                                     +- * Project (35)
                                        +- * Filter (34)
                                           +- * ColumnarToRow (33)
-                                             +- Scan parquet default.store_returns (32)
+                                             +- Scan parquet spark_catalog.default.store_returns (32)
 
 
-(1) Scan parquet default.store
+(1) Scan parquet spark_catalog.default.store
 Output [5]: [s_store_sk#1, s_store_name#2, s_market_id#3, s_state#4, s_zip#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
@@ -71,7 +71,7 @@ Input [5]: [s_store_sk#1, s_store_name#2, s_market_id#3, s_state#4, s_zip#5]
 Input [4]: [s_store_sk#1, s_store_name#2, s_state#4, s_zip#5]
 Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false), [plan_id=1]
 
-(6) Scan parquet default.customer_address
+(6) Scan parquet spark_catalog.default.customer_address
 Output [4]: [ca_address_sk#6, ca_state#7, ca_zip#8, ca_country#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -98,7 +98,7 @@ Input [8]: [s_store_sk#1, s_store_name#2, s_state#4, s_zip#5, ca_address_sk#6, c
 Input [6]: [s_store_sk#1, s_store_name#2, s_state#4, ca_address_sk#6, ca_state#7, ca_country#9]
 Arguments: HashedRelationBroadcastMode(List(input[3, int, true], upper(input[5, string, true])),false), [plan_id=2]
 
-(12) Scan parquet default.customer
+(12) Scan parquet spark_catalog.default.customer
 Output [5]: [c_customer_sk#10, c_current_addr_sk#11, c_first_name#12, c_last_name#13, c_birth_country#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -125,7 +125,7 @@ Input [11]: [s_store_sk#1, s_store_name#2, s_state#4, ca_address_sk#6, ca_state#
 Input [7]: [s_store_sk#1, s_store_name#2, s_state#4, ca_state#7, c_customer_sk#10, c_first_name#12, c_last_name#13]
 Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[4, int, true] as bigint) & 4294967295))),false), [plan_id=3]
 
-(18) Scan parquet default.store_sales
+(18) Scan parquet spark_catalog.default.store_sales
 Output [6]: [ss_item_sk#15, ss_customer_sk#16, ss_store_sk#17, ss_ticket_number#18, ss_net_paid#19, ss_sold_date_sk#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -152,7 +152,7 @@ Join condition: None
 Output [8]: [s_store_name#2, s_state#4, ca_state#7, c_first_name#12, c_last_name#13, ss_item_sk#15, ss_ticket_number#18, ss_net_paid#19]
 Input [12]: [s_store_sk#1, s_store_name#2, s_state#4, ca_state#7, c_customer_sk#10, c_first_name#12, c_last_name#13, ss_item_sk#15, ss_customer_sk#16, ss_store_sk#17, ss_ticket_number#18, ss_net_paid#19]
 
-(24) Scan parquet default.item
+(24) Scan parquet spark_catalog.default.item
 Output [6]: [i_item_sk#21, i_current_price#22, i_size#23, i_color#24, i_units#25, i_manager_id#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -187,7 +187,7 @@ Arguments: hashpartitioning(ss_ticket_number#18, ss_item_sk#15, 5), ENSURE_REQUI
 Input [13]: [s_store_name#2, s_state#4, ca_state#7, c_first_name#12, c_last_name#13, ss_item_sk#15, ss_ticket_number#18, ss_net_paid#19, i_current_price#22, i_size#23, i_color#24, i_units#25, i_manager_id#26]
 Arguments: [ss_ticket_number#18 ASC NULLS FIRST, ss_item_sk#15 ASC NULLS FIRST], false, 0
 
-(32) Scan parquet default.store_returns
+(32) Scan parquet spark_catalog.default.store_returns
 Output [3]: [sr_item_sk#27, sr_ticket_number#28, sr_returned_date_sk#29]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
@@ -293,12 +293,12 @@ Subquery:1 Hosting operator id = 46 Hosting Expression = Subquery scalar-subquer
                      :           :           +- * Project (53)
                      :           :              +- * Filter (52)
                      :           :                 +- * ColumnarToRow (51)
-                     :           :                    +- Scan parquet default.store_sales (50)
+                     :           :                    +- Scan parquet spark_catalog.default.store_sales (50)
                      :           +- * Sort (62)
                      :              +- Exchange (61)
                      :                 +- * Filter (60)
                      :                    +- * ColumnarToRow (59)
-                     :                       +- Scan parquet default.item (58)
+                     :                       +- Scan parquet spark_catalog.default.item (58)
                      +- * Sort (68)
                         +- ReusedExchange (67)
 
@@ -306,7 +306,7 @@ Subquery:1 Hosting operator id = 46 Hosting Expression = Subquery scalar-subquer
 (49) ReusedExchange [Reuses operator id: 17]
 Output [7]: [s_store_sk#1, s_store_name#2, s_state#4, ca_state#7, c_customer_sk#10, c_first_name#12, c_last_name#13]
 
-(50) Scan parquet default.store_sales
+(50) Scan parquet spark_catalog.default.store_sales
 Output [6]: [ss_item_sk#15, ss_customer_sk#16, ss_store_sk#17, ss_ticket_number#18, ss_net_paid#19, ss_sold_date_sk#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -341,7 +341,7 @@ Arguments: hashpartitioning(ss_item_sk#15, 5), ENSURE_REQUIREMENTS, [plan_id=10]
 Input [8]: [s_store_name#2, s_state#4, ca_state#7, c_first_name#12, c_last_name#13, ss_item_sk#15, ss_ticket_number#18, ss_net_paid#19]
 Arguments: [ss_item_sk#15 ASC NULLS FIRST], false, 0
 
-(58) Scan parquet default.item
+(58) Scan parquet spark_catalog.default.item
 Output [6]: [i_item_sk#21, i_current_price#22, i_size#23, i_color#24, i_units#25, i_manager_id#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]

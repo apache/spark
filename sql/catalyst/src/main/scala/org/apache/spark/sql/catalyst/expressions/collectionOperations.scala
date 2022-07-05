@@ -2187,7 +2187,7 @@ case class ElementAt(
           }
         } else {
           val idx = if (index == 0) {
-            throw QueryExecutionErrors.sqlArrayIndexNotStartAtOneError()
+            throw QueryExecutionErrors.elementAtByIndexZeroError()
           } else if (index > 0) {
             index - 1
           } else {
@@ -2243,7 +2243,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw QueryExecutionErrors.sqlArrayIndexNotStartAtOneError();
+             |    throw QueryExecutionErrors.elementAtByIndexZeroError();
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {

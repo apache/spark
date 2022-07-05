@@ -146,7 +146,7 @@ class MLEventsSuite
     }
     // Test if they can be ser/de via JSON protocol.
     assert(events.nonEmpty)
-    events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+    events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
       assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
     }
   }
@@ -204,7 +204,7 @@ class MLEventsSuite
     }
     // Test if they can be ser/de via JSON protocol.
     assert(events.nonEmpty)
-    events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+    events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
       assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
     }
   }
@@ -236,7 +236,7 @@ class MLEventsSuite
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
           assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
@@ -264,7 +264,7 @@ class MLEventsSuite
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
           assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
@@ -299,7 +299,7 @@ class MLEventsSuite
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
           assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
@@ -327,7 +327,7 @@ class MLEventsSuite
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
           assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }

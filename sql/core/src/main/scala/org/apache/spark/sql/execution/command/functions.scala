@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
@@ -100,7 +100,9 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val name = if (info.getDb != null) info.getDb + "." + info.getName else info.getName
+    val identifier = CatalystIdentifier.attachSessionCatalog(
+      FunctionIdentifier(info.getName, Option(info.getDb)))
+    val name = identifier.unquotedString
     val result = if (info.getClassName != null) {
       Row(s"Function: $name") ::
         Row(s"Class: ${info.getClassName}") ::

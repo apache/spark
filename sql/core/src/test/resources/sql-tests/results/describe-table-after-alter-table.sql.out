@@ -18,6 +18,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	table_with_comment  	                    
 Created Time [not included in comparison]
@@ -48,6 +49,7 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	table_with_comment  	                    
 Created Time [not included in comparison]
@@ -85,6 +87,7 @@ a                   	string
 b                   	int                 	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	table_comment       	                    
 Created Time [not included in comparison]
@@ -112,6 +115,7 @@ a                   	string
 b                   	int                 	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	table_comment       	                    
 Created Time [not included in comparison]
@@ -140,6 +144,7 @@ a                   	string
 b                   	int                 	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
 Database            	default             	                    
 Table               	table_comment       	                    
 Created Time [not included in comparison]

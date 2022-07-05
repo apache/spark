@@ -27,11 +27,12 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFooterReader
@@ -92,7 +93,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       .add("col1", "int", nullable = true, metadata = metadata)
       .add("col2", "string")
     CatalogTable(
-      identifier = name,
+      identifier = CatalystIdentifier.attachSessionCatalog(name),
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = schema.copy(
@@ -434,12 +435,12 @@ class HiveDDLSuite
         assertAnalysisError(
           "CREATE TABLE tab1 USING hive",
           "Unable to infer the schema. The schema specification is required to " +
-            "create the table `default`.`tab1`")
+            s"create the table `$SESSION_CATALOG_NAME`.`default`.`tab1`")
 
         assertAnalysisError(
           s"CREATE TABLE tab2 USING hive location '${tempDir.getCanonicalPath}'",
           "Unable to infer the schema. The schema specification is required to " +
-            "create the table `default`.`tab2`")
+            s"create the table `$SESSION_CATALOG_NAME`.`default`.`tab2`")
       }
     }
   }
@@ -563,7 +564,8 @@ class HiveDDLSuite
   test("create table: partition column names exist in table definition") {
     assertAnalysisError(
       "CREATE TABLE tbl(a int) PARTITIONED BY (a string)",
-      "Found duplicate column(s) in the table definition of `default`.`tbl`: `a`")
+      "Found duplicate column(s) in the table definition of " +
+        s"`$SESSION_CATALOG_NAME`.`default`.`tbl`: `a`")
   }
 
   test("create partitioned table without specifying data type for the partition columns") {
@@ -672,7 +674,7 @@ class HiveDDLSuite
         assertAnalysisError(
           s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')",
           "unknownCol is not a valid partition column in table " +
-            "`default`.`exttable_with_partitions`")
+            s"`$SESSION_CATALOG_NAME`.`default`.`exttable_with_partitions`")
 
         sql(
           s"""
@@ -776,7 +778,8 @@ class HiveDDLSuite
 
         assertAnalysisError(
           s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')",
-          "Attempted to unset non-existent property 'p' in table '`default`.`view1`'")
+          "Attempted to unset non-existent property 'p' in table " +
+            s"'`$SESSION_CATALOG_NAME`.`default`.`view1`'")
       }
     }
   }
@@ -1837,7 +1840,8 @@ class HiveDDLSuite
       val e3 = intercept[AnalysisException] {
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
       }
-      assert(e3.message.contains("Cannot overwrite table default.t that is also being read from"))
+      assert(e3.message.contains(s"Cannot overwrite table $SESSION_CATALOG_NAME.default.t " +
+        "that is also being read from"))
     }
   }
 
@@ -1997,7 +2001,8 @@ class HiveDDLSuite
         Seq(5 -> "e").toDF("i", "j")
           .write.format("hive").mode("append").saveAsTable("t1")
       }
-      assert(e.message.contains("The format of the existing table default.t1 is "))
+      assert(e.message.contains(
+        s"The format of the existing table $SESSION_CATALOG_NAME.default.t1 is "))
       assert(e.message.contains("It doesn't match the specified format `HiveFileFormat`."))
     }
   }
@@ -2993,7 +2998,8 @@ class HiveDDLSuite
         val errMsg = intercept[UnsupportedOperationException] {
           sql(sqlCmd)
         }.getMessage
-        assert(errMsg.contains(s"Hive table `default`.`$tbl` with ANSI intervals is not supported"))
+        assert(errMsg.contains(s"Hive table `$SESSION_CATALOG_NAME`.`default`.`$tbl` with " +
+          "ANSI intervals is not supported"))
       }
     }
   }

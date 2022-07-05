@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.columnar.ColumnAccessor
 import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 
 class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
   private def withVector(
@@ -604,15 +604,6 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
         assert(rowCopy.get(0, dt) === i)
       }
     }
-  }
-
-  test("SPARK-38018: ColumnVectorUtils.populate to handle CalendarIntervalType correctly") {
-    val vector = new OnHeapColumnVector(5, CalendarIntervalType)
-    val row = new SpecificInternalRow(Array(CalendarIntervalType))
-    val interval = new CalendarInterval(3, 5, 1000000)
-    row.setInterval(0, interval)
-    ColumnVectorUtils.populate(vector, row, 0)
-    assert(vector.getInterval(0) === interval)
   }
 }
 
