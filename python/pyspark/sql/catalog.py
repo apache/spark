@@ -359,7 +359,7 @@ class Catalog:
                 "a future version. Use functionExists(`dbName.tableName`) instead.",
                 FutureWarning,
             )
-            return self._jcatalog.functionExists(self.currentDatabase(), functionName)
+            return self._jcatalog.functionExists(dbName, functionName)
 
     def getFunction(self, functionName: str) -> Function:
         """Get the function with the specified name. This function can be a temporary function or a
