@@ -571,6 +571,6 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     val join = Join(left, right, LeftOuter,
       Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
 
-    assert(join.stats == Statistics(sizeInBytes = 100, rowCount = Some(1)))
+    assert(join.stats == Statistics(sizeInBytes = 100))
   }
 }

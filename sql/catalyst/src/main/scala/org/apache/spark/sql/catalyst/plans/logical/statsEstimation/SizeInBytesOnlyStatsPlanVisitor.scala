@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
@@ -120,7 +121,13 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   }
 
   override def visitJoin(p: Join): Statistics = {
-    JoinEstimation(p).estimate.getOrElse(default(p))
+    p.joinType match {
+      case LeftAnti | LeftSemi =>
+        // LeftSemi and LeftAnti won't ever be bigger than left
+        p.left.stats
+      case _ =>
+        default(p)
+    }
   }
 
   override def visitLocalLimit(p: LocalLimit): Statistics = {
