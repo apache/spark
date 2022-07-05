@@ -1548,7 +1548,8 @@ object SQLConf {
       "during tests. `FALLBACK` means trying codegen first and then falling back to " +
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
       "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that " +
-      "this config works only for tests.")
+      "this configuration is only for the internal usage, and NOT supposed to be set by " +
+      "end users.")
     .version("2.4.0")
     .internal()
     .stringConf

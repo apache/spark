@@ -15,23 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.deploy.master
+
+import org.apache.spark.resource.ResourceRequirement
 
 /**
- * Used to send state on-the-wire about Executors from Worker to Master.
- * This state is sufficient for the Master to reconstruct its internal data structures during
- * failover.
+ * Describe resource requirements for different resource profiles. Used for executor schedule.
+ *
+ * @param coresPerExecutor cores for each executor.
+ * @param memoryMbPerExecutor memory for each executor.
+ * @param customResourcesPerExecutor custom resource requests for each executor.
  */
-private[deploy] class ExecutorDescription(
-    val appId: String,
-    val execId: Int,
-    val rpId: Int,
-    val cores: Int,
-    val memoryMb: Int,
-    val state: ExecutorState.Value)
-  extends Serializable {
-
-  override def toString: String =
-    "ExecutorState(appId=%s, execId=%d, rpId=%d, cores=%d, memoryMb=%d state=%s)"
-      .format(appId, execId, rpId, cores, memoryMb, state)
-}
+private[spark] case class ExecutorResourceDescription(
+    coresPerExecutor: Option[Int],
+    memoryMbPerExecutor: Int,
+    customResourcesPerExecutor: Seq[ResourceRequirement] = Seq.empty)

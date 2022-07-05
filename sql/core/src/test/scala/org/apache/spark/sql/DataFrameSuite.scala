@@ -3239,6 +3239,11 @@ class DataFrameSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-39612: exceptAll with following count should work") {
+    val d1 = Seq("a").toDF
+    assert(d1.exceptAll(d1).count() === 0)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

@@ -1076,14 +1076,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         case TypeCheckResult.TypeCheckFailure(message) =>
           assert(message.contains(expectedErrMsg))
       }
-
-      val tryToCharResult = TryToCharacter(Decimal(456), Literal(format)).checkInputDataTypes()
-      assert(tryToCharResult != TypeCheckResult.TypeCheckSuccess,
-        s"The format string should have been invalid: $format")
-      tryToCharResult match {
-        case TypeCheckResult.TypeCheckFailure(message) =>
-          assert(message.contains(expectedErrMsg))
-      }
     }
   }
 
@@ -1156,10 +1148,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
     }
 
     // Test '.' and 'D'
@@ -1194,14 +1182,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       expr = ToCharacter(Literal(decimal), Literal(format2))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format2))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
     }
 
     Seq(
@@ -1226,10 +1206,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         " 4542 "
     ).foreach { case ((decimal, format), expected) =>
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1261,14 +1237,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(expr, expected)
 
       expr = ToCharacter(Literal(decimal), Literal(format2))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format2))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1323,10 +1291,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
     }
 
     // Test '$'
@@ -1339,10 +1303,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "$78.12"
     ).foreach { case ((decimal, format), expected) =>
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1380,10 +1340,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
     }
 
     // Test 'MI'
@@ -1414,10 +1370,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "               -4.310000000000000"
     ).foreach { case ((decimal, format), expected) =>
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1455,10 +1407,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
     }
 
     // Test overflows
@@ -1479,10 +1427,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "##.#"
     ).foreach { case ((decimal, format), expected) =>
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }

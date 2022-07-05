@@ -222,6 +222,12 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
+  def executorResourceRequestToRequirement(resourceRequest: Seq[ExecutorResourceRequest])
+    : Seq[ResourceRequirement] = {
+    resourceRequest.map(request =>
+      ResourceRequirement(request.resourceName, request.amount.toInt, 1))
+  }
+
   def resourcesMeetRequirements(
       resourcesFree: Map[String, Int],
       resourceRequirements: Seq[ResourceRequirement])

@@ -162,7 +162,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitWindow(p: Window): Statistics = visitUnaryNode(p)
 
-  override def visitSort(p: Sort): Statistics = default(p)
+  override def visitSort(p: Sort): Statistics = p.child.stats
 
   override def visitTail(p: Tail): Statistics = {
     val limit = p.limitExpr.eval().asInstanceOf[Int]

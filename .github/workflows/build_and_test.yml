@@ -289,6 +289,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -374,6 +377,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -439,6 +445,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
