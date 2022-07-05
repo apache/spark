@@ -32,8 +32,9 @@ import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 
@@ -366,7 +367,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val db = new Database("nama", "cataloa", "descripta", "locata")
     val table = new Table("nama", "cataloa", Array("databasa"), "descripta", "typa",
       isTemporary = false)
-    val function = new Function("nama", "databasa", "descripta", "classa", isTemporary = false)
+    val function = new Function("nama", "cataloa", Array("databasa"), "descripta", "classa", false)
     val column = new Column(
       "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
     val dbFields = ScalaReflection.getConstructorParameterValues(db)
@@ -377,7 +378,9 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(Seq(tableFields(0), tableFields(1), tableFields(3), tableFields(4), tableFields(5)) ==
       Seq("nama", "cataloa", "descripta", "typa", false))
     assert(tableFields(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))
-    assert(functionFields == Seq("nama", "databasa", "descripta", "classa", false))
+    assert((functionFields(0), functionFields(1), functionFields(3), functionFields(4),
+      functionFields(5)) == ("nama", "cataloa", "descripta", "classa", false))
+    assert(functionFields(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))
     assert(columnFields == Seq("nama", "descripta", "typa", false, true, true))
     val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
     val tableString = CatalogImpl.makeDataset(Seq(table), spark).showString(10)
@@ -386,7 +389,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     dbFields.foreach { f => assert(dbString.contains(f.toString)) }
     tableFields.foreach { f => assert(tableString.contains(f.toString) ||
       tableString.contains(f.asInstanceOf[Array[String]].mkString(""))) }
-    functionFields.foreach { f => assert(functionString.contains(f.toString)) }
+    functionFields.foreach { f => assert(functionString.contains(f.toString) ||
+      functionString.contains(f.asInstanceOf[Array[String]].mkString(""))) }
     columnFields.foreach { f => assert(columnString.contains(f.toString)) }
   }
 
@@ -894,5 +898,54 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       spark.catalog.setCurrentDatabase("unknown_db")
     }.getMessage
     assert(e3.contains("unknown_db"))
+  }
+
+  test("SPARK-39579: Three layer namespace compatibility - " +
+    "listFunctions, getFunction, functionExists") {
+    createDatabase("my_db1")
+    createFunction("my_func1", Some("my_db1"))
+
+    val functions1a = spark.catalog.listFunctions("my_db1").collect().map(_.name)
+    val functions1b = spark.catalog.listFunctions("spark_catalog.my_db1").collect().map(_.name)
+    assert(functions1a.length > 200 && functions1a.contains("my_func1"))
+    assert(functions1b.length > 200 && functions1b.contains("my_func1"))
+    // functions1b contains 5 more functions: [<>, ||, !=, case, between]
+    assert(functions1a.intersect(functions1b) === functions1a)
+
+    assert(spark.catalog.functionExists("my_db1.my_func1"))
+    assert(spark.catalog.functionExists("spark_catalog.my_db1.my_func1"))
+
+    val func1a = spark.catalog.getFunction("my_db1.my_func1")
+    val func1b = spark.catalog.getFunction("spark_catalog.my_db1.my_func1")
+    assert(func1a.name === func1b.name && func1a.namespace === func1b.namespace &&
+      func1a.className === func1b.className && func1a.isTemporary === func1b.isTemporary)
+    assert(func1a.catalog === null && func1b.catalog === "spark_catalog")
+    assert(func1a.description === null && func1b.description === "N/A.")
+
+    val function: UnboundFunction = new UnboundFunction {
+      override def bind(inputType: StructType): BoundFunction = new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(IntegerType)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "my_bound_function"
+      }
+      override def description(): String = "hello"
+      override def name(): String = "my_function"
+    }
+
+    val testCatalog: InMemoryCatalog =
+      spark.sessionState.catalogManager.catalog("testcat").asInstanceOf[InMemoryCatalog]
+    testCatalog.createFunction(Identifier.of(Array("my_db2"), "my_func2"), function)
+
+    val functions2 = spark.catalog.listFunctions("testcat.my_db2").collect().map(_.name)
+    assert(functions2.length > 200 && functions2.contains("my_func2"))
+
+    assert(spark.catalog.functionExists("testcat.my_db2.my_func2"))
+    assert(!spark.catalog.functionExists("testcat.my_db2.my_func3"))
+
+    val func2 = spark.catalog.getFunction("testcat.my_db2.my_func2")
+    assert(func2.name === "my_func2" && func2.namespace === Array("my_db2") &&
+      func2.catalog === "testcat" && func2.description === "hello" &&
+      func2.isTemporary === false &&
+      func2.className.startsWith("org.apache.spark.sql.internal.CatalogSuite"))
   }
 }

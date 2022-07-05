@@ -23,16 +23,17 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedNonPersistentFunc, ResolvedPersistentFunc, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedFunc, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowNamespaces, ShowTables, SubqueryAlias, TableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, MultipartIdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
@@ -194,11 +195,40 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
-    requireDatabaseExists(dbName)
-    val functions = sessionCatalog.listFunctions(dbName).map { case (functIdent, _) =>
-      makeFunction(functIdent)
+    // `dbName` could be either a single database name (behavior in Spark 3.3 and prior) or
+    // a qualified namespace with catalog name. We assume it's a single database name
+    // and check if we can find the dbName in sessionCatalog. If so we listFunctions under
+    // that database. Otherwise we try 3-part name parsing and locate the database.
+    if (sessionCatalog.databaseExists(dbName)) {
+      val functions = sessionCatalog.listFunctions(dbName)
+        .map { case (functIdent, _) => makeFunction(functIdent) }
+      CatalogImpl.makeDataset(functions, sparkSession)
+    } else {
+      val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(dbName)
+      val functions = collection.mutable.ArrayBuilder.make[Function]
+
+      // built-in functions
+      val plan0 = ShowFunctions(UnresolvedNamespace(ident),
+        userScope = false, systemScope = true, None)
+      sparkSession.sessionState.executePlan(plan0).toRdd.collect().foreach { row =>
+        // `lookupBuiltinOrTempFunction` and `lookupBuiltinOrTempTableFunction` in Analyzer
+        // require the input identifier only contains the function name, otherwise, built-in
+        // functions will be skipped.
+        val name = row.getString(0)
+        functions += makeFunction(Seq(name))
+      }
+
+      // user functions
+      val plan1 = ShowFunctions(UnresolvedNamespace(ident),
+        userScope = true, systemScope = false, None)
+      sparkSession.sessionState.executePlan(plan1).toRdd.collect().foreach { row =>
+        // `row.getString(0)` may contain dbName like `db.function`, so extract the function name.
+        val name = row.getString(0).split("\\.").last
+        functions += makeFunction(ident :+ name)
+      }
+
+      CatalogImpl.makeDataset(functions.result(), sparkSession)
     }
-    CatalogImpl.makeDataset(functions, sparkSession)
   }
 
   private def makeFunction(funcIdent: FunctionIdentifier): Function = {
@@ -209,6 +239,39 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       description = null, // for now, this is always undefined
       className = metadata.getClassName,
       isTemporary = metadata.getDb == null)
+  }
+
+  private def makeFunction(ident: Seq[String]): Function = {
+    val plan = UnresolvedFunc(ident, "Catalog.makeFunction", false, None)
+    sparkSession.sessionState.executePlan(plan).analyzed match {
+      case f: ResolvedPersistentFunc =>
+        val className = f.func match {
+          case f: V1Function => f.info.getClassName
+          case f => f.getClass.getName
+        }
+        new Function(
+          name = f.identifier.name(),
+          catalog = f.catalog.name(),
+          namespace = f.identifier.namespace(),
+          description = f.func.description(),
+          className = className,
+          isTemporary = false)
+
+      case f: ResolvedNonPersistentFunc =>
+        val className = f.func match {
+          case f: V1Function => f.info.getClassName
+          case f => f.getClass.getName
+        }
+        new Function(
+          name = f.name,
+          catalog = null,
+          namespace = null,
+          description = f.func.description(),
+          className = className,
+          isTemporary = true)
+
+      case _ => throw QueryCompilationErrors.noSuchFunctionError(ident, plan)
+    }
   }
 
   /**
@@ -380,8 +443,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * function. This throws an `AnalysisException` when no `Function` can be found.
    */
   override def getFunction(functionName: String): Function = {
-    val functionIdent = sparkSession.sessionState.sqlParser.parseFunctionIdentifier(functionName)
-    getFunction(functionIdent.database.orNull, functionIdent.funcName)
+    // calling `sqlParser.parseFunctionIdentifier` to parse functionName. If it contains only
+    // function name and optionally contains a database name(thus a FunctionIdentifier), then
+    // we look up the function in sessionCatalog.
+    // Otherwise we try `sqlParser.parseMultipartIdentifier` to have a sequence of string as
+    // the qualified identifier and resolve the function through SQL analyzer.
+    try {
+      val ident = sparkSession.sessionState.sqlParser.parseFunctionIdentifier(functionName)
+      getFunction(ident.database.orNull, ident.funcName)
+    } catch {
+      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(functionName)
+        makeFunction(ident)
+    }
   }
 
   /**
@@ -443,8 +517,23 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * or a function.
    */
   override def functionExists(functionName: String): Boolean = {
-    val functionIdent = sparkSession.sessionState.sqlParser.parseFunctionIdentifier(functionName)
-    functionExists(functionIdent.database.orNull, functionIdent.funcName)
+    try {
+      val ident = sparkSession.sessionState.sqlParser.parseFunctionIdentifier(functionName)
+      functionExists(ident.database.orNull, ident.funcName)
+    } catch {
+      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
+        try {
+          val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(functionName)
+          val plan = UnresolvedFunc(ident, "Catalog.functionExists", false, None)
+          sparkSession.sessionState.executePlan(plan).analyzed match {
+            case _: ResolvedPersistentFunc => true
+            case _: ResolvedNonPersistentFunc => true
+            case _ => false
+          }
+        } catch {
+          case _: org.apache.spark.sql.AnalysisException => false
+        }
+    }
   }
 
   /**

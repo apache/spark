@@ -4050,12 +4050,12 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
-               c("name", "database", "description", "className", "isTemporary"))
+               c("name", "catalog", "namespace", "description", "className", "isTemporary"))
   expect_equal(take(orderBy(f, "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("zxwtyswklpf_db"),
-               paste("Error in listFunctions : analysis error - Database",
-                     "'zxwtyswklpf_db' does not exist"))
+               paste("Error in listFunctions : no such database - Database",
+                     "'zxwtyswklpf_db' not found"))
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
