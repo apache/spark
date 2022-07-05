@@ -548,6 +548,7 @@ object FunctionRegistry {
     expression[StringLocate]("position", true),
     expression[FormatString]("printf", true),
     expression[RegExpExtract]("regexp_extract"),
+    expression[RegExpExtract]("regexp_substr", true, Some("3.4.0")),
     expression[RegExpExtractAll]("regexp_extract_all"),
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
