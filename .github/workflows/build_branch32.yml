@@ -36,8 +36,8 @@ jobs:
         {
           "SCALA_PROFILE": "scala2.13"
         }
-      # TODO(SPARK-39681): Reenable "lint": "true"
-      # TODO(SPARK-39685): Reenable "pyspark": "true"
+      # TODO(SPARK-39685): Reenable "lint": "true"
+      # TODO(SPARK-39681): Reenable "pyspark": "true"
       # TODO(SPARK-39682): Reenable "docker-integration-tests": "true"
       jobs: >-
         {
