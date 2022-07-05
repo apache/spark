@@ -56,28 +56,6 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof Extract) {
       Extract extract = (Extract) expr;
       return visitExtract(extract.field(), build(extract.source()));
-    } else if (expr instanceof Min) {
-      Min min = (Min) expr;
-      return visitAggregateFunction("MIN", false,
-        Arrays.stream(min.children()).map(c -> build(c)).toArray(String[]::new));
-    } else if (expr instanceof Max) {
-      Max max = (Max) expr;
-      return visitAggregateFunction("MAX", false,
-        Arrays.stream(max.children()).map(c -> build(c)).toArray(String[]::new));
-    } else if (expr instanceof Count) {
-      Count count = (Count) expr;
-      return visitAggregateFunction("COUNT", count.isDistinct(),
-        Arrays.stream(count.children()).map(c -> build(c)).toArray(String[]::new));
-    } else if (expr instanceof Sum) {
-      Sum sum = (Sum) expr;
-      return visitAggregateFunction("SUM", sum.isDistinct(),
-        Arrays.stream(sum.children()).map(c -> build(c)).toArray(String[]::new));
-    } else if (expr instanceof CountStar) {
-      return visitAggregateFunction("COUNT", false, new String[]{"*"});
-    } else if (expr instanceof Avg) {
-      Avg avg = (Avg) expr;
-      return visitAggregateFunction("AVG", avg.isDistinct(),
-        Arrays.stream(avg.children()).map(c -> build(c)).toArray(String[]::new));
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
       String name = e.name();
@@ -194,6 +172,28 @@ public class V2ExpressionSQLBuilder {
         default:
           return visitUnexpectedExpr(expr);
       }
+    } else if (expr instanceof Min) {
+      Min min = (Min) expr;
+      return visitAggregateFunction("MIN", false,
+        Arrays.stream(min.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof Max) {
+      Max max = (Max) expr;
+      return visitAggregateFunction("MAX", false,
+        Arrays.stream(max.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof Count) {
+      Count count = (Count) expr;
+      return visitAggregateFunction("COUNT", count.isDistinct(),
+        Arrays.stream(count.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof Sum) {
+      Sum sum = (Sum) expr;
+      return visitAggregateFunction("SUM", sum.isDistinct(),
+        Arrays.stream(sum.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof CountStar) {
+      return visitAggregateFunction("COUNT", false, new String[]{"*"});
+    } else if (expr instanceof Avg) {
+      Avg avg = (Avg) expr;
+      return visitAggregateFunction("AVG", avg.isDistinct(),
+        Arrays.stream(avg.children()).map(c -> build(c)).toArray(String[]::new));
     } else if (expr instanceof GeneralAggregateFunc) {
       GeneralAggregateFunc f = (GeneralAggregateFunc) expr;
       return visitGeneralAggregateFunction(f.name(), f.isDistinct(),
@@ -330,8 +330,7 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitGeneralAggregateFunction(
       String funcName, boolean isDistinct, String[] inputs) {
-    throw new UnsupportedOperationException(
-      this.getClass().getSimpleName() + " does not support aggregate function: " + funcName);
+    return visitAggregateFunction(funcName, isDistinct, inputs);
   }
 
   protected String visitUserDefinedScalarFunction(

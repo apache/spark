@@ -256,7 +256,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     override def visitGeneralAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
       if (isSupportedFunction(funcName)) {
-        visitAggregateFunction(funcName, isDistinct, inputs)
+        super.visitGeneralAggregateFunction(funcName, isDistinct, inputs)
       } else {
         throw new UnsupportedOperationException(
           s"${this.getClass.getSimpleName} does not support aggregate function: $funcName");
