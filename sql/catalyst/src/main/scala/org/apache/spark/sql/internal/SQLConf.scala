@@ -2739,14 +2739,6 @@ object SQLConf {
       .version("2.3.0")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
 
-  val SQL_EXPLAIN_EXCLUDE_SERDE_ON_CATALOG_TABLE =
-    buildConf("spark.sql.explain.catalogTable.exclude.serde")
-      .internal()
-      .doc("Whether to exclude serde from the output of catalog table for SQL explain commands.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
       "an output as binary. Otherwise, it returns as a string.")
@@ -4226,9 +4218,6 @@ class SQLConf extends Serializable with Logging {
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
 
   def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
-
-  def excludeSerdeOnCatalogTableFromExplain: Boolean =
-    getConf(SQL_EXPLAIN_EXCLUDE_SERDE_ON_CATALOG_TABLE)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
