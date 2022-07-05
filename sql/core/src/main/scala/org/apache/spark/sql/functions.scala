@@ -3826,7 +3826,7 @@ object functions {
   }
 
   /**
-   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) 
+   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC)
    * to a timestamp of that moment in the current system time zone.
    * @group datetime_funcs
    * @since 3.1.0
