@@ -169,7 +169,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     } else {
       Some(stats.map(_.rowCount.get).filter(_ > 0L).sum)
     }
-    Statistics(sizeInBytes = stats.map(_.sizeInBytes).filter(_ > 0L).product, rowCount = rowCount)
+    Statistics(sizeInBytes = stats.map(_.sizeInBytes).sum, rowCount = rowCount)
   }
 
   override def visitWindow(p: Window): Statistics = visitUnaryNode(p)
