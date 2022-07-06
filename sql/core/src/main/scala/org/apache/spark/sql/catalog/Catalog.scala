@@ -105,6 +105,7 @@ abstract class Catalog {
    * @param tableName is an unqualified name that designates a table/view.
    * @since 2.0.0
    */
+  @deprecated("use listColumns(tableName) instead", "3.4.0")
   @throws[AnalysisException]("database or table does not exist")
   def listColumns(dbName: String, tableName: String): Dataset[Column]
 
@@ -135,6 +136,7 @@ abstract class Catalog {
    *
    * @since 2.1.0
    */
+  @deprecated("use getTable(tableName) instead", "3.4.0")
   @throws[AnalysisException]("database or table does not exist")
   def getTable(dbName: String, tableName: String): Table
 
@@ -158,6 +160,7 @@ abstract class Catalog {
    * @param functionName is an unqualified name that designates a function in the specified database
    * @since 2.1.0
    */
+  @deprecated("use getFunction(functionName) instead", "3.4.0")
   @throws[AnalysisException]("database or function does not exist")
   def getFunction(dbName: String, functionName: String): Function
 
@@ -186,6 +189,7 @@ abstract class Catalog {
    * @param tableName is an unqualified name that designates a table.
    * @since 2.1.0
    */
+  @deprecated("use tableExists(tableName) instead", "3.4.0")
   def tableExists(dbName: String, tableName: String): Boolean
 
   /**
@@ -206,6 +210,7 @@ abstract class Catalog {
    * @param functionName is an unqualified name that designates a function.
    * @since 2.1.0
    */
+  @deprecated("use functionExists(functionName) instead", "3.4.0")
   def functionExists(dbName: String, functionName: String): Boolean
 
   /**
