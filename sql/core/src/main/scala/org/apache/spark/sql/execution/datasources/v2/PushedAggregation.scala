@@ -27,5 +27,5 @@ case class PushedAggregation(
     pushedAggregates: Option[Aggregation],
     resultExpressions: Seq[NamedExpression],
     aggregates: Seq[AggregateExpression],
-    normalizedGroupingExpressions: Seq[Expression],
+    groupingExpressions: Seq[Expression],
     aggExprToOutputOrdinal: HashMap[Expression, Int])
