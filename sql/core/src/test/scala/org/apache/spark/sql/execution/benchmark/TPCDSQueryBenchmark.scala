@@ -37,9 +37,9 @@ import org.apache.spark.sql.internal.SQLConf
  *   1. without sbt:
  *        bin/spark-submit --jars <spark core test jar>,<spark catalyst test jar>
  *          --class <this class> <spark sql test jar> --data-location <location>
- *   2. build/sbt "sql/test:runMain <this class> --data-location <TPCDS data location>"
+ *   2. build/sbt "sql/Test/runMain <this class> --data-location <TPCDS data location>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt
- *        "sql/test:runMain <this class> --data-location <location>"
+ *        "sql/Test/runMain <this class> --data-location <location>"
  *      Results will be written to "benchmarks/TPCDSQueryBenchmark-results.txt".
  * }}}
  */

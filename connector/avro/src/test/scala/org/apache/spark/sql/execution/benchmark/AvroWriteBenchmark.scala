@@ -30,8 +30,8 @@ import org.apache.spark.storage.StorageLevel
  *        --jars <spark core test jar>,<spark catalyst test jar>,
   *              <spark sql test jar>,<spark avro jar>
  *        <spark avro test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "avro/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "avro/Test/runMain <this class>"
  *      Results will be written to "benchmarks/AvroWriteBenchmark-results.txt".
  *  }}}
  */
