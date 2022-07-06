@@ -215,7 +215,9 @@ class CSVOptions(
    */
   val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
     require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
-    require(sep.length == 1, "'lineSep' can contain only 1 character.")
+    require(sep.length <= 2, "'lineSep' can contain only 1 or 2 characters.")
+    if (sep.length == 2) logWarning("It is not recommended to set 'lineSep' " +
+      "with 2 characters due to the limitation of supporting multi-char lineSep within quotes.")
     sep
   }
 
