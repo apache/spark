@@ -283,8 +283,13 @@ case class TakeOrderedAndProjectExec(
   }
 
   override def executeCollect(): Array[InternalRow] = {
+    val orderingSatisfies = SortOrder.orderingSatisfies(child.outputOrdering, sortOrder)
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
-    val limited = child.execute().mapPartitionsInternal(_.map(_.copy())).takeOrdered(limit)(ord)
+    val limited = if (orderingSatisfies) {
+      child.execute().mapPartitionsInternal(_.map(_.copy()).take(limit)).takeOrdered(limit)(ord)
+    } else {
+      child.execute().mapPartitionsInternal(_.map(_.copy())).takeOrdered(limit)(ord)
+    }
     val data = if (offset > 0) limited.drop(offset) else limited
     if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
@@ -313,9 +318,7 @@ case class TakeOrderedAndProjectExec(
         childRDD
       } else {
         val localTopK = if (orderingSatisfies) {
-          childRDD.mapPartitionsInternal { iter =>
-            iter.map(_.copy()).take(limit)
-          }
+          childRDD.mapPartitionsInternal(_.map(_.copy()).take(limit))
         } else {
           childRDD.mapPartitionsInternal { iter =>
             Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
