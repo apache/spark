@@ -663,7 +663,7 @@ test_that("test tableNames and tables", {
   expect_equal(count(tables), count + 1)
   expect_equal(count(tables()), count(tables))
   expect_true("tableName" %in% colnames(tables()))
-  expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
+  expect_true(all(c("tableName", "namespace", "isTemporary") %in% colnames(tables())))
 
   suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
@@ -4015,10 +4015,10 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
   expect_error(setCurrentDatabase("zxwtyswklpf"),
-               paste0("Error in setCurrentDatabase : analysis error - Database ",
-               "'zxwtyswklpf' does not exist"))
+               paste0("Error in setCurrentDatabase : no such database - Database ",
+               "'zxwtyswklpf' not found"))
   dbs <- collect(listDatabases())
-  expect_equal(names(dbs), c("name", "description", "locationUri"))
+  expect_equal(names(dbs), c("name", "catalog", "description", "locationUri"))
   expect_equal(which(dbs[, 1] == "default"), 1)
 })
 
@@ -4026,7 +4026,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   tb <- listTables()
   count <- count(tables())
   expect_equal(nrow(tb), count)
-  expect_equal(colnames(tb), c("name", "database", "description", "tableType", "isTemporary"))
+  expect_equal(colnames(tb),
+               c("name", "catalog", "namespace", "description", "tableType", "isTemporary"))
 
   createOrReplaceTempView(as.DataFrame(cars), "cars")
 
@@ -4049,12 +4050,12 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
-               c("name", "database", "description", "className", "isTemporary"))
+               c("name", "catalog", "namespace", "description", "className", "isTemporary"))
   expect_equal(take(orderBy(f, "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("zxwtyswklpf_db"),
-               paste("Error in listFunctions : analysis error - Database",
-                     "'zxwtyswklpf_db' does not exist"))
+               paste("Error in listFunctions : no such database - Database",
+                     "'zxwtyswklpf_db' not found"))
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),

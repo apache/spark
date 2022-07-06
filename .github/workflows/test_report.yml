@@ -20,12 +20,13 @@
 name: Report test results
 on:
   workflow_run:
-    workflows: ["Build and test"]
+    workflows: ["Build"]
     types:
       - completed
 
 jobs:
   test_report:
+    if: github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
     steps:
     - name: Download test results to report

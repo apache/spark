@@ -23,6 +23,7 @@ import java.util.{Locale, Map => JMap}
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
+import org.apache.spark.TaskContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
@@ -230,7 +231,9 @@ private[sql] object SQLUtils extends Logging {
   def readArrowStreamFromFile(
       sparkSession: SparkSession,
       filename: String): JavaRDD[Array[Byte]] = {
-    ArrowConverters.readArrowStreamFromFile(sparkSession, filename)
+    // Parallelize the record batches to create an RDD
+    val batches = ArrowConverters.readArrowStreamFromFile(filename)
+    JavaRDD.fromRDD(sparkSession.sparkContext.parallelize(batches, batches.length))
   }
 
   /**
@@ -241,6 +244,11 @@ private[sql] object SQLUtils extends Logging {
       arrowBatchRDD: JavaRDD[Array[Byte]],
       schema: StructType,
       sparkSession: SparkSession): DataFrame = {
-    ArrowConverters.toDataFrame(arrowBatchRDD, schema.json, sparkSession)
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val rdd = arrowBatchRDD.rdd.mapPartitions { iter =>
+      val context = TaskContext.get()
+      ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, context)
+    }
+    sparkSession.internalCreateDataFrame(rdd.setName("arrow"), schema)
   }
 }

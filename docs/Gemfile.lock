@@ -9,7 +9,7 @@ GEM
       eventmachine (>= 0.12.9)
       http_parser.rb (~> 0.6.0)
     eventmachine (1.2.7)
-    ffi (1.15.4)
+    ffi (1.15.5)
     forwardable-extended (2.6.0)
     http_parser.rb (0.6.0)
     i18n (1.8.11)
@@ -64,10 +64,11 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  ffi (= 1.15.5)
   jekyll (= 4.2.1)
   jekyll-redirect-from (= 0.16.0)
   rouge (= 3.26.0)
   webrick (= 1.7)
 
 BUNDLED WITH
-   2.2.9
+   2.3.8

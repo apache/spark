@@ -28,7 +28,7 @@
 
     with Spark-specific changes from:
 
-    http://spark.apache.org/contributing.html#code-style-guide
+    https://spark.apache.org/contributing.html#code-style-guide
 
     Checkstyle is very configurable. Be sure to read the documentation at
     http://checkstyle.sf.net (or in your downloaded distribution).
@@ -142,25 +142,6 @@
              <message key="ws.notPreceded"
              value="GenericWhitespace ''{0}'' is not preceded with whitespace."/>
         </module>
-        <!-- TODO: 11/09/15 disabled - indentation is currently inconsistent -->
-        <!--
-        <module name="Indentation">
-            <property name="basicOffset" value="4"/>
-            <property name="braceAdjustment" value="0"/>
-            <property name="caseIndent" value="4"/>
-            <property name="throwsIndent" value="4"/>
-            <property name="lineWrappingIndentation" value="4"/>
-            <property name="arrayInitIndent" value="4"/>
-        </module>
-        -->
-        <!-- TODO: 11/09/15 disabled - order is currently wrong in many places -->
-        <!--
-        <module name="ImportOrder">
-            <property name="separated" value="true"/>
-            <property name="ordered" value="true"/>
-            <property name="groups" value="/^javax?\./,scala,*,org.apache.spark"/>
-        </module>
-        -->
         <module name="MethodParamPad"/>
         <module name="AnnotationLocation">
             <property name="tokens" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF"/>
@@ -192,6 +173,12 @@
         <module name="RegexpSinglelineJava">
             <property name="format" value="new (java\.lang\.)?(Byte|Integer|Long|Short)\("/>
             <property name="message" value="Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Files\.createTempDir\("/>
+            <property name="message"
+              value="Avoid using com.google.common.io.Files.createTempDir() due to CVE-2020-8908.
+                Use org.apache.spark.network.util.JavaUtils.createTempDir() instead." />
         </module>
         <module name="IllegalImport">
             <property name="illegalPkgs" value="org.apache.log4j" />

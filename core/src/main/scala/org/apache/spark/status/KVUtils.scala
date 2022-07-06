@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
 
 private[spark] object KVUtils extends Logging {
@@ -89,6 +90,50 @@ private[spark] object KVUtils extends Logging {
       iter.asScala.filter(filter).take(max).toList
     } finally {
       iter.close()
+    }
+  }
+
+  /** Turns an interval of KVStoreView into a Scala sequence, applying a filter. */
+  def viewToSeq[T](
+      view: KVStoreView[T],
+      from: Int,
+      until: Int)(filter: T => Boolean): Seq[T] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.filter(filter).slice(from, until).toList
+    }
+  }
+
+  /** Turns a KVStoreView into a Scala sequence. */
+  def viewToSeq[T](view: KVStoreView[T]): Seq[T] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.toList
+    }
+  }
+
+  /** Counts the number of elements in the KVStoreView which satisfy a predicate. */
+  def count[T](view: KVStoreView[T])(countFunc: T => Boolean): Int = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.count(countFunc)
+    }
+  }
+
+  /** Applies a function f to all values produced by KVStoreView. */
+  def foreach[T](view: KVStoreView[T])(foreachFunc: T => Unit): Unit = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.foreach(foreachFunc)
+    }
+  }
+
+  /** Maps all values of KVStoreView to new values using a transformation function. */
+  def mapToSeq[T, B](view: KVStoreView[T])(mapFunc: T => B): Seq[B] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.map(mapFunc).toList
+    }
+  }
+
+  def size[T](view: KVStoreView[T]): Int = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.size
     }
   }
 

@@ -308,28 +308,7 @@ private[spark] object Utils extends Logging {
    * newly created, and is not marked for automatic deletion.
    */
   def createDirectory(root: String, namePrefix: String = "spark"): File = {
-    var attempts = 0
-    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
-    var dir: File = null
-    while (dir == null) {
-      attempts += 1
-      if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
-          maxAttempts + " attempts!")
-      }
-      try {
-        dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        // SPARK-35907:
-        // This could throw more meaningful exception information if directory creation failed.
-        Files.createDirectories(dir.toPath)
-      } catch {
-        case e @ (_ : IOException | _ : SecurityException) =>
-          logError(s"Failed to create directory $dir", e)
-          dir = null
-      }
-    }
-
-    dir.getCanonicalFile
+    JavaUtils.createDirectory(root, namePrefix)
   }
 
   /**
@@ -339,9 +318,7 @@ private[spark] object Utils extends Logging {
   def createTempDir(
       root: String = System.getProperty("java.io.tmpdir"),
       namePrefix: String = "spark"): File = {
-    val dir = createDirectory(root, namePrefix)
-    ShutdownHookManager.registerShutdownDeleteDir(dir)
-    dir
+    JavaUtils.createTempDir(root, namePrefix)
   }
 
   /**
@@ -600,13 +577,39 @@ private[spark] object Utils extends Logging {
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
+      // TODO(SPARK-37677): should keep file permissions. Java implementation doesn't.
       FileUtil.unZip(source, dest)
-    } else if (
-      lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz") || lowerSrc.endsWith(".tar")) {
+    } else if (lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz")) {
       FileUtil.unTar(source, dest)
+    } else if (lowerSrc.endsWith(".tar")) {
+      // TODO(SPARK-38632): should keep file permissions. Java implementation doesn't.
+      unTarUsingJava(source, dest)
     } else {
       logWarning(s"Cannot unpack $source, just copying it to $dest.")
       copyRecursive(source, dest)
+    }
+  }
+
+  /**
+   * The method below was copied from `FileUtil.unTar` but uses Java-based implementation
+   * to work around a security issue, see also SPARK-38631.
+   */
+  private def unTarUsingJava(source: File, dest: File): Unit = {
+    if (!dest.mkdirs && !dest.isDirectory) {
+      throw new IOException(s"Mkdirs failed to create $dest")
+    } else {
+      try {
+        // Should not fail because all Hadoop 2.1+ (from HADOOP-9264)
+        // have 'unTarUsingJava'.
+        val mth = classOf[FileUtil].getDeclaredMethod(
+          "unTarUsingJava", classOf[File], classOf[File], classOf[Boolean])
+        mth.setAccessible(true)
+        mth.invoke(null, source, dest, java.lang.Boolean.FALSE)
+      } catch {
+        // Re-throw the original exception.
+        case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
+          throw e.getCause
+      }
     }
   }
 
@@ -1068,21 +1071,30 @@ private[spark] object Utils extends Logging {
    * Get the local machine's FQDN.
    */
   def localCanonicalHostName(): String = {
-    customHostname.getOrElse(localIpAddress.getCanonicalHostName)
+    addBracketsIfNeeded(customHostname.getOrElse(localIpAddress.getCanonicalHostName))
   }
 
   /**
    * Get the local machine's hostname.
+   * In case of IPv6, getHostAddress may return '0:0:0:0:0:0:0:1'.
    */
   def localHostName(): String = {
-    customHostname.getOrElse(localIpAddress.getHostAddress)
+    addBracketsIfNeeded(customHostname.getOrElse(localIpAddress.getHostAddress))
   }
 
   /**
    * Get the local machine's URI.
    */
   def localHostNameForURI(): String = {
-    customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
+    addBracketsIfNeeded(customHostname.getOrElse(InetAddresses.toUriString(localIpAddress)))
+  }
+
+  private[spark] def addBracketsIfNeeded(addr: String): String = {
+    if (addr.contains(":") && !addr.contains("[")) {
+      "[" + addr + "]"
+    } else {
+      addr
+    }
   }
 
   /**
@@ -1975,6 +1987,11 @@ private[spark] object Utils extends Logging {
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
    */
   val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
+
+  /**
+   * Whether the underlying JVM prefer IPv6 addresses.
+   */
+  val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
 
   /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.

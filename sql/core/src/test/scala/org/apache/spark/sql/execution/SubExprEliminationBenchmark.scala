@@ -49,7 +49,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
       val schema = writeWideRow(path.getAbsolutePath, rowsNum, numCols)
 
       val cols = (0 until numCols).map { idx =>
-        from_json(Symbol("value"), schema).getField(s"col$idx")
+        from_json($"value", schema).getField(s"col$idx")
       }
 
       Seq(
@@ -88,7 +88,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
       val schema = writeWideRow(path.getAbsolutePath, rowsNum, numCols)
 
       val predicate = (0 until numCols).map { idx =>
-        (from_json(Symbol("value"), schema).getField(s"col$idx") >= Literal(100000)).expr
+        (from_json($"value", schema).getField(s"col$idx") >= Literal(100000)).expr
       }.asInstanceOf[Seq[Expression]].reduce(Or)
 
       Seq(

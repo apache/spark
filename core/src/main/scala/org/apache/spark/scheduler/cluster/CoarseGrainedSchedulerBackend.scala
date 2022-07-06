@@ -21,7 +21,7 @@ import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet, Queue}
 import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
@@ -81,6 +81,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // manager, [[ExecutorAllocationManager]]
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private val requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
+
+  // Profile IDs to the times that executors were requested for.
+  // The operations we do on queue are all amortized constant cost
+  // see https://www.scala-lang.org/api/2.13.x/scala/collection/mutable/ArrayDeque.html
+  @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  private val execRequestTimes = new HashMap[Int, Queue[(Int, Long)]]
 
   private val listenerBus = scheduler.sc.listenerBus
 
@@ -260,9 +266,27 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
             (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
           }
+          // If we've requested the executor figure out when we did.
+          val reqTs: Option[Long] = CoarseGrainedSchedulerBackend.this.synchronized {
+            execRequestTimes.get(resourceProfileId).flatMap {
+              times =>
+              times.headOption.map {
+                h =>
+                // Take off the top element
+                times.dequeue()
+                // If we requested more than one exec reduce the req count by 1 and prepend it back
+                if (h._1 > 1) {
+                  ((h._1 - 1, h._2)) +=: times
+                }
+                h._2
+              }
+            }
+          }
+
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
-            resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis())
+            resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis(),
+            requestTs = reqTs)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -742,6 +766,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val numExisting = requestedTotalExecutorsPerResourceProfile.getOrElse(defaultProf, 0)
       requestedTotalExecutorsPerResourceProfile(defaultProf) = numExisting + numAdditionalExecutors
       // Account for executors pending to be added or removed
+      updateExecRequestTime(defaultProf.id, numAdditionalExecutors)
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
 
@@ -780,13 +805,51 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)
     }
     val response = synchronized {
+      val oldResourceProfileToNumExecutors = requestedTotalExecutorsPerResourceProfile.map {
+        case (rp, num) =>
+          (rp.id, num)
+      }.toMap
       this.requestedTotalExecutorsPerResourceProfile.clear()
       this.requestedTotalExecutorsPerResourceProfile ++= resourceProfileToNumExecutors
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
+      updateExecRequestTimes(oldResourceProfileToNumExecutors, resourceProfileIdToNumExecutors)
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
     defaultAskTimeout.awaitResult(response)
+  }
+
+  private def updateExecRequestTimes(oldProfile: Map[Int, Int], newProfile: Map[Int, Int]): Unit = {
+    newProfile.map {
+      case (k, v) =>
+        val delta = v - oldProfile.getOrElse(k, 0)
+        if (delta != 0) {
+          updateExecRequestTime(k, delta)
+        }
+    }
+  }
+
+  private def updateExecRequestTime(profileId: Int, delta: Int) = {
+    val times = execRequestTimes.getOrElseUpdate(profileId, Queue[(Int, Long)]())
+    if (delta > 0) {
+      // Add the request to the end, constant time op
+      times += ((delta, System.currentTimeMillis()))
+    } else if (delta < 0) {
+      // Consume as if |delta| had been allocated
+      var toConsume = -delta
+      // Note: it's possible that something else allocated an executor and we have
+      // a negative delta, we can just avoid mutating the queue.
+      while (toConsume > 0 && times.nonEmpty) {
+        val h = times.dequeue
+        if (h._1 > toConsume) {
+          // Prepend updated first req to times, constant time op
+          ((h._1 - toConsume, h._2)) +=: times
+          toConsume = 0
+        } else {
+          toConsume = toConsume - h._1
+        }
+      }
+    }
   }
 
   /**

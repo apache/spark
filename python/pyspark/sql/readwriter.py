@@ -17,7 +17,7 @@
 import sys
 from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
-from py4j.java_gateway import JavaClass, JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaClass, JavaObject
 
 from pyspark import RDD, since
 from pyspark.sql.column import _to_seq, _to_java_column, Column
@@ -63,7 +63,7 @@ class DataFrameReader(OptionUtils):
     """
 
     def __init__(self, spark: "SparkSession"):
-        self._jreader = spark._jsparkSession.read()  # type: ignore[attr-defined]
+        self._jreader = spark._jsparkSession.read()
         self._spark = spark
 
     def _df(self, jdf: JavaObject) -> "DataFrame":
@@ -112,9 +112,7 @@ class DataFrameReader(OptionUtils):
 
         spark = SparkSession._getActiveSessionOrCreate()
         if isinstance(schema, StructType):
-            jschema = spark._jsparkSession.parseDataType(
-                schema.json()
-            )  # type: ignore[attr-defined]
+            jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
         elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
@@ -283,11 +281,7 @@ class DataFrameReader(OptionUtils):
             path = [path]
         if type(path) == list:
             assert self._spark._sc._jvm is not None
-            return self._df(
-                self._jreader.json(
-                    self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
-                )
-            )
+            return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
 
             def func(iterator: Iterable) -> Iterable:
@@ -301,7 +295,7 @@ class DataFrameReader(OptionUtils):
             keyed = path.mapPartitions(func)
             keyed._bypass_serializer = True  # type: ignore[attr-defined]
             assert self._spark._jvm is not None
-            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())  # type: ignore[attr-defined]
+            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
         else:
             raise TypeError("path can be only string, list or RDD")
@@ -424,11 +418,7 @@ class DataFrameReader(OptionUtils):
         if isinstance(paths, str):
             paths = [paths]
         assert self._spark._sc._jvm is not None
-        return self._df(
-            self._jreader.text(
-                self._spark._sc._jvm.PythonUtils.toSeq(paths)  # type: ignore[attr-defined]
-            )
-        )
+        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
     def csv(
         self,
@@ -738,7 +728,7 @@ class DataFrameWriter(OptionUtils):
     def __init__(self, df: "DataFrame"):
         self._df = df
         self._spark = df.sparkSession
-        self._jwrite = df._jdf.write()  # type: ignore[operator]
+        self._jwrite = df._jdf.write()
 
     def _sq(self, jsq: JavaObject) -> "StreamingQuery":
         from pyspark.sql.streaming import StreamingQuery
@@ -1361,7 +1351,7 @@ class DataFrameWriterV2:
     def __init__(self, df: "DataFrame", table: str):
         self._df = df
         self._spark = df.sparkSession
-        self._jwriter = df._jdf.writeTo(table)  # type: ignore[operator]
+        self._jwriter = df._jdf.writeTo(table)
 
     @since(3.1)
     def using(self, provider: str) -> "DataFrameWriterV2":

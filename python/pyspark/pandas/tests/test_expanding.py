@@ -27,11 +27,15 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 class ExpandingTest(PandasOnSparkTestCase, TestUtils):
     def _test_expanding_func(self, f):
-        pser = pd.Series([1, 2, 3], index=np.random.rand(3))
+        pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
         psser = ps.from_pandas(pser)
-        self.assert_eq(getattr(psser.expanding(2), f)(), getattr(pser.expanding(2), f)())
         self.assert_eq(
-            getattr(psser.expanding(2), f)().sum(), getattr(pser.expanding(2), f)().sum()
+            getattr(psser.expanding(2), f)(), getattr(pser.expanding(2), f)(), almost=True
+        )
+        self.assert_eq(
+            getattr(psser.expanding(2), f)().sum(),
+            getattr(pser.expanding(2), f)().sum(),
+            almost=True,
         )
 
         # Multiindex
@@ -86,6 +90,12 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_expanding_var(self):
         self._test_expanding_func("var")
+
+    def test_expanding_skew(self):
+        self._test_expanding_func("skew")
+
+    def test_expanding_kurt(self):
+        self._test_expanding_func("kurt")
 
     def _test_groupby_expanding_func(self, f):
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
@@ -206,6 +216,12 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_expanding_var(self):
         self._test_groupby_expanding_func("var")
+
+    def test_groupby_expanding_skew(self):
+        self._test_groupby_expanding_func("skew")
+
+    def test_groupby_expanding_kurt(self):
+        self._test_groupby_expanding_func("kurt")
 
 
 if __name__ == "__main__":

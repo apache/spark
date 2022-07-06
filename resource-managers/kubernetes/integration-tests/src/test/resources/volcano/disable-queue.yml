@@ -19,6 +19,6 @@ kind: Queue
 metadata:
   name: queue
 spec:
-  weight: 0
+  weight: 1
   capability:
-    cpu: "1"
+    cpu: "0.001"

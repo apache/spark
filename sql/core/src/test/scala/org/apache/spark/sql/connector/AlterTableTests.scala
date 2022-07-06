@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -307,6 +308,43 @@ trait AlterTableTests extends SharedSparkSession {
           StructField("x", DoubleType),
           StructField("y", DoubleType),
           StructField("z", DoubleType))))))
+    }
+  }
+
+  test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ADD/ALTER COLUMN") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = s"${catalogAndNamespace}table_name"
+      withTable("t") {
+        sql(s"create table $t (a string) using $v2Format")
+        sql(s"alter table $t add column (b int default 2 + 3)")
+
+        val tableName = fullTableName(t)
+        val table = getTableMetadata(tableName)
+
+        assert(table.name === tableName)
+        assert(table.schema === new StructType()
+          .add("a", StringType)
+          .add(StructField("b", IntegerType)
+            .withCurrentDefaultValue("2 + 3")
+            .withExistenceDefaultValue("5")))
+
+        sql(s"alter table $t alter column b set default 2 + 3")
+
+        assert(
+          getTableMetadata(tableName).schema === new StructType()
+            .add("a", StringType)
+            .add(StructField("b", IntegerType)
+              .withCurrentDefaultValue("2 + 3")
+              .withExistenceDefaultValue("5")))
+
+        sql(s"alter table $t alter column b drop default")
+
+        assert(
+          getTableMetadata(tableName).schema === new StructType()
+            .add("a", StringType)
+            .add(StructField("b", IntegerType)
+              .withExistenceDefaultValue("5")))
+      }
     }
   }
 
@@ -1070,7 +1108,7 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("AlterTable: drop column must exist") {
+  test("AlterTable: drop column must exist if required") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
@@ -1080,10 +1118,15 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains("Missing field data"))
+
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS data")
+      val table = getTableMetadata(fullTableName(t))
+      assert(table.schema == new StructType().add("id", IntegerType))
     }
   }
 
-  test("AlterTable: nested drop column must exist") {
+  test("AlterTable: nested drop column must exist if required") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
@@ -1093,6 +1136,27 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains("Missing field point.x"))
+
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS point.x")
+      val table = getTableMetadata(fullTableName(t))
+      assert(table.schema == new StructType().add("id", IntegerType))
+
+    }
+  }
+
+  test("AlterTable: drop mixed existing/non-existing columns using IF EXISTS") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, name string, points array<struct<x: double, y: double>>) " +
+        s"USING $v2Format")
+
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS " +
+        s"names, name, points.element.z, id, points.element.x")
+      val table = getTableMetadata(fullTableName(t))
+      assert(table.schema == new StructType()
+        .add("points", ArrayType(StructType(Seq(StructField("y", DoubleType))))))
     }
   }
 

@@ -43,29 +43,29 @@ class OptimizeCsvExprsSuite extends PlanTest with ExpressionEvalHelper {
 
   val schema = StructType.fromDDL("a int, b int")
 
-  private val csvAttr = 'csv.string
+  private val csvAttr = $"csv".string
   private val testRelation = LocalRelation(csvAttr)
 
   test("SPARK-32968: prune unnecessary columns from GetStructField + from_csv") {
     val options = Map.empty[String, String]
 
     val query1 = testRelation
-      .select(GetStructField(CsvToStructs(schema, options, 'csv), 0))
+      .select(GetStructField(CsvToStructs(schema, options, $"csv"), 0))
     val optimized1 = Optimizer.execute(query1.analyze)
 
     val prunedSchema1 = StructType.fromDDL("a int")
     val expected1 = testRelation
-      .select(GetStructField(CsvToStructs(schema, options, 'csv, None, Some(prunedSchema1)), 0))
+      .select(GetStructField(CsvToStructs(schema, options, $"csv", None, Some(prunedSchema1)), 0))
       .analyze
     comparePlans(optimized1, expected1)
 
     val query2 = testRelation
-      .select(GetStructField(CsvToStructs(schema, options, 'csv), 1))
+      .select(GetStructField(CsvToStructs(schema, options, $"csv"), 1))
     val optimized2 = Optimizer.execute(query2.analyze)
 
     val prunedSchema2 = StructType.fromDDL("b int")
     val expected2 = testRelation
-      .select(GetStructField(CsvToStructs(schema, options, 'csv, None, Some(prunedSchema2)), 0))
+      .select(GetStructField(CsvToStructs(schema, options, $"csv", None, Some(prunedSchema2)), 0))
       .analyze
     comparePlans(optimized2, expected2)
   }
@@ -74,7 +74,7 @@ class OptimizeCsvExprsSuite extends PlanTest with ExpressionEvalHelper {
     val options = Map("mode" -> "failfast")
 
     val query = testRelation
-      .select(GetStructField(CsvToStructs(schema, options, 'csv), 0))
+      .select(GetStructField(CsvToStructs(schema, options, $"csv"), 0))
     val optimized = Optimizer.execute(query.analyze)
 
     val expected = query.analyze

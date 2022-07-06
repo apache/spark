@@ -25,6 +25,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * This class wraps an array of {@link ColumnVector} and provides a row view.
+ *
+ * @since 3.3.0
  */
 @DeveloperApi
 public final class ColumnarBatchRow extends InternalRow {
@@ -71,6 +73,12 @@ public final class ColumnarBatchRow extends InternalRow {
           row.setInt(i, getInt(i));
         } else if (dt instanceof TimestampType) {
           row.setLong(i, getLong(i));
+        } else if (dt instanceof StructType) {
+          row.update(i, getStruct(i, ((StructType) dt).fields().length).copy());
+        } else if (dt instanceof ArrayType) {
+          row.update(i, getArray(i).copy());
+        } else if (dt instanceof MapType) {
+          row.update(i, getMap(i).copy());
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }

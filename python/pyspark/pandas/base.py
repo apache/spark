@@ -148,7 +148,7 @@ def align_diff_index_ops(
                     ],
                 ).rename(this_index_ops.name)
             else:
-                this = cast(Index, this_index_ops).to_frame().reset_index(drop=True)
+                this = this_index_ops.to_frame().reset_index(drop=True)
 
                 that_series = next(col for col in cols if isinstance(col, Series))
                 that_frame = that_series._psdf[
@@ -982,9 +982,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
               original column labels.
 
         skipna : boolean, default True
-            Exclude NA/null values. If an entire row/column is NA and skipna is True,
+            Exclude NA values, such as None or numpy.NaN.
+            If an entire row/column is NA values and `skipna` is True,
             then the result will be True, as for an empty row/column.
-            If skipna is False, then NA are treated as True, because these are not equal to zero.
+            If `skipna` is False, numpy.NaNs are treated as True because these are
+            not equal to zero, Nones are treated as False.
 
         Examples
         --------
@@ -1362,8 +1364,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 sdf = sdf.orderBy(F.col("count").desc())
 
         if normalize:
-            sum = sdf_dropna.count()
-            sdf = sdf.withColumn("count", F.col("count") / SF.lit(sum))
+            drop_sum = sdf_dropna.count()
+            sdf = sdf.withColumn("count", F.col("count") / SF.lit(drop_sum))
 
         internal = InternalFrame(
             spark_frame=sdf,

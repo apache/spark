@@ -80,6 +80,12 @@ public final class MutableColumnarRow extends InternalRow {
           row.setInt(i, getInt(i));
         } else if (dt instanceof TimestampType) {
           row.setLong(i, getLong(i));
+        } else if (dt instanceof StructType) {
+          row.update(i, getStruct(i, ((StructType) dt).fields().length).copy());
+        } else if (dt instanceof ArrayType) {
+          row.update(i, getArray(i).copy());
+        } else if (dt instanceof MapType) {
+          row.update(i, getMap(i).copy());
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }

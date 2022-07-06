@@ -1528,6 +1528,94 @@ abstract class DynamicPartitionPruningSuiteBase
       }
     }
   }
+
+  test("SPARK-38570: Fix incorrect DynamicPartitionPruning caused by Literal") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT f.store_id,
+          |       f.date_id,
+          |       s.state_province
+          |FROM (SELECT 4 AS store_id,
+          |               date_id,
+          |               product_id
+          |      FROM   fact_sk
+          |      WHERE  date_id >= 1300
+          |      UNION ALL
+          |      SELECT 5 AS store_id,
+          |               date_id,
+          |               product_id
+          |      FROM   fact_stats
+          |      WHERE  date_id <= 1000) f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id
+          |WHERE s.country = 'US'
+          |""".stripMargin)
+
+      checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
+      checkAnswer(df, Row(4, 1300, "California") :: Row(5, 1000, "Texas") :: Nil)
+    }
+  }
+
+  test("SPARK-38674: Remove useless deduplicate in SubqueryBroadcastExec") {
+    withTable("duplicate_keys") {
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+        Seq[(Int, String)]((1, "NL"), (1, "NL"), (3, "US"), (3, "US"), (3, "US"))
+          .toDF("store_id", "country")
+          .write
+          .format(tableFormat)
+          .saveAsTable("duplicate_keys")
+
+        val df = sql(
+          """
+            |SELECT date_id, product_id FROM fact_sk f
+            |JOIN duplicate_keys s
+            |ON f.store_id = s.store_id WHERE s.country = 'US' AND date_id > 1050
+          """.stripMargin)
+
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+
+        val subqueryBroadcastExecs = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case s: SubqueryBroadcastExec => s
+        }
+        assert(subqueryBroadcastExecs.size === 1)
+        subqueryBroadcastExecs.foreach { subqueryBroadcastExec =>
+          assert(subqueryBroadcastExec.metrics("numOutputRows").value === 1)
+        }
+
+        checkAnswer(df, Row(1060, 2) :: Row(1060, 2) :: Row(1060, 2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-39338: Remove dynamic pruning subquery if pruningKey's references is empty") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT f.store_id,
+          |       f.date_id,
+          |       s.state_province
+          |FROM (SELECT   store_id,
+          |               date_id,
+          |               product_id
+          |      FROM   fact_stats
+          |      WHERE  date_id <= 1000
+          |      UNION ALL
+          |      SELECT 4 AS store_id,
+          |               date_id,
+          |               product_id
+          |      FROM   fact_sk
+          |      WHERE  date_id >= 1300) f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id
+          |WHERE s.country IN ('US', 'NL')
+          |""".stripMargin)
+
+      checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+      checkAnswer(df, Row(4, 1300, "California") :: Row(1, 1000, "North-Holland") :: Nil)
+      assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningDataSourceSuiteBase
@@ -1664,7 +1752,44 @@ class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
   with DisableAdaptiveExecutionSuite
 
 class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
-  with EnableAdaptiveExecutionSuite
+  with EnableAdaptiveExecutionSuite {
+
+  test("SPARK-39447: Avoid AssertionError in AdaptiveSparkPlanExec.doExecuteBroadcast") {
+    val df = sql(
+      """
+        |WITH empty_result AS (
+        |  SELECT * FROM fact_stats WHERE product_id < 0
+        |)
+        |SELECT *
+        |FROM   (SELECT /*+ SHUFFLE_MERGE(fact_sk) */ empty_result.store_id
+        |        FROM   fact_sk
+        |               JOIN empty_result
+        |                 ON fact_sk.product_id = empty_result.product_id) t2
+        |       JOIN empty_result
+        |         ON t2.store_id = empty_result.store_id
+      """.stripMargin)
+
+    checkPartitionPruningPredicate(df, false, false)
+    checkAnswer(df, Nil)
+  }
+
+  test("SPARK-37995: PlanAdaptiveDynamicPruningFilters should use prepareExecutedPlan " +
+    "rather than createSparkPlan to re-plan subquery") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
+          |WHERE s.state_province != (SELECT max(state_province) FROM dim_stats)
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, true, false)
+      checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+    }
+  }
+}
 
 abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDataSourceSuiteBase {
   override protected def runAnalyzeColumnCommands: Boolean = false

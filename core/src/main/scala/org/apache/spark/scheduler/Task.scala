@@ -44,6 +44,7 @@ import org.apache.spark.util._
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
+ * @param numPartitions Total number of partitions in the stage that this task belongs to.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
  *                              and sent to executor side.
@@ -59,6 +60,7 @@ private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
+    val numPartitions: Int,
     @transient var localProperties: Properties = new Properties,
     // The default value is only used in tests.
     serializedTaskMetrics: Array[Byte] =
@@ -98,6 +100,7 @@ private[spark] abstract class Task[T](
       partitionId,
       taskAttemptId,
       attemptNumber,
+      numPartitions,
       taskMemoryManager,
       localProperties,
       metricsSystem,

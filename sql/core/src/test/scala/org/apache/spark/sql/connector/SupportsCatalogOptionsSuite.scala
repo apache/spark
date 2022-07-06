@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.util.Optional
 
+import scala.concurrent.duration.MICROSECONDS
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -75,7 +76,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       saveMode: SaveMode,
       withCatalogOption: Option[String],
       partitionBy: Seq[String]): Unit = {
-    val df = spark.range(10).withColumn("part", Symbol("id") % 5)
+    val df = spark.range(10).withColumn("part", $"id" % 5)
     val dfw = df.write.format(format).mode(saveMode).option("name", "t1")
     withCatalogOption.foreach(cName => dfw.option("catalog", cName))
     dfw.partitionBy(partitionBy: _*).save()
@@ -140,7 +141,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   test("Ignore mode if table exists - session catalog") {
     sql(s"create table t1 (id bigint) using $format")
-    val df = spark.range(10).withColumn("part", Symbol("id") % 5)
+    val df = spark.range(10).withColumn("part", $"id" % 5)
     val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
     dfw.save()
 
@@ -152,7 +153,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   test("Ignore mode if table exists - testcat catalog") {
     sql(s"create table $catalogName.t1 (id bigint) using $format")
-    val df = spark.range(10).withColumn("part", Symbol("id") % 5)
+    val df = spark.range(10).withColumn("part", $"id" % 5)
     val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
     dfw.option("catalog", catalogName).save()
 
@@ -322,6 +323,12 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
         timestamp = Some("2019-01-29 00:37:58")), df3.toDF())
       checkAnswer(load("t", Some(catalogName), version = None,
         timestamp = Some("2021-01-29 00:37:58")), df4.toDF())
+
+      // load with timestamp in number format
+      checkAnswer(load("t", Some(catalogName), version = None,
+        timestamp = Some(MICROSECONDS.toSeconds(ts1).toString)), df3.toDF())
+      checkAnswer(load("t", Some(catalogName), version = None,
+        timestamp = Some(MICROSECONDS.toSeconds(ts2).toString)), df4.toDF())
     }
 
     val e = intercept[AnalysisException] {

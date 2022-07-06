@@ -25,6 +25,8 @@ package org.apache.spark.sql.connector.read.streaming;
  * if the interface is implemented along with DSv1 streaming sources.
  *
  * The callback method will be called once per run.
+ *
+ * @since 3.3.0
  */
 public interface AcceptsLatestSeenOffset extends SparkDataStream {
   /**

@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
@@ -999,13 +1000,31 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] split(UTF8String pattern, int limit) {
+    return split(pattern.toString(), limit);
+  }
+
+  public UTF8String[] splitSQL(UTF8String delimiter, int limit) {
+    // if delimiter is empty string, skip the regex based splitting directly as regex
+    // treats empty string as matching anything, thus use the input directly.
+    if (delimiter.numBytes() == 0) {
+      return new UTF8String[]{this};
+    } else {
+      // we do not treat delimiter as a regex but consider the whole string of delimiter
+      // as the separator to split string. Java String's split, however, only accept
+      // regex as the pattern to split, thus we can quote the delimiter to escape special
+      // characters in the string.
+      return split(Pattern.quote(delimiter.toString()), limit);
+    }
+  }
+
+  private UTF8String[] split(String delimiter, int limit) {
     // Java String's split method supports "ignore empty string" behavior when the limit is 0
     // whereas other languages do not. To avoid this java specific behavior, we fall back to
     // -1 when the limit is 0.
     if (limit == 0) {
       limit = -1;
     }
-    String[] splits = toString().split(pattern.toString(), limit);
+    String[] splits = toString().split(delimiter, limit);
     UTF8String[] res = new UTF8String[splits.length];
     for (int i = 0; i < res.length; i++) {
       res[i] = fromString(splits[i]);
@@ -1296,7 +1315,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toLong(result, false)) {
       return result.value;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   /**
@@ -1310,7 +1329,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toInt(result, false)) {
       return result.value;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   public short toShortExact() {
@@ -1319,7 +1338,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (result == value) {
       return result;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   public byte toByteExact() {
@@ -1328,7 +1347,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (result == value) {
       return result;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   @Override
@@ -1492,12 +1511,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(sx);
   }
 
+  @Override
   public void writeExternal(ObjectOutput out) throws IOException {
     byte[] bytes = getBytes();
     out.writeInt(bytes.length);
     out.write(bytes);
   }
 
+  @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     offset = BYTE_ARRAY_OFFSET;
     numBytes = in.readInt();

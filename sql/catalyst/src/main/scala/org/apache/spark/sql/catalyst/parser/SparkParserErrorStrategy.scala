@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntStream, Parser,
-  ParserRuleContext, RecognitionException, Recognizer}
+import org.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntStream, NoViableAltException, Parser, ParserRuleContext, RecognitionException, Recognizer, Token}
 
 /**
  * A [[SparkRecognitionException]] extends the [[RecognitionException]] with more information
@@ -49,6 +48,10 @@ class SparkRecognitionException(
       },
       Some(errorClass),
       messageParameters)
+
+  /** Construct with pure errorClass and messageParameter information.  */
+  def this(errorClass: String, messageParameters: Array[String]) =
+    this("", null, null, null, Some(errorClass), messageParameters)
 }
 
 /**
@@ -61,21 +64,49 @@ class SparkRecognitionException(
  */
 class SparkParserErrorStrategy() extends DefaultErrorStrategy {
   private val userWordDict : Map[String, String] = Map("'<EOF>'" -> "end of input")
-  private def getUserFacingLanguage(input: String) = {
-    userWordDict.getOrElse(input, input)
+
+  /** Get the user-facing display of the error token. */
+  override def getTokenErrorDisplay(t: Token): String = {
+    val tokenName = super.getTokenErrorDisplay(t)
+    userWordDict.getOrElse(tokenName, tokenName)
   }
 
   override def reportInputMismatch(recognizer: Parser, e: InputMismatchException): Unit = {
-    // Keep the original error message in ANTLR
-    val msg = "mismatched input " +
-      this.getTokenErrorDisplay(e.getOffendingToken) +
-      " expecting " +
-      e.getExpectedTokens.toString(recognizer.getVocabulary)
-
     val exceptionWithErrorClass = new SparkRecognitionException(
       e,
-      "PARSE_INPUT_MISMATCHED",
-      Array(getUserFacingLanguage(getTokenErrorDisplay(e.getOffendingToken))))
-    recognizer.notifyErrorListeners(e.getOffendingToken, msg, exceptionWithErrorClass)
+      "PARSE_SYNTAX_ERROR",
+      Array(getTokenErrorDisplay(e.getOffendingToken), ""))
+    recognizer.notifyErrorListeners(e.getOffendingToken, "", exceptionWithErrorClass)
+  }
+
+  override def reportNoViableAlternative(recognizer: Parser, e: NoViableAltException): Unit = {
+    val exceptionWithErrorClass = new SparkRecognitionException(
+      e,
+      "PARSE_SYNTAX_ERROR",
+      Array(getTokenErrorDisplay(e.getOffendingToken), ""))
+    recognizer.notifyErrorListeners(e.getOffendingToken, "", exceptionWithErrorClass)
+  }
+
+  override def reportUnwantedToken(recognizer: Parser): Unit = {
+    if (!this.inErrorRecoveryMode(recognizer)) {
+      this.beginErrorCondition(recognizer)
+      val errorTokenDisplay = getTokenErrorDisplay(recognizer.getCurrentToken)
+      val hint = ": extra input " + errorTokenDisplay
+      val exceptionWithErrorClass = new SparkRecognitionException(
+        "PARSE_SYNTAX_ERROR",
+        Array(errorTokenDisplay, hint))
+      recognizer.notifyErrorListeners(recognizer.getCurrentToken, "", exceptionWithErrorClass)
+    }
+  }
+
+  override def reportMissingToken(recognizer: Parser): Unit = {
+    if (!this.inErrorRecoveryMode(recognizer)) {
+      this.beginErrorCondition(recognizer)
+      val hint = ": missing " + getExpectedTokens(recognizer).toString(recognizer.getVocabulary)
+      val exceptionWithErrorClass = new SparkRecognitionException(
+        "PARSE_SYNTAX_ERROR",
+        Array(getTokenErrorDisplay(recognizer.getCurrentToken), hint))
+      recognizer.notifyErrorListeners(recognizer.getCurrentToken, "", exceptionWithErrorClass)
+    }
   }
 }

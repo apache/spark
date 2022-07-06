@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
@@ -101,6 +101,12 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     assert(model.hasParent)
 
     MLTestingUtils.checkCopyAndUids(gbt, model)
+  }
+
+  test("GBTClassifier validate input dataset") {
+    testInvalidClassificationLabels(new GBTClassifier().fit(_), Some(2))
+    testInvalidWeights(new GBTClassifier().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GBTClassifier().fit(_))
   }
 
   test("setThreshold, getThreshold") {
@@ -302,36 +308,6 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
     gbt.fit(df)
-  }
-
-  test("extractLabeledPoints with bad data") {
-    def getTestData(labels: Seq[Double]): DataFrame = {
-      labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }.toDF()
-    }
-
-    val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
-    // Invalid datasets
-    val df1 = getTestData(Seq(0.0, -1.0, 1.0, 0.0))
-    withClue("Classifier should fail if label is negative") {
-      val e: SparkException = intercept[SparkException] {
-        gbt.fit(df1)
-      }
-      assert(e.getMessage.contains("currently only supports binary classification"))
-    }
-    val df2 = getTestData(Seq(0.0, 0.1, 1.0, 0.0))
-    withClue("Classifier should fail if label is not an integer") {
-      val e: SparkException = intercept[SparkException] {
-        gbt.fit(df2)
-      }
-      assert(e.getMessage.contains("currently only supports binary classification"))
-    }
-    val df3 = getTestData(Seq(0.0, 2.0, 1.0, 0.0))
-    withClue("Classifier should fail if label is >= 2") {
-      val e: SparkException = intercept[SparkException] {
-        gbt.fit(df3)
-      }
-      assert(e.getMessage.contains("currently only supports binary classification"))
-    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

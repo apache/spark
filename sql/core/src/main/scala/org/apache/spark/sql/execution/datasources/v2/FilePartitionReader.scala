@@ -23,18 +23,19 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.InputFileBlockHolder
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
-import org.apache.spark.sql.internal.SQLConf
 
-class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
+class FilePartitionReader[T](
+    readers: Iterator[PartitionedFileReader[T]],
+    options: FileSourceOptions)
   extends PartitionReader[T] with Logging {
   private var currentReader: PartitionedFileReader[T] = null
 
-  private val sqlConf = SQLConf.get
-  private def ignoreMissingFiles = sqlConf.ignoreMissingFiles
-  private def ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
+  private def ignoreMissingFiles = options.ignoreMissingFiles
+  private def ignoreCorruptFiles = options.ignoreCorruptFiles
 
   override def next(): Boolean = {
     if (currentReader == null) {

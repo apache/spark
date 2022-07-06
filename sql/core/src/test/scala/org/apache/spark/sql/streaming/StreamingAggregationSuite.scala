@@ -30,6 +30,7 @@ import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
@@ -413,13 +414,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       inputDataOne.toDF()
         .groupBy($"value")
         .agg(count("*"))
-        .where(Symbol("value") >= current_timestamp().cast("long") - 10L)
+        .where($"value" >= current_timestamp().cast("long") - 10L)
     val inputDataTwo = MemoryStream[Long]
     val aggregatedTwo =
       inputDataTwo.toDF()
         .groupBy($"value")
         .agg(count("*"))
-        .where(Symbol("value") >= localtimestamp().cast(TimestampType).cast("long") - 10L)
+        .where($"value" >= localtimestamp().cast(TimestampType).cast("long") - 10L)
 
     Seq((inputDataOne, aggregatedOne), (inputDataTwo, aggregatedTwo)).foreach { x =>
       val inputData = x._1
@@ -475,7 +476,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
-        .select(to_utc_timestamp(from_unixtime(Symbol("value") * SECONDS_PER_DAY), tz))
+        .select(to_utc_timestamp(from_unixtime($"value" * SECONDS_PER_DAY), tz))
         .toDF("value")
         .groupBy($"value")
         .agg(count("*"))
@@ -522,12 +523,12 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val streamInput = MemoryStream[Int]
     val batchDF = Seq(1, 2, 3, 4, 5)
         .toDF("value")
-        .withColumn("parity", Symbol("value") % 2)
-        .groupBy(Symbol("parity"))
+        .withColumn("parity", $"value" % 2)
+        .groupBy($"parity")
         .agg(count("*") as Symbol("joinValue"))
     val joinDF = streamInput
         .toDF()
-        .join(batchDF, Symbol("value") === Symbol("parity"))
+        .join(batchDF, $"value" === $"parity")
 
     // make sure we're planning an aggregate in the first place
     assert(batchDF.queryExecution.optimizedPlan match { case _: Aggregate => true })
@@ -542,8 +543,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   /**
    * This method verifies certain properties in the SparkPlan of a streaming aggregation.
    * First of all, it checks that the child of a `StateStoreRestoreExec` creates the desired
-   * data distribution, where the child could be an Exchange, or a `HashAggregateExec` which already
-   * provides the expected data distribution.
+   * data distribution, where the child is a `HashAggregateExec` which already provides
+   * the expected data distribution.
    *
    * The second thing it checks that the child provides the expected number of partitions.
    *
@@ -552,7 +553,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
    */
   private def checkAggregationChain(
       se: StreamExecution,
-      expectShuffling: Boolean,
       expectedPartition: Int): Boolean = {
     val executedPlan = se.lastExecution.executedPlan
     val restore = executedPlan
@@ -560,12 +560,17 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       .head
     restore.child match {
       case node: UnaryExecNode =>
-        assert(node.outputPartitioning.numPartitions === expectedPartition,
-          "Didn't get the expected number of partitions.")
-        if (expectShuffling) {
-          assert(node.isInstanceOf[Exchange], s"Expected a shuffle, got: ${node.child}")
-        } else {
-          assert(!node.isInstanceOf[Exchange], "Didn't expect a shuffle")
+        node.outputPartitioning match {
+          case HashPartitioning(_, numPartitions) =>
+            assert(numPartitions === expectedPartition,
+              "Didn't get the expected number of partitions.")
+
+            // below case should only applied to no grouping key which leads to AllTuples
+          case SinglePartition if expectedPartition == 1 => // OK
+
+          case p =>
+            fail("Expected a hash partitioning for child output partitioning, but has " +
+              s"$p instead.")
         }
 
       case _ => fail("Expected no shuffling")
@@ -605,12 +610,12 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         AddBlockData(inputSource, Seq(1)),
         CheckLastBatch(1),
         AssertOnQuery("Verify no shuffling") { se =>
-          checkAggregationChain(se, expectShuffling = false, 1)
+          checkAggregationChain(se, 1)
         },
         AddBlockData(inputSource), // create an empty trigger
         CheckLastBatch(1),
         AssertOnQuery("Verify that no exchange is required") { se =>
-          checkAggregationChain(se, expectShuffling = false, 1)
+          checkAggregationChain(se, 1)
         },
         AddBlockData(inputSource, Seq(2, 3)),
         CheckLastBatch(3),
@@ -639,7 +644,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         def createDf(partitions: Int): Dataset[(Long, Long)] = {
           spark.readStream
             .format((new MockSourceProvider).getClass.getCanonicalName)
-            .load().coalesce(partitions).groupBy(Symbol("a") % 1).count().as[(Long, Long)]
+            .load().coalesce(partitions).groupBy($"a" % 1).count().as[(Long, Long)]
         }
 
         testStream(createDf(1), Complete())(
@@ -647,10 +652,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           AddBlockData(inputSource, Seq(1)),
           CheckLastBatch((0L, 1L)),
           AssertOnQuery("Verify addition of exchange operator") { se =>
-            checkAggregationChain(
-              se,
-              expectShuffling = true,
-              spark.sessionState.conf.numShufflePartitions)
+            checkAggregationChain(se, spark.sessionState.conf.numShufflePartitions)
           },
           StopStream
         )
@@ -661,10 +663,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           AddBlockData(inputSource, Seq(2), Seq(3), Seq(4)),
           CheckLastBatch((0L, 4L)),
           AssertOnQuery("Verify no exchange added") { se =>
-            checkAggregationChain(
-              se,
-              expectShuffling = false,
-              spark.sessionState.conf.numShufflePartitions)
+            checkAggregationChain(se, spark.sessionState.conf.numShufflePartitions)
           },
           AddBlockData(inputSource),
           CheckLastBatch((0L, 4L)),
@@ -677,7 +676,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("SPARK-22230: last should change with new batches") {
     val input = MemoryStream[Int]
 
-    val aggregated = input.toDF().agg(last(Symbol("value")))
+    val aggregated = input.toDF().agg(last($"value"))
     testStream(aggregated, OutputMode.Complete())(
       AddData(input, 1, 2, 3),
       CheckLastBatch(3),

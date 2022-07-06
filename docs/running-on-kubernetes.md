@@ -359,7 +359,7 @@ If no volume is set as local storage, Spark uses temporary scratch space to spil
 
 `emptyDir` volumes use the nodes backing storage for ephemeral storage by default, this behaviour may not be appropriate for some compute environments.  For example if you have diskless nodes with remote storage mounted over a network, having lots of executors doing IO to this remote storage may actually degrade performance.
 
-In this case it may be desirable to set `spark.kubernetes.local.dirs.tmpfs=true` in your configuration which will cause the `emptyDir` volumes to be configured as `tmpfs` i.e. RAM backed volumes.  When configured like this Spark's local storage usage will count towards your pods memory usage therefore you may wish to increase your memory requests by increasing the value of `spark.kubernetes.memoryOverheadFactor` as appropriate.
+In this case it may be desirable to set `spark.kubernetes.local.dirs.tmpfs=true` in your configuration which will cause the `emptyDir` volumes to be configured as `tmpfs` i.e. RAM backed volumes.  When configured like this Spark's local storage usage will count towards your pods memory usage therefore you may wish to increase your memory requests by increasing the value of `spark.{driver,executor}.memoryOverheadFactor` as appropriate.
 
 
 ## Introspection and Debugging
@@ -1143,6 +1143,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various systems processes, and <code>tmpfs</code>-based local directories when <code>spark.kubernetes.local.dirs.tmpfs</code> is <code>true</code>. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
     This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This preempts this error with a higher default.
+    This will be overridden by the value set by <code>spark.driver.memoryOverheadFactor</code> and <code>spark.executor.memoryOverheadFactor</code> explicitly.
   </td>
   <td>2.4.0</td>
 </tr>
@@ -1394,7 +1395,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     If true, driver pod becomes the owner of on-demand persistent volume claims instead of the executor pods
   </td>
@@ -1402,7 +1403,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.reusePersistentVolumeClaim</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     If true, driver pod tries to reuse driver-owned on-demand persistent volume claims
     of the deleted executor pods if exists. This can be useful to reduce executor pod
@@ -1708,7 +1709,7 @@ Kubernetes supports [Pod priority](https://kubernetes.io/docs/concepts/schedulin
 
 Spark on Kubernetes allows defining the priority of jobs by [Pod template](#pod-template). The user can specify the <code>priorityClassName</code> in driver or executor Pod template <code>spec</code> section. Below is an example to show how to specify it:
 
-```
+```yaml
 apiVersion: v1
 Kind: Pod
 metadata:
@@ -1720,6 +1721,92 @@ spec:
   containers:
   - name: test-driver-container
     image: will-be-overwritten
+```
+
+#### Customized Kubernetes Schedulers for Spark on Kubernetes
+
+Spark allows users to specify a custom Kubernetes schedulers.
+
+1. Specify a scheduler name.
+
+   Users can specify a custom scheduler using <code>spark.kubernetes.scheduler.name</code> or
+   <code>spark.kubernetes.{driver/executor}.scheduler.name</code> configuration.
+
+2. Specify scheduler related configurations.
+
+   To configure the custom scheduler the user can use [Pod templates](#pod-template), add labels (<code>spark.kubernetes.{driver,executor}.label.*</code>), annotations (<code>spark.kubernetes.{driver/executor}.annotation.*</code>) or scheduler specific configurations (such as <code>spark.kubernetes.scheduler.volcano.podGroupTemplateFile</code>).
+
+3. Specify scheduler feature step.
+
+   Users may also consider to use <code>spark.kubernetes.{driver/executor}.pod.featureSteps</code> to support more complex requirements, including but not limited to:
+   - Create additional Kubernetes custom resources for driver/executor scheduling.
+   - Set scheduler hints according to configuration or existing Pod info dynamically.
+
+#### Using Volcano as Customized Scheduler for Spark on Kubernetes
+
+**This feature is currently experimental. In future versions, there may be behavioral changes around configuration, feature step improvement.**
+
+##### Prerequisites
+* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.5.1. Below is an example to install Volcano 1.5.1:
+
+  ```bash
+  # x86_64
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
+
+  # arm64:
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+  ```
+
+##### Build
+To create a Spark distribution along with Volcano suppport like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
+
+```bash
+./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pkubernetes -Pvolcano
+```
+
+##### Usage
+Spark on Kubernetes allows using Volcano as a custom scheduler. Users can use Volcano to
+support more advanced resource scheduling: queue scheduling, resource reservation, priority scheduling, and more.
+
+To use Volcano as a custom scheduler the user needs to specify the following configuration options:
+
+```bash
+# Specify volcano scheduler and PodGroup template
+--conf spark.kubernetes.scheduler.name=volcano
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup-template.yaml
+# Specify driver/executor VolcanoFeatureStep
+--conf spark.kubernetes.driver.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
+--conf spark.kubernetes.executor.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
+```
+
+##### Volcano Feature Step
+Volcano feature steps help users to create a Volcano PodGroup and set driver/executor pod annotation to link with this [PodGroup](https://volcano.sh/en/docs/podgroup/).
+
+Note that currently only driver/job level PodGroup is supported in Volcano Feature Step.
+
+##### Volcano PodGroup Template
+Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example).
+
+Similar to [Pod template](#pod-template), Spark users can use Volcano PodGroup Template to define the PodGroup spec configurations.
+To do so, specify the Spark property `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
+Below is an example of PodGroup template:
+
+```yaml
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+spec:
+  # Specify minMember to 1 to make a driver pod
+  minMember: 1
+  # Specify minResources to support resource reservation (the driver pod resource and executors pod resource should be considered)
+  # It is useful for ensource the available resources meet the minimum requirements of the Spark job and avoiding the
+  # situation where drivers are scheduled, and then they are unable to schedule sufficient executors to progress.
+  minResources:
+    cpu: "2"
+    memory: "3Gi"
+  # Specify the priority, help users to specify job priority in the queue during scheduling.
+  priorityClassName: system-node-critical
+  # Specify the queue, indicates the resource queue which the job should be submitted to
+  queue: default
 ```
 
 ### Stage Level Scheduling Overview

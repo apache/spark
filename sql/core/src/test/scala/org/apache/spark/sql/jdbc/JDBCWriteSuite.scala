@@ -497,7 +497,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
         .jdbc(url1, "TEST.USERDBTYPETEST", properties)
     }.getMessage()
-    assert(msg.contains("extraneous input"))
+    assert(msg.contains("Syntax error at or near '`': extra input '`'"))
   }
 
   test("SPARK-10849: jdbc CreateTableColumnTypes duplicate columns") {

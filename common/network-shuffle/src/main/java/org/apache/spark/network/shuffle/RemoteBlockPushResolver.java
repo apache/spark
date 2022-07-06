@@ -115,6 +115,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
     CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
       new CacheLoader<String, ShuffleIndexInformation>() {
+        @Override
         public ShuffleIndexInformation load(String filePath) throws IOException {
           return new ShuffleIndexInformation(filePath);
         }
@@ -756,12 +757,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     /**
-     * This throws RuntimeException if the number of IOExceptions have exceeded threshold.
+     * @throws IllegalStateException if the number of IOExceptions have exceeded threshold.
      */
     private void abortIfNecessary() {
       if (partitionInfo.shouldAbort(mergeManager.ioExceptionsThresholdDuringMerge)) {
         deferredBufs = null;
-        throw new RuntimeException(String.format("%s when merging %s",
+        throw new IllegalStateException(String.format("%s when merging %s",
           ErrorHandler.BlockPushErrorHandler.IOEXCEPTIONS_EXCEEDED_THRESHOLD_PREFIX,
           streamId));
       }

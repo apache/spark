@@ -3,118 +3,118 @@ Benchmark for performance of JSON parsing
 ================================================================================================
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 JSON schema inferring:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                        3297           3368          61          1.5         659.4       1.0X
-UTF-8 is set                                       4838           4869          33          1.0         967.6       0.7X
+No encoding                                        3854           3897          60          1.3         770.7       1.0X
+UTF-8 is set                                       6178           6214          58          0.8        1235.7       0.6X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 count a short column:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                        2081           2110          44          2.4         416.3       1.0X
-UTF-8 is set                                       3726           3743          16          1.3         745.1       0.6X
+No encoding                                        3229           3269          37          1.5         645.7       1.0X
+UTF-8 is set                                       4600           4609           8          1.1         920.0       0.7X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 count a wide column:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                        4141           4186          52          0.2        4140.7       1.0X
-UTF-8 is set                                       5650           5680          44          0.2        5649.7       0.7X
+No encoding                                        5500           5592         124          0.2        5500.3       1.0X
+UTF-8 is set                                       7500           7588          77          0.1        7500.1       0.7X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 select wide row:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                       11465          11535         119          0.0      229296.8       1.0X
-UTF-8 is set                                      11335          11386          61          0.0      226707.8       1.0X
+No encoding                                       14804          14992         247          0.0      296086.1       1.0X
+UTF-8 is set                                      16528          16619          82          0.0      330562.4       0.9X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Select a subset of 10 columns:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Select 10 columns                                  1838           1854          23          0.5        1838.4       1.0X
-Select 1 column                                    2088           2108          24          0.5        2087.7       0.9X
+Select 10 columns                                  2654           2704          43          0.4        2654.0       1.0X
+Select 1 column                                    2708           2710           4          0.4        2707.6       1.0X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 creation of JSON parser per line:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Short column without encoding                       638            641           4          1.6         638.1       1.0X
-Short column with UTF-8                             915            919           4          1.1         915.4       0.7X
-Wide column without encoding                       6684           6731          54          0.1        6684.2       0.1X
-Wide column with UTF-8                             8285           8322          32          0.1        8284.5       0.1X
+Short column without encoding                       815            833          16          1.2         814.6       1.0X
+Short column with UTF-8                            1125           1139          18          0.9        1124.5       0.7X
+Wide column without encoding                       8664           8883         190          0.1        8663.5       0.1X
+Wide column with UTF-8                            10774          10850          85          0.1       10774.4       0.1X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 JSON functions:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Text read                                            91             92           2         11.0          91.1       1.0X
-from_json                                          1634           1653          22          0.6        1634.3       0.1X
-json_tuple                                         1899           1906          11          0.5        1899.4       0.0X
-get_json_object                                    1683           1692          11          0.6        1683.0       0.1X
+Text read                                            98            101           3         10.3          97.5       1.0X
+from_json                                          1775           1799          21          0.6        1775.0       0.1X
+json_tuple                                         2103           2132          43          0.5        2103.1       0.0X
+get_json_object                                    1968           1997          25          0.5        1968.2       0.0X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Dataset of json strings:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Text read                                           368            371           4         13.6          73.6       1.0X
-schema inferring                                   2523           2537          19          2.0         504.6       0.1X
-parsing                                            2916           2922           9          1.7         583.1       0.1X
+Text read                                           455            460           7         11.0          91.1       1.0X
+schema inferring                                   2888           2902          21          1.7         577.6       0.2X
+parsing                                            3192           3218          27          1.6         638.4       0.1X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Json files in the per-line mode:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Text read                                           921            926           5          5.4         184.2       1.0X
-Schema inferring                                   3254           3277          21          1.5         650.9       0.3X
-Parsing without charset                            3078           3082           4          1.6         615.5       0.3X
-Parsing with UTF-8                                 4427           4429           3          1.1         885.4       0.2X
+Text read                                          1196           1233          32          4.2         239.2       1.0X
+Schema inferring                                   4001           4078          67          1.2         800.1       0.3X
+Parsing without charset                            3721           3765          43          1.3         744.3       0.3X
+Parsing with UTF-8                                 5331           5363          36          0.9        1066.2       0.2X
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Write dates and timestamps:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Create a dataset of timestamps                      163            171           7          6.1         163.3       1.0X
-to_json(timestamp)                                 1095           1098           2          0.9        1095.4       0.1X
-write timestamps to files                          1035           1042           8          1.0        1034.9       0.2X
-Create a dataset of dates                           174            183           9          5.7         174.3       0.9X
-to_json(date)                                       740            742           3          1.4         740.0       0.2X
-write dates to files                                629            635           6          1.6         629.2       0.3X
+Create a dataset of timestamps                      203            209           5          4.9         202.9       1.0X
+to_json(timestamp)                                 1470           1553          72          0.7        1470.1       0.1X
+write timestamps to files                          1178           1230          48          0.8        1177.9       0.2X
+Create a dataset of dates                           199            210          10          5.0         199.3       1.0X
+to_json(date)                                      1066           1075          10          0.9        1066.2       0.2X
+write dates to files                                747            791          42          1.3         746.9       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Read dates and timestamps:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read timestamp text from files                      225            230           5          4.4         225.0       1.0X
-read timestamps from files                         2412           2415           4          0.4        2412.3       0.1X
-infer timestamps from files                       10481          10483           2          0.1       10481.4       0.0X
-read date text from files                           203            206           3          4.9         203.3       1.1X
-read date from files                                780            787           7          1.3         780.1       0.3X
-timestamp strings                                   252            261           8          4.0         251.5       0.9X
-parse timestamps from Dataset[String]              2589           2592           6          0.4        2588.5       0.1X
-infer timestamps from Dataset[String]             10594          10620          35          0.1       10594.0       0.0X
-date strings                                        325            330           4          3.1         325.0       0.7X
-parse dates from Dataset[String]                   1047           1048           2          1.0        1047.1       0.2X
-from_json(timestamp)                               3535           3546          10          0.3        3535.4       0.1X
-from_json(date)                                    2022           2026           4          0.5        2021.8       0.1X
+read timestamp text from files                      283            287           5          3.5         282.9       1.0X
+read timestamps from files                         2729           2759          31          0.4        2729.2       0.1X
+infer timestamps from files                       13608          13690          84          0.1       13607.9       0.0X
+read date text from files                           269            272           4          3.7         268.6       1.1X
+read date from files                                877            896          23          1.1         877.4       0.3X
+timestamp strings                                   292            306          22          3.4         291.9       1.0X
+parse timestamps from Dataset[String]              2924           2979          49          0.3        2924.1       0.1X
+infer timestamps from Dataset[String]             13830          13888          51          0.1       13830.3       0.0X
+date strings                                        386            413          41          2.6         386.3       0.7X
+parse dates from Dataset[String]                   1273           1304          36          0.8        1272.8       0.2X
+from_json(timestamp)                               4123           4173          43          0.2        4122.8       0.1X
+from_json(date)                                    2318           2351          41          0.4        2317.5       0.1X
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-w/o filters                                       17818          17832          20          0.0      178183.6       1.0X
-pushdown disabled                                 17401          17440          39          0.0      174007.0       1.0X
-w/ filters                                          838            842           7          0.1        8378.4      21.3X
+w/o filters                                       20934          21233         291          0.0      209338.2       1.0X
+pushdown disabled                                 20325          20535         236          0.0      203245.4       1.0X
+w/ filters                                          737            801          56          0.1        7374.4      28.4X
 
 

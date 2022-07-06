@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import cast, List, Sequence, TYPE_CHECKING, TypeVar
+from typing import List, Sequence, TypeVar, TYPE_CHECKING
 
 from pyspark import since
 from pyspark.ml.linalg import Vector
@@ -336,7 +336,7 @@ class _RandomForestParams(_TreeEnsembleParams):
         """
         Gets the value of bootstrap or its default value.
         """
-        return cast(bool, self.getOrDefault(self.bootstrap))
+        return self.getOrDefault(self.bootstrap)
 
 
 class _GBTParams(_TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndicatorCol):

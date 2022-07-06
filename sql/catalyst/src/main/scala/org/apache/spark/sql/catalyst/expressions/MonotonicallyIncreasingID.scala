@@ -85,7 +85,7 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
       $countTerm++;""", isNull = FalseLiteral)
   }
 
-  override def prettyName: String = "monotonically_increasing_id"
+  override def nodeName: String = "monotonically_increasing_id"
 
   override def sql: String = s"$prettyName()"
 

@@ -60,6 +60,7 @@ case class SubqueryBroadcastExec(
   }
 
   override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
 
@@ -89,10 +90,15 @@ case class SubqueryBroadcastExec(
         val proj = UnsafeProjection.create(expr)
         val keyIter = iter.map(proj).map(_.copy())
 
-        val rows = keyIter.toArray[InternalRow].distinct
+        val rows = if (broadcastRelation.keyIsUnique) {
+          keyIter.toArray[InternalRow]
+        } else {
+          keyIter.toArray[InternalRow].distinct
+        }
         val beforeBuild = System.nanoTime()
         longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes).sum
+        longMetric("numOutputRows") += rows.length
         longMetric("dataSize") += dataSize
         SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 

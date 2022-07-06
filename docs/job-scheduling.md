@@ -83,6 +83,10 @@ This feature is disabled by default and available on all coarse-grained cluster 
 [Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes) and [K8s mode](running-on-kubernetes.html).
 
 
+### Caveats
+
+- In [standalone mode](spark-standalone.html), without explicitly setting `spark.executor.cores`, each executor will get all the available cores of a worker. In this case, when dynamic allocation enabled, spark will possibly acquire much more executors than expected. When you want to use dynamic allocation in [standalone mode](spark-standalone.html), you are recommended to explicitly set cores for each executor before the issue [SPARK-30299](https://issues.apache.org/jira/browse/SPARK-30299) got fixed.
+
 ### Configuration and Setup
 
 There are two ways for using this feature.
@@ -304,5 +308,5 @@ via `sc.setJobGroup` in a separate PVM thread, which also disallows to cancel th
 later.
 
 `pyspark.InheritableThread` is recommended to use together for a PVM thread to inherit the inheritable attributes
- such as local properties in a JVM thread, and to avoid resource leak.
+ such as local properties in a JVM thread.
 

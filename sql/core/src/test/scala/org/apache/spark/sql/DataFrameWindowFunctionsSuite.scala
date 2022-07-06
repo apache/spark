@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
  */
 class DataFrameWindowFunctionsSuite extends QueryTest
   with SharedSparkSession
-  with AdaptiveSparkPlanHelper{
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -404,8 +404,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val df = Seq((1, "1")).toDF("key", "value")
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
-    assert(e.getErrorClass == "MISSING_COLUMN")
-    assert(e.messageParameters.sameElements(Array("invalid", "value, key")))
+    assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(e.messageParameters.sameElements(Array("`invalid`", "`value`, `key`")))
   }
 
   test("numerical aggregate functions on string column") {
@@ -710,6 +710,50 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("a", 4, "x", "x", "y", "x", "x", "y"),
         Row("b", 1, null, null, null, null, null, null),
         Row("b", 2, null, null, null, null, null, null)))
+
+    val df2 = Seq(
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z")).
+      toDF("key", "order", "value")
+    checkAnswer(
+      df2.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window1),
+        nth_value($"value", 2, ignoreNulls = true).over(window1),
+        nth_value($"value", 2).over(window2),
+        nth_value($"value", 2, ignoreNulls = true).over(window2),
+        nth_value($"value", 3).over(window1),
+        nth_value($"value", 3, ignoreNulls = true).over(window1),
+        nth_value($"value", 3).over(window2),
+        nth_value($"value", 3, ignoreNulls = true).over(window2),
+        nth_value($"value", 4).over(window1),
+        nth_value($"value", 4, ignoreNulls = true).over(window1),
+        nth_value($"value", 4).over(window2),
+        nth_value($"value", 4, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 1, "y", "y", null, null, "z", "z", null, null, null, null, null, null),
+        Row("a", 2, "y", "y", "y", "y", "z", "z", null, null, null, null, null, null),
+        Row("a", 3, "y", "y", "y", "y", "z", "z", "z", "z", null, null, null, null)))
+
+    val df3 = Seq(
+      ("a", 1, "x"),
+      ("a", 2, nullStr),
+      ("a", 3, "z")).
+      toDF("key", "order", "value")
+    checkAnswer(
+      df3.select(
+        $"key",
+        $"order",
+        nth_value($"value", 3).over(window1),
+        nth_value($"value", 3, ignoreNulls = true).over(window1),
+        nth_value($"value", 3).over(window2),
+        nth_value($"value", 3, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 1, "z", null, null, null),
+        Row("a", 2, "z", null, null, null),
+        Row("a", 3, "z", null, "z", null)))
   }
 
   test("nth_value on descending ordered window") {
@@ -1121,5 +1165,42 @@ class DataFrameWindowFunctionsSuite extends QueryTest
 
       assert(shuffleByRequirement, "Can't find desired shuffle node from the query plan")
     }
+  }
+
+  test("SPARK-38308: Properly handle Stream of window expressions") {
+    val df = Seq(
+      (1, 2, 3),
+      (1, 3, 4),
+      (2, 4, 5),
+      (2, 5, 6)
+    ).toDF("a", "b", "c")
+
+    val w = Window.partitionBy("a").orderBy("b")
+    val selectExprs = Stream(
+      sum("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("sumc"),
+      avg("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("avgc")
+    )
+    checkAnswer(
+      df.select(selectExprs: _*),
+      Seq(
+        Row(3, 3),
+        Row(7, 3.5),
+        Row(5, 5),
+        Row(11, 5.5)
+      )
+    )
+  }
+
+  test("SPARK-38614: percent_rank should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", percent_rank().over(w)).limit(3),
+      Seq(
+        Row(0, 0.0d),
+        Row(1, 0.01d),
+        Row(2, 0.02d)
+      )
+    )
   }
 }

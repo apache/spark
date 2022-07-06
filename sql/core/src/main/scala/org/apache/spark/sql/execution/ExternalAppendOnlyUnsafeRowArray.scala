@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.Closeable
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
@@ -192,10 +194,14 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
     protected def throwExceptionIfModified(): Unit = {
       if (expectedModificationsCount != modificationsCount) {
+        closeIfNeeded()
         throw QueryExecutionErrors.concurrentModificationOnExternalAppendOnlyUnsafeRowArrayError(
           classOf[ExternalAppendOnlyUnsafeRowArray].getName)
       }
     }
+
+    protected def closeIfNeeded(): Unit = {}
+
   }
 
   private[this] class InMemoryBufferIterator(startIndex: Int)
@@ -227,6 +233,11 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       iterator.loadNext()
       currentRow.pointTo(iterator.getBaseObject, iterator.getBaseOffset, iterator.getRecordLength)
       currentRow
+    }
+
+    override protected def closeIfNeeded(): Unit = iterator match {
+      case c: Closeable => c.close()
+      case _ => // do nothing
     }
   }
 }

@@ -129,13 +129,9 @@ class MLWriter(BaseReadWrite):
     def _handleOverwrite(self, path: str) -> None:
         from pyspark.ml.wrapper import JavaWrapper
 
-        _java_obj = JavaWrapper._new_java_obj(  # type: ignore[attr-defined]
-            "org.apache.spark.ml.util.FileSystemOverwrite"
-        )
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
         wrapper = JavaWrapper(_java_obj)
-        wrapper._call_java(  # type: ignore[attr-defined]
-            "handleOverwrite", path, True, self.sparkSession._jsparkSession
-        )
+        wrapper._call_java("handleOverwrite", path, True, self.sparkSession._jsparkSession)
 
     def save(self, path: str) -> None:
         """Save the ML instance to the input path."""

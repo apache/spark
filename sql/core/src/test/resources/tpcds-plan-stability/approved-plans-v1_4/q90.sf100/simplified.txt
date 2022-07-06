@@ -16,7 +16,7 @@ WholeStageCodegen (10)
                               Filter [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.web_sales [ws_sold_time_sk,ws_ship_hdemo_sk,ws_web_page_sk,ws_sold_date_sk]
+                                    Scan parquet spark_catalog.default.web_sales [ws_sold_time_sk,ws_ship_hdemo_sk,ws_web_page_sk,ws_sold_date_sk]
                             InputAdapter
                               BroadcastExchange #2
                                 WholeStageCodegen (1)
@@ -24,7 +24,7 @@ WholeStageCodegen (10)
                                     Filter [wp_char_count,wp_web_page_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.web_page [wp_web_page_sk,wp_char_count]
+                                          Scan parquet spark_catalog.default.web_page [wp_web_page_sk,wp_char_count]
                         InputAdapter
                           BroadcastExchange #3
                             WholeStageCodegen (2)
@@ -32,7 +32,7 @@ WholeStageCodegen (10)
                                 Filter [hd_dep_count,hd_demo_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count]
+                                      Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_dep_count]
                     InputAdapter
                       BroadcastExchange #4
                         WholeStageCodegen (3)
@@ -40,7 +40,7 @@ WholeStageCodegen (10)
                             Filter [t_hour,t_time_sk]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.time_dim [t_time_sk,t_hour]
+                                  Scan parquet spark_catalog.default.time_dim [t_time_sk,t_hour]
       InputAdapter
         BroadcastExchange #5
           WholeStageCodegen (9)
@@ -59,7 +59,7 @@ WholeStageCodegen (10)
                                     Filter [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.web_sales [ws_sold_time_sk,ws_ship_hdemo_sk,ws_web_page_sk,ws_sold_date_sk]
+                                          Scan parquet spark_catalog.default.web_sales [ws_sold_time_sk,ws_ship_hdemo_sk,ws_web_page_sk,ws_sold_date_sk]
                                   InputAdapter
                                     ReusedExchange [wp_web_page_sk] #2
                               InputAdapter
@@ -71,4 +71,4 @@ WholeStageCodegen (10)
                                   Filter [t_hour,t_time_sk]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.time_dim [t_time_sk,t_hour]
+                                        Scan parquet spark_catalog.default.time_dim [t_time_sk,t_hour]

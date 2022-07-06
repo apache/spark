@@ -583,33 +583,33 @@ public abstract class AbstractBytesToBytesMapSuite {
         map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8)
           .append(arr, Platform.LONG_ARRAY_OFFSET, 8, arr, Platform.LONG_ARRAY_OFFSET, 8);
       }
-      assert map.numKeys() == 1024;
-      assert map.numValues() == 1024;
+      assertEquals(1024, map.numKeys());
+      assertEquals(1024, map.numValues());
       for (i = 0; i < 1024; i++) {
         final long[] arr = new long[]{i};
         map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8)
           .append(arr, Platform.LONG_ARRAY_OFFSET, 8, arr, Platform.LONG_ARRAY_OFFSET, 8);
       }
-      assert map.numKeys() == 1024;
-      assert map.numValues() == 2048;
+      assertEquals(1024, map.numKeys());
+      assertEquals(2048, map.numValues());
       for (i = 0; i < 1024; i++) {
         final long[] arr = new long[]{i};
         final BytesToBytesMap.Location loc = map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8);
-        assert loc.isDefined();
-        assert loc.nextValue();
-        assert !loc.nextValue();
+        assertTrue(loc.isDefined());
+        assertTrue(loc.nextValue());
+        assertFalse(loc.nextValue());
       }
       BytesToBytesMap.MapIterator iter = map.iterator();
       for (i = 0; i < 2048; i++) {
-        assert iter.hasNext();
+        assertTrue(iter.hasNext());
         final BytesToBytesMap.Location loc = iter.next();
-        assert loc.isDefined();
+        assertTrue(loc.isDefined());
       }
       BytesToBytesMap.MapIteratorWithKeyIndex iterWithKeyIndex = map.iteratorWithKeyIndex();
       for (i = 0; i < 2048; i++) {
-        assert iterWithKeyIndex.hasNext();
+        assertTrue(iterWithKeyIndex.hasNext());
         final BytesToBytesMap.Location loc = iterWithKeyIndex.next();
-        assert loc.isDefined() && loc.getKeyIndex() >= 0;
+        assertTrue(loc.isDefined() && loc.getKeyIndex() >= 0);
       }
     } finally {
       map.free();
@@ -618,33 +618,14 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void initialCapacityBoundsChecking() {
-    try {
-      new BytesToBytesMap(taskMemoryManager, 0, PAGE_SIZE_BYTES);
-      Assert.fail("Expected IllegalArgumentException to be thrown");
-    } catch (IllegalArgumentException e) {
-      // expected exception
-    }
-
-    try {
-      new BytesToBytesMap(
-        taskMemoryManager,
-        BytesToBytesMap.MAX_CAPACITY + 1,
-        PAGE_SIZE_BYTES);
-      Assert.fail("Expected IllegalArgumentException to be thrown");
-    } catch (IllegalArgumentException e) {
-      // expected exception
-    }
-
-    try {
-      new BytesToBytesMap(
-        taskMemoryManager,
-        1,
-        TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES + 1);
-      Assert.fail("Expected IllegalArgumentException to be thrown");
-    } catch (IllegalArgumentException e) {
-      // expected exception
-    }
-
+    assertThrows(IllegalArgumentException.class,
+      () -> new BytesToBytesMap(taskMemoryManager, 0, PAGE_SIZE_BYTES));
+    assertThrows(IllegalArgumentException.class,
+      () -> new BytesToBytesMap(taskMemoryManager,
+              BytesToBytesMap.MAX_CAPACITY + 1, PAGE_SIZE_BYTES));
+    assertThrows(IllegalArgumentException.class,
+      () -> new BytesToBytesMap(taskMemoryManager, 1,
+              TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES + 1));
   }
 
   @Test
@@ -742,10 +723,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     // Force OOM on next memory allocation.
     memoryManager.markExecutionAsOutOfMemoryOnce();
     try {
-      map.reset();
-      Assert.fail("Expected SparkOutOfMemoryError to be thrown");
-    } catch (SparkOutOfMemoryError e) {
-      // Expected exception; do nothing.
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
     } finally {
       map.free();
     }

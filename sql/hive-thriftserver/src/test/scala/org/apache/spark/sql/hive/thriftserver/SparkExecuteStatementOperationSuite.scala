@@ -25,7 +25,7 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
-import org.apache.hive.service.rpc.thrift.TProtocolVersion
+import org.apache.hive.service.rpc.thrift.{TProtocolVersion, TTypeId}
 import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
@@ -41,22 +41,28 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
     val field1 = StructField("NULL", NullType)
     val field2 = StructField("(IF(true, NULL, NULL))", NullType)
     val tableSchema = StructType(Seq(field1, field2))
-    val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
-    assert(columns.size() == 2)
-    assert(columns.get(0).getType().getName == "VOID")
-    assert(columns.get(1).getType().getName == "VOID")
+    val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+    assert(columns.getColumnsSize == 2)
+    assert(columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.NULL_TYPE)
+    assert(columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.NULL_TYPE)
   }
 
   test("SPARK-20146 Comment should be preserved") {
     val field1 = StructField("column1", StringType).withComment("comment 1")
     val field2 = StructField("column2", IntegerType)
     val tableSchema = StructType(Seq(field1, field2))
-    val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
-    assert(columns.size() == 2)
-    assert(columns.get(0).getType().getName == "STRING")
-    assert(columns.get(0).getComment() == "comment 1")
-    assert(columns.get(1).getType().getName == "INT")
-    assert(columns.get(1).getComment() == "")
+    val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+    assert(columns.getColumnsSize == 2)
+    assert(columns.getColumns.get(0).getColumnName == "column1")
+    assert(columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.STRING_TYPE)
+    assert(columns.getColumns.get(0).getComment == "comment 1")
+    assert(columns.getColumns.get(1).getColumnName == "column2")
+    assert(columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.INT_TYPE)
+    assert(columns.getColumns.get(1).getComment == "")
   }
 
   Seq(

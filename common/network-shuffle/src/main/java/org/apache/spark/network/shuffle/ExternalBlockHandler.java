@@ -157,14 +157,14 @@ public class ExternalBlockHandler extends RpcHandler
             iterator = new ShuffleChunkManagedBufferIterator((FetchShuffleBlockChunks) msgObj);
           }
           streamId = streamManager.registerStream(client.getClientId(), iterator,
-            client.getChannel());
+            client.getChannel(), true);
         } else {
           // For the compatibility with the old version, still keep the support for OpenBlocks.
           OpenBlocks msg = (OpenBlocks) msgObj;
           numBlockIds = msg.blockIds.length;
           checkAuth(client, msg.appId);
           streamId = streamManager.registerStream(client.getClientId(),
-            new ManagedBufferIterator(msg), client.getChannel());
+            new ManagedBufferIterator(msg), client.getChannel(), true);
         }
         if (logger.isTraceEnabled()) {
           logger.trace(

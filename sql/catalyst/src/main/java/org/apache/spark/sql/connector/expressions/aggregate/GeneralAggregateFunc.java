@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.connector.expressions.aggregate;
 
-import java.util.Arrays;
-import java.util.stream.Collectors;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
 /**
  * The general implementation of {@link AggregateFunc}, which contains the upper-cased function
@@ -46,27 +43,23 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 public final class GeneralAggregateFunc implements AggregateFunc {
   private final String name;
   private final boolean isDistinct;
-  private final NamedReference[] inputs;
+  private final Expression[] children;
+
+  public GeneralAggregateFunc(String name, boolean isDistinct, Expression[] children) {
+    this.name = name;
+    this.isDistinct = isDistinct;
+    this.children = children;
+  }
 
   public String name() { return name; }
   public boolean isDistinct() { return isDistinct; }
-  public NamedReference[] inputs() { return inputs; }
 
-  public GeneralAggregateFunc(String name, boolean isDistinct, NamedReference[] inputs) {
-    this.name = name;
-    this.isDistinct = isDistinct;
-    this.inputs = inputs;
-  }
+  @Override
+  public Expression[] children() { return children; }
 
   @Override
   public String toString() {
-    String inputsString = Arrays.stream(inputs)
-      .map(Expression::describe)
-      .collect(Collectors.joining(", "));
-    if (isDistinct) {
-      return name + "(DISTINCT " + inputsString + ")";
-    } else {
-      return name + "(" + inputsString + ")";
-    }
+    ToStringSQLBuilder builder = new ToStringSQLBuilder();
+    return builder.build(this);
   }
 }

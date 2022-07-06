@@ -39,6 +39,9 @@ public final class Avg implements AggregateFunc {
   public boolean isDistinct() { return isDistinct; }
 
   @Override
+  public Expression[] children() { return new Expression[]{ input }; }
+
+  @Override
   public String toString() {
     if (isDistinct) {
       return "AVG(DISTINCT " + input.describe() + ")";

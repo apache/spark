@@ -111,6 +111,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       taskId = taskId,
       attemptNumber = attemptNumber,
       index = taskId.toInt,
+      partitionId = taskId.toInt,
       // The following fields are not used in tests
       launchTime = 0,
       executorId = "",
@@ -607,8 +608,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
   test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
     val event = SparkListenerDriverAccumUpdates(1L, Seq((2L, 3L)))
-    val json = JsonProtocol.sparkEventToJson(event)
-    assertValidDataInJson(json,
+    val json = JsonProtocol.sparkEventToJsonString(event)
+    assertValidDataInJson(parse(json),
       parse("""
         |{
         |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
@@ -626,14 +627,14 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     }
 
     // Test a case where the numbers in the JSON can only fit in longs:
-    val longJson = parse(
+    val longJson =
       """
         |{
         |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
         |  "executionId": 4294967294,
         |  "accumUpdates": [[4294967294,3]]
         |}
-      """.stripMargin)
+      """.stripMargin
     JsonProtocol.sparkEventFromJson(longJson) match {
       case SparkListenerDriverAccumUpdates(executionId, accums) =>
         assert(executionId == 4294967294L)
@@ -878,7 +879,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       val oldCount = statusStore.executionsList().size
 
       val cls = classOf[CustomMetricsDataSource].getName
-      spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+      spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
         .write.format(cls)
         .option("path", dir.getCanonicalPath).mode("append").save()
 
@@ -920,7 +921,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
       try {
         val cls = classOf[CustomMetricsDataSource].getName
-        spark.range(0, 10, 1, 2).select(Symbol("id") as Symbol("i"), -'id as Symbol("j"))
+        spark.range(0, 10, 1, 2).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
           .write.format(cls)
           .option("path", dir.getCanonicalPath).mode("append").save()
 

@@ -59,14 +59,20 @@ private[spark] class BasicExecutorFeatureStep(
   private val isDefaultProfile = resourceProfile.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
   private val isPythonApp = kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)
   private val disableConfigMap = kubernetesConf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)
+  private val memoryOverheadFactor = if (kubernetesConf.contains(EXECUTOR_MEMORY_OVERHEAD_FACTOR)) {
+    kubernetesConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
+  } else {
+    kubernetesConf.get(MEMORY_OVERHEAD_FACTOR)
+  }
 
   val execResources = ResourceProfile.getResourcesForClusterManager(
     resourceProfile.id,
     resourceProfile.executorResources,
-    kubernetesConf.get(MEMORY_OVERHEAD_FACTOR),
+    memoryOverheadFactor,
     kubernetesConf.sparkConf,
     isPythonApp,
     Map.empty)
+  assert(execResources.cores.nonEmpty)
 
   private val executorMemoryString = s"${execResources.executorMemoryMiB}m"
   // we don't include any kubernetes conf specific requests or limits when using custom
@@ -75,7 +81,7 @@ private[spark] class BasicExecutorFeatureStep(
     if (isDefaultProfile && kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
       kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
     } else {
-      execResources.cores.toString
+      execResources.cores.get.toString
     }
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
@@ -101,10 +107,10 @@ private[spark] class BasicExecutorFeatureStep(
     val keyToPaths = KubernetesClientUtils.buildKeyToPathObjects(confFilesMap)
     // According to
     // https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names,
-    // hostname must be no longer than `KUBERNETES_DNSNAME_MAX_LENGTH`(63) characters,
+    // hostname must be no longer than `KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH`(63) characters,
     // so take the last 63 characters of the pod name as the hostname.
     // This preserves uniqueness since the end of name contains executorId
-    val hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNSNAME_MAX_LENGTH))
+    val hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH))
       // Remove non-word characters from the start of the hostname
       .replaceAll("^[^\\w]+", "")
       // Replace dangerous characters in the remaining string with a safe alternative.
@@ -118,7 +124,7 @@ private[spark] class BasicExecutorFeatureStep(
     val executorEnv: Seq[EnvVar] = {
         (Seq(
           (ENV_DRIVER_URL, driverUrl),
-          (ENV_EXECUTOR_CORES, execResources.cores.toString),
+          (ENV_EXECUTOR_CORES, execResources.cores.get.toString),
           (ENV_EXECUTOR_MEMORY, executorMemoryString),
           (ENV_APPLICATION_ID, kubernetesConf.appId),
           // This is to set the SPARK_CONF_DIR to be /opt/spark/conf

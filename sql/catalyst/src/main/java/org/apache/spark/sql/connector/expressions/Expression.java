@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions;
 
+import java.util.Arrays;
+
 import org.apache.spark.annotation.Evolving;
 
 /**
@@ -26,8 +28,23 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface Expression {
+  Expression[] EMPTY_EXPRESSION = new Expression[0];
+
   /**
    * Format the expression as a human readable SQL-like string.
    */
   default String describe() { return this.toString(); }
+
+  /**
+   * Returns an array of the children of this node. Children should not change.
+   */
+  Expression[] children();
+
+  /**
+   * List of fields or columns that are referenced by this expression.
+   */
+  default NamedReference[] references() {
+    return Arrays.stream(children()).map(e -> e.references())
+      .flatMap(Arrays::stream).distinct().toArray(NamedReference[]::new);
+  }
 }

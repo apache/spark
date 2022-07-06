@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
@@ -334,14 +334,11 @@ case class StateStoreRestoreExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
-    // before making any changes.
-    // TODO(SPARK-38204)
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions,
-        requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
+      StatefulOperatorPartitioning.getCompatibleDistribution(
+        keyExpressions, getStateInfo, conf) :: Nil
     }
   }
 
@@ -497,14 +494,11 @@ case class StateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
-    // before making any changes.
-    // TODO(SPARK-38204)
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions,
-        requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
+      StatefulOperatorPartitioning.getCompatibleDistribution(
+        keyExpressions, getStateInfo, conf) :: Nil
     }
   }
 
@@ -591,11 +585,8 @@ case class SessionWindowStateStoreRestoreExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
-    // before making any changes.
-    // TODO(SPARK-38204)
-    ClusteredDistribution(keyWithoutSessionExpressions,
-      requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
@@ -706,11 +697,8 @@ case class SessionWindowStateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
-    // before making any changes.
-    // TODO(SPARK-38204)
-    ClusteredDistribution(keyExpressions,
-      requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
@@ -755,6 +743,29 @@ case class SessionWindowStateStoreSaveExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+
+  /**
+   * The class overrides this method since dropping late events are happening in the upstream node
+   * [[SessionWindowStateStoreRestoreExec]], and this class has responsibility to report the number
+   * of dropped late events as a part of StateOperatorProgress.
+   *
+   * This method should be called in the driver after this SparkPlan has been executed and metrics
+   * have been updated.
+   */
+  override def getProgress(): StateOperatorProgress = {
+    val stateOpProgress = super.getProgress()
+
+    // This should be safe, since the method is called in the driver after the plan has been
+    // executed and metrics have been updated.
+    val numRowsDroppedByWatermark = child.collectFirst {
+      case s: SessionWindowStateStoreRestoreExec =>
+        s.longMetric("numRowsDroppedByWatermark").value
+    }.getOrElse(0L)
+
+    stateOpProgress.copy(
+      newNumRowsUpdated = stateOpProgress.numRowsUpdated,
+      newNumRowsDroppedByWatermark = numRowsDroppedByWatermark)
+  }
 }
 
 
@@ -768,12 +779,11 @@ case class StreamingDeduplicateExec(
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] = {
-    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
-    // before making any changes.
-    // TODO(SPARK-38204)
-    ClusteredDistribution(keyExpressions,
-      requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      keyExpressions, getStateInfo, conf) :: Nil
   }
+
+  private val schemaForEmptyRow: StructType = StructType(Array(StructField("__dummy__", NullType)))
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -781,7 +791,7 @@ case class StreamingDeduplicateExec(
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      child.output.toStructType,
+      schemaForEmptyRow,
       numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),

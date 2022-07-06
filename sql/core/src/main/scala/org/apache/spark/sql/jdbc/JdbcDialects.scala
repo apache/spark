@@ -22,17 +22,20 @@ import java.time.{Instant, LocalDate}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -73,7 +76,7 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * for the given Catalyst type.
  */
 @DeveloperApi
-abstract class JdbcDialect extends Serializable with Logging{
+abstract class JdbcDialect extends Serializable with Logging {
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -219,15 +222,63 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
-  class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
-    override def visitFieldReference(fieldRef: FieldReference): String = {
-      if (fieldRef.fieldNames().length != 1) {
-        throw new IllegalArgumentException(
-          "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
+  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    override def visitLiteral(literal: Literal[_]): String = {
+      compileValue(
+        CatalystTypeConverters.convertToScala(literal.value(), literal.dataType())).toString
+    }
+
+    override def visitNamedReference(namedRef: NamedReference): String = {
+      if (namedRef.fieldNames().length > 1) {
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+          "Filter push down", namedRef.toString)
       }
-      quoteIdentifier(fieldRef.fieldNames.head)
+      quoteIdentifier(namedRef.fieldNames.head)
+    }
+
+    override def visitCast(l: String, dataType: DataType): String = {
+      val databaseTypeDefinition =
+        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+      s"CAST($l AS $databaseTypeDefinition)"
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        s"""$funcName(${inputs.mkString(", ")})"""
+      } else {
+        // The framework will catch the error and give up the push-down.
+        // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: $funcName")
+      }
+    }
+
+    override def visitOverlay(inputs: Array[String]): String = {
+      if (isSupportedFunction("OVERLAY")) {
+        super.visitOverlay(inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+      }
+    }
+
+    override def visitTrim(direction: String, inputs: Array[String]): String = {
+      if (isSupportedFunction("TRIM")) {
+        super.visitTrim(direction, inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: TRIM")
+      }
     }
   }
+
+  /**
+   * Returns whether the database supports function.
+   * @param funcName Upper-cased function name
+   * @return True if the database supports function.
+   */
+  @Since("3.3.0")
+  def isSupportedFunction(funcName: String): Boolean = false
 
   /**
    * Converts V2 expression to String representing a SQL expression.
@@ -240,7 +291,9 @@ abstract class JdbcDialect extends Serializable with Logging{
     try {
       Some(jdbcSQLBuilder.build(expr))
     } catch {
-      case _: IllegalArgumentException => None
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
     }
   }
 
@@ -270,6 +323,12 @@ abstract class JdbcDialect extends Serializable with Logging{
       case _ => None
     }
   }
+
+  /**
+   * List the user-defined functions in jdbc dialect.
+   * @return a sequence of tuple from function name to user-defined function.
+   */
+  def functions: Seq[(String, UnboundFunction)] = Nil
 
   /**
    * Create schema with an optional comment. Empty string means no comment.
@@ -488,6 +547,13 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   def getLimitClause(limit: Integer): String = {
     if (limit > 0 ) s"LIMIT $limit" else ""
+  }
+
+  /**
+   * returns the OFFSET clause for the SELECT statement
+   */
+  def getOffsetClause(offset: Integer): String = {
+    if (offset > 0 ) s"OFFSET $offset" else ""
   }
 
   def supportsTableSample: Boolean = false

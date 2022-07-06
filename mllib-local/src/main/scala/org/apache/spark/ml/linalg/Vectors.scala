@@ -372,6 +372,13 @@ object Vectors {
     }
   }
 
+  private[ml] def normalize(vector: Vector, p: Double): Vector = {
+    val n = norm(vector, p)
+    require(n > 0, "Can not normalize zero-length vectors.")
+    BLAS.scal(1.0 / n, vector)
+    vector
+  }
+
   /**
    * Returns the squared distance between two Vectors.
    * @param v1 first Vector.

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.Types
 import java.util.Locale
 
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
@@ -35,30 +36,30 @@ private case object TeradataDialect extends JdbcDialect {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
         case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_POP($distinct${f.inputs().head})")
+          Some(s"VAR_POP($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_SAMP($distinct${f.inputs().head})")
+          Some(s"VAR_SAMP($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_POP($distinct${f.inputs().head})")
+          Some(s"STDDEV_POP($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.inputs().length == 1)
+          assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_SAMP($distinct${f.inputs().head})")
+          Some(s"STDDEV_SAMP($distinct${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
-          assert(f.inputs().length == 2)
-          Some(s"COVAR_POP(${f.inputs().head}, ${f.inputs().last})")
+          assert(f.children().length == 2)
+          Some(s"COVAR_POP(${f.children().head}, ${f.children().last})")
         case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
-          assert(f.inputs().length == 2)
-          Some(s"COVAR_SAMP(${f.inputs().head}, ${f.inputs().last})")
+          assert(f.children().length == 2)
+          Some(s"COVAR_SAMP(${f.children().head}, ${f.children().last})")
         case f: GeneralAggregateFunc if f.name() == "CORR" && f.isDistinct == false =>
-          assert(f.inputs().length == 2)
-          Some(s"CORR(${f.inputs().head}, ${f.inputs().last})")
+          assert(f.children().length == 2)
+          Some(s"CORR(${f.children().head}, ${f.children().last})")
         case _ => None
       }
     )
@@ -95,5 +96,32 @@ private case object TeradataDialect extends JdbcDialect {
 
   override def getLimitClause(limit: Integer): String = {
     ""
+  }
+
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    sqlType match {
+      case Types.NUMERIC =>
+        if (md == null) {
+          Some(DecimalType.SYSTEM_DEFAULT)
+        } else {
+          val scale = md.build().getLong("scale")
+          // In Teradata, define Number without parameter means precision and scale is flexible.
+          // However, in this case, the scale returned from JDBC is 0, which will lead to
+          // fractional part loss. And the precision returned from JDBC is 40, which conflicts to
+          // DecimalType.MAX_PRECISION.
+          // Handle this special case by adding explicit conversion to system default decimal type.
+          if (size == 40) {
+            if (scale == 0) Some(DecimalType.SYSTEM_DEFAULT)
+            // In Teradata, Number(*, scale) is valid but in this case, the precision
+            // returned from JDBC is also 40, which conflicts to DecimalType.MAX_PRECISION.
+            else Some(DecimalType(DecimalType.MAX_PRECISION, scale.toInt))
+          } else {
+            // Normal case, Number(precision, scale) is explicitly set in Teradata
+            Some(DecimalType(size, scale.toInt))
+          }
+        }
+        case _ => None
+    }
   }
 }
