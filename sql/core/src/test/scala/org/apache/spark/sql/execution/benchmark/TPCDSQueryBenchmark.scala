@@ -23,12 +23,14 @@ import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.TPCDSSchema
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 /**
  * Benchmark to measure TPCDS query performance.
@@ -65,23 +67,19 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
     "web_returns", "web_site", "reason", "call_center", "warehouse", "ship_mode", "income_band",
     "time_dim", "web_page")
 
-  def setupTables(dataLocation: String, createTempView: Boolean): Map[String, Long] = {
+  def setupTables(dataLocation: String, tableColumns: Map[String, StructType]): Map[String, Long] =
     tables.map { tableName =>
-      if (createTempView) {
-        spark.read.parquet(s"$dataLocation/$tableName").createOrReplaceTempView(tableName)
-      } else {
-        spark.sql(s"DROP TABLE IF EXISTS $tableName")
-        spark.catalog.createTable(tableName, s"$dataLocation/$tableName", "parquet")
-        // Recover partitions but don't fail if a table is not partitioned.
-        Try {
-          spark.sql(s"ALTER TABLE $tableName RECOVER PARTITIONS")
-        }.getOrElse {
-          logInfo(s"Recovering partitions of table $tableName failed")
-        }
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+      val options = Map("path" -> s"$dataLocation/$tableName")
+      spark.catalog.createTable(tableName, "parquet", tableColumns(tableName), options)
+      // Recover partitions but don't fail if a table is not partitioned.
+      Try {
+        spark.sql(s"ALTER TABLE $tableName RECOVER PARTITIONS")
+      }.getOrElse {
+        logInfo(s"Recovering partitions of table $tableName failed")
       }
       tableName -> spark.table(tableName).count()
     }.toMap
-  }
 
   def runTpcdsQueries(
       queryLocation: String,
@@ -163,7 +161,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
     }
 
     val tableSizes = setupTables(benchmarkArgs.dataLocation,
-      createTempView = !benchmarkArgs.cboEnabled)
+      TPCDSSchemaHelper.getTableColumns)
     if (benchmarkArgs.cboEnabled) {
       spark.sql(s"SET ${SQLConf.CBO_ENABLED.key}=true")
       spark.sql(s"SET ${SQLConf.PLAN_STATS_ENABLED.key}=true")
@@ -185,4 +183,9 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
     runTpcdsQueries(queryLocation = "tpcds-v2.7.0", queries = queriesV2_7ToRun, tableSizes,
       nameSuffix = nameSuffixForQueriesV2_7)
   }
+}
+
+object TPCDSSchemaHelper extends TPCDSSchema {
+  def getTableColumns: Map[String, StructType] =
+    tableColumns.map(kv => kv._1 -> StructType.fromDDL(kv._2))
 }

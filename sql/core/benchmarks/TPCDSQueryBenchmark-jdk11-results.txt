@@ -1,810 +1,810 @@
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q1                                                 1582           1896         444          0.0      Infinity       1.0X
+q1                                                 1339           1579         339          0.3        2903.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q2                                                 1380           1648         380          0.0      Infinity       1.0X
+q2                                                 1321           1500         253          1.7         591.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q3                                                  469            606         126          0.0      Infinity       1.0X
+q3                                                  463            514          48          6.4         156.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q4                                                 8474           8819         488          0.0      Infinity       1.0X
+q4                                                 6635           7140         715          0.8        1273.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q5                                                 2383           2587         289          0.0      Infinity       1.0X
+q5                                                 1638           1754         164          3.4         291.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q6                                                 2887           3209         456          0.0      Infinity       1.0X
+q6                                                 2024           2407         542          1.5         648.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q7                                                  129            229          97          0.0      Infinity       1.0X
+q7                                                  926            935           7          5.3         189.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q8                                                 1261           1531         382          0.0      Infinity       1.0X
+q8                                                 1103           1197         133          2.8         355.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q9                                                 2049           2056          11          0.0      Infinity       1.0X
+q9                                                 1444           1493          69          0.0    41248439.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q10                                                3251           3529         393          0.0      Infinity       1.0X
+q10                                                3069           3244         247          0.7        1482.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q11                                                2939           3294         502          0.0      Infinity       1.0X
+q11                                                2494           2670         248          1.5         661.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q12                                                 112            145          31          0.0      Infinity       1.0X
+q12                                                 270            320          59          3.0         333.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q13                                                 406            450          41          0.0      Infinity       1.0X
+q13                                                1331           1484         217          3.7         270.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q14a                                               9207           9579         526          0.0      Infinity       1.0X
+q14a                                               7211           8039        1171          0.7        1405.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q14b                                               7150           7356         290          0.0      Infinity       1.0X
+q14b                                               5828           5960         188          0.9        1136.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q15                                                 693            766         124          0.0      Infinity       1.0X
+q15                                                 565            605          53          2.9         339.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q16                                                1820           1828          10          0.0      Infinity       1.0X
+q16                                                1353           1502         211          1.2         865.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q17                                                3081           3248         237          0.0      Infinity       1.0X
+q17                                                2772           2931         225          1.7         589.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q18                                                 392            836         500          0.0      Infinity       1.0X
+q18                                                1854           1915          86          1.9         514.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q19                                                 654            785         226          0.0      Infinity       1.0X
+q19                                                 535            693         150          5.8         171.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q20                                                 115            168          51          0.0      Infinity       1.0X
+q20                                                 448            472          20          3.4         292.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q21                                                1731           1814         117          0.0      Infinity       1.0X
+q21                                                1112           1214         144         10.6          94.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q22                                                5287           5697         580          0.0      Infinity       1.0X
+q22                                                4472           4719         349          2.6         377.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q23a                                               9940          10614         953          0.0      Infinity       1.0X
+q23a                                               7856           8054         279          0.7        1502.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q23b                                              10361          10721         509          0.0      Infinity       1.0X
+q23b                                               8528           8742         303          0.6        1630.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q24a                                                699            849         175          0.0      Infinity       1.0X
+q24a                                                583            702         107          5.7         174.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q24b                                                482            685         190          0.0      Infinity       1.0X
+q24b                                                473            577          77          7.0         141.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q25                                                3149           3172          32          0.0      Infinity       1.0X
+q25                                                2511           2685         246          1.9         534.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q26                                                 162            188          21          0.0      Infinity       1.0X
+q26                                                 569            592          19          6.1         164.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q27                                                 243            280          40          0.0      Infinity       1.0X
+q27                                                1140           1158          25          4.3         233.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q28                                                2783           3136         499          0.0      Infinity       1.0X
+q28                                                2298           2427         182          1.3         798.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q29                                                3047           3255         294          0.0      Infinity       1.0X
+q29                                                2686           2789         145          1.7         571.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q30                                                1380           1440          84          0.0      Infinity       1.0X
+q30                                                 805            901          89          0.4        2730.2       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q31                                                2351           2581         325          0.0      Infinity       1.0X
+q31                                                1833           2313         680          2.0         492.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q32                                                 417            542         141          0.0      Infinity       1.0X
+q32                                                 341            390          61          4.5         222.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q33                                                 325            374          36          0.0      Infinity       1.0X
+q33                                                1137           1221         118          4.6         219.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q34                                                 283            366          54          0.0      Infinity       1.0X
+q34                                                 759            795          58          4.0         247.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q35                                                3084           3299         304          0.0      Infinity       1.0X
+q35                                                2550           2866         447          0.8        1231.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q36                                                 974           1000          24          0.0      Infinity       1.0X
+q36                                                 841            846           5          3.5         283.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q37                                                1923           2066         202          0.0      Infinity       1.0X
+q37                                                1483           1569         123          9.0         111.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q38                                                1573           1912         479          0.0      Infinity       1.0X
+q38                                                1303           1431         181          4.0         250.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q39a                                               3000           3176         248          0.0      Infinity       1.0X
+q39a                                               2319           2742         599          5.1         195.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q39b                                               3068           3191         174          0.0      Infinity       1.0X
+q39b                                               2523           2550          38          4.7         213.2       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q40                                                 839            936          84          0.0      Infinity       1.0X
+q40                                                 643            781         121          2.6         383.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q41                                                 121            161          58          0.0      Infinity       1.0X
+q41                                                 260            369          73          0.1       14418.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q42                                                 446            462          18          0.0      Infinity       1.0X
+q42                                                 273            368          68         10.9          91.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q43                                                 687            708          20          0.0      Infinity       1.0X
+q43                                                 551            630          55          5.4         186.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q44                                                1021           1097         107          0.0      Infinity       1.0X
+q44                                                1026           1057          44          2.8         353.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q45                                                 599            638          55          0.0      Infinity       1.0X
+q45                                                 469            573         154          2.0         488.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q46                                                1241           1391         212          0.0      Infinity       1.0X
+q46                                                 920           1075         220          3.4         295.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q47                                                3016           3160         204          0.0      Infinity       1.0X
+q47                                                2593           2836         344          1.1         872.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q48                                                 202            287          70          0.0      Infinity       1.0X
+q48                                                1213           1227          19          4.1         246.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q49                                                1621           2096         672          0.0      Infinity       1.0X
+q49                                                1387           1639         355          4.0         247.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q50                                                1483           1515          45          0.0      Infinity       1.0X
+q50                                                1195           1230          49          2.7         368.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q51                                                4513           4730         307          0.0      Infinity       1.0X
+q51                                                3414           3868         641          1.1         929.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q52                                                 404            461          47          0.0      Infinity       1.0X
+q52                                                 345            407          44          8.6         116.2       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q53                                                 178            252          56          0.0      Infinity       1.0X
+q53                                                 646            683          33          4.6         217.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q54                                                1532           1561          41          0.0      Infinity       1.0X
+q54                                                2324           2403         112          2.3         440.2       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q55                                                 346            432         113          0.0      Infinity       1.0X
+q55                                                 260            341          72         11.4          87.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q56                                                 247            320          65          0.0      Infinity       1.0X
+q56                                                 990           1020          43          5.2         191.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q57                                                2065           2305         339          0.0      Infinity       1.0X
+q57                                                1929           1948          26          0.8        1260.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q58                                                1262           1675         584          0.0      Infinity       1.0X
+q58                                                1178           1295         166          4.4         229.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q59                                                1067           1102          49          0.0      Infinity       1.0X
+q59                                                1124           1182          82          2.6         380.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q60                                                 255            315          47          0.0      Infinity       1.0X
+q60                                                1009           1069          85          5.1         194.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q61                                                 399            519          82          0.0      Infinity       1.0X
+q61                                                1066           1128          89          2.9         341.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q62                                                 421            483          49          0.0      Infinity       1.0X
+q62                                                 374            419          28          2.1         472.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q63                                                 167            225          49          0.0      Infinity       1.0X
+q63                                                 558            617          66          5.3         187.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q64                                                3778           4473         983          0.0      Infinity       1.0X
+q64                                                4712           5577        1224          1.5         680.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q65                                                1189           1220          44          0.0      Infinity       1.0X
+q65                                                1031           1061          43          2.9         347.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q66                                                 343            373          25          0.0      Infinity       1.0X
+q66                                                1090           1444         501          2.1         470.2       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q67                                               10720          10912         272          0.0      Infinity       1.0X
+q67                                                8923           9116         273          0.3        3003.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q68                                                1098           1119          28          0.0      Infinity       1.0X
+q68                                                1028           1064          51          3.0         330.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q69                                                3084           3283         282          0.0      Infinity       1.0X
+q69                                                2706           2865         224          0.8        1306.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q70                                                1267           1300          46          0.0      Infinity       1.0X
+q70                                                 994           1012          26          3.0         336.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q71                                                 161            217          37          0.0      Infinity       1.0X
+q71                                                 756            811          53          6.9         144.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q72                                                2092           2287         275          0.0      Infinity       1.0X
+q72                                              108953         109207         359          0.1        7098.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q73                                                 149            318          89          0.0      Infinity       1.0X
+q73                                                 619            710          81          4.9         202.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q74                                                2668           3015         491          0.0      Infinity       1.0X
+q74                                                2088           2668         820          1.8         553.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q75                                                1024           1068          62          0.0      Infinity       1.0X
+q75                                                2545           2998         641          2.2         451.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q76                                                 745            777          34          0.0      Infinity       1.0X
+q76                                                 509            592          57         10.1          99.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q77                                                1764           2063         422          0.0      Infinity       1.0X
+q77                                                1463           1475          16          3.8         260.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q78                                                4354           5053         988          0.0      Infinity       1.0X
+q78                                                4133           4242         154          1.4         735.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q79                                                1006           1063          81          0.0      Infinity       1.0X
+q79                                                 751            831          94          4.1         245.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q80                                                3528           3882         501          0.0      Infinity       1.0X
+q80                                                2522           2957         615          2.2         446.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q81                                                1063           1132          98          0.0      Infinity       1.0X
+q81                                                 964           1022          82          0.4        2627.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q82                                                2373           2427          76          0.0      Infinity       1.0X
+q82                                                1992           2130         196          7.4         135.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q83                                                 934           1031         137          0.0      Infinity       1.0X
+q83                                                 695            731          32          0.9        1168.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q84                                                1426           1544         167          0.0      Infinity       1.0X
+q84                                                1235           1239           5          1.9         522.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q85                                                2011           2051          57          0.0      Infinity       1.0X
+q85                                                2841           3052         298          1.0        1002.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q86                                                 456            510          69          0.0      Infinity       1.0X
+q86                                                 293            322          43          2.8         362.2       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q87                                                1945           2101         221          0.0      Infinity       1.0X
+q87                                                1314           1379          92          4.0         252.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q88                                                2553           2823         381          0.0      Infinity       1.0X
+q88                                                2202           2267          92          1.4         740.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q89                                                 159            214          45          0.0      Infinity       1.0X
+q89                                                 609            693          78          4.9         204.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q90                                                 378            416          26          0.0      Infinity       1.0X
+q90                                                 266            330          32          3.0         327.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q91                                                 309            369          48          0.0      Infinity       1.0X
+q91                                                 587            630          34          3.9         255.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q92                                                 394            548         184          0.0      Infinity       1.0X
+q92                                                 297            362          58          2.7         366.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q93                                                 131            290          75          0.0      Infinity       1.0X
+q93                                                 762            828          66          4.2         240.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q94                                                 445            524          72          0.0      Infinity       1.0X
+q94                                                 737            886         161          1.1         875.2       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q95                                                 726           1511        1110          0.0      Infinity       1.0X
+q95                                                8426           8574         209          0.1       10007.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q96                                                 346            407          58          0.0      Infinity       1.0X
+q96                                                 300            340          46          9.9         100.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q97                                                2299           2613         444          0.0      Infinity       1.0X
+q97                                                2098           2344         348          2.1         477.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q98                                                 116            170          46          0.0      Infinity       1.0X
+q98                                                 604            636          33          4.9         203.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q99                                                 578            608          28          0.0      Infinity       1.0X
+q99                                                 405            480          68          3.7         267.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q5a-v2.7                                           2931           3061         184          0.0      Infinity       1.0X
+q5a-v2.7                                           1939           2146         292          2.9         344.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q6-v2.7                                            2238           2357         168          0.0      Infinity       1.0X
+q6-v2.7                                            1901           2128         320          1.6         609.2       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q10a-v2.7                                          3329           3516         264          0.0      Infinity       1.0X
+q10a-v2.7                                          2513           2818         431          0.8        1213.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q11-v2.7                                           3063           3261         280          0.0      Infinity       1.0X
+q11-v2.7                                           2274           2471         279          1.7         602.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q12-v2.7                                             95            118          31          0.0      Infinity       1.0X
+q12-v2.7                                            213            245          32          3.8         263.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q14-v2.7                                           6618           7653        1464          0.0      Infinity       1.0X
+q14-v2.7                                           5950           6558         859          0.9        1159.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q14a-v2.7                                         12903          13520         872          0.0      Infinity       1.0X
+q14a-v2.7                                         10474          10940         659          0.5        2041.8       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q18a-v2.7                                          1512           1542          42          0.0      Infinity       1.0X
+q18a-v2.7                                          3064           3264         283          1.2         850.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q20-v2.7                                             91            115          29          0.0      Infinity       1.0X
+q20-v2.7                                            328            365          35          4.7         214.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q22-v2.7                                          21940          21964          34          0.0      Infinity       1.0X
+q22-v2.7                                          16149          16356         293          0.7        1364.4       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q22a-v2.7                                          3770           3840          98          0.0      Infinity       1.0X
+q22a-v2.7                                          3107           3290         259          3.8         262.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q24-v2.7                                            694            711          15          0.0      Infinity       1.0X
+q24-v2.7                                            533            574          36          6.3         159.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q27a-v2.7                                           296            347          59          0.0      Infinity       1.0X
+q27a-v2.7                                          2055           2211         221          2.4         420.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q34-v2.7                                            197            330          77          0.0      Infinity       1.0X
+q34-v2.7                                            678            715          33          4.5         221.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q35-v2.7                                           3115           3220         148          0.0      Infinity       1.0X
+q35-v2.7                                           2592           2650          82          0.8        1251.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q35a-v2.7                                          2843           2882          55          0.0      Infinity       1.0X
+q35a-v2.7                                          2176           2329         217          1.0        1050.9       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q36a-v2.7                                           948            961          12          0.0      Infinity       1.0X
+q36a-v2.7                                           795            808          20          3.7         267.6       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q47-v2.7                                           2833           3373         765          0.0      Infinity       1.0X
+q47-v2.7                                           2348           2770         597          1.3         790.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q49-v2.7                                           1696           1802         150          0.0      Infinity       1.0X
+q49-v2.7                                           1158           1380         314          4.8         206.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q51a-v2.7                                         25198          26070        1232          0.0      Infinity       1.0X
+q51a-v2.7                                         20194          20996        1135          0.2        5499.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q57-v2.7                                           2218           2351         188          0.0      Infinity       1.0X
+q57-v2.7                                           1601           1783         258          1.0        1045.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q64-v2.7                                           2121           3511        1966          0.0      Infinity       1.0X
+q64-v2.7                                           5253           5424         242          1.3         759.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q67a-v2.7                                         13048          13273         318          0.0      Infinity       1.0X
+q67a-v2.7                                         11145          11459         443          0.3        3751.5       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q70a-v2.7                                          1673           1940         377          0.0      Infinity       1.0X
+q70a-v2.7                                          1303           1358          78          2.3         441.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q72-v2.7                                           1526           1882         504          0.0      Infinity       1.0X
+q72-v2.7                                         108129         110913         NaN          0.1        7045.1       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q74-v2.7                                           2252           2704         638          0.0      Infinity       1.0X
+q74-v2.7                                           1874           2366         697          2.0         496.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q75-v2.7                                            872            935          66          0.0      Infinity       1.0X
+q75-v2.7                                           2672           2955         401          2.1         474.3       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q77a-v2.7                                          2183           2197          20          0.0      Infinity       1.0X
+q77a-v2.7                                          1696           1758          88          3.3         302.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q78-v2.7                                           4960           5094         190          0.0      Infinity       1.0X
+q78-v2.7                                           4100           4483         541          1.4         730.2       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q80a-v2.7                                          3584           4060         673          0.0      Infinity       1.0X
+q80a-v2.7                                          3268           3309          58          1.7         579.0       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q86a-v2.7                                           438            456          15          0.0      Infinity       1.0X
+q86a-v2.7                                           383            453          75          2.1         472.7       1.0X
 
 OpenJDK 64-Bit Server VM 11.0.15+10-LTS on Linux 5.13.0-1031-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-q98-v2.7                                             91            125          23          0.0      Infinity       1.0X
+q98-v2.7                                            520            617          71          5.7         175.0       1.0X
 
