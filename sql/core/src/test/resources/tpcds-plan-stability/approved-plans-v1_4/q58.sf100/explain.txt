@@ -276,7 +276,7 @@ Input [5]: [item_id#13, ss_item_rev#14, cs_item_rev#26, item_id#38, ws_item_rev#
 
 (49) TakeOrderedAndProject
 Input [8]: [item_id#13, ss_item_rev#14, ss_dev#41, cs_item_rev#26, cs_dev#42, ws_item_rev#39, ws_dev#43, average#44]
-Arguments: 100, 0, [item_id#13 ASC NULLS FIRST, ss_item_rev#14 ASC NULLS FIRST], [item_id#13, ss_item_rev#14, ss_dev#41, cs_item_rev#26, cs_dev#42, ws_item_rev#39, ws_dev#43, average#44]
+Arguments: 100, [item_id#13 ASC NULLS FIRST, ss_item_rev#14 ASC NULLS FIRST], [item_id#13, ss_item_rev#14, ss_dev#41, cs_item_rev#26, cs_dev#42, ws_item_rev#39, ws_dev#43, average#44]
 
 ===== Subqueries =====
 

@@ -225,7 +225,7 @@ Results [5]: [i_brand_id#8 AS brand_id#30, i_brand#9 AS brand#31, i_manufact_id#
 
 (41) TakeOrderedAndProject
 Input [5]: [brand_id#30, brand#31, i_manufact_id#10, i_manufact#11, ext_price#32]
-Arguments: 100, 0, [ext_price#32 DESC NULLS LAST, brand#31 ASC NULLS FIRST, brand_id#30 ASC NULLS FIRST, i_manufact_id#10 ASC NULLS FIRST, i_manufact#11 ASC NULLS FIRST], [brand_id#30, brand#31, i_manufact_id#10, i_manufact#11, ext_price#32]
+Arguments: 100, [ext_price#32 DESC NULLS LAST, brand#31 ASC NULLS FIRST, brand_id#30 ASC NULLS FIRST, i_manufact_id#10 ASC NULLS FIRST, i_manufact#11 ASC NULLS FIRST], [brand_id#30, brand#31, i_manufact_id#10, i_manufact#11, ext_price#32]
 
 ===== Subqueries =====
 

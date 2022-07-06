@@ -119,7 +119,7 @@ Results [9]: [s_store_name#11, s_store_id#10, MakeDecimal(sum(UnscaledValue(CASE
 
 (21) TakeOrderedAndProject
 Input [9]: [s_store_name#11, s_store_id#10, sun_sales#36, mon_sales#37, tue_sales#38, wed_sales#39, thu_sales#40, fri_sales#41, sat_sales#42]
-Arguments: 100, 0, [s_store_name#11 ASC NULLS FIRST, s_store_id#10 ASC NULLS FIRST, sun_sales#36 ASC NULLS FIRST, mon_sales#37 ASC NULLS FIRST, tue_sales#38 ASC NULLS FIRST, wed_sales#39 ASC NULLS FIRST, thu_sales#40 ASC NULLS FIRST, fri_sales#41 ASC NULLS FIRST, sat_sales#42 ASC NULLS FIRST], [s_store_name#11, s_store_id#10, sun_sales#36, mon_sales#37, tue_sales#38, wed_sales#39, thu_sales#40, fri_sales#41, sat_sales#42]
+Arguments: 100, [s_store_name#11 ASC NULLS FIRST, s_store_id#10 ASC NULLS FIRST, sun_sales#36 ASC NULLS FIRST, mon_sales#37 ASC NULLS FIRST, tue_sales#38 ASC NULLS FIRST, wed_sales#39 ASC NULLS FIRST, thu_sales#40 ASC NULLS FIRST, fri_sales#41 ASC NULLS FIRST, sat_sales#42 ASC NULLS FIRST], [s_store_name#11, s_store_id#10, sun_sales#36, mon_sales#37, tue_sales#38, wed_sales#39, thu_sales#40, fri_sales#41, sat_sales#42]
 
 ===== Subqueries =====
 

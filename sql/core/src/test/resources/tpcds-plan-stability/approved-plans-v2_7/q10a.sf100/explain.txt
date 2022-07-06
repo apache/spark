@@ -244,7 +244,7 @@ Results [14]: [cd_gender#24, cd_marital_status#25, cd_education_status#26, count
 
 (45) TakeOrderedAndProject
 Input [14]: [cd_gender#24, cd_marital_status#25, cd_education_status#26, cnt1#36, cd_purchase_estimate#27, cnt2#37, cd_credit_rating#28, cnt3#38, cd_dep_count#29, cnt4#39, cd_dep_employed_count#30, cnt5#40, cd_dep_college_count#31, cnt6#41]
-Arguments: 100, 0, [cd_gender#24 ASC NULLS FIRST, cd_marital_status#25 ASC NULLS FIRST, cd_education_status#26 ASC NULLS FIRST, cd_purchase_estimate#27 ASC NULLS FIRST, cd_credit_rating#28 ASC NULLS FIRST, cd_dep_count#29 ASC NULLS FIRST, cd_dep_employed_count#30 ASC NULLS FIRST, cd_dep_college_count#31 ASC NULLS FIRST], [cd_gender#24, cd_marital_status#25, cd_education_status#26, cnt1#36, cd_purchase_estimate#27, cnt2#37, cd_credit_rating#28, cnt3#38, cd_dep_count#29, cnt4#39, cd_dep_employed_count#30, cnt5#40, cd_dep_college_count#31, cnt6#41]
+Arguments: 100, [cd_gender#24 ASC NULLS FIRST, cd_marital_status#25 ASC NULLS FIRST, cd_education_status#26 ASC NULLS FIRST, cd_purchase_estimate#27 ASC NULLS FIRST, cd_credit_rating#28 ASC NULLS FIRST, cd_dep_count#29 ASC NULLS FIRST, cd_dep_employed_count#30 ASC NULLS FIRST, cd_dep_college_count#31 ASC NULLS FIRST], [cd_gender#24, cd_marital_status#25, cd_education_status#26, cnt1#36, cd_purchase_estimate#27, cnt2#37, cd_credit_rating#28, cnt3#38, cd_dep_count#29, cnt4#39, cd_dep_employed_count#30, cnt5#40, cd_dep_college_count#31, cnt6#41]
 
 ===== Subqueries =====
 

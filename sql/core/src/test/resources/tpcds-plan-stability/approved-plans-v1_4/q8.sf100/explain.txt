@@ -276,7 +276,7 @@ Results [2]: [s_store_name#7, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#31
 
 (49) TakeOrderedAndProject
 Input [2]: [s_store_name#7, sum(ss_net_profit)#32]
-Arguments: 100, 0, [s_store_name#7 ASC NULLS FIRST], [s_store_name#7, sum(ss_net_profit)#32]
+Arguments: 100, [s_store_name#7 ASC NULLS FIRST], [s_store_name#7, sum(ss_net_profit)#32]
 
 ===== Subqueries =====
 

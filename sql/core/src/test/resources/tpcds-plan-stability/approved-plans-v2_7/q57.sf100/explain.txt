@@ -277,7 +277,7 @@ Input [14]: [i_category#15, i_brand#14, cc_name#10, d_year#7, d_moy#8, sum_sales
 
 (52) TakeOrderedAndProject
 Input [8]: [i_category#15, i_brand#14, d_year#7, d_moy#8, avg_monthly_sales#25, sum_sales#21, psum#46, nsum#47]
-Arguments: 100, 0, [(sum_sales#21 - avg_monthly_sales#25) ASC NULLS FIRST, d_year#7 ASC NULLS FIRST], [i_category#15, i_brand#14, d_year#7, d_moy#8, avg_monthly_sales#25, sum_sales#21, psum#46, nsum#47]
+Arguments: 100, [(sum_sales#21 - avg_monthly_sales#25) ASC NULLS FIRST, d_year#7 ASC NULLS FIRST], [i_category#15, i_brand#14, d_year#7, d_moy#8, avg_monthly_sales#25, sum_sales#21, psum#46, nsum#47]
 
 ===== Subqueries =====
 

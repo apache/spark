@@ -2044,9 +2044,16 @@ class Dataset[T] private[sql](
     Limit(Literal(n), logicalPlan)
   }
 
-  def limitRange(start: Int, end: Int): Dataset[T] = withTypedPlan {
-    Limit(Literal(end - start), Offset(Literal(start), logicalPlan))
+  /**
+   * Returns a new Dataset by skipping the first `n` rows.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def offset(n: Int): Dataset[T] = withTypedPlan {
+    Offset(Literal(n), logicalPlan)
   }
+
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
    *

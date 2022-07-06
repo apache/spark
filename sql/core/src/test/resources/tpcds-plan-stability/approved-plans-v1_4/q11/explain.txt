@@ -410,7 +410,7 @@ Input [7]: [customer_id#21, year_total#22, customer_preferred_cust_flag#43, year
 
 (72) TakeOrderedAndProject
 Input [1]: [customer_preferred_cust_flag#43]
-Arguments: 100, 0, [customer_preferred_cust_flag#43 ASC NULLS FIRST], [customer_preferred_cust_flag#43]
+Arguments: 100, [customer_preferred_cust_flag#43 ASC NULLS FIRST], [customer_preferred_cust_flag#43]
 
 ===== Subqueries =====
 
