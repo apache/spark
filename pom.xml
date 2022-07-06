@@ -821,7 +821,7 @@
       </dependency>
       <!--
         When upgrading `RoaringBitmap`, the results of `MapStatusesConvertBenchmark`
-        and `MapStatusesSerDeserBenchmark` should to be updated
+        and `MapStatusesSerDeserBenchmark` should to be updated.
       -->
       <dependency>
         <groupId>org.roaringbitmap</groupId>
