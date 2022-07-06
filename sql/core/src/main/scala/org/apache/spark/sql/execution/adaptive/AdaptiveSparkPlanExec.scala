@@ -241,14 +241,15 @@ case class AdaptiveSparkPlanExec(
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
           stagesToReplace = result.newStages ++ stagesToReplace
-          executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
+          val notMaterialised = result.newStages.filter(!_.isMaterialized)
+          executionId.foreach(onUpdatePlan(_, notMaterialised.map(_.plan)))
 
           // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
           // for tasks to be scheduled and leading to broadcast timeout.
           // This partial fix only guarantees the start of materialization for BroadcastQueryStage
           // is prior to others, but because the submission of collect job for broadcasting is
           // running in another thread, the issue is not completely resolved.
-          val reorderedNewStages = result.newStages
+          val reorderedNewStages = notMaterialised
             .sortWith {
               case (_: BroadcastQueryStageExec, _: BroadcastQueryStageExec) => false
               case (_: BroadcastQueryStageExec, _) => true
@@ -483,7 +484,7 @@ case class AdaptiveSparkPlanExec(
           CreateStageResult(
             newPlan = stage,
             allChildStagesMaterialized = isMaterialized,
-            newStages = if (isMaterialized) Seq.empty else Seq(stage))
+            newStages = Seq(stage))
 
         case _ =>
           val result = createQueryStages(e.child)
@@ -505,7 +506,7 @@ case class AdaptiveSparkPlanExec(
             CreateStageResult(
               newPlan = newStage,
               allChildStagesMaterialized = isMaterialized,
-              newStages = if (isMaterialized) Seq.empty else Seq(newStage))
+              newStages = Seq(newStage))
           } else {
             CreateStageResult(newPlan = newPlan,
               allChildStagesMaterialized = false, newStages = result.newStages)
