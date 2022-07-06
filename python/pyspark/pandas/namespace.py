@@ -286,9 +286,8 @@ def read_csv(
         Indicates the encoding to read file
     options : dict
         All other options passed directly into Spark's data source.
-    na_filter : bool
-        If na_filter is false missing values will remain as is otherwise it
-        will be converted to None. By default it will True
+    na_filter : bool, default True
+        Detect missing value markers (empty string and the value of na_values)
 
     Returns
     -------
