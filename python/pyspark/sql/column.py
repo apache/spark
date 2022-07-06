@@ -147,25 +147,6 @@ def _bin_func_op(
     return _
 
 
-def _bin_op_other_str(
-    name: str,
-    doc: str = "binary operator",
-) -> Callable[
-    ["Column", Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]], "Column"
-]:
-    """Create a method for given binary operator, where the `other` operand is a str"""
-
-    def _(
-        self: "Column",
-        other: str,
-    ) -> "Column":
-        njc = getattr(self._jc, name)(other)
-        return Column(njc)
-
-    _.__doc__ = doc
-    return _
-
-
 def _bin_op(
     name: str,
     doc: str = "binary operator",
@@ -592,57 +573,6 @@ class Column:
     >>> df.filter(df.name.contains('o')).collect()
     [Row(age=5, name='Bob')]
     """
-    _rlike_doc = """
-    SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
-    match.
-
-    Parameters
-    ----------
-    other : str
-        an extended regex expression
-
-    Examples
-    --------
-    >>> df.filter(df.name.rlike('ice$')).collect()
-    [Row(age=2, name='Alice')]
-    """
-    _like_doc = """
-    SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
-
-    Parameters
-    ----------
-    other : str
-        a SQL LIKE pattern
-
-    See Also
-    --------
-    pyspark.sql.Column.rlike
-
-    Examples
-    --------
-    >>> df.filter(df.name.like('Al%')).collect()
-    [Row(age=2, name='Alice')]
-    """
-    _ilike_doc = """
-    SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
-    based on a case insensitive match.
-
-    .. versionadded:: 3.3.0
-
-    Parameters
-    ----------
-    other : str
-        a SQL LIKE pattern
-
-    See Also
-    --------
-    pyspark.sql.Column.rlike
-
-    Examples
-    --------
-    >>> df.filter(df.name.ilike('%Ice')).collect()
-    [Row(age=2, name='Alice')]
-    """
     _startswith_doc = """
     String starts with. Returns a boolean :class:`Column` based on a string match.
 
@@ -675,11 +605,71 @@ class Column:
     """
 
     contains = _bin_op("contains", _contains_doc)
-    rlike = _bin_op_other_str("rlike", _rlike_doc)
-    like = _bin_op_other_str("like", _like_doc)
-    ilike = _bin_op_other_str("ilike", _ilike_doc)
     startswith = _bin_op("startsWith", _startswith_doc)
     endswith = _bin_op("endsWith", _endswith_doc)
+
+    def like(self: "Column", other: str) -> "Column":
+        """
+        SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
+
+        Parameters
+        ----------
+        other : str
+            a SQL LIKE pattern
+
+        See Also
+        --------
+        pyspark.sql.Column.rlike
+
+        Examples
+        --------
+        >>> df.filter(df.name.like('Al%')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        njc = getattr(self._jc, "like")(other)
+        return Column(njc)
+
+    def rlike(self: "Column", other: str) -> "Column":
+        """
+        SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
+        match.
+
+        Parameters
+        ----------
+        other : str
+            an extended regex expression
+
+        Examples
+        --------
+        >>> df.filter(df.name.rlike('ice$')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        njc = getattr(self._jc, "rlike")(other)
+        return Column(njc)
+
+    def ilike(self: "Column", other: str) -> "Column":
+        """
+        SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
+        based on a case insensitive match.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        other : str
+            a SQL LIKE pattern
+
+        See Also
+        --------
+        pyspark.sql.Column.rlike
+
+        Examples
+        --------
+        >>> df.filter(df.name.ilike('%Ice')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        njc = getattr(self._jc, "ilike")(other)
+        return Column(njc)
 
     @overload
     def substr(self, startPos: int, length: int) -> "Column":
