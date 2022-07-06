@@ -21,13 +21,13 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.jupiter.api.BeforeEach;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple2$;
 import scala.Tuple3$;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
@@ -77,7 +77,7 @@ public class JavaRankingMetricsSuite extends SharedSparkSession {
   @Test
   public void rankingMetricsWithRelevance() {
     RankingMetrics<?> metrics = RankingMetrics.of(predictionLabelsAndRelevance);
-    Assert.assertEquals(0.355026, metrics.meanAveragePrecision(), 1e-5);
-    Assert.assertEquals(0.511959, metrics.ndcgAt(3), 1e-5);
+    Assertions.assertEquals(0.355026, metrics.meanAveragePrecision(), 1e-5);
+    Assertions.assertEquals(0.511959, metrics.ndcgAt(3), 1e-5);
   }
 }
