@@ -40,3 +40,4 @@ jobs:
         {
           "pyspark": "true"
         }
+    secrets: inherit

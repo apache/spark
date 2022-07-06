@@ -258,7 +258,7 @@ jobs:
 
   infra-image:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).pyspark == 'true'
+    if: fromJson(needs.precondition.outputs.required).pyspark == 'true' && ${{ inputs.branch }} == 'master'
     runs-on: ubuntu-latest
     steps:
       - name: Login to GitHub Container Registry
@@ -305,7 +305,12 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: ghcr.io/${{ needs.precondition.outputs.user }}/apache-spark-ci-image-${{ needs.precondition.outputs.img_tag }}
+      # Currently, only enable docker build from cache for `master` branch jobs
+      image: >-
+        ${{
+          (inputs.branch == 'master' && format('ghcr.io/{0}/apache-spark-ci-image-{1}', needs.precondition.outputs.user, needs.precondition.outputs.img_tag))
+          || 'dongjoon/apache-spark-github-action-image:20220207'
+        }}
     strategy:
       fail-fast: false
       matrix:
@@ -859,17 +864,19 @@ jobs:
   # - 1. Generate the token from https://github.com/settings/tokens with `write:packages` and `delete:packages`
   # - 2. Add the the token as secrets `GHCR_DEL` in https://github.com/{username}}/spark/settings/secrets/actions
   infra-image-post:
-    # Always runs after pyspark/sparkr/lint have completed, regardless of whether they were successful
+    # Always runs after pyspark have completed, regardless of whether they were successful
     if: always()
-    needs: [pyspark, sparkr, lint]
+    needs: [precondition, pyspark]
     runs-on: ubuntu-20.04
+    # Secrets cannot be used by if condition, so add env in here
+    # See also: https://github.com/actions/runner/issues/1138
     env:
       GHCR_DEL: ${{ secrets.GHCR_DEL }}
     steps:
     - name: Cleanup docker image
       # Only cleanup the ci images when users set the secrets in fork repo
-      if: ${{ env.GHCR_DEL }}
-      # TODO: Switch to actions/delete-package-versions when it supported by:
+      if: ${{ env.GHCR_DEL }} && ${{ inputs.branch }} == 'master'
+      # TODO: Switch to actions/delete-package-versions when it is supported:
       # https://github.com/actions/delete-package-versions/issues/74
       run: >
         curl

@@ -40,3 +40,4 @@ jobs:
           "sparkr": "true",
           "tpcds-1g": "true"
         }
+    secrets: inherit

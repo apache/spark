@@ -45,3 +45,4 @@ jobs:
           "tpcds-1g": "true",
           "docker-integration-tests": "true"
         }
+    secrets: inherit
