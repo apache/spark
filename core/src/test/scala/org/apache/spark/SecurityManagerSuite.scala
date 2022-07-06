@@ -29,7 +29,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.security.GroupMappingServiceProvider
-import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
+import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv}
 
 class DummyGroupMappingServiceProvider extends GroupMappingServiceProvider {
 
@@ -512,15 +512,6 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   private def encodeFileAsBase64(secretFile: File) = {
     Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
-  }
-
-  private def withSecretFile(contents: String = "test-secret")(f: File => Unit): Unit = {
-    val secretDir = Utils.createTempDir("temp-secrets")
-    val secretFile = new File(secretDir, "temp-secret.txt")
-    Files.write(secretFile.toPath, contents.getBytes(UTF_8))
-    try f(secretFile) finally {
-      Utils.deleteRecursively(secretDir)
-    }
   }
 }
 
