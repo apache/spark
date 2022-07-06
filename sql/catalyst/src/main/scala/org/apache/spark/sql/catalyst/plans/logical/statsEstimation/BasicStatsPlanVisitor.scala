@@ -102,10 +102,7 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitWindow(p: Window): Statistics = {
     val childStats = p.child.stats
-    childStats.rowCount.map { rowCount =>
-      val windowOutputDataSize = EstimationUtils.getSizePerRow(p.windowOutputSet.toSeq) * rowCount
-      childStats.copy(sizeInBytes = childStats.sizeInBytes + windowOutputDataSize)
-    }.getOrElse(childStats)
+    fallback(p).copy(rowCount = childStats.rowCount, attributeStats = childStats.attributeStats)
   }
 
   override def visitSort(p: Sort): Statistics = fallback(p)
