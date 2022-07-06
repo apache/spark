@@ -225,7 +225,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         if (supportListIndexes) {
           val indexes = jdbcTable.listIndexes()
           assert(indexes.size == 1)
-          assert(indexes(0).indexName() == "i1")
+          assert(indexes.head.indexName() == "i1")
         }
 
         sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
@@ -234,7 +234,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         if (supportListIndexes) {
           val indexes = jdbcTable.listIndexes()
           assert(indexes.size == 2)
-          assert(indexes.map(index => index.indexName()).sorted === Array("i1", "i2"))
+          assert(indexes.map(_.indexName()).sorted === Array("i1", "i2"))
         }
 
         // This should pass without exception
@@ -250,7 +250,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         if (supportListIndexes) {
           val indexes = jdbcTable.listIndexes()
           assert(indexes.size == 1)
-          assert(indexes(0).indexName() == "i2")
+          assert(indexes.head.indexName() == "i2")
         }
 
         sql(s"DROP index i2 ON $catalogName.new_table")
