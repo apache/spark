@@ -1004,3 +1004,42 @@ case class RegExpCount(left: Expression, right: Expression)
       newChildren: IndexedSeq[Expression]): RegExpCount =
     copy(left = newChildren(0), right = newChildren(1))
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str, regexp) - Returns the substring that matches the regular expression `regexp` within the string `str`. If the regular expression is not found, the result is null.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression.
+      * regexp - a string representing a regular expression. The regex string should be a Java regular expression.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en');
+       Steven
+      > SELECT _FUNC_('Steven Jones and Stephen Smith are the best players', 'Jeck');
+       NULL
+  """,
+  since = "3.4.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class RegExpSubStr(left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression =
+    new NullIf(
+      RegExpExtract(subject = left, regexp = right, idx = Literal(0)),
+      Literal(""))
+
+  override def prettyName: String = "regexp_substr"
+
+  override def children: Seq[Expression] = Seq(left, right)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): RegExpSubStr =
+    copy(left = newChildren(0), right = newChildren(1))
+}
