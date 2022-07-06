@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.NestedColumnAliasingSuite.collectGeneratedAliases
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -463,37 +462,6 @@ class ColumnPruningSuite extends PlanTest {
     val plan1 = AttachDistributedSequence($"d".int, input).select($"a")
     val correctAnswer1 = Project(Seq($"a"), input).analyze
     comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
-  }
-
-  test("SPARK-38531: Nested field pruning for Project and PosExplode") {
-    val name = StructType.fromDDL("first string, middle string, last string")
-    val employer = StructType.fromDDL("id int, company struct<name:string, address:string>")
-    val contact = LocalRelation(
-      'id.int,
-      'name.struct(name),
-      'address.string,
-      'friends.array(name),
-      'relatives.map(StringType, name),
-      'employer.struct(employer))
-
-    val query = contact
-      .select('id, 'friends)
-      .generate(PosExplode('friends))
-      .select('col.getField("middle"))
-      .analyze
-    val optimized = Optimize.execute(query)
-
-    val aliases = collectGeneratedAliases(optimized)
-
-    val expected = contact
-      // GetStructField is pushed down, unused id column is pruned.
-      .select(
-        'friends.getField("middle").as(aliases(0)))
-      .generate(PosExplode($"${aliases(0)}"),
-        unrequiredChildIndex = Seq(0)) // unrequiredChildIndex is added.
-      .select('col.as("col.middle"))
-      .analyze
-    comparePlans(optimized, expected)
   }
 
   test("SPARK-39445: Remove the window if windowExpressions is empty in column pruning") {

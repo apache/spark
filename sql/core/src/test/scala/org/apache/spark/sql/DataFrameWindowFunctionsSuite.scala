@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
  */
 class DataFrameWindowFunctionsSuite extends QueryTest
   with SharedSparkSession
-  with AdaptiveSparkPlanHelper{
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 

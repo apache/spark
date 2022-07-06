@@ -697,7 +697,7 @@ private[spark] class PythonAccumulatorV2(
     @transient private val serverHost: String,
     private val serverPort: Int,
     private val secretToken: String)
-  extends CollectionAccumulator[Array[Byte]] with Logging{
+  extends CollectionAccumulator[Array[Byte]] with Logging {
 
   Utils.checkHost(serverHost)
 

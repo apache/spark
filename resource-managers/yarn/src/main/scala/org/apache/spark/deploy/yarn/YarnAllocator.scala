@@ -342,8 +342,10 @@ private[yarn] class YarnAllocator(
       } else {
         customSparkResources
       }
-      val resource =
-        Resource.newInstance(resourcesWithDefaults.totalMemMiB.toInt, resourcesWithDefaults.cores)
+
+      assert(resourcesWithDefaults.cores.nonEmpty)
+      val resource = Resource.newInstance(
+        resourcesWithDefaults.totalMemMiB.toInt, resourcesWithDefaults.cores.get)
       ResourceRequestHelper.setResourceRequests(customResources, resource)
       logDebug(s"Created resource capability: $resource")
       rpIdToYarnResource.putIfAbsent(rp.id, resource)
@@ -753,7 +755,11 @@ private[yarn] class YarnAllocator(
       val defaultResources = ResourceProfile.getDefaultProfileExecutorResources(sparkConf)
       val containerMem = rp.executorResources.get(ResourceProfile.MEMORY).
         map(_.amount).getOrElse(defaultResources.executorMemoryMiB).toInt
-      val containerCores = rp.getExecutorCores.getOrElse(defaultResources.cores)
+
+      assert(defaultResources.cores.nonEmpty)
+      val defaultCores = defaultResources.cores.get
+      val containerCores = rp.getExecutorCores.getOrElse(defaultCores)
+
       val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size
       if (rpRunningExecs < getOrUpdateTargetNumExecutorsForRPId(rpId)) {
         getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
