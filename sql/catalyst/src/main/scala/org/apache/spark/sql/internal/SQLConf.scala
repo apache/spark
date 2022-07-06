@@ -3781,6 +3781,14 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
+  val PLANNED_WRITE_ENABLED = buildConf("spark.sql.plannedWrite.enabled")
+    .internal()
+    .doc("When set to true, Spark adds logical sorts to V1 write commands if needed so that " +
+      "`FileFormatWriter` does not need to insert physical sorts.")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val INFER_NESTED_DICT_AS_STRUCT = buildConf("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
     .doc("PySpark's SparkSession.createDataFrame infers the nested dict as a map by default. " +
       "When it set to true, it infers the nested dict as a struct.")
@@ -4616,6 +4624,8 @@ class SQLConf extends Serializable with Logging {
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
+
+  def plannedWriteEnabled: Boolean = getConf(SQLConf.PLANNED_WRITE_ENABLED)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 

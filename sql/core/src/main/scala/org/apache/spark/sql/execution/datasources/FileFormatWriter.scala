@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
@@ -126,38 +125,8 @@ object FileFormatWriter extends Logging {
     }
     val empty2NullPlan = if (needConvert) ProjectExec(projectList, plan) else plan
 
-    val writerBucketSpec = bucketSpec.map { spec =>
-      val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
-
-      if (options.getOrElse(BucketingUtils.optionForHiveCompatibleBucketWrite, "false") ==
-        "true") {
-        // Hive bucketed table: use `HiveHash` and bitwise-and as bucket id expression.
-        // Without the extra bitwise-and operation, we can get wrong bucket id when hash value of
-        // columns is negative. See Hive implementation in
-        // `org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#getBucketNumber()`.
-        val hashId = BitwiseAnd(HiveHash(bucketColumns), Literal(Int.MaxValue))
-        val bucketIdExpression = Pmod(hashId, Literal(spec.numBuckets))
-
-        // The bucket file name prefix is following Hive, Presto and Trino conversion, so this
-        // makes sure Hive bucketed table written by Spark, can be read by other SQL engines.
-        //
-        // Hive: `org.apache.hadoop.hive.ql.exec.Utilities#getBucketIdFromFile()`.
-        // Trino: `io.trino.plugin.hive.BackgroundHiveSplitLoader#BUCKET_PATTERNS`.
-        val fileNamePrefix = (bucketId: Int) => f"$bucketId%05d_0_"
-        WriterBucketSpec(bucketIdExpression, fileNamePrefix)
-      } else {
-        // Spark bucketed table: use `HashPartitioning.partitionIdExpression` as bucket id
-        // expression, so that we can guarantee the data distribution is same between shuffle and
-        // bucketed data source, which enables us to only shuffle one side when join a bucketed
-        // table and a normal one.
-        val bucketIdExpression = HashPartitioning(bucketColumns, spec.numBuckets)
-          .partitionIdExpression
-        WriterBucketSpec(bucketIdExpression, (_: Int) => "")
-      }
-    }
-    val sortColumns = bucketSpec.toSeq.flatMap {
-      spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
-    }
+    val writerBucketSpec = V1WritesUtils.getWriterBucketSpec(bucketSpec, dataColumns, options)
+    val sortColumns = V1WritesUtils.getBucketSortColumns(bucketSpec, dataColumns)
 
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
@@ -211,6 +180,7 @@ object FileFormatWriter extends Logging {
 
     try {
       val (rdd, concurrentOutputWriterSpec) = if (orderingMatched) {
+        logInfo(s"Output ordering is matched for write job ${description.uuid}")
         (empty2NullPlan.execute(), None)
       } else {
         // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
