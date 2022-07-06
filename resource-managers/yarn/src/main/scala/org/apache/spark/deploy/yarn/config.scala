@@ -446,12 +446,6 @@ package object config extends Logging {
     .toSequence
     .createWithDefault(Nil)
 
-  // Enable executor decommissioning when node is in decommissioning state
-  private[spark] val YARN_EXECUTOR_DECOMMISSION_ENABLED =
-    ConfigBuilder("spark.yarn.executor.decommission.enabled")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val YARN_GPU_DEVICE = ConfigBuilder("spark.yarn.resourceGpuDeviceName")
     .version("3.2.1")
     .doc("Specify the mapping of the Spark resource type of gpu to the YARN resource "

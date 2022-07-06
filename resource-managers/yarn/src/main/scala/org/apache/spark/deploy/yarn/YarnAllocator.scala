@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
@@ -27,7 +26,6 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -43,7 +41,8 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{DecommissionExecutorsOnHost, RemoveExecutor, RetrieveLastAllocatedExecutorId}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
@@ -399,8 +398,6 @@ private[yarn] class YarnAllocator(
     val allocatedContainers = allocateResponse.getAllocatedContainers()
     allocatorNodeHealthTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
-    decommissionNodes(allocateResponse)
-
     if (allocatedContainers.size > 0) {
       logDebug(("Allocated containers: %d. Current executor count: %d. " +
         "Launching executor count: %d. Cluster resources: %s.")
@@ -420,30 +417,6 @@ private[yarn] class YarnAllocator(
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, getNumExecutorsRunning))
     }
-  }
-
-  private def decommissionNodes(allocateResponse: AllocateResponse): Unit = {
-    if (sparkConf.get(YARN_EXECUTOR_DECOMMISSION_ENABLED)) {
-      try {
-        allocateResponse.getUpdatedNodes.asScala.filter(shouldDecommissionNode).
-          foreach(node => driverRef.send(DecommissionExecutorsOnHost(getHostAddress(node))))
-      } catch {
-        case e: Exception => logError("Node decommissioning failed", e)
-      }
-    }
-  }
-
-  private def shouldDecommissionNode(nodeReport: NodeReport): Boolean = {
-    nodeReport.getNodeState match {
-      case NodeState.DECOMMISSIONING =>
-        true
-      case _ =>
-        false
-    }
-  }
-
-  private def getHostAddress(nodeReport: NodeReport): String = {
-    new URI(s"http://${nodeReport.getHttpAddress}").getHost
   }
 
   /**
