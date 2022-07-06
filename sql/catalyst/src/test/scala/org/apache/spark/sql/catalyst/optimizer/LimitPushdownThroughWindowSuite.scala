@@ -51,7 +51,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   private val testRelation = LocalRelation.fromExternalRows(
     Seq("a".attr.int, "b".attr.int, "c".attr.int),
-    1.to(6).map(_ => Row(1, 2, 3)))
+    1.to(100).map(_ => Row(1, 2, 3)))
 
   private val a = testRelation.output(0)
   private val b = testRelation.output(1)
@@ -175,7 +175,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .limit(20)
+      .limit(200)
 
     comparePlans(
       Optimize.execute(originalQuery.analyze),
@@ -239,8 +239,8 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
   }
 
   test("SPARK-39600: Limit should LessThan/LessThanOrEqual filter value") {
-    Seq(3, 4, 5, 6).foreach { limitVal =>
-      Seq(3, 4, 5, 6).foreach { filterVal =>
+    Seq(40, 80, 120).foreach { limitVal =>
+      Seq(40, 80, 120).foreach { filterVal =>
         val originalQuery = testRelation
           .select(a, b, c,
             windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
@@ -253,7 +253,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
             windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
           .where('rn < Literal(filterVal))
 
-        if (limitVal < filterVal && limitVal < 6) {
+        if (limitVal < filterVal && limitVal < 100) {
           comparePlans(
             Optimize.execute(originalQuery.analyze),
             WithoutOptimize.execute(correctAnswer.analyze))
@@ -264,54 +264,6 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
         }
       }
     }
-
-    Seq(3, 4, 5, 6).foreach { limitVal =>
-      Seq(3, 4, 5, 6).foreach { filterVal =>
-        val originalQuery = testRelation
-          .select(a, b, c,
-            windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-          .where('rn <= Literal(filterVal))
-          .sortBy(a.asc, b.asc)
-          .limit(limitVal)
-        val correctAnswer = testRelation
-          .orderBy(a.asc, c.desc)
-          .limit(limitVal)
-          .select(a, b, c,
-            windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-          .where('rn <= Literal(filterVal))
-          .sortBy(a.asc, b.asc)
-
-        if (limitVal <= filterVal && limitVal < 6) {
-          comparePlans(
-            Optimize.execute(originalQuery.analyze),
-            WithoutOptimize.execute(correctAnswer.analyze))
-        } else {
-          comparePlans(
-            Optimize.execute(originalQuery.analyze),
-            WithoutOptimize.execute(originalQuery.analyze))
-        }
-      }
-    }
-  }
-
-  test("SPARK-39600: Push down if partitionSpec is the prefix of sort exprs") {
-    val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .where('rn <= Literal(5))
-      .orderBy(b.asc)
-      .limit(5)
-    val correctAnswer = testRelation
-      .orderBy(b.asc, c.desc)
-      .limit(5)
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .where('rn <= Literal(5))
-      .orderBy(b.asc)
-
-    comparePlans(
-      Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(correctAnswer.analyze))
   }
 
   test("SPARK-39600: Push down if sort exprs is not exist") {
@@ -326,46 +278,6 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       .select(a, b, c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
       .where('rn <= Literal(5))
-
-    comparePlans(
-      Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(correctAnswer.analyze))
-  }
-
-  test("SPARK-39600: Push down should keep the origin order") {
-    val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .where('rn <= Literal(5))
-      .orderBy(b.desc, c.asc, a.desc)
-      .limit(5)
-    val correctAnswer = testRelation
-      .orderBy(b.desc, c.desc)
-      .limit(5)
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .where('rn <= Literal(5))
-      .orderBy(b.desc, c.asc, a.desc)
-
-    comparePlans(
-      Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(correctAnswer.analyze))
-  }
-
-  test("SPARK-39600: Order exprs is subset of partitionSpec") {
-    val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(a :: b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .where('rn <= Literal(5))
-      .orderBy(a.desc)
-      .limit(5)
-    val correctAnswer = testRelation
-      .orderBy(a.desc, b.asc, c.desc)
-      .limit(5)
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(a :: b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .where('rn <= Literal(5))
-      .orderBy(a.desc)
 
     comparePlans(
       Optimize.execute(originalQuery.analyze),

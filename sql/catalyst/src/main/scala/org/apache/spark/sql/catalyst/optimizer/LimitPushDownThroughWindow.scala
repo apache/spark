@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, Ascending, Attribute, CurrentRow, DenseRank, Expression, IntegerLiteral, LessThan, LessThanOrEqual, NamedExpression, NTile, Rank, RowFrame, RowNumber, SortOrder, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, WINDOW}
@@ -77,7 +77,8 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with AliasHelper {
   private def pushedOrder(order: Seq[SortOrder], window: Window): Seq[SortOrder] = {
     val windowSize = window.partitionSpec.size
     order.take(windowSize) ++
-      sortWindowSpec(window.partitionSpec.takeRight(windowSize - order.size), window.orderSpec)
+      sortWindowSpec(window.partitionSpec.takeRight(windowSize - order.size), window.orderSpec) ++
+      order.takeRight(order.size - windowSize).filter(_.references.subsetOf(window.child.outputSet))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
@@ -107,13 +108,6 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with AliasHelper {
         limit < conf.topKSortFallbackThreshold && supportsPushDown(attr, Nil, window) =>
       val newWindowChild = Limit(limitExpr, Sort(pushedOrder(Nil, window), true, window.child))
       f.copy(child = window.copy(child = newWindowChild))
-
-    case Limit(limitExpr @ IntegerLiteral(limit), s @ Sort(order, _,
-        f @ Filter(ExtractFilterCondition(attr, filterVal), window: Window)))
-      if limit < filterVal && window.maxRows.forall(_ > limit) &&
-        limit < conf.topKSortFallbackThreshold && supportsPushDown(attr, order, window) =>
-      val newWindowChild = Limit(limitExpr, Sort(pushedOrder(order, window), true, window.child))
-      s.copy(child = f.copy(child = window.copy(child = newWindowChild)))
   }
 
   private object ExtractFilterCondition {
