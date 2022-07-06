@@ -819,10 +819,6 @@
         <version>${protobuf.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
-      <!--
-        When upgrading `RoaringBitmap`, the results of `MapStatusesConvertBenchmark`
-        and `MapStatusesSerDeserBenchmark` should to be updated.
-      -->
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
