@@ -792,7 +792,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       checkOutputPartitioningRewrite(inMemoryScan, expectedPartitioningClass)
     }
     // when enable AQE, the reusedExchange is inserted when executed.
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "-1") {
       // ReusedExchange is HashPartitioning
       val df1 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
       val df2 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
@@ -1291,6 +1293,20 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       // before: numShuffles is 3, numSorts is 4
       assert(numShuffles.size == 2)
       assert(numSorts.size == 2)
+    }
+  }
+
+  test("SPARK-39698: Use TakeOrderedAndProject if maxRows below the topKSortFallbackThreshold") {
+    Seq(2, 10).foreach { threshold =>
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+        val df = Seq(1 -> "a", 2 -> "b", 3 -> "c", 4 -> "d", 5 -> "e").toDF("i", "j").orderBy($"i")
+        assert(df.queryExecution.optimizedPlan.maxRows === Some(5))
+        if (threshold < 5) {
+          assert(df.queryExecution.sparkPlan.isInstanceOf[execution.SortExec])
+        } else {
+          assert(df.queryExecution.sparkPlan.isInstanceOf[execution.TakeOrderedAndProjectExec])
+        }
+      }
     }
   }
 }
