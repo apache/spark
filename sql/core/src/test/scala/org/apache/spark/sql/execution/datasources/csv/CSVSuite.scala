@@ -2294,7 +2294,7 @@ abstract class CSVSuite
     val errMsg2 = intercept[IllegalArgumentException] {
       spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect
     }.getMessage
-    assert(errMsg2.contains("'lineSep' can contain only 1 or 2 characters."))
+    assert(errMsg2.contains("'lineSep' can contain only 1 character"))
   }
 
   Seq(true, false).foreach { multiLine =>
