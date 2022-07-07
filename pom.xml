@@ -82,6 +82,7 @@
     <module>common/network-shuffle</module>
     <module>common/unsafe</module>
     <module>common/tags</module>
+    <module>connect</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
