@@ -78,8 +78,7 @@ class SparkEnv (
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata = CacheBuilder.newBuilder()
-    .maximumSize(conf.get(HADOOP_RDD_METADATA_CACHE_SIZE))
-    .softValues().build[String, AnyRef]().asMap()
+    .maximumSize(1000).softValues().build[String, AnyRef]().asMap()
 
   private[spark] var driverTmpDir: Option[String] = None
 
