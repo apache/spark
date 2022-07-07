@@ -80,21 +80,21 @@ SELECT * FROM basic_pays;
 |    employee_name|department|salary|
 +-----------------+----------+------+
 |      Anthony Bow|Accounting|	6627|
-|      Barry Jones|	      SCM| 10586|
+|      Barry Jones|       SCM| 10586|
 |     Diane Murphy|Accounting|	8435|
-|   Foon Yue Tseng|	    Sales|	6660|
-|    George Vanauf|	    Sales| 10563|
+|   Foon Yue Tseng|     Sales|	6660|
+|    George Vanauf|     Sales| 10563|
 |    Gerard Bondur|Accounting| 11472|
-| Gerard Hernandez|	      SCM|	6949|
+| Gerard Hernandez|       SCM|	6949|
 |    Jeff Firrelli|Accounting|	8992|
-|   Julie Firrelli|	    Sales|	9181|
-|       Larry Bott|	      SCM| 11798|
+|   Julie Firrelli|     Sales|	9181|
+|       Larry Bott|       SCM| 11798|
 |  Leslie Jennings|        IT|	8113|
-|  Leslie Thompson|	       IT|	5186|
-|      Loui Bondur|	      SCM| 10449|
+|  Leslie Thompson|        IT|	5186|
+|      Loui Bondur|       SCM| 10449|
 |   Mary Patterson|Accounting|	9998|
-|  Pamela Castillo|	      SCM| 11303|
-|  Steve Patterson|	    Sales|	9441|
+|  Pamela Castillo|       SCM| 11303|
+|  Steve Patterson|     Sales|	9441|
 |William Patterson|Accounting|	8870|
 +-----------------+----------+------+
 
@@ -114,19 +114,19 @@ ORDER BY salary;
 +-----------------+----------+------+-------+-------+-------+-------+
 |  Leslie Thompson|        IT|  5186|5917.75| 5186.0|7381.25| 8113.0|
 |      Anthony Bow|Accounting|  6627|8543.75| 8435.0| 9746.5| 9998.0|
-|   Foon Yue Tseng|	    Sales|	6660|8550.75| 6660.0| 9721.5|10563.0|
-| Gerard Hernandez|	      SCM|	6949|10449.0|10449.0|11303.0|11303.0|
-|  Leslie Jennings|	       IT|	8113|5917.75| 5186.0|7381.25| 8113.0|
+|   Foon Yue Tseng|     Sales|	6660|8550.75| 6660.0| 9721.5|10563.0|
+| Gerard Hernandez|       SCM|	6949|10449.0|10449.0|11303.0|11303.0|
+|  Leslie Jennings|        IT|	8113|5917.75| 5186.0|7381.25| 8113.0|
 |     Diane Murphy|Accounting|	8435|8543.75| 8435.0| 9746.5| 9998.0|
 |William Patterson|Accounting|	8870|8543.75| 8435.0| 9746.5| 9998.0|
 |    Jeff Firrelli|Accounting|	8992|8543.75| 8435.0| 9746.5| 9998.0|
-|   Julie Firrelli|	    Sales|	9181|8550.75| 6660.0| 9721.5|10563.0|
-|  Steve Patterson|	    Sales|	9441|8550.75| 6660.0| 9721.5|10563.0|
+|   Julie Firrelli|     Sales|	9181|8550.75| 6660.0| 9721.5|10563.0|
+|  Steve Patterson|     Sales|	9441|8550.75| 6660.0| 9721.5|10563.0|
 |   Mary Patterson|Accounting|	9998|8543.75| 8435.0| 9746.5| 9998.0|
-|      Loui Bondur|	      SCM| 10449|10449.0|10449.0|11303.0|11303.0|
-|    George Vanauf|	    Sales| 10563|8550.75| 6660.0| 9721.5|10563.0|
-|      Barry Jones|	      SCM| 10586|10449.0|10449.0|11303.0|11303.0|
-|  Pamela Castillo|	      SCM| 11303|10449.0|10449.0|11303.0|11303.0|
+|      Loui Bondur|       SCM| 10449|10449.0|10449.0|11303.0|11303.0|
+|    George Vanauf|     Sales| 10563|8550.75| 6660.0| 9721.5|10563.0|
+|      Barry Jones|       SCM| 10586|10449.0|10449.0|11303.0|11303.0|
+|  Pamela Castillo|       SCM| 11303|10449.0|10449.0|11303.0|11303.0|
 |    Gerard Bondur|Accounting| 11472|8543.75| 8435.0| 9746.5| 9998.0|
 |       Larry Bott|    	  SCM| 11798|10449.0|10449.0|11303.0|11303.0|
 +-----------------+----------+------+-------+-------+-------+-------+
