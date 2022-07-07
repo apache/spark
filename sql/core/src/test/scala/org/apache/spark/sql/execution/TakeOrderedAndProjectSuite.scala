@@ -22,6 +22,7 @@ import scala.util.Random
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -124,6 +125,25 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
               SortExec(sortOrder, false, input)),
           input => expected(input),
           sortAnswers = false)
+      }
+    }
+  }
+
+  test("SPARK-39709: The result of executeCollect and doExecute should be the same") {
+    import testImplicits._
+
+    Seq(-1, 1000).foreach { threshold =>
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+        val takeOrderedAndProject =
+          Seq((1, 1), (1, 2), (2, 3), (2, 4), (3, 5), (3, 6), (3, 7)).toDF("a", "b")
+            .orderBy("a")
+            .selectExpr("b")
+            .limit(6)
+            .queryExecution.sparkPlan
+
+        assert(takeOrderedAndProject.isInstanceOf[TakeOrderedAndProjectExec] === (threshold > 0))
+        assert(takeOrderedAndProject.executeCollect() ===
+          takeOrderedAndProject.execute().map(_.copy()).collect())
       }
     }
   }
