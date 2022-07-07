@@ -3024,12 +3024,15 @@ object SQLConf {
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
-      .doc("In SQL queries with a SORT followed by a LIMIT like " +
+      .doc("In SQL queries with a SORT followed by a LIMIT or maximum number of rows exists like " +
           "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
           " in memory, otherwise do a global sort which spills to disk if necessary.")
       .version("2.4.0")
       .intConf
-      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+      .checkValue(_ <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+        "The top-K sort fallback threshold should be less than or equal to " +
+          s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+      .createWithDefault(5000000)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
