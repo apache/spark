@@ -21,14 +21,15 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WINDOW_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -89,6 +90,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case _ => // OK
         }
     }
+  }
+
+  private def isMapWithStringKey(e: Expression): Boolean = if (e.resolved) {
+    e.dataType match {
+      case m: MapType => m.keyType.isInstanceOf[StringType]
+      case _ => false
+    }
+  } else {
+    false
+  }
+
+  private def failUnresolvedAttribute(
+      operator: LogicalPlan,
+      a: Attribute,
+      errorClass: String): Nothing = {
+    val missingCol = a.sql
+    val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+    val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+    throw QueryCompilationErrors.unresolvedAttributeError(
+      errorClass, missingCol, orderedCandidates, a.origin)
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
@@ -160,11 +181,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan =>
-        // Check argument data types of higher-order functions downwards first.
-        // If the arguments of the higher-order functions are resolved but the type check fails,
-        // the argument functions will not get resolved, but we should report the argument type
-        // check failure instead of claiming the argument functions are unresolved.
         operator transformExpressionsDown {
+          // Check argument data types of higher-order functions downwards first.
+          // If the arguments of the higher-order functions are resolved but the type check fails,
+          // the argument functions will not get resolved, but we should report the argument type
+          // check failure instead of claiming the argument functions are unresolved.
           case hof: HigherOrderFunction
               if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
             hof.checkArgumentDataTypes() match {
@@ -172,16 +193,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 hof.failAnalysis(
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
             }
+
+          // If an attribute can't be resolved as a map key of string type, either the key should be
+          // surrounded with single quotes, or there is a typo in the attribute name.
+          case GetMapValue(map, key: Attribute, _) if isMapWithStringKey(map) && !key.resolved =>
+            failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
-            val missingCol = a.sql
-            val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
-            val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
-            a.failAnalysis(
-              errorClass = "MISSING_COLUMN",
-              messageParameters = Array(missingCol, orderedCandidates.mkString(", ")))
+            failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
 
           case s: Star =>
             withPosition(s) {
@@ -211,7 +232,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
           case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
-              !e.isInstanceOf[WindowExpression] =>
+              !e.isInstanceOf[WindowExpression] && e.resolved =>
             val w = e.children.find(_.isInstanceOf[WindowFunction]).get
             failAnalysis(s"Window function $w requires an OVER clause.")
 
@@ -228,7 +249,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             w.windowFunction match {
-              case agg @ AggregateExpression(_: PercentileCont | _: PercentileDisc, _, _, _, _)
+              case agg @ AggregateExpression(
+                _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
                 if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
                     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
                 failAnalysis(
@@ -285,20 +307,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               failAnalysis("Input argument tolerance must be non-negative.")
             }
 
-          case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
-            def isAggregateExpression(expr: Expression): Boolean = {
-              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
-            }
-
+          case Aggregate(groupingExprs, aggregateExprs, _) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case expr: Expression if isAggregateExpression(expr) =>
+              case expr: Expression if AggregateExpression.isAggregate(expr) =>
                 val aggFunction = expr match {
                   case agg: AggregateExpression => agg.aggregateFunction
                   case udf: PythonUDF => udf
                 }
                 aggFunction.children.foreach { child =>
                   child.foreach {
-                    case expr: Expression if isAggregateExpression(expr) =>
+                    case expr: Expression if AggregateExpression.isAggregate(expr) =>
                       failAnalysis(
                         s"It is not allowed to use an aggregate function in the argument of " +
                           s"another aggregate function. Please use the inner aggregate function " +
@@ -414,7 +432,24 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
-          case LocalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
+          case LocalLimit(limitExpr, child) =>
+            checkLimitLikeClause("limit", limitExpr)
+            child match {
+              case Offset(offsetExpr, _) =>
+                val limit = limitExpr.eval().asInstanceOf[Int]
+                val offset = offsetExpr.eval().asInstanceOf[Int]
+                if (Int.MaxValue - limit < offset) {
+                  failAnalysis(
+                    s"""
+                       |The sum of the LIMIT clause and the OFFSET clause must not be greater than
+                       |the maximum 32-bit integer value (2,147,483,647),
+                       |but found limit = $limit, offset = $offset.
+                       |""".stripMargin.replace("\n", " "))
+                }
+              case _ =>
+            }
+
+          case Offset(offsetExpr, _) => checkLimitLikeClause("offset", offsetExpr)
 
           case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
@@ -508,6 +543,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.sql).mkString(",")}""".stripMargin)
 
+          case p @ Project(projectList, _) =>
+            projectList.foreach(_.transformDownWithPruning(
+              _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
+              case UnresolvedWindowExpression(_, windowSpec) =>
+                throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
+            })
+
           case j: Join if !j.duplicateResolved =>
             val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
             failAnalysis(
@@ -565,8 +607,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}
                """.stripMargin)
 
-          case _: UnresolvedHint =>
-            throw QueryExecutionErrors.logicalHintOperatorNotRemovedDuringAnalysisError
+          case _: UnresolvedHint => throw new IllegalStateException(
+            "Logical hint operator should be removed during analysis.")
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
@@ -684,7 +726,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
-  private def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+  def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
         query: LogicalPlan, agg: Aggregate): Unit = {
@@ -728,8 +770,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       expressions.exists(_.exists(_.semanticEquals(expr)))
     }
 
+    def checkOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = p match {
+      case f: Filter =>
+        if (hasOuterReferences(expr.plan)) {
+          expr.plan.expressions.foreach(_.foreachUp {
+            case o: OuterReference =>
+              p.children.foreach(e =>
+                if (!e.output.exists(_.exprId == o.exprId)) {
+                  failAnalysis("outer attribute not found")
+                })
+            case _ =>
+          })
+        }
+      case _ =>
+    }
+
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
+
+    // Check if there is outer attribute that cannot be found from the plan.
+    checkOuterReference(plan, expr)
 
     expr match {
       case ScalarSubquery(query, outerAttrs, _, _) =>
@@ -1093,7 +1153,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
+      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _, _) =>
         val fieldName = col.name.quoted
         if (a.dataType.isDefined) {
           val field = CharVarcharUtils.getRawType(col.field.metadata)

@@ -498,7 +498,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
     val query = contact
-      .select($"name.first", winExpr.as(Symbol("window")))
+      .select($"name.first", winExpr.as("window"))
       .orderBy($"name.last".asc)
       .analyze
     val optimized = Optimize.execute(query)
@@ -516,7 +516,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("Nested field pruning for Filter with other supported operators") {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
-    val query1 = contact.select($"name.first", winExpr.as(Symbol("window")))
+    val query1 = contact.select($"name.first", winExpr.as("window"))
       .where($"window" === 1 && $"name.first" === "a")
       .analyze
     val optimized1 = Optimize.execute(query1)
@@ -848,6 +848,18 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .analyze
 
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-38529: GeneratorNestedColumnAliasing does not pushdown for non-Explode") {
+    val employer = StructType.fromDDL("id int, company struct<name:string, address:string>")
+    val input = LocalRelation(
+      'col1.int,
+      'col2.array(ArrayType(StructType.fromDDL("field1 struct<col1: int, col2: int>, field2 int")))
+    )
+    val plan = input.generate(Inline('col2)).select('field1.getField("col1")).analyze
+    val optimized = GeneratorNestedColumnAliasing.unapply(plan)
+    // The plan is expected to be unchanged.
+    comparePlans(plan, RemoveNoopOperators.apply(optimized.get))
   }
 }
 

@@ -33,6 +33,7 @@ import org.apache.parquet.schema.{GroupType, LogicalTypeAnnotation, MessageType,
 import org.apache.parquet.schema.LogicalTypeAnnotation.{DecimalLogicalTypeAnnotation, TimeUnit}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
+import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
@@ -51,7 +52,7 @@ class ParquetFilters(
     pushDownDate: Boolean,
     pushDownTimestamp: Boolean,
     pushDownDecimal: Boolean,
-    pushDownStartWith: Boolean,
+    pushDownStringPredicate: Boolean,
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean,
     datetimeRebaseSpec: RebaseSpec,
@@ -70,7 +71,10 @@ class ParquetFilters(
         fields: Seq[Type],
         parentFieldNames: Array[String] = Array.empty): Seq[ParquetPrimitiveField] = {
       fields.flatMap {
-        case p: PrimitiveType =>
+        // Parquet only supports predicate push-down for non-repeated primitive types.
+        // TODO(SPARK-39393): Remove extra condition when parquet added filter predicate support for
+        //                    repeated columns (https://issues.apache.org/jira/browse/PARQUET-34)
+        case p: PrimitiveType if p.getRepetition != Repetition.REPEATED =>
           Some(ParquetPrimitiveField(fieldNames = parentFieldNames :+ p.getName,
             fieldType = ParquetSchemaType(p.getLogicalTypeAnnotation,
               p.getPrimitiveTypeName, p.getTypeLength)))
@@ -767,7 +771,7 @@ class ParquetFilters(
         }
 
       case sources.StringStartsWith(name, prefix)
-          if pushDownStartWith && canMakeFilterOn(name, prefix) =>
+          if pushDownStringPredicate && canMakeFilterOn(name, prefix) =>
         Option(prefix).map { v =>
           FilterApi.userDefined(binaryColumn(nameToParquetField(name).fieldNames),
             new UserDefinedPredicate[Binary] with Serializable {
@@ -798,13 +802,42 @@ class ParquetFilters(
           )
         }
 
+      case sources.StringEndsWith(name, suffix)
+          if pushDownStringPredicate && canMakeFilterOn(name, suffix) =>
+        Option(suffix).map { v =>
+          FilterApi.userDefined(binaryColumn(nameToParquetField(name).fieldNames),
+            new UserDefinedPredicate[Binary] with Serializable {
+              private val suffixStr = UTF8String.fromString(v)
+              override def canDrop(statistics: Statistics[Binary]): Boolean = false
+              override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
+              override def keep(value: Binary): Boolean = {
+                value != null && UTF8String.fromBytes(value.getBytes).endsWith(suffixStr)
+              }
+            }
+          )
+        }
+
+      case sources.StringContains(name, value)
+          if pushDownStringPredicate && canMakeFilterOn(name, value) =>
+        Option(value).map { v =>
+          FilterApi.userDefined(binaryColumn(nameToParquetField(name).fieldNames),
+            new UserDefinedPredicate[Binary] with Serializable {
+              private val subStr = UTF8String.fromString(v)
+              override def canDrop(statistics: Statistics[Binary]): Boolean = false
+              override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
+              override def keep(value: Binary): Boolean = {
+                value != null && UTF8String.fromBytes(value.getBytes).contains(subStr)
+              }
+            }
+          )
+        }
+
       case _ if canDynamicallyPushDownDataFilter(predicate) =>
         if (evaluatePartitionFilter(partitionSchema, partitionValues, predicate)) {
           None
         } else {
           // Empty FilterPredicate, will be removed later.
           Some(null)
-        }
 
       case _ => None
     }

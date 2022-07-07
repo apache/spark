@@ -131,6 +131,11 @@ case class MapOfValueClassKey(m: Map[IntWrapper, String])
 case class MapOfValueClassValue(m: Map[String, StringWrapper])
 case class OptionOfValueClassValue(o: Option[StringWrapper])
 case class CaseClassWithGeneric[T](generic: T, value: IntWrapper)
+case class NestedGeneric[T](generic: CaseClassWithGeneric[T])
+case class SeqNestedGeneric[T](list: Seq[T])
+case class OptionNestedGeneric[T](list: Option[T])
+case class MapNestedGenericKey[T](list: Map[T, Int])
+case class MapNestedGenericValue[T](list: Map[Int, T])
 
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
@@ -454,6 +459,18 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     "nested tuple._2 of class value")
   encodeDecodeTest(CaseClassWithGeneric(IntWrapper(1), IntWrapper(2)),
     "case class with value class in generic parameter")
+  encodeDecodeTest(NestedGeneric(CaseClassWithGeneric(IntWrapper(1), IntWrapper(2))),
+    "case class with nested generic parameter")
+  encodeDecodeTest(SeqNestedGeneric(List(2)),
+    "case class with nested generic parameter seq")
+  encodeDecodeTest(SeqNestedGeneric(List(IntWrapper(2))),
+    "case class with value class and nested generic parameter seq")
+  encodeDecodeTest(OptionNestedGeneric(Some(2)),
+    "case class with nested generic option")
+  encodeDecodeTest(MapNestedGenericKey(Map(1 -> 2)),
+    "case class with nested generic map key ")
+  encodeDecodeTest(MapNestedGenericValue(Map(1 -> 2)),
+    "case class with nested generic map value")
 
   encodeDecodeTest(Option(31), "option of int")
   encodeDecodeTest(Option.empty[Int], "empty option of int")

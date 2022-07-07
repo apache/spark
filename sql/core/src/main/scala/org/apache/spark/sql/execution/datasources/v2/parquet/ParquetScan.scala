@@ -86,6 +86,9 @@ case class ParquetScan(
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
+      sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
 
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))
@@ -117,7 +120,7 @@ case class ParquetScan(
 
   lazy private val (pushedAggregationsStr, pushedGroupByStr) = if (pushedAggregate.nonEmpty) {
     (seqToString(pushedAggregate.get.aggregateExpressions),
-      seqToString(pushedAggregate.get.groupByColumns))
+      seqToString(pushedAggregate.get.groupByExpressions))
   } else {
     ("[]", "[]")
   }

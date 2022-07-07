@@ -29,6 +29,7 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeExpanding,
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeExponentialMoving,
+    MissingPandasLikeExponentialMovingGroupby,
 )
 
 # For running doctests and reference resolution in PyCharm.
@@ -117,6 +118,24 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(var)
+
+    def skew(self) -> FrameLike:
+        def skew(scol: Column) -> Column:
+            return F.when(
+                F.row_number().over(self._unbounded_window) >= self._min_periods,
+                SF.skew(scol).over(self._window),
+            ).otherwise(SF.lit(None))
+
+        return self._apply_as_series_or_frame(skew)
+
+    def kurt(self) -> FrameLike:
+        def kurt(scol: Column) -> Column:
+            return F.when(
+                F.row_number().over(self._unbounded_window) >= self._min_periods,
+                SF.kurt(scol).over(self._window),
+            ).otherwise(SF.lit(None))
+
+        return self._apply_as_series_or_frame(kurt)
 
 
 class RollingLike(RollingAndExpanding[FrameLike]):
@@ -642,6 +661,110 @@ class Rolling(RollingLike[FrameLike]):
         """
         return super().var()
 
+    def skew(self) -> FrameLike:
+        """
+        Calculate unbiased rolling skew.
+
+        .. note:: the current implementation of this API uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the rolling calculation.
+
+        See Also
+        --------
+        Series.rolling : Calling object with Series data.
+        DataFrame.rolling : Calling object with DataFrames.
+        Series.std : Equivalent method for Series.
+        DataFrame.std : Equivalent method for DataFrame.
+        numpy.std : Equivalent method for Numpy array.
+
+        Examples
+        --------
+        >>> s = ps.Series([5, 5, 6, 7, 5, 1, 5, 9])
+        >>> s.rolling(3).skew()
+        0         NaN
+        1         NaN
+        2    1.732051
+        3    0.000000
+        4    0.000000
+        5   -0.935220
+        6   -1.732051
+        7    0.000000
+        dtype: float64
+
+        For DataFrame, each rolling standard deviation is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.rolling(5).skew()
+                  A         B
+        0       NaN       NaN
+        1       NaN       NaN
+        2       NaN       NaN
+        3       NaN       NaN
+        4  1.257788  1.369456
+        5 -1.492685 -0.526039
+        6 -1.492685 -0.526039
+        7 -0.551618  0.686072
+        """
+        return super().skew()
+
+    def kurt(self) -> FrameLike:
+        """
+        Calculate unbiased rolling kurtosis.
+
+        .. note:: the current implementation of this API uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the rolling calculation.
+
+        See Also
+        --------
+        Series.rolling : Calling object with Series data.
+        DataFrame.rolling : Calling object with DataFrames.
+        Series.var : Equivalent method for Series.
+        DataFrame.var : Equivalent method for DataFrame.
+        numpy.var : Equivalent method for Numpy array.
+
+        Examples
+        --------
+        >>> s = ps.Series([5, 5, 6, 7, 5, 1, 5, 9])
+        >>> s.rolling(4).kurt()
+        0         NaN
+        1         NaN
+        2         NaN
+        3   -1.289256
+        4   -1.289256
+        5    2.234867
+        6    2.227147
+        7    1.500000
+        dtype: float64
+
+        For DataFrame, each unbiased rolling variance is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.rolling(5).kurt()
+                  A         B
+        0       NaN       NaN
+        1       NaN       NaN
+        2       NaN       NaN
+        3       NaN       NaN
+        4  0.312500  0.906336
+        5  2.818047  1.016942
+        6  2.818047  1.016942
+        7  0.867769  0.389750
+        """
+        return super().kurt()
+
 
 class RollingGroupby(RollingLike[FrameLike]):
     def __init__(
@@ -1051,6 +1174,44 @@ class RollingGroupby(RollingLike[FrameLike]):
         """
         return super().var()
 
+    def skew(self) -> FrameLike:
+        """
+        Calculate unbiased rolling skew.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the rolling calculation.
+
+        See Also
+        --------
+        Series.rolling : Calling object with Series data.
+        DataFrame.rolling : Calling object with DataFrames.
+        Series.std : Equivalent method for Series.
+        DataFrame.std : Equivalent method for DataFrame.
+        numpy.std : Equivalent method for Numpy array.
+        """
+        return super().skew()
+
+    def kurt(self) -> FrameLike:
+        """
+        Calculate unbiased rolling kurtosis.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the rolling calculation.
+
+        See Also
+        --------
+        Series.rolling : Calling object with Series data.
+        DataFrame.rolling : Calling object with DataFrames.
+        Series.var : Equivalent method for Series.
+        DataFrame.var : Equivalent method for DataFrame.
+        numpy.var : Equivalent method for Numpy array.
+        """
+        return super().kurt()
+
 
 class ExpandingLike(RollingAndExpanding[FrameLike]):
     def __init__(self, min_periods: int = 1):
@@ -1422,6 +1583,110 @@ class Expanding(ExpandingLike[FrameLike]):
         """
         return super().var()
 
+    def skew(self) -> FrameLike:
+        """
+        Calculate unbiased expanding skew.
+
+        .. note:: the current implementation of this API uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the expanding calculation.
+
+        See Also
+        --------
+        Series.expanding : Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.std : Equivalent method for Series.
+        DataFrame.std : Equivalent method for DataFrame.
+        numpy.std : Equivalent method for Numpy array.
+
+        Examples
+        --------
+        >>> s = ps.Series([5, 5, 6, 7, 5, 1, 5, 9])
+        >>> s.expanding(3).skew()
+        0         NaN
+        1         NaN
+        2    1.732051
+        3    0.854563
+        4    1.257788
+        5   -1.571593
+        6   -1.657542
+        7   -0.521760
+        dtype: float64
+
+        For DataFrame, each expanding standard deviation variance is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.expanding(5).skew()
+                  A         B
+        0       NaN       NaN
+        1       NaN       NaN
+        2       NaN       NaN
+        3       NaN       NaN
+        4  1.257788  1.369456
+        5 -1.571593 -0.423309
+        6 -1.657542 -0.355737
+        7 -0.521760  1.116874
+        """
+        return super().skew()
+
+    def kurt(self) -> FrameLike:
+        """
+        Calculate unbiased expanding kurtosis.
+
+        .. note:: the current implementation of this API uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the expanding calculation.
+
+        See Also
+        --------
+        Series.expanding : Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.var : Equivalent method for Series.
+        DataFrame.var : Equivalent method for DataFrame.
+        numpy.var : Equivalent method for Numpy array.
+
+        Examples
+        --------
+        >>> s = ps.Series([5, 5, 6, 7, 5, 1, 5, 9])
+        >>> s.expanding(4).kurt()
+        0         NaN
+        1         NaN
+        2         NaN
+        3   -1.289256
+        4    0.312500
+        5    3.419520
+        6    4.028185
+        7    2.230373
+        dtype: float64
+
+        For DataFrame, each unbiased expanding variance is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.expanding(5).kurt()
+                  A         B
+        0       NaN       NaN
+        1       NaN       NaN
+        2       NaN       NaN
+        3       NaN       NaN
+        4  0.312500  0.906336
+        5  3.419520  1.486581
+        6  4.028185  1.936169
+        7  2.230373  2.273792
+        """
+        return super().kurt()
+
 
 class ExpandingGroupby(ExpandingLike[FrameLike]):
     def __init__(self, groupby: GroupBy[FrameLike], min_periods: int = 1):
@@ -1752,6 +2017,45 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
         """
         return super().var()
 
+    def skew(self) -> FrameLike:
+        """
+        Calculate expanding standard skew.
+
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the expanding calculation.
+
+        See Also
+        --------
+        Series.expanding: Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.std : Equivalent method for Series.
+        DataFrame.std : Equivalent method for DataFrame.
+        numpy.std : Equivalent method for Numpy array.
+        """
+        return super().skew()
+
+    def kurt(self) -> FrameLike:
+        """
+        Calculate unbiased expanding kurtosis.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the expanding calculation.
+
+        See Also
+        --------
+        Series.expanding : Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.var : Equivalent method for Series.
+        DataFrame.var : Equivalent method for DataFrame.
+        numpy.var : Equivalent method for Numpy array.
+        """
+        return super().kurt()
+
 
 class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
     def __init__(
@@ -1935,6 +2239,117 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
     def __repr__(self) -> str:
         return (
             "ExponentialMoving [com={}, span={}, halflife={}, alpha={}, "
+            "min_periods={}, ignore_na={}]".format(
+                self._com,
+                self._span,
+                self._halflife,
+                self._alpha,
+                self._min_periods,
+                self._ignore_na,
+            )
+        )
+
+
+class ExponentialMovingGroupby(ExponentialMovingLike[FrameLike]):
+    def __init__(
+        self,
+        groupby: GroupBy[FrameLike],
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
+        ignore_na: bool = False,
+    ):
+        window_spec = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+        super().__init__(window_spec, com, span, halflife, alpha, min_periods, ignore_na)
+
+        self._groupby = groupby
+        self._window = self._window.partitionBy(*[ser.spark.column for ser in groupby._groupkeys])
+        self._unbounded_window = self._unbounded_window.partitionBy(
+            *[ser.spark.column for ser in groupby._groupkeys]
+        )
+
+    def __getattr__(self, item: str) -> Any:
+        if hasattr(MissingPandasLikeExponentialMovingGroupby, item):
+            property_or_func = getattr(MissingPandasLikeExponentialMovingGroupby, item)
+            if isinstance(property_or_func, property):
+                return property_or_func.fget(self)
+            else:
+                return partial(property_or_func, self)
+        raise AttributeError(item)
+
+    _apply_as_series_or_frame = RollingGroupby._apply_as_series_or_frame
+
+    def mean(self) -> FrameLike:
+        """
+        Calculate an online exponentially weighted mean.
+
+        Notes
+        -----
+        There are behavior differences between pandas-on-Spark and pandas.
+
+        * the current implementation of this API uses Spark's Window without
+          specifying partition specification. This leads to move all data into
+          single partition in single machine and could cause serious
+          performance degradation. Avoid this method against very large dataset.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the exponentially
+            calculation.
+
+        See Also
+        --------
+        Series.expanding : Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.mean : Equivalent method for Series.
+        DataFrame.mean : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s.groupby(s).ewm(alpha=0.5).mean().sort_index()
+        2  0     2.0
+           1     2.0
+        3  2     3.0
+           3     3.0
+           4     3.0
+        4  5     4.0
+           6     4.0
+           7     4.0
+           8     4.0
+        5  9     5.0
+           10    5.0
+        dtype: float64
+
+        For DataFrame, each ewm mean is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.groupby(df.A).ewm(alpha=0.5).mean().sort_index()  # doctest: +NORMALIZE_WHITESPACE
+                 B
+        A
+        2 0    4.0
+          1    4.0
+        3 2    9.0
+          3    9.0
+          4    9.0
+        4 5   16.0
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9   25.0
+          10  25.0
+        """
+        return super().mean()
+
+    # TODO: when add 'adjust' parameter, should add to here too.
+    def __repr__(self) -> str:
+        return (
+            "ExponentialMovingGroupby [com={}, span={}, halflife={}, alpha={}, "
             "min_periods={}, ignore_na={}]".format(
                 self._com,
                 self._span,

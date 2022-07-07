@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
@@ -38,7 +39,7 @@ case class ParquetScanBuilder(
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema)
-    with SupportsPushDownAggregates{
+    with SupportsPushDownAggregates {
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -55,7 +56,7 @@ case class ParquetScanBuilder(
       val pushDownDate = sqlConf.parquetFilterPushDownDate
       val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
       val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
-      val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+      val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
       val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
       val isCaseSensitive = sqlConf.caseSensitiveAnalysis
       val parquetSchema =
@@ -65,7 +66,7 @@ case class ParquetScanBuilder(
         pushDownDate,
         pushDownTimestamp,
         pushDownDecimal,
-        pushDownStringStartWith,
+        pushDownStringPredicate,
         pushDownInFilterThreshold,
         isCaseSensitive,
         // The rebase mode doesn't matter here because the filters are used to determine
@@ -90,7 +91,7 @@ case class ParquetScanBuilder(
   // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
   // It requires the Parquet physical schema to determine whether a filter is convertible.
   // All filters that can be converted to Parquet are pushed down.
-  override def pushedFilters(): Array[Filter] = pushedParquetFilters
+  override def pushedFilters: Array[Predicate] = pushedParquetFilters.map(_.toV2)
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown) {

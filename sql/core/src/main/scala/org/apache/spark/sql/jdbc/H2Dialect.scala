@@ -17,42 +17,31 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLException
+import java.sql.{SQLException, Types}
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
-import scala.util.control.NonFatal
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
 
-private object H2Dialect extends JdbcDialect {
+private[sql] object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
-  class H2SQLBuilder extends JDBCSQLBuilder {
-    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
-      funcName match {
-        case "WIDTH_BUCKET" =>
-          val functionInfo = super.visitSQLFunction(funcName, inputs)
-          throw QueryCompilationErrors.noSuchFunctionError("H2", functionInfo)
-        case _ => super.visitSQLFunction(funcName, inputs)
-      }
-    }
-  }
+  private val supportedFunctions =
+    Set("ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LOG", "LOG10", "LN", "EXP",
+      "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
+      "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
+      "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM")
 
-  override def compileExpression(expr: Expression): Option[String] = {
-    val h2SQLBuilder = new H2SQLBuilder()
-    try {
-      Some(h2SQLBuilder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
 
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
@@ -88,6 +77,30 @@ private object H2Dialect extends JdbcDialect {
         case _ => None
       }
     )
+  }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case StringType => Option(JdbcType("CLOB", Types.CLOB))
+    case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
+    case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
+    case t: DecimalType => Some(
+      JdbcType(s"NUMERIC(${t.precision},${t.scale})", Types.NUMERIC))
+    case _ => JdbcUtils.getCommonJDBCType(dt)
+  }
+
+  private val functionMap: java.util.Map[String, UnboundFunction] =
+    new ConcurrentHashMap[String, UnboundFunction]()
+
+  // test only
+  def registerFunction(name: String, fn: UnboundFunction): UnboundFunction = {
+    functionMap.put(name, fn)
+  }
+
+  override def functions: Seq[(String, UnboundFunction)] = functionMap.asScala.toSeq
+
+  // test only
+  def clearFunctions(): Unit = {
+    functionMap.clear()
   }
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {

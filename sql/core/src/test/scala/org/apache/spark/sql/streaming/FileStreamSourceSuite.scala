@@ -192,7 +192,7 @@ abstract class FileStreamSourceTest
 
   protected def getSourcesFromStreamingQuery(query: StreamExecution): Seq[FileStreamSource] = {
     query.logicalPlan.collect {
-      case StreamingExecutionRelation(source, _) if source.isInstanceOf[FileStreamSource] =>
+      case StreamingExecutionRelation(source, _, _) if source.isInstanceOf[FileStreamSource] =>
         source.asInstanceOf[FileStreamSource]
     }
   }
@@ -2332,7 +2332,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     ).foreach { schema =>
       withTempDir { dir =>
         val colName = "col"
-        val msg = "can only contain StringType as a key type for a MapType"
+        val msg = "can only contain STRING as a key type for a MAP"
 
         val thrown1 = intercept[AnalysisException](
           spark.readStream.schema(StructType(Seq(StructField(colName, schema))))

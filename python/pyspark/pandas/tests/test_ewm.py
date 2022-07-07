@@ -54,6 +54,29 @@ class EWMTest(PandasOnSparkTestCase, TestUtils):
         ):
             psdf.ewm(com=0.5, alpha=0.7).mean()
 
+        with self.assertRaisesRegex(ValueError, "min_periods must be >= 0"):
+            psdf.groupby(psdf.id).ewm(min_periods=-1, alpha=0.5).mean()
+
+        with self.assertRaisesRegex(ValueError, "com must be >= 0"):
+            psdf.groupby(psdf.id).ewm(com=-0.1).mean()
+
+        with self.assertRaisesRegex(ValueError, "span must be >= 1"):
+            psdf.groupby(psdf.id).ewm(span=0.7).mean()
+
+        with self.assertRaisesRegex(ValueError, "halflife must be > 0"):
+            psdf.groupby(psdf.id).ewm(halflife=0).mean()
+
+        with self.assertRaisesRegex(ValueError, "alpha must be in"):
+            psdf.groupby(psdf.id).ewm(alpha=1.7).mean()
+
+        with self.assertRaisesRegex(ValueError, "Must pass one of com, span, halflife, or alpha"):
+            psdf.groupby(psdf.id).ewm().mean()
+
+        with self.assertRaisesRegex(
+            ValueError, "com, span, halflife, and alpha are mutually exclusive"
+        ):
+            psdf.groupby(psdf.id).ewm(com=0.5, alpha=0.7).mean()
+
     def _test_ewm_func(self, f):
         pser = pd.Series([1, 2, 3], index=np.random.rand(3), name="a")
         psser = ps.from_pandas(pser)
@@ -203,6 +226,195 @@ class EWMTest(PandasOnSparkTestCase, TestUtils):
 
     def test_ewm_mean(self):
         self._test_ewm_func("mean")
+
+    def _test_groupby_ewm_func(self, f):
+        pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(getattr(psser.ewm(com=0.2), f)(), getattr(pser.ewm(com=0.2), f)())
+        self.assert_eq(
+            getattr(psser.groupby(psser).ewm(com=0.2), f)().sum(),
+            getattr(pser.groupby(pser).ewm(com=0.2), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psser.groupby(psser).ewm(span=1.7), f)(),
+            getattr(pser.groupby(pser).ewm(span=1.7), f)(),
+        )
+        self.assert_eq(
+            getattr(psser.groupby(psser).ewm(span=1.7), f)().sum(),
+            getattr(pser.groupby(pser).ewm(span=1.7), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psser.groupby(psser).ewm(halflife=0.5), f)(),
+            getattr(pser.groupby(pser).ewm(halflife=0.5), f)(),
+        )
+        self.assert_eq(
+            getattr(psser.groupby(psser).ewm(halflife=0.5), f)().sum(),
+            getattr(pser.groupby(pser).ewm(halflife=0.5), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psser.groupby(psser).ewm(alpha=0.7), f)(),
+            getattr(pser.groupby(pser).ewm(alpha=0.7), f)(),
+        )
+        self.assert_eq(
+            getattr(psser.groupby(psser).ewm(alpha=0.7), f)().sum(),
+            getattr(pser.groupby(pser).ewm(alpha=0.7), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psser.groupby(psser).ewm(alpha=0.7, min_periods=2), f)(),
+            getattr(pser.groupby(pser).ewm(alpha=0.7, min_periods=2), f)(),
+        )
+        self.assert_eq(
+            getattr(psser.groupby(psser).ewm(alpha=0.7, min_periods=2), f)().sum(),
+            getattr(pser.groupby(pser).ewm(alpha=0.7, min_periods=2), f)().sum(),
+        )
+
+        pdf = pd.DataFrame(
+            {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(com=0.2), f)(),
+            getattr(pdf.groupby(pdf.a).ewm(com=0.2), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(com=0.2), f)().sum(),
+            getattr(pdf.groupby(pdf.a).ewm(com=0.2), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(span=1.7), f)(),
+            getattr(pdf.groupby(pdf.a).ewm(span=1.7), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(span=1.7), f)().sum(),
+            getattr(pdf.groupby(pdf.a).ewm(span=1.7), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(halflife=0.5), f)(),
+            getattr(pdf.groupby(pdf.a).ewm(halflife=0.5), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(halflife=0.5), f)().sum(),
+            getattr(pdf.groupby(pdf.a).ewm(halflife=0.5), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(alpha=0.7), f)(),
+            getattr(pdf.groupby(pdf.a).ewm(alpha=0.7), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(alpha=0.7), f)().sum(),
+            getattr(pdf.groupby(pdf.a).ewm(alpha=0.7), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(alpha=0.7, min_periods=2), f)(),
+            getattr(pdf.groupby(pdf.a).ewm(alpha=0.7, min_periods=2), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.a).ewm(alpha=0.7, min_periods=2), f)().sum(),
+            getattr(pdf.groupby(pdf.a).ewm(alpha=0.7, min_periods=2), f)().sum(),
+        )
+
+        pdf = pd.DataFrame(
+            {
+                "s1": [None, 2, 3, 4],
+                "s2": [1, None, 3, 4],
+                "s3": [1, 3, 4, 5],
+                "s4": [1, 0, 3, 4],
+                "s5": [None, None, 1, None],
+                "s6": [None, None, None, None],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(com=0.2, ignore_na=True), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(com=0.2, ignore_na=True), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(com=0.2, ignore_na=True), f)().sum(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(com=0.2, ignore_na=True), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(com=0.2, ignore_na=False), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(com=0.2, ignore_na=False), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(com=0.2, ignore_na=False), f)().sum(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(com=0.2, ignore_na=False), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(span=1.7, ignore_na=True), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(span=1.7, ignore_na=True), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(span=1.7, ignore_na=True), f)().sum(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(span=1.7, ignore_na=True), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(span=1.7, ignore_na=False), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(span=1.7, ignore_na=False), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(span=1.7, ignore_na=False), f)().sum(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(span=1.7, ignore_na=False), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(halflife=0.5, ignore_na=True), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(halflife=0.5, ignore_na=True), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(halflife=0.5, ignore_na=True), f)().sum(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(halflife=0.5, ignore_na=True), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(halflife=0.5, ignore_na=False), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(halflife=0.5, ignore_na=False), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(halflife=0.5, ignore_na=False), f)().sum(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(halflife=0.5, ignore_na=False), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(alpha=0.7, ignore_na=True), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(alpha=0.7, ignore_na=True), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(alpha=0.7, ignore_na=True), f)().sum(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(alpha=0.7, ignore_na=True), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(alpha=0.7, ignore_na=False), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(alpha=0.7, ignore_na=False), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(alpha=0.7, ignore_na=False), f)().sum(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(alpha=0.7, ignore_na=False), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(alpha=0.7, ignore_na=True, min_periods=2), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(alpha=0.7, ignore_na=True, min_periods=2), f)(),
+        )
+        self.assert_eq(
+            getattr(
+                psdf.groupby(psdf.s1 + 1).ewm(alpha=0.7, ignore_na=True, min_periods=2), f
+            )().sum(),
+            getattr(
+                pdf.groupby(pdf.s1 + 1).ewm(alpha=0.7, ignore_na=True, min_periods=2), f
+            )().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.groupby(psdf.s1 + 1).ewm(alpha=0.7, ignore_na=False, min_periods=2), f)(),
+            getattr(pdf.groupby(pdf.s1 + 1).ewm(alpha=0.7, ignore_na=False, min_periods=2), f)(),
+        )
+        self.assert_eq(
+            getattr(
+                psdf.groupby(psdf.s1 + 1).ewm(alpha=0.7, ignore_na=False, min_periods=2), f
+            )().sum(),
+            getattr(
+                pdf.groupby(pdf.s1 + 1).ewm(alpha=0.7, ignore_na=False, min_periods=2), f
+            )().sum(),
+        )
+
+    def test_groupby_ewm_func(self):
+        self._test_groupby_ewm_func("mean")
 
 
 if __name__ == "__main__":

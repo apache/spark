@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeS
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -80,7 +80,7 @@ object PushDownUtils extends PredicateHelper {
         for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr), nestedPredicatePushdownEnabled = true)
+              filterExpr, Some(translatedFilterToExpr))
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
@@ -98,7 +98,7 @@ object PushDownUtils extends PredicateHelper {
 
       case f: FileScanBuilder =>
         val postScanFilters = f.pushFilters(filters)
-        (Left(f.pushedFilters), postScanFilters)
+        (Right(f.pushedFilters), postScanFilters)
       case _ => (Left(Nil), filters)
     }
   }
@@ -127,6 +127,19 @@ object PushDownUtils extends PredicateHelper {
       case s: SupportsPushDownLimit if s.pushLimit(limit) =>
         (true, s.isPartiallyPushed)
       case _ => (false, false)
+    }
+  }
+
+  /**
+   * Pushes down OFFSET to the data source Scan.
+   *
+   * @return the Boolean value represents whether to push down.
+   */
+  def pushOffset(scanBuilder: ScanBuilder, offset: Int): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownOffset =>
+        s.pushOffset(offset)
+      case _ => false
     }
   }
 

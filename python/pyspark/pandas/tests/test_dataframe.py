@@ -96,6 +96,15 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         index_cols = pdf.columns[column_mask]
         self.assert_eq(psdf[index_cols], pdf[index_cols])
 
+    def test_creation_index(self):
+        err_msg = (
+            "The given index cannot be a pandas-on-Spark index. Try pandas index or array-like."
+        )
+        with self.assertRaisesRegex(TypeError, err_msg):
+            ps.DataFrame([1, 2], index=ps.Index([1, 2]))
+        with self.assertRaisesRegex(TypeError, err_msg):
+            ps.DataFrame([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+
     def _check_extension(self, psdf, pdf):
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
             self.assert_eq(psdf, pdf, check_exact=False)
@@ -1814,8 +1823,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
-        self.assert_eq(psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"]))
+        # see also: https://github.com/pandas-dev/pandas/issues/46589
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
+            self.assert_eq(
+                psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"])
+            )
         self.assert_eq(psdf.nlargest(5, columns=["c"]), pdf.nlargest(5, columns=["c"]))
         self.assert_eq(
             psdf.nlargest(5, columns=["c"], keep="first"),
@@ -1838,10 +1851,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
-        self.assert_eq(
-            psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
-        )
+        # see also: https://github.com/pandas-dev/pandas/issues/46589
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
+            self.assert_eq(
+                psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
+            )
         self.assert_eq(psdf.nsmallest(n=5, columns=["c"]), pdf.nsmallest(5, columns=["c"]))
         self.assert_eq(
             psdf.nsmallest(n=5, columns=["c"], keep="first"),
@@ -2619,8 +2634,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" * psdf["a"])
 
     def test_sample(self):
-        pdf = pd.DataFrame({"A": [0, 2, 4]})
-        psdf = ps.from_pandas(pdf)
+        psdf = ps.DataFrame({"A": [0, 2, 4]}, index=["x", "y", "z"])
 
         # Make sure the tests run, but we can't check the result because they are non-deterministic.
         psdf.sample(frac=0.1)
@@ -2629,6 +2643,19 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf["A"].sample(frac=0.2)
         psdf["A"].sample(frac=0.2, replace=True)
         psdf["A"].sample(frac=0.2, random_state=5)
+
+        self.assert_eq(psdf.sample(frac=0.1, ignore_index=True).index.dtype, np.int64)
+        self.assert_eq(psdf.sample(frac=0.2, replace=True, ignore_index=True).index.dtype, np.int64)
+        self.assert_eq(
+            psdf.sample(frac=0.2, random_state=5, ignore_index=True).index.dtype, np.int64
+        )
+        self.assert_eq(psdf["A"].sample(frac=0.2, ignore_index=True).index.dtype, np.int64)
+        self.assert_eq(
+            psdf["A"].sample(frac=0.2, replace=True, ignore_index=True).index.dtype, np.int64
+        )
+        self.assert_eq(
+            psdf["A"].sample(frac=0.2, random_state=5, ignore_index=True).index.dtype, np.int64
+        )
 
         with self.assertRaises(ValueError):
             psdf.sample()
@@ -3486,6 +3513,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                     pdf.drop_duplicates([("x", "a"), ("y", "b")], keep=keep).sort_index(),
                     psdf.drop_duplicates([("x", "a"), ("y", "b")], keep=keep).sort_index(),
                 )
+                self.assert_eq(
+                    pdf.drop_duplicates(
+                        [("x", "a"), ("y", "b")], keep=keep, ignore_index=True
+                    ).sort_index(),
+                    psdf.drop_duplicates(
+                        [("x", "a"), ("y", "b")], keep=keep, ignore_index=True
+                    ).sort_index(),
+                )
 
         # inplace is True
         subset_list = [None, "a", ["a", "b"]]
@@ -3514,7 +3549,9 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             pser = pdf[("x", "a")]
             psser = psdf[("x", "a")]
             pdf.drop_duplicates(subset=subset, inplace=True)
+            pdf.drop_duplicates(subset=subset, inplace=True, ignore_index=True)
             psdf.drop_duplicates(subset=subset, inplace=True)
+            psdf.drop_duplicates(subset=subset, inplace=True, ignore_index=True)
             self.assert_eq(psdf.sort_index(), pdf.sort_index())
             self.assert_eq(psser.sort_index(), pser.sort_index())
 
@@ -5353,18 +5390,25 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             psdf.truncate("C", "B", axis=1)
 
     def test_explode(self):
-        pdf = pd.DataFrame({"A": [[-1.0, np.nan], [0.0, np.inf], [1.0, -np.inf]], "B": 1})
+        pdf = pd.DataFrame(
+            {"A": [[-1.0, np.nan], [0.0, np.inf], [1.0, -np.inf]], "B": 1}, index=["a", "b", "c"]
+        )
         pdf.index.name = "index"
         pdf.columns.name = "columns"
         psdf = ps.from_pandas(pdf)
 
-        expected_result1 = pdf.explode("A")
-        expected_result2 = pdf.explode("B")
+        expected_result1, result1 = pdf.explode("A"), psdf.explode("A")
+        expected_result2, result2 = pdf.explode("B"), psdf.explode("B")
+        expected_result3, result3 = pdf.explode("A", ignore_index=True), psdf.explode(
+            "A", ignore_index=True
+        )
 
-        self.assert_eq(psdf.explode("A"), expected_result1, almost=True)
-        self.assert_eq(psdf.explode("B"), expected_result2)
-        self.assert_eq(psdf.explode("A").index.name, expected_result1.index.name)
-        self.assert_eq(psdf.explode("A").columns.name, expected_result1.columns.name)
+        self.assert_eq(result1, expected_result1, almost=True)
+        self.assert_eq(result2, expected_result2)
+        self.assert_eq(result1.index.name, expected_result1.index.name)
+        self.assert_eq(result1.columns.name, expected_result1.columns.name)
+        self.assert_eq(result3, expected_result3, almost=True)
+        self.assert_eq(result3.index, expected_result3.index)
 
         self.assertRaises(TypeError, lambda: psdf.explode(["A", "B"]))
 
@@ -5375,13 +5419,18 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf.index = midx
         psdf = ps.from_pandas(pdf)
 
-        expected_result1 = pdf.explode("A")
-        expected_result2 = pdf.explode("B")
+        expected_result1, result1 = pdf.explode("A"), psdf.explode("A")
+        expected_result2, result2 = pdf.explode("B"), psdf.explode("B")
+        expected_result3, result3 = pdf.explode("A", ignore_index=True), psdf.explode(
+            "A", ignore_index=True
+        )
 
-        self.assert_eq(psdf.explode("A"), expected_result1, almost=True)
-        self.assert_eq(psdf.explode("B"), expected_result2)
-        self.assert_eq(psdf.explode("A").index.names, expected_result1.index.names)
-        self.assert_eq(psdf.explode("A").columns.name, expected_result1.columns.name)
+        self.assert_eq(result1, expected_result1, almost=True)
+        self.assert_eq(result2, expected_result2)
+        self.assert_eq(result1.index.names, expected_result1.index.names)
+        self.assert_eq(result1.columns.name, expected_result1.columns.name)
+        self.assert_eq(result3, expected_result3, almost=True)
+        self.assert_eq(result3.index, expected_result3.index)
 
         self.assertRaises(TypeError, lambda: psdf.explode(["A", "B"]))
 
@@ -5390,16 +5439,15 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf.columns = columns
         psdf.columns = columns
 
-        expected_result1 = pdf.explode(("A", "Z"))
-        expected_result2 = pdf.explode(("B", "X"))
-        expected_result3 = pdf.A.explode("Z")
+        expected_result1, result1 = pdf.explode(("A", "Z")), psdf.explode(("A", "Z"))
+        expected_result2, result2 = pdf.explode(("B", "X")), psdf.explode(("B", "X"))
+        expected_result3, result3 = pdf.A.explode("Z"), psdf.A.explode("Z")
 
-        self.assert_eq(psdf.explode(("A", "Z")), expected_result1, almost=True)
-        self.assert_eq(psdf.explode(("B", "X")), expected_result2)
-        self.assert_eq(psdf.explode(("A", "Z")).index.names, expected_result1.index.names)
-        self.assert_eq(psdf.explode(("A", "Z")).columns.names, expected_result1.columns.names)
-
-        self.assert_eq(psdf.A.explode("Z"), expected_result3, almost=True)
+        self.assert_eq(result1, expected_result1, almost=True)
+        self.assert_eq(result2, expected_result2)
+        self.assert_eq(result1.index.names, expected_result1.index.names)
+        self.assert_eq(result1.columns.names, expected_result1.columns.names)
+        self.assert_eq(result3, expected_result3, almost=True)
 
         self.assertRaises(TypeError, lambda: psdf.explode(["A", "B"]))
         self.assertRaises(ValueError, lambda: psdf.explode("A"))
@@ -5528,6 +5576,33 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         self.assert_eq(abs(psdf), abs(pdf))
         self.assert_eq(np.abs(psdf), np.abs(pdf))
+
+    def test_corrwith(self):
+        df1 = ps.DataFrame({"A": [1, np.nan, 7, 8], "X": [5, 8, np.nan, 3], "C": [10, 4, 9, 3]})
+        df2 = df1[["A", "C"]]
+        self._test_corrwith(df1, df2)
+        self._test_corrwith((df1 + 1), df2.A)
+        self._test_corrwith((df1 + 1), (df2.C + 2))
+
+        with self.assertRaisesRegex(
+            NotImplementedError, "corrwith currently works only for method='pearson'"
+        ):
+            df1.corrwith(df2, method="kendall")
+
+        with self.assertRaisesRegex(TypeError, "unsupported type"):
+            df1.corrwith(123)
+
+        df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
+        self._test_corrwith(df_bool, df_bool.A)
+        self._test_corrwith(df_bool, df_bool.B)
+
+    def _test_corrwith(self, psdf, psobj):
+        pdf = psdf.to_pandas()
+        pobj = psobj.to_pandas()
+        for drop in [True, False]:
+            p_corr = pdf.corrwith(pobj, drop=drop)
+            ps_corr = psdf.corrwith(psobj, drop=drop)
+            self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
 
     def test_iteritems(self):
         pdf = pd.DataFrame(
@@ -6372,13 +6447,28 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psmidx = ps.from_pandas(pmidx)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+            if LooseVersion(pd.__version__) not in (LooseVersion("1.4.1"), LooseVersion("1.4.2")):
+                self.assert_eq(psmidx.dtypes, pmidx.dtypes)
         else:
             expected = pd.Series(
                 [np.dtype("int64"), np.dtype("O")],
                 index=pd.Index([("zero", "first"), ("one", "second")]),
             )
             self.assert_eq(psmidx.dtypes, expected)
+
+    def test_multi_index_dtypes_not_unique_name(self):
+        # Regression test for https://github.com/pandas-dev/pandas/issues/45174
+        pmidx = pd.MultiIndex.from_arrays([[1], [2]], names=[1, 1])
+        psmidx = ps.from_pandas(pmidx)
+
+        if LooseVersion(pd.__version__) < LooseVersion("1.4"):
+            expected = pd.Series(
+                [np.dtype("int64"), np.dtype("int64")],
+                index=[1, 1],
+            )
+            self.assert_eq(psmidx.dtypes, expected)
+        else:
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
 
     def test_cov(self):
         # SPARK-36396: Implement DataFrame.cov

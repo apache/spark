@@ -935,6 +935,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(LongType),
         None,
         None,
+        None,
         None))
   }
 
@@ -954,6 +955,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(LongType),
         None,
         None,
+        None,
         None))
   }
 
@@ -966,6 +968,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         Some("new comment"),
+        None,
         None))
   }
 
@@ -978,7 +981,8 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         None,
-        Some(UnresolvedFieldPosition(first()))))
+        Some(UnresolvedFieldPosition(first())),
+        None))
   }
 
   test("alter table: multiple property changes are not allowed") {
@@ -1004,6 +1008,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         Some(false),
         None,
+        None,
         None))
 
     comparePlans(
@@ -1014,6 +1019,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         Some(true),
         None,
+        None,
         None))
   }
 
@@ -1022,7 +1028,15 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
       DropColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c")))))
+        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
+        ifExists = false))
+
+    comparePlans(
+      parsePlan("ALTER TABLE table_name DROP COLUMN IF EXISTS a.b.c"),
+      DropColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
+        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
+        ifExists = true))
   }
 
   test("alter table: drop multiple columns") {
@@ -1034,7 +1048,20 @@ class DDLParserSuite extends AnalysisTest {
           UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
           Seq(UnresolvedFieldName(Seq("x")),
             UnresolvedFieldName(Seq("y")),
-            UnresolvedFieldName(Seq("a", "b", "c")))))
+            UnresolvedFieldName(Seq("a", "b", "c"))),
+          ifExists = false))
+    }
+
+    val sqlIfExists = "ALTER TABLE table_name DROP COLUMN IF EXISTS x, y, a.b.c"
+    Seq(sqlIfExists, sqlIfExists.replace("COLUMN", "COLUMNS")).foreach { drop =>
+      comparePlans(
+        parsePlan(drop),
+        DropColumns(
+          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
+          Seq(UnresolvedFieldName(Seq("x")),
+            UnresolvedFieldName(Seq("y")),
+            UnresolvedFieldName(Seq("a", "b", "c"))),
+          ifExists = true))
     }
   }
 
@@ -1051,6 +1078,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         None,
+        None,
         None))
 
     comparePlans(
@@ -1061,6 +1089,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         Some("new_comment"),
+        None,
         None))
 
     comparePlans(
@@ -1071,7 +1100,8 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         None,
-        Some(UnresolvedFieldPosition(after("other_col")))))
+        Some(UnresolvedFieldPosition(after("other_col"))),
+        None))
 
     // renaming column not supported in hive style ALTER COLUMN.
     intercept("ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT",
@@ -1180,22 +1210,7 @@ class DDLParserSuite extends AnalysisTest {
     val caught = intercept[AnalysisException](
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
     assert(caught.getMessage.contains(
-        "DESC TABLE COLUMN for a specific partition is not supported"))
-  }
-
-  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    comparePlans(parsePlan("describe t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
-    comparePlans(parsePlan("describe table t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
-    comparePlans(parsePlan("describe table extended t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
-    comparePlans(parsePlan("describe table formatted t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
+        "The feature is not supported: DESC TABLE COLUMN for a specific partition."))
   }
 
   test("insert table: basic append") {
@@ -2027,45 +2042,6 @@ class DDLParserSuite extends AnalysisTest {
       DescribeFunction(createFuncPlan(Seq("a", "b", "c")), true))
   }
 
-  test("SHOW FUNCTIONS") {
-    val nsPlan = UnresolvedNamespace(Nil)
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS"),
-      ShowFunctions(nsPlan, true, true, None))
-    comparePlans(
-      parsePlan("SHOW USER FUNCTIONS"),
-      ShowFunctions(nsPlan, true, false, None))
-    comparePlans(
-      parsePlan("SHOW user FUNCTIONS"),
-      ShowFunctions(nsPlan, true, false, None))
-    comparePlans(
-      parsePlan("SHOW SYSTEM FUNCTIONS"),
-      ShowFunctions(nsPlan, false, true, None))
-    comparePlans(
-      parsePlan("SHOW ALL FUNCTIONS"),
-      ShowFunctions(nsPlan, true, true, None))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS 'funct*'"),
-      ShowFunctions(nsPlan, true, true, Some("funct*")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
-      ShowFunctions(nsPlan, true, true, Some("funct*")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS IN db LIKE 'funct*'"),
-      ShowFunctions(UnresolvedNamespace(Seq("db")), true, true, Some("funct*")))
-
-    // The legacy syntax.
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS a"),
-      ShowFunctions(nsPlan, true, true, Some("a")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE a"),
-      ShowFunctions(nsPlan, true, true, Some("a")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
-      ShowFunctions(UnresolvedNamespace(Seq("a", "b")), true, true, Some("c")))
-  }
-
   test("REFRESH FUNCTION") {
     def createFuncPlan(name: Seq[String]): UnresolvedFunc = {
       UnresolvedFunc(name, "REFRESH FUNCTION", true, None)
@@ -2239,22 +2215,6 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
-    comparePlans(
-      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
-      AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(None, "x", IntegerType, false, None, None, Some("42")))))
-    // The following ALTER TABLE commands will support DEFAULT columns, but this has not been
-    // implemented yet.
-    val unsupportedError = "Support for DEFAULT column values is not implemented yet"
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42")
-    }.getMessage.contains(unsupportedError))
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT")
-    }.getMessage.contains(unsupportedError))
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)")
-    }.getMessage.contains(unsupportedError))
     // These CREATE/REPLACE TABLE statements should parse successfully.
     val schemaWithDefaultColumn = new StructType()
       .add("a", IntegerType, true)
@@ -2272,6 +2232,50 @@ class DDLParserSuite extends AnalysisTest {
       ReplaceTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty[String, String], None, None, None, false), false))
+    // THese ALTER TABLE statements should parse successfully.
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
+      AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None, Some("42")))))
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42"),
+      AlterColumn(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
+        None,
+        None,
+        None,
+        None,
+        Some("42")))
+    // It is possible to pass an empty string default value using quotes.
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ''"),
+      AlterColumn(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
+        None,
+        None,
+        None,
+        None,
+        Some("''")))
+    // It is not possible to pass an empty string default value without using quotes.
+    // This results in a parsing error.
+    intercept("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ",
+      "Syntax error at or near end of input")
+    // It is not possible to both SET DEFAULT and DROP DEFAULT at the same time.
+    // This results in a parsing error.
+    intercept("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT SET DEFAULT 42",
+      "Syntax error at or near 'SET'")
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT"),
+      AlterColumn(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
+        None,
+        None,
+        None,
+        None,
+        Some("")))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       intercept(

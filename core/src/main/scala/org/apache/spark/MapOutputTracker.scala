@@ -879,8 +879,12 @@ private[spark] class MapOutputTrackerMaster(
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
-      shuffleStatus.invalidateSerializedMapOutputStatusCache()
-      shuffleStatus.invalidateSerializedMergeOutputStatusCache()
+      // SPARK-39553: Add protection for Scala 2.13 due to https://github.com/scala/bug/issues/12613
+      // We should revert this if Scala 2.13 solves this issue.
+      if (shuffleStatus != null) {
+        shuffleStatus.invalidateSerializedMapOutputStatusCache()
+        shuffleStatus.invalidateSerializedMergeOutputStatusCache()
+      }
     }
   }
 
@@ -965,7 +969,7 @@ private[spark] class MapOutputTrackerMaster(
         statuses.length.toLong * totalSizes.length / parallelAggThreshold + 1).toInt
       if (parallelism <= 1) {
         statuses.filter(_ != null).foreach { s =>
-          for (i <- 0 until totalSizes.length) {
+          for (i <- totalSizes.indices) {
             totalSizes(i) += s.getSizeForBlock(i)
           }
         }
@@ -1596,7 +1600,7 @@ private[spark] object MapOutputTracker extends Logging {
       mapStatuses: Array[MapStatus],
       startMapIndex : Int,
       endMapIndex: Int,
-      mergeStatuses: Option[Array[MergeStatus]] = None): MapSizesByExecutorId = {
+      mergeStatusesOpt: Option[Array[MergeStatus]] = None): MapSizesByExecutorId = {
     assert (mapStatuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
     var enableBatchFetch = true
@@ -1608,39 +1612,39 @@ private[spark] object MapOutputTracker extends Logging {
     // TODO: SPARK-35036: Instead of reading map blocks in case of AQE with Push based shuffle,
     // TODO: improve push based shuffle to read partial merged blocks satisfying the start/end
     // TODO: map indexes
-    if (mergeStatuses.exists(_.exists(_ != null)) && startMapIndex == 0
+    if (mergeStatusesOpt.exists(_.exists(_ != null)) && startMapIndex == 0
       && endMapIndex == mapStatuses.length) {
       enableBatchFetch = false
       logDebug(s"Disable shuffle batch fetch as Push based shuffle is enabled for $shuffleId.")
-      // We have MergeStatus and full range of mapIds are requested so return a merged block.
-      val numMaps = mapStatuses.length
-      mergeStatuses.get.zipWithIndex.slice(startPartition, endPartition).foreach {
-        case (mergeStatus, partId) =>
-          val remainingMapStatuses = if (mergeStatus != null && mergeStatus.totalSize > 0) {
-            // If MergeStatus is available for the given partition, add location of the
-            // pre-merged shuffle partition for this partition ID. Here we create a
-            // ShuffleMergedBlockId to indicate this is a merged shuffle block.
-            splitsByAddress.getOrElseUpdate(mergeStatus.location, ListBuffer()) +=
-              ((ShuffleMergedBlockId(shuffleId, mergeStatus.shuffleMergeId, partId),
-                mergeStatus.totalSize, SHUFFLE_PUSH_MAP_ID))
-            // For the "holes" in this pre-merged shuffle partition, i.e., unmerged mapper
-            // shuffle partition blocks, fetch the original map produced shuffle partition blocks
-            val mapStatusesWithIndex = mapStatuses.zipWithIndex
-            mergeStatus.getMissingMaps(numMaps).map(mapStatusesWithIndex)
-          } else {
-            // If MergeStatus is not available for the given partition, fall back to
-            // fetching all the original mapper shuffle partition blocks
-            mapStatuses.zipWithIndex.toSeq
-          }
-          // Add location for the mapper shuffle partition blocks
-          for ((mapStatus, mapIndex) <- remainingMapStatuses) {
-            validateStatus(mapStatus, shuffleId, partId)
+      val mergeStatuses = mergeStatusesOpt.get
+      for (partId <- startPartition until endPartition) {
+        val mergeStatus = mergeStatuses(partId)
+        if (mergeStatus != null && mergeStatus.totalSize > 0) {
+          // If MergeStatus is available for the given partition, add location of the
+          // pre-merged shuffle partition for this partition ID. Here we create a
+          // ShuffleMergedBlockId to indicate this is a merged shuffle block.
+          splitsByAddress.getOrElseUpdate(mergeStatus.location, ListBuffer()) +=
+            ((ShuffleMergedBlockId(shuffleId, mergeStatus.shuffleMergeId, partId),
+              mergeStatus.totalSize, SHUFFLE_PUSH_MAP_ID))
+        }
+      }
+
+      // Add location for the mapper shuffle partition blocks
+      for ((mapStatus, mapIndex) <- mapStatuses.iterator.zipWithIndex) {
+        validateStatus(mapStatus, shuffleId, startPartition)
+        for (partId <- startPartition until endPartition) {
+          // For the "holes" in this pre-merged shuffle partition, i.e., unmerged mapper
+          // shuffle partition blocks, fetch the original map produced shuffle partition blocks
+          val mergeStatus = mergeStatuses(partId)
+          if (mergeStatus == null || mergeStatus.totalSize == 0 ||
+            !mergeStatus.tracker.contains(mapIndex)) {
             val size = mapStatus.getSizeForBlock(partId)
             if (size != 0) {
               splitsByAddress.getOrElseUpdate(mapStatus.location, ListBuffer()) +=
                 ((ShuffleBlockId(shuffleId, mapStatus.mapId, partId), size, mapIndex))
             }
           }
+        }
       }
     } else {
       val iter = mapStatuses.iterator.zipWithIndex

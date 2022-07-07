@@ -54,6 +54,16 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def psser(self):
         return ps.from_pandas(self.pser)
 
+    def test_creation_index(self):
+        err_msg = (
+            "The given index cannot be a pandas-on-Spark index. Try pandas index or array-like."
+        )
+        with self.assertRaisesRegex(TypeError, err_msg):
+            ps.Series([1, 2], index=ps.Index([1, 2]))
+
+        with self.assertRaisesRegex(TypeError, err_msg):
+            ps.Series([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+
     def test_series_ops(self):
         pser = self.pser
         psser = self.psser
@@ -228,8 +238,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_rename_axis(self):
         index = pd.Index(["A", "B", "C"], name="index")
-        pser = pd.Series([1.0, 2.0, 3.0], index=index, name="name")
-        psser = ps.from_pandas(pser)
+        pdf = pd.DataFrame({"x": [1.0, 2.0, 3.0]}, index=index)
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         self.assert_eq(
             pser.rename_axis("index2").sort_index(),
@@ -240,12 +251,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             (pser + 1).rename_axis("index2").sort_index(),
             (psser + 1).rename_axis("index2").sort_index(),
         )
-
-        pser2 = pser.copy()
-        psser2 = psser.copy()
-        pser2.rename_axis("index2", inplace=True)
-        psser2.rename_axis("index2", inplace=True)
-        self.assert_eq(pser2.sort_index(), psser2.sort_index())
 
         self.assertRaises(ValueError, lambda: psser.rename_axis(["index2", "index3"]))
         self.assertRaises(TypeError, lambda: psser.rename_axis(mapper=["index2"], index=["index3"]))
@@ -259,6 +264,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pser.rename_axis(index=str.upper).sort_index(),
             psser.rename_axis(index=str.upper).sort_index(),
         )
+
+        pser.rename_axis("index2", inplace=True)
+        psser.rename_axis("index2", inplace=True)
+        self.assert_eq(pser.sort_index(), psser.sort_index())
+        # Note: in pandas, pdf.x's index is renamed, whereas pdf's index isn't due to a bug.
+        self.assert_eq(pdf, psdf)
 
         index = pd.MultiIndex.from_tuples(
             [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
@@ -1709,24 +1720,40 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.aggregate(["min", max])
 
     def test_drop(self):
-        pser = pd.Series([10, 20, 15, 30, 45], name="x")
-        psser = ps.Series(pser)
+        pdf = pd.DataFrame({"x": [10, 20, 15, 30, 45]})
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         self.assert_eq(psser.drop(1), pser.drop(1))
         self.assert_eq(psser.drop([1, 4]), pser.drop([1, 4]))
+        self.assert_eq(psser.drop(columns=1), pser.drop(columns=1))
+        self.assert_eq(psser.drop(columns=[1, 4]), pser.drop(columns=[1, 4]))
 
-        msg = "Need to specify at least one of 'labels' or 'index'"
+        msg = "Need to specify at least one of 'labels', 'index' or 'columns'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.drop()
         self.assertRaises(KeyError, lambda: psser.drop((0, 1)))
+
+        psser.drop([2, 3], inplace=True)
+        pser.drop([2, 3], inplace=True)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+
+        n_pser, n_psser = pser + 1, psser + 1
+        n_psser.drop([1, 4], inplace=True)
+        n_pser.drop([1, 4], inplace=True)
+        self.assert_eq(n_psser, n_pser)
+        self.assert_eq(psser, pser)
 
         # For MultiIndex
         midx = pd.MultiIndex(
             [["lama", "cow", "falcon"], ["speed", "weight", "length"]],
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
-        pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        psser = ps.from_pandas(pser)
+
+        pdf = pd.DataFrame({"x": [45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3]}, index=midx)
+        psdf = ps.from_pandas(pdf)
+        psser, pser = psdf.x, pdf.x
 
         self.assert_eq(psser.drop("lama"), pser.drop("lama"))
         self.assert_eq(psser.drop(labels="weight", level=1), pser.drop(labels="weight", level=1))
@@ -1749,13 +1776,21 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(ValueError, msg):
             psser.drop(["lama", ["cow", "falcon"]])
 
-        msg = "Cannot specify both 'labels' and 'index'"
+        msg = "Cannot specify both 'labels' and 'index'/'columns'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.drop("lama", index="cow")
+
+        with self.assertRaisesRegex(ValueError, msg):
+            psser.drop("lama", columns="cow")
 
         msg = r"'Key length \(2\) exceeds index depth \(3\)'"
         with self.assertRaisesRegex(KeyError, msg):
             psser.drop(("lama", "speed", "x"))
+
+        psser.drop({"lama": "speed"}, inplace=True)
+        pser.drop({"lama": "speed"}, inplace=True)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
 
     def test_pop(self):
         midx = pd.MultiIndex(
@@ -2962,9 +2997,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             name="Koalas",
         )
         psser = ps.from_pandas(pser)
-
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
+        self.assert_eq((pser + 1).argmax(skipna=False), (psser + 1).argmax(skipna=False))
 
         # MultiIndex
         pser.index = pd.MultiIndex.from_tuples(
@@ -2973,15 +3009,21 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
 
         # Null Series
         self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
         self.assert_eq(pd.Series([np.nan]).argmax(), ps.Series([np.nan]).argmax())
+        self.assert_eq(
+            pd.Series([np.nan]).argmax(skipna=False), ps.Series([np.nan]).argmax(skipna=False)
+        )
 
         with self.assertRaisesRegex(ValueError, "attempt to get argmin of an empty sequence"):
             ps.Series([]).argmin()
         with self.assertRaisesRegex(ValueError, "attempt to get argmax of an empty sequence"):
             ps.Series([]).argmax()
+        with self.assertRaisesRegex(ValueError, "axis can only be 0 or 'index'"):
+            psser.argmax(axis=1)
 
     def test_backfill(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})

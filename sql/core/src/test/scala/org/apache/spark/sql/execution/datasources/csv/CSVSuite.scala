@@ -2619,8 +2619,8 @@ abstract class CSVSuite
             val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
             }
-            assert(ex.getErrorClass == "MISSING_COLUMN")
-            assert(ex.messageParameters.head == "AAA")
+            assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
+            assert(ex.messageParameters.head == "`AAA`")
           }
         }
       }
@@ -2692,6 +2692,16 @@ abstract class CSVSuite
         .csv(csv)
       assert(df.schema == expected)
       checkAnswer(df, Row(1, null) :: Nil)
+    }
+
+    withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
+      checkAnswer(
+        spark.read.schema(
+          StructType(
+            StructField("f1", StringType, nullable = false) ::
+            StructField("f2", StringType, nullable = false) :: Nil)
+        ).option("mode", "DROPMALFORMED").csv(Seq("a,", "a,b").toDS),
+        Row("a", "b"))
     }
   }
 

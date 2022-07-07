@@ -25,6 +25,7 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeRollingGroupby,
     MissingPandasLikeExponentialMoving,
+    MissingPandasLikeExponentialMovingGroupby,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
@@ -304,6 +305,40 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(psdf.a.rolling(1), name)()  # Series
 
+        # ExponentialMoving functions
+        missing_functions = inspect.getmembers(
+            MissingPandasLikeExponentialMovingGroupby, inspect.isfunction
+        )
+        unsupported_functions = [
+            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
+        ]
+        for name in unsupported_functions:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "method.*ExponentialMoving.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.groupby("a").ewm(com=0.5), name)()  # Frame
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "method.*ExponentialMoving.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.a.groupby(psdf.a).ewm(com=0.5), name)()  # Series
+
+        deprecated_functions = [
+            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
+        ]
+        for name in deprecated_functions:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "method.*ExponentialMoving.*{}.*is deprecated".format(name),
+            ):
+                getattr(psdf.ewm(com=0.5), name)()  # Frame
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "method.*ExponentialMoving.*{}.*is deprecated".format(name),
+            ):
+                getattr(psdf.a.ewm(com=0.5), name)()  # Series
+
         # Expanding properties
         missing_properties = inspect.getmembers(
             MissingPandasLikeExpandingGroupby, lambda o: isinstance(o, property)
@@ -374,6 +409,43 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError, "property.*Rolling.*{}.*is deprecated".format(name)
             ):
                 getattr(psdf.a.rolling(1), name)()  # Series
+
+        # ExponentialMoving properties
+        missing_properties = inspect.getmembers(
+            MissingPandasLikeExponentialMovingGroupby, lambda o: isinstance(o, property)
+        )
+        unsupported_properties = [
+            name
+            for (name, type_) in missing_properties
+            if type_.fget.__name__ == "unsupported_property"
+        ]
+        for name in unsupported_properties:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "property.*ExponentialMoving.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.groupby("a").ewm(com=0.5), name)()  # Frame
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "property.*ExponentialMoving.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.a.groupby(psdf.a).ewm(com=0.5), name)()  # Series
+        deprecated_properties = [
+            name
+            for (name, type_) in missing_properties
+            if type_.fget.__name__ == "deprecated_property"
+        ]
+        for name in deprecated_properties:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "property.*ExponentialMoving.*{}.*is deprecated".format(name),
+            ):
+                getattr(psdf.ewm(com=0.5), name)()  # Frame
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "property.*ExponentialMoving.*{}.*is deprecated".format(name),
+            ):
+                getattr(psdf.a.ewm(com=0.5), name)()  # Series
 
 
 if __name__ == "__main__":

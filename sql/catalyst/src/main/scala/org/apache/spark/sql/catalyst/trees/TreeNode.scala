@@ -28,7 +28,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.sql.catalyst.{AliasIdentifier, IdentifierWithDatabase}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions._
@@ -72,71 +72,81 @@ case class Origin(
    * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
    *                          ^^^^^^^^^^^^^^^
    */
-  lazy val context: String = sqlText.map { text =>
-    val positionContext = if (line.isDefined && startPosition.isDefined) {
-      s"(line ${line.get}, position ${startPosition.get})"
-    } else {
+  lazy val context: String = {
+    // If the query context is missing or incorrect, simply return an empty string.
+    if (sqlText.isEmpty || startIndex.isEmpty || stopIndex.isEmpty ||
+      startIndex.get < 0 || stopIndex.get >= sqlText.get.length || startIndex.get > stopIndex.get) {
       ""
-    }
-    val objectContext = if (objectType.isDefined && objectName.isDefined) {
-      s" of ${objectType.get} ${objectName.get}"
     } else {
-      ""
-    }
-    val builder = new StringBuilder
-    builder ++= s"\n== SQL$objectContext$positionContext ==\n"
-
-    val start = startIndex.getOrElse(0)
-    val stop = stopIndex.getOrElse(sqlText.get.length - 1)
-    // Ideally we should show all the lines which contains the SQL text context of the current node:
-    // [additional text] [current tree node] [additional text]
-    // However, we need to truncate the additional text in case it is too long. The following
-    // variable is to define the max length of additional text.
-    val maxExtraContextLength = 32
-    val truncatedText = "..."
-    var lineStartIndex = start
-    // Collect the SQL text within the starting line of current Node.
-    // The text is truncated if it is too long.
-    while(lineStartIndex >= 0 &&
-      start - lineStartIndex <= maxExtraContextLength &&
-      text.charAt(lineStartIndex) != '\n') {
-      lineStartIndex -= 1
-    }
-    val startTruncated = start - lineStartIndex > maxExtraContextLength
-    var currentIndex = lineStartIndex
-    if (startTruncated) {
-      currentIndex -= truncatedText.length
-    }
-
-    var lineStopIndex = stop
-    // Collect the SQL text within the ending line of current Node.
-    // The text is truncated if it is too long.
-    while(lineStopIndex < text.length &&
-      lineStopIndex - stop <= maxExtraContextLength &&
-      text.charAt(lineStopIndex) != '\n') {
-      lineStopIndex += 1
-    }
-    val stopTruncated = lineStopIndex - stop > maxExtraContextLength
-
-    val subText = (if (startTruncated) truncatedText else "") +
-      text.substring(lineStartIndex + 1, lineStopIndex) +
-      (if (stopTruncated) truncatedText else "")
-    val lines = subText.split("\n")
-    lines.foreach { lineText =>
-      builder ++= lineText + "\n"
-      currentIndex += 1
-      (0 until lineText.length).foreach { _ =>
-        if (currentIndex < start) {
-          builder ++= " "
-        } else if (currentIndex >= start && currentIndex <= stop) {
-          builder ++= "^"
-        }
-        currentIndex += 1
+      val positionContext = if (line.isDefined && startPosition.isDefined) {
+        // Note that the line number starts from 1, while the start position starts from 0.
+        // Here we increase the start position by 1 for consistency.
+        s"(line ${line.get}, position ${startPosition.get + 1})"
+      } else {
+        ""
       }
-      builder ++= "\n"
+      val objectContext = if (objectType.isDefined && objectName.isDefined) {
+        s" of ${objectType.get} ${objectName.get}"
+      } else {
+        ""
+      }
+      val builder = new StringBuilder
+      builder ++= s"== SQL$objectContext$positionContext ==\n"
+
+      val text = sqlText.get
+      val start = math.max(startIndex.get, 0)
+      val stop = math.min(stopIndex.getOrElse(text.length - 1), text.length - 1)
+      // Ideally we should show all the lines which contains the SQL text context of the current
+      // node:
+      // [additional text] [current tree node] [additional text]
+      // However, we need to truncate the additional text in case it is too long. The following
+      // variable is to define the max length of additional text.
+      val maxExtraContextLength = 32
+      val truncatedText = "..."
+      var lineStartIndex = start
+      // Collect the SQL text within the starting line of current Node.
+      // The text is truncated if it is too long.
+      while (lineStartIndex >= 0 &&
+        start - lineStartIndex <= maxExtraContextLength &&
+        text.charAt(lineStartIndex) != '\n') {
+        lineStartIndex -= 1
+      }
+      val startTruncated = start - lineStartIndex > maxExtraContextLength
+      var currentIndex = lineStartIndex
+      if (startTruncated) {
+        currentIndex -= truncatedText.length
+      }
+
+      var lineStopIndex = stop
+      // Collect the SQL text within the ending line of current Node.
+      // The text is truncated if it is too long.
+      while (lineStopIndex < text.length &&
+        lineStopIndex - stop <= maxExtraContextLength &&
+        text.charAt(lineStopIndex) != '\n') {
+        lineStopIndex += 1
+      }
+      val stopTruncated = lineStopIndex - stop > maxExtraContextLength
+
+      val truncatedSubText = (if (startTruncated) truncatedText else "") +
+        text.substring(lineStartIndex + 1, lineStopIndex) +
+        (if (stopTruncated) truncatedText else "")
+      val lines = truncatedSubText.split("\n")
+      lines.foreach { lineText =>
+        builder ++= lineText + "\n"
+        currentIndex += 1
+        (0 until lineText.length).foreach { _ =>
+          if (currentIndex < start) {
+            builder ++= " "
+          } else if (currentIndex >= start && currentIndex <= stop) {
+            builder ++= "^"
+          }
+          currentIndex += 1
+        }
+        builder ++= "\n"
+      }
+      builder.result()
     }
-    builder.result()
-  }.getOrElse("")
+  }
 }
 
 /**
@@ -858,6 +868,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case null => Nil
     case None => Nil
     case Some(null) => Nil
+    case Some(table: CatalogTable) =>
+      stringArgsForCatalogTable(table)
     case Some(any) => any :: Nil
     case map: CaseInsensitiveStringMap =>
       redactMapString(map.asCaseSensitiveMap().asScala, maxFields)
@@ -867,12 +879,21 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       t.copy(properties = Utils.redact(t.properties).toMap,
         options = Utils.redact(t.options).toMap) :: Nil
     case table: CatalogTable =>
-      table.storage.serde match {
-        case Some(serde) => table.identifier :: serde :: Nil
-        case _ => table.identifier :: Nil
-      }
+      stringArgsForCatalogTable(table)
+
     case other => other :: Nil
   }.mkString(", ")
+
+  private def stringArgsForCatalogTable(table: CatalogTable): Seq[Any] = {
+    table.storage.serde match {
+      case Some(serde)
+        // SPARK-39564: don't print out serde to avoid introducing complicated and error-prone
+        // regex magic.
+        if !SQLConf.get.getConfString("spark.test.noSerdeInExplain", "false").toBoolean =>
+        table.identifier :: serde :: Nil
+      case _ => table.identifier :: Nil
+    }
+  }
 
   /**
    * ONE line description of this node.
@@ -1144,7 +1165,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private def shouldConvertToJson(product: Product): Boolean = product match {
     case exprId: ExprId => true
     case field: StructField => true
-    case id: IdentifierWithDatabase => true
+    case id: CatalystIdentifier => true
     case alias: AliasIdentifier => true
     case join: JoinType => true
     case spec: BucketSpec => true

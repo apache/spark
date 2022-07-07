@@ -63,7 +63,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>encoding</code></td>
     <td>UTF-8</td>
-    <td>For reading, decodes the CSV files by the given encoding type. For writing, specifies encoding (charset) of saved CSV files</td>
+    <td>For reading, decodes the CSV files by the given encoding type. For writing, specifies encoding (charset) of saved CSV files. CSV built-in functions ignore this option.</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -99,19 +99,19 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>header</code></td>
     <td>false</td>
-    <td>For reading, uses the first line as names of columns. For writing, writes the names of columns as the first line. Note that if the given path is a RDD of Strings, this header option will remove all lines same with the header if exists.</td>
+    <td>For reading, uses the first line as names of columns. For writing, writes the names of columns as the first line. Note that if the given path is a RDD of Strings, this header option will remove all lines same with the header if exists. CSV built-in functions ignore this option.</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>inferSchema</code></td>
     <td>false</td>
-    <td>Infers the input schema automatically from data. It requires one extra pass over the data.</td>
+    <td>Infers the input schema automatically from data. It requires one extra pass over the data. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>enforceSchema</code></td>
     <td>true</td>
-    <td>If it is set to <code>true</code>, the specified or inferred schema will be forcibly applied to datasource files, and headers in CSV files will be ignored. If the option is set to <code>false</code>, the schema will be validated against all headers in CSV files in the case when the <code>header</code> option is set to <code>true</code>. Field names in the schema and column names in CSV headers are checked by their positions taking into account <code>spark.sql.caseSensitive</code>. Though the default value is true, it is recommended to disable the <code>enforceSchema</code> option to avoid incorrect results.</td>
+    <td>If it is set to <code>true</code>, the specified or inferred schema will be forcibly applied to datasource files, and headers in CSV files will be ignored. If the option is set to <code>false</code>, the schema will be validated against all headers in CSV files in the case when the <code>header</code> option is set to <code>true</code>. Field names in the schema and column names in CSV headers are checked by their positions taking into account <code>spark.sql.caseSensitive</code>. Though the default value is true, it is recommended to disable the <code>enforceSchema</code> option to avoid incorrect results. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -186,7 +186,7 @@ Data source options of CSV can be set via:
     <td>Allows a mode for dealing with corrupt records during parsing. It supports the following case-insensitive modes. Note that Spark tries to parse only required columns in CSV under column pruning. Therefore, corrupt records can be different based on required set of fields. This behavior can be controlled by <code>spark.sql.csv.parser.columnPruning.enabled</code> (enabled by default).<br>
     <ul>
       <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To keep corrupt records, an user can set a string type field named <code>columnNameOfCorruptRecord</code> in an user-defined schema. If a schema does not have the field, it drops corrupt records during parsing. A record with less/more tokens than schema is not a corrupted record to CSV. When it meets a record having fewer tokens than the length of the schema, sets <code>null</code> to extra fields. When the record has more tokens than the length of the schema, it drops extra tokens.</li>
-      <li><code>DROPMALFORMED</code>: ignores the whole corrupted records.</li>
+      <li><code>DROPMALFORMED</code>: ignores the whole corrupted records. This mode is unsupported in the CSV built-in functions.</li>
       <li><code>FAILFAST</code>: throws an exception when it meets corrupted records.</li>
     </ul>
     </td>
@@ -201,7 +201,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>multiLine</code></td>
     <td>false</td>
-    <td>Parse one record, which may span multiple lines, per file.</td>
+    <td>Parse one record, which may span multiple lines, per file. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -213,7 +213,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>samplingRatio</code></td>
     <td>1.0</td>
-    <td>Defines fraction of rows used for schema inferring.</td>
+    <td>Defines fraction of rows used for schema inferring. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -231,7 +231,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>lineSep</code></td>
     <td><code>\r</code>, <code>\r\n</code> and <code>\n</code> (for reading), <code>\n</code> (for writing)</td>
-    <td>Defines the line separator that should be used for parsing/writing. Maximum length is 1 character.</td>
+    <td>Defines the line separator that should be used for parsing/writing. Maximum length is 1 character. CSV built-in functions ignore this option.</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -251,7 +251,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>compression</code></td>
     <td>(none)</td>
-    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (<code>none</code>, <code>bzip2</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code> and <code>deflate</code>).</td>
+    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (<code>none</code>, <code>bzip2</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code> and <code>deflate</code>). CSV built-in functions ignore this option.</td>
     <td>write</td>
   </tr>
 </table>

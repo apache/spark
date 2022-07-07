@@ -28,7 +28,7 @@ import org.apache.spark.mllib.clustering.KMeansModel
 /**
  * PMML Model Export for KMeansModel class
  */
-private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModelExport{
+private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModelExport {
 
   populateKMeansPMML(model)
 

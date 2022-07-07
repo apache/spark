@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.SQLViewSuite
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -83,7 +84,8 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
             val e = intercept[AnalysisException] {
               sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
             }.getMessage
-            assert(e.contains("Not allowed to create a permanent view `default`.`view1` by " +
+            assert(e.contains("Not allowed to create a permanent view " +
+              s"`$SESSION_CATALOG_NAME`.`default`.`view1` by " +
               s"referencing a temporary function `$tempFunctionName`"))
           }
         }

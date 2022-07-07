@@ -151,19 +151,6 @@ object OrcUtils extends Logging {
     }
   }
 
-  def readCatalystSchema(
-      file: Path,
-      conf: Configuration,
-      ignoreCorruptFiles: Boolean): Option[StructType] = {
-    readSchema(file, conf, ignoreCorruptFiles) match {
-      case Some(schema) => Some(toCatalystSchema(schema))
-
-      case None =>
-        // Field names is empty or `FileFormatException` was thrown but ignoreCorruptFiles is true.
-        None
-    }
-  }
-
   /**
    * Reads ORC file schemas in multi-threaded manner, using native version of ORC.
    * This is visible for testing.
@@ -224,7 +211,9 @@ object OrcUtils extends Logging {
         // the physical schema doesn't match the data schema).
         // In these cases we map the physical schema to the data schema by index.
         assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
-          s"${dataSchema.catalogString} has less fields than the actual ORC physical schema, " +
+          s"${dataSchema.catalogString} (length:${dataSchema.length}) " +
+          s"has fewer ${orcFieldNames.length - dataSchema.length} fields than " +
+          s"the actual ORC physical schema $orcSchema (length:${orcFieldNames.length}), " +
           "no idea which columns were dropped, fail to read.")
         // for ORC file written by Hive, no field names
         // in the physical schema, there is a need to send the
@@ -407,6 +396,8 @@ object OrcUtils extends Logging {
    * (Max/Min/Count) result using the statistics information from ORC file footer, and then
    * construct an InternalRow from these aggregate results.
    *
+   * NOTE: if statistics is missing from ORC file footer, exception would be thrown.
+   *
    * @return Aggregate results in the format of InternalRow
    */
   def createAggInternalRowFromFooter(
@@ -516,7 +507,7 @@ object OrcUtils extends Logging {
     val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
       (0 until schemaWithoutGroupBy.length).toArray)
     val resultRow = orcValuesDeserializer.deserializeFromValues(aggORCValues)
-    if (aggregation.groupByColumns.nonEmpty) {
+    if (aggregation.groupByExpressions.nonEmpty) {
       val reOrderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
         partitionSchema, aggregation, partitionValues)
       new JoinedRow(reOrderedPartitionValues, resultRow)

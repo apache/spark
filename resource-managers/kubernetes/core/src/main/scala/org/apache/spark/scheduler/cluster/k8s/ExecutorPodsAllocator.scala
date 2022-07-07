@@ -25,7 +25,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, Pod, PodBuilder}
-import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
@@ -360,16 +360,22 @@ class ExecutorPodsAllocator(
   private def getReusablePVCs(applicationId: String, pvcsInUse: Seq[String]) = {
     if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && conf.get(KUBERNETES_DRIVER_REUSE_PVC) &&
         driverPod.nonEmpty) {
-      val createdPVCs = kubernetesClient
-        .persistentVolumeClaims
-        .withLabel("spark-app-selector", applicationId)
-        .list()
-        .getItems
-        .asScala
+      try {
+        val createdPVCs = kubernetesClient
+          .persistentVolumeClaims
+          .withLabel("spark-app-selector", applicationId)
+          .list()
+          .getItems
+          .asScala
 
-      val reusablePVCs = createdPVCs.filterNot(pvc => pvcsInUse.contains(pvc.getMetadata.getName))
-      logInfo(s"Found ${reusablePVCs.size} reusable PVCs from ${createdPVCs.size} PVCs")
-      reusablePVCs
+        val reusablePVCs = createdPVCs.filterNot(pvc => pvcsInUse.contains(pvc.getMetadata.getName))
+        logInfo(s"Found ${reusablePVCs.size} reusable PVCs from ${createdPVCs.size} PVCs")
+        reusablePVCs
+      } catch {
+        case _: KubernetesClientException =>
+          logInfo("Cannot list PVC resources. Please check account permissions.")
+          mutable.Buffer.empty[PersistentVolumeClaim]
+      }
     } else {
       mutable.Buffer.empty[PersistentVolumeClaim]
     }

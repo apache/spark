@@ -17,6 +17,7 @@
 
 import sys
 import warnings
+from collections.abc import Sized
 from functools import reduce
 from threading import RLock
 from types import TracebackType
@@ -49,6 +50,7 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import (
     AtomicType,
     DataType,
+    StructField,
     StructType,
     _make_type_verifier,
     _infer_schema,
@@ -56,13 +58,14 @@ from pyspark.sql.types import (
     _merge_type,
     _create_converter,
     _parse_datatype_string,
+    _from_numpy_type,
 )
 from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike
     from pyspark.sql.catalog import Catalog
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+    from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
     from pyspark.sql.udf import UDFRegistration
 
@@ -104,6 +107,46 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
     RDD.toDF = toDF  # type: ignore[assignment]
 
 
+# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
+# In Python 3.9, the @property decorator has been made compatible with the
+# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
+#
+# @classmethod + @property is also affected by a bug in Python's docstring which was backported
+# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+class classproperty(property):
+    """Same as Python's @property decorator, but for class attributes.
+
+    Example:
+
+    >>> class Builder:
+    ...
+    ...    def build(self):
+    ...        return MyClass()
+    ...
+    >>> class MyClass:
+    ...
+    ...     @classproperty
+    ...     def builder(cls):
+    ...         print("instantiating new builder")
+    ...         return Builder()
+    >>> c1 = MyClass.builder
+    instantiating new builder
+    >>> c2 = MyClass.builder
+    instantiating new builder
+    >>> c1 == c2
+    False
+    >>> isinstance(c1.build(), MyClass)
+    True
+    """
+
+    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
+        # The "type: ignore" below silences the following error from mypy:
+        # error: Argument 1 to "classmethod" has incompatible
+        # type "Optional[Callable[[Any], Any]]";
+        # expected "Callable[..., Any]"  [arg-type]
+        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
+
+
 class SparkSession(SparkConversionMixin):
     """The entry point to programming Spark with the Dataset and DataFrame API.
 
@@ -142,8 +185,9 @@ class SparkSession(SparkConversionMixin):
         """Builder for :class:`SparkSession`."""
 
         _lock = RLock()
-        _options: Dict[str, Any] = {}
-        _sc: Optional[SparkContext] = None
+
+        def __init__(self) -> None:
+            self._options: Dict[str, Any] = {}
 
         @overload
         def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
@@ -247,13 +291,19 @@ class SparkSession(SparkConversionMixin):
             >>> s1.conf.get("k1") == "v1"
             True
 
+            The configuration of the SparkSession can be changed afterwards
+
+            >>> s1.conf.set("k1", "v1_new")
+            >>> s1.conf.get("k1") == "v1_new"
+            True
+
             In case an existing SparkSession is returned, the config options specified
             in this builder will be applied to the existing SparkSession.
 
             >>> s2 = SparkSession.builder.config("k2", "v2").getOrCreate()
-            >>> s1.conf.get("k1") == s2.conf.get("k1")
+            >>> s1.conf.get("k1") == s2.conf.get("k1") == "v1_new"
             True
-            >>> s1.conf.get("k2") == s2.conf.get("k2")
+            >>> s1.conf.get("k2") == s2.conf.get("k2") == "v2"
             True
             """
             with self._lock:
@@ -276,8 +326,18 @@ class SparkSession(SparkConversionMixin):
                     ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
-    builder = Builder()
-    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances."""
+    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
+    # Python 3.8 is dropped.
+    #
+    # In Python 3.9, the @property decorator has been made compatible with the
+    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
+    #
+    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
+    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+    @classproperty
+    def builder(cls) -> Builder:
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
+        return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
@@ -513,10 +573,20 @@ class SparkSession(SparkConversionMixin):
         if not data:
             raise ValueError("can not infer schema from empty dataset")
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
+        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         schema = reduce(
             _merge_type,
-            (_infer_schema(row, names, infer_dict_as_struct, prefer_timestamp_ntz) for row in data),
+            (
+                _infer_schema(
+                    row,
+                    names,
+                    infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
+                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                )
+                for row in data
+            ),
         )
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
@@ -544,10 +614,11 @@ class SparkSession(SparkConversionMixin):
         :class:`pyspark.sql.types.StructType`
         """
         first = rdd.first()
-        if not first:
-            raise ValueError("The first row in RDD is empty, " "can not infer schema")
+        if isinstance(first, Sized) and len(first) == 0:
+            raise ValueError("The first row in RDD is empty, can not infer schema")
 
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
+        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
             schema = _infer_schema(
@@ -564,6 +635,7 @@ class SparkSession(SparkConversionMixin):
                             row,
                             names=names,
                             infer_dict_as_struct=infer_dict_as_struct,
+                            infer_array_from_first_element=infer_array_from_first_element,
                             prefer_timestamp_ntz=prefer_timestamp_ntz,
                         ),
                     )
@@ -582,6 +654,7 @@ class SparkSession(SparkConversionMixin):
                     row,
                     names,
                     infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
                     prefer_timestamp_ntz=prefer_timestamp_ntz,
                 )
             ).reduce(_merge_type)
@@ -766,13 +839,14 @@ class SparkSession(SparkConversionMixin):
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union[RDD[Any], Iterable[Any], "PandasDataFrameLike"],
+        data: Union[RDD[Any], Iterable[Any], "PandasDataFrameLike", "ArrayLike"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True,
     ) -> DataFrame:
         """
-        Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
+        Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`
+        or a :class:`numpy.ndarray`.
 
         When ``schema`` is a list of column names, the type of each column
         will be inferred from ``data``.
@@ -799,8 +873,8 @@ class SparkSession(SparkConversionMixin):
         ----------
         data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
-            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
-            :class:`pandas.DataFrame`.
+            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
+            :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
@@ -881,12 +955,40 @@ class SparkSession(SparkConversionMixin):
             schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
 
         try:
-            import pandas
+            import pandas as pd
 
             has_pandas = True
         except Exception:
             has_pandas = False
-        if has_pandas and isinstance(data, pandas.DataFrame):
+
+        try:
+            import numpy as np
+
+            has_numpy = True
+        except Exception:
+            has_numpy = False
+
+        if has_numpy and isinstance(data, np.ndarray):
+            # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
+            # so pandas is required.
+            from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
+            require_minimum_pandas_version()
+            if data.ndim not in [1, 2]:
+                raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
+            column_names = ["value"] if data.ndim == 1 else ["_1", "_2"]
+            if schema is None and not self._jconf.arrowPySparkEnabled():
+                # Construct `schema` from `np.dtype` of the input NumPy array
+                # TODO: Apply the logic below when self._jconf.arrowPySparkEnabled() is True
+                spark_type = _from_numpy_type(data.dtype)
+                if spark_type is not None:
+                    schema = StructType(
+                        [StructField(name, spark_type, nullable=True) for name in column_names]
+                    )
+
+            data = pd.DataFrame(data, columns=column_names)
+
+        if has_pandas and isinstance(data, pd.DataFrame):
             # Create a DataFrame from pandas DataFrame.
             return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema

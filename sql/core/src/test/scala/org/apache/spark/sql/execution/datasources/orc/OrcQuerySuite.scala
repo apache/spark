@@ -814,20 +814,52 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
                       | timestamp_ntz '2021-03-14 02:15:00.0' as ts_ntz3
                       |""".stripMargin
 
-      val df = sql(sqlText)
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = sql(sqlText)
 
-      df.write.mode("overwrite").orc("ts_ntz_orc")
+        df.write.mode("overwrite").orc(path)
 
-      val query = "select * from `orc`.`ts_ntz_orc`"
+        val query = s"select * from `orc`.`$path`"
 
-      DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-        DateTimeTestUtils.withDefaultTimeZone(zoneId) {
-          withAllNativeOrcReaders {
-            checkAnswer(sql(query), df)
+        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            withAllNativeOrcReaders {
+              checkAnswer(sql(query), df)
+            }
           }
         }
       }
     }
+  }
+
+  // SPARK-39519: Ignore this case because it requires more than 4g heap memory to ensure test
+  // stability when use Java 11. Should test it manually when upgrading `hive-storage-api`
+  ignore("SPARK-39387: BytesColumnVector should not throw RuntimeException due to overflow") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(1, 22, 1, 1).map { _ =>
+        val byteData = Array.fill[Byte](1024 * 1024)('X')
+        val mapData = (1 to 100).map(i => (i, byteData))
+        mapData
+      }.toDF()
+      df.write.format("orc").save(path)
+    }
+  }
+
+  test("SPARK-39381: Make vectorized orc columar writer batch size configurable") {
+    Seq(10, 100).foreach(batchSize => {
+      withSQLConf(SQLConf.ORC_VECTORIZED_WRITER_BATCH_SIZE.key -> batchSize.toString) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          val df = spark.range(1, 1024, 1, 1).map { _ =>
+            val byteData = Array.fill[Byte](5 * 1024 * 1024)('X')
+            byteData
+          }.toDF()
+          df.write.format("orc").save(path)
+        }
+      }
+    })
   }
 }
 

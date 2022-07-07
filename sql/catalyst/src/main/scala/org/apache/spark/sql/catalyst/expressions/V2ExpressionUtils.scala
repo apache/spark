@@ -27,7 +27,6 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.expressions.{BucketTransform, Expression => V2Expression, FieldReference, IdentityTransform, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
  * A utility class that converts public connector expressions into Catalyst expressions.
@@ -54,19 +53,25 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
    * Converts the array of input V2 [[V2SortOrder]] into their counterparts in catalyst.
    */
   def toCatalystOrdering(ordering: Array[V2SortOrder], query: LogicalPlan): Seq[SortOrder] = {
-    sequenceToOption(ordering.map(toCatalyst(_, query))).asInstanceOf[Option[Seq[SortOrder]]]
-      .getOrElse(Seq.empty)
+    ordering.map(toCatalyst(_, query).asInstanceOf[SortOrder])
   }
 
   def toCatalyst(
       expr: V2Expression,
       query: LogicalPlan,
+      funCatalogOpt: Option[FunctionCatalog] = None): Expression =
+    toCatalystOpt(expr, query, funCatalogOpt)
+        .getOrElse(throw new AnalysisException(s"$expr is not currently supported"))
+
+  def toCatalystOpt(
+      expr: V2Expression,
+      query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = {
     expr match {
       case t: Transform =>
-        toCatalystTransform(t, query, funCatalogOpt)
+        toCatalystTransformOpt(t, query, funCatalogOpt)
       case SortValue(child, direction, nullOrdering) =>
-        toCatalyst(child, query, funCatalogOpt).map { catalystChild =>
+        toCatalystOpt(child, query, funCatalogOpt).map { catalystChild =>
           SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
         }
       case ref: FieldReference =>
@@ -76,7 +81,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     }
   }
 
-  def toCatalystTransform(
+  def toCatalystTransformOpt(
       trans: Transform,
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
@@ -89,7 +94,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       // look up the V2 function.
       val numBucketsRef = AttributeReference("numBuckets", IntegerType, nullable = false)()
       funCatalogOpt.flatMap { catalog =>
-        loadV2Function(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs).map { bound =>
+        loadV2FunctionOpt(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs).map { bound =>
           TransformExpression(bound, resolvedRefs, Some(numBuckets))
         }
       }
@@ -99,7 +104,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         resolveRef[NamedExpression](r, query)
       }
       funCatalogOpt.flatMap { catalog =>
-        loadV2Function(catalog, name, resolvedRefs).map { bound =>
+        loadV2FunctionOpt(catalog, name, resolvedRefs).map { bound =>
           TransformExpression(bound, resolvedRefs)
         }
       }
@@ -107,7 +112,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       throw new AnalysisException(s"Transform $trans is not currently supported")
   }
 
-  private def loadV2Function(
+  private def loadV2FunctionOpt(
       catalog: FunctionCatalog,
       name: String,
       args: Seq[Expression]): Option[BoundFunction] = {

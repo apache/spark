@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -58,11 +58,6 @@ class ParquetFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
-  // Hold a reference to the (serializable) singleton instance of ParquetLogRedirector. This
-  // ensures the ParquetLogRedirector class is initialized whether an instance of ParquetFileFormat
-  // is constructed or deserialized. Do not heed the Scala compiler's warning about an unused field
-  // here.
-  private val parquetLogRedirector = ParquetLogRedirector.INSTANCE
 
   override def shortName(): String = "parquet"
 
@@ -124,6 +119,10 @@ class ParquetFileFormat
       SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key,
       sparkSession.sessionState.conf.parquetFieldIdWriteEnabled.toString)
 
+    conf.set(
+      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
+      sparkSession.sessionState.conf.parquetTimestampNTZEnabled.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
@@ -142,11 +141,6 @@ class ParquetFileFormat
     }
 
     new OutputWriterFactory {
-      // This OutputWriterFactory instance is deserialized when writing Parquet files on the
-      // executor side without constructing or deserializing ParquetFileFormat. Therefore, we hold
-      // another reference to ParquetLogRedirector.INSTANCE here to ensure the latter class is
-      // initialized.
-      private val parquetLogRedirector = ParquetLogRedirector.INSTANCE
 
         override def newInstance(
           path: String,
@@ -182,13 +176,13 @@ class ParquetFileFormat
       requiredSchema: StructType,
       partitionSchema: StructType,
       sqlConf: SQLConf): Option[Seq[String]] = {
-    Option(Seq.fill(requiredSchema.fields.length + partitionSchema.fields.length)(
+    Option(Seq.fill(requiredSchema.fields.length)(
       if (!sqlConf.offHeapColumnVectorEnabled) {
         classOf[OnHeapColumnVector].getName
       } else {
         classOf[OffHeapColumnVector].getName
       }
-    ))
+    ) ++ Seq.fill(partitionSchema.fields.length)(classOf[ConstantColumnVector].getName))
   }
 
   override def isSplitable(
@@ -230,6 +224,9 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
+      sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -251,7 +248,7 @@ class ParquetFileFormat
     val pushDownDate = sqlConf.parquetFilterPushDownDate
     val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
     val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
-    val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+    val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val pushDownDynamically = sqlConf.parquetFilterPushDownDynamically
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
@@ -280,7 +277,7 @@ class ParquetFileFormat
           pushDownDate,
           pushDownTimestamp,
           pushDownDecimal,
-          pushDownStringStartWith,
+          pushDownStringPredicate,
           pushDownInFilterThreshold,
           isCaseSensitive,
           datetimeRebaseSpec,
@@ -419,7 +416,8 @@ object ParquetFileFormat extends Logging {
 
     val converter = new ParquetToSparkSchemaConverter(
       sparkSession.sessionState.conf.isParquetBinaryAsString,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+      sparkSession.sessionState.conf.isParquetINT96AsTimestamp,
+      timestampNTZEnabled = sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -515,12 +513,14 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
+    val timestampNTZEnabled = sparkSession.sessionState.conf.parquetTimestampNTZEnabled
 
     val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean) => {
       // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
       val converter = new ParquetToSparkSchemaConverter(
         assumeBinaryIsString = assumeBinaryIsString,
-        assumeInt96IsTimestamp = assumeInt96IsTimestamp)
+        assumeInt96IsTimestamp = assumeInt96IsTimestamp,
+        timestampNTZEnabled = timestampNTZEnabled)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
