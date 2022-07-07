@@ -62,18 +62,15 @@ private[sql] object H2Dialect extends JdbcDialect {
           assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
           Some(s"STDDEV_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" =>
+        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && !f.isDistinct =>
           assert(f.children().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"COVAR_POP($distinct${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" =>
+          Some(s"COVAR_POP(${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && !f.isDistinct =>
           assert(f.children().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"COVAR_SAMP($distinct${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "CORR" =>
+          Some(s"COVAR_SAMP(${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "CORR" && !f.isDistinct =>
           assert(f.children().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"CORR($distinct${f.children().head}, ${f.children().last})")
+          Some(s"CORR(${f.children().head}, ${f.children().last})")
         case _ => None
       }
     )
