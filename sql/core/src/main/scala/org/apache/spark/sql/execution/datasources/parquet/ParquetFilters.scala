@@ -838,6 +838,7 @@ class ParquetFilters(
         } else {
           // Empty FilterPredicate, will be removed later.
           Some(null)
+        }
 
       case _ => None
     }
