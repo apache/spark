@@ -22,7 +22,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * TakeOrderedAndProject with SMJ benchmark.
+ * TakeOrderedAndProject benchmark.
  * To run this benchmark:
  * {{{
  *   1. without sbt:
