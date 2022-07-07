@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
@@ -479,7 +479,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * Build a create index SQL statement.
    *
    * @param indexName         the name of the index to be created
-   * @param tableName         the table on which index to be created
+   * @param tableIdent        the table on which index to be created
    * @param columns           the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
    * @param properties        the properties of the index to be created
@@ -487,7 +487,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def createIndex(
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
@@ -498,7 +498,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * Checks whether an index exists
    *
    * @param indexName the name of the index
-   * @param tableName the table name on which index to be checked
+   * @param tableIdent the table on which index to be checked
    * @param options JDBCOptions of the table
    * @return true if the index with `indexName` exists in the table with `tableName`,
    *         false otherwise
@@ -506,7 +506,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   def indexExists(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     throw new UnsupportedOperationException("indexExists is not supported")
   }
@@ -515,10 +515,10 @@ abstract class JdbcDialect extends Serializable with Logging {
    * Build a drop index SQL statement.
    *
    * @param indexName the name of the index to be dropped.
-   * @param tableName the table name on which index to be dropped.
+   * @param tableIdent the table on which index to be dropped.
   * @return the SQL statement to use for dropping the index.
    */
-  def dropIndex(indexName: String, tableName: String): String = {
+  def dropIndex(indexName: String, tableIdent: Identifier): String = {
     throw new UnsupportedOperationException("dropIndex is not supported")
   }
 
