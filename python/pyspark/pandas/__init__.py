@@ -136,12 +136,12 @@ def _auto_patch_pandas() -> None:
     if sys.version_info >= (3, 7):
         # Just in case pandas implements '__class_getitem__' later.
         if not _frame_has_class_getitem:
-            pd.DataFrame.__class_getitem__ = (  # type: ignore[assignment,attr-defined]
+            pd.DataFrame.__class_getitem__ = (  # type: ignore[attr-defined]
                 lambda params: DataFrame.__class_getitem__(params)
             )
 
         if not _series_has_class_getitem:
-            pd.Series.__class_getitem__ = (  # type: ignore[assignment,attr-defined]
+            pd.Series.__class_getitem__ = (  # type: ignore[attr-defined]
                 lambda params: Series.__class_getitem__(params)
             )
 
