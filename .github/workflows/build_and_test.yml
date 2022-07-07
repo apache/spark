@@ -253,10 +253,10 @@ jobs:
 
   infra-image:
     needs: precondition
+    # Currently, only enable docker build from cache for `master` branch jobs
     if: fromJson(needs.precondition.outputs.required).pyspark == 'true' && ${{ inputs.branch }} == 'master'
     runs-on: ubuntu-latest
     outputs:
-      image_name: ${{ steps.infra-image-outputs.outputs.image_name }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
     steps:
       - name: Generate image name and url
@@ -264,10 +264,9 @@ jobs:
         run: |
           # Convert to lowercase to meet docker repo name requirement
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          IMG_NAME="apache-spark-ci-image-${{ inputs.branch }}-${{ github.run_id }}"
+          IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
           IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
           echo ::set-output name=image_url::$IMG_URL
-          echo ::set-output name=image_name::$IMG_NAME
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
@@ -308,7 +307,8 @@ jobs:
 
   pyspark:
     needs: [precondition, infra-image]
-    if: fromJson(needs.precondition.outputs.required).pyspark == 'true'
+    # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
+    if: always() && fromJson(needs.precondition.outputs.required).pyspark == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
@@ -865,29 +865,3 @@ jobs:
       with:
         name: unit-tests-log-docker-integration--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
-
-  # Note that: there are only GHCR creation permission for secrets.GITHUB_TOKEN
-  # If you want to clean up the CI images, you need to:
-  # - 1. Generate the token from https://github.com/settings/tokens with `write:packages` and `delete:packages`
-  # - 2. Add the the token as secrets `GHCR_DEL` in https://github.com/{username}}/spark/settings/secrets/actions
-  infra-image-post:
-    # Always runs after pyspark have completed, regardless of whether they were successful
-    if: always()
-    needs: [infra-image, pyspark]
-    runs-on: ubuntu-20.04
-    # Secrets cannot be used by if condition, so add env in here
-    # See also: https://github.com/actions/runner/issues/1138
-    env:
-      GHCR_DEL: ${{ secrets.GHCR_DEL }}
-    steps:
-    - name: Cleanup docker image
-      # Only cleanup the ci images when users set the secrets in fork repo
-      if: ${{ env.GHCR_DEL }} && ${{ inputs.branch }} == 'master'
-      # TODO: Switch to actions/delete-package-versions when it is supported:
-      # https://github.com/actions/delete-package-versions/issues/74
-      run: >
-        curl
-        -X DELETE
-        -H "Accept: application/vnd.github+json"
-        -H "Authorization: token ${{ secrets.GHCR_DEL }}"
-        https://api.github.com/user/packages/container/${{ needs.infra-image.outputs.image_name }}

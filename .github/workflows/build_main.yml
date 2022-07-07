@@ -28,4 +28,3 @@ jobs:
   call-build-and-test:
     name: Run
     uses: ./.github/workflows/build_and_test.yml
-    secrets: inherit

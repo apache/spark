@@ -45,4 +45,3 @@ jobs:
           "docker-integration-tests": "true",
           "lint" : "true"
         }
-    secrets: inherit
