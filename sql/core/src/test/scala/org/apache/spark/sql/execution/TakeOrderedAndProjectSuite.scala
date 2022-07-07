@@ -93,4 +93,38 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
   }
+
+  test("TakeOrderedAndProject.doExecute with local sort") {
+    withClue(s"seed = $seed") {
+      val expected = (input: SparkPlan) => {
+        GlobalLimitExec(limit,
+          LocalLimitExec(limit,
+            ProjectExec(Seq(input.output.last),
+              SortExec(sortOrder, true, input))))
+      }
+
+      // test doExecute
+      Seq((10000, 10), (200, 10)).foreach { case (n, m) =>
+        checkThatPlansAgree(
+          generateRandomInputData(n, m),
+          input =>
+            noOpFilter(
+              TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last),
+                SortExec(sortOrder, false, input))),
+          input => expected(input),
+          sortAnswers = false)
+      }
+
+      // test executeCollect
+      Seq((10000, 10), (200, 10)).foreach { case (n, m) =>
+        checkThatPlansAgree(
+          generateRandomInputData(n, m),
+          input =>
+            TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last),
+              SortExec(sortOrder, false, input)),
+          input => expected(input),
+          sortAnswers = false)
+      }
+    }
+  }
 }
