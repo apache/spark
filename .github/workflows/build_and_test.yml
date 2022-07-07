@@ -56,8 +56,6 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
-      user: ${{ steps.set-outputs.outputs.user }}
-      img_tag: ${{ steps.set-outputs.outputs.img_tag }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -75,9 +73,6 @@ jobs:
     - name: Check all modules
       id: set-outputs
       run: |
-        # Convert to lowercase to meet docker repo name requirement
-        echo ::set-output name=user::$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        echo ::set-output name=img_tag::$(echo "${{ inputs.branch }}-${{ github.run_id }}")
         if [ -z "${{ inputs.jobs }}" ]; then
           # is-changed.py is missing in branch-3.2, and it might run in scheduled build, see also SPARK-39517
           pyspark=true; sparkr=true; tpcds=true; docker=true;
@@ -260,7 +255,19 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).pyspark == 'true' && ${{ inputs.branch }} == 'master'
     runs-on: ubuntu-latest
+    outputs:
+      image_name: ${{ steps.infra-image-outputs.outputs.image_name }}
+      image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
     steps:
+      - name: Generate image name and url
+        id: infra-image-outputs
+        run: |
+          # Convert to lowercase to meet docker repo name requirement
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMG_NAME="apache-spark-ci-image-${{ inputs.branch }}-${{ github.run_id }}"
+          IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+          echo ::set-output name=image_url::$IMG_URL
+          echo ::set-output name=image_name::$IMG_NAME
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
@@ -295,7 +302,7 @@ jobs:
           context: ./dev/infra/
           push: true
           tags: |
-            ghcr.io/${{ needs.precondition.outputs.user }}/apache-spark-ci-image-${{ needs.precondition.outputs.img_tag }}
+            ${{ steps.infra-image-outputs.outputs.image_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
 
@@ -308,7 +315,7 @@ jobs:
       # Currently, only enable docker build from cache for `master` branch jobs
       image: >-
         ${{
-          (inputs.branch == 'master' && format('ghcr.io/{0}/apache-spark-ci-image-{1}', needs.precondition.outputs.user, needs.precondition.outputs.img_tag))
+          (inputs.branch == 'master' && needs.infra-image.outputs.image_url)
           || 'dongjoon/apache-spark-github-action-image:20220207'
         }}
     strategy:
@@ -866,7 +873,7 @@ jobs:
   infra-image-post:
     # Always runs after pyspark have completed, regardless of whether they were successful
     if: always()
-    needs: [precondition, pyspark]
+    needs: [infra-image, pyspark]
     runs-on: ubuntu-20.04
     # Secrets cannot be used by if condition, so add env in here
     # See also: https://github.com/actions/runner/issues/1138
@@ -883,4 +890,4 @@ jobs:
         -X DELETE
         -H "Accept: application/vnd.github+json"
         -H "Authorization: token ${{ secrets.GHCR_DEL }}"
-        https://api.github.com/user/packages/container/apache-spark-ci-image-${{ needs.precondition.outputs.img_tag }}
+        https://api.github.com/user/packages/container/${{ needs.infra-image.outputs.image_name }}
