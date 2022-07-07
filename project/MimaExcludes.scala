@@ -54,7 +54,15 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.getNumClasses"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.getNumClasses$default$2"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRest.extractInstances"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.extractInstances")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.extractInstances"),
+
+    // [SPARK-39703][SPARK-39062] Mima complains with Scala 2.13 for the changes in DeployMessages
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.deploy.DeployMessages$LaunchExecutor$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.requestedTotal"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.copy"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.copy$default$2"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.apply")
   )
 
   // Exclude rules for 3.3.x from 3.2.0
