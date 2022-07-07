@@ -47,6 +47,29 @@ private[sql] object H2Dialect extends JdbcDialect {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  class H2SQLBuilder extends JDBCSQLBuilder {
+    override def visitAggregateFunction(
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
+      funcName match {
+        case "COVAR_POP" | "COVAR_SAMP" | "CORR" if isDistinct =>
+          throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
+            s"support aggregate function: $funcName with DISTINCT");
+        case _ => super.visitAggregateFunction(funcName, isDistinct, inputs)
+      }
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val h2SQLBuilder = new H2SQLBuilder()
+    try {
+      Some(h2SQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Option(JdbcType("CLOB", Types.CLOB))
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
