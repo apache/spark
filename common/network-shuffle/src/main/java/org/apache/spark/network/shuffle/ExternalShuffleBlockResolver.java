@@ -473,4 +473,12 @@ public class ExternalShuffleBlockResolver {
     }
     return registeredExecutors;
   }
+
+  /**
+   * This class does not support shuffle decommissioning monitoring.
+   */
+  public void setExecutorDecommissioned(String appId, String execId) {
+
+    // Function not required when External Fs shuffle movement is disabled.
+  }
 }

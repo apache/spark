@@ -24,6 +24,7 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 import scala.collection.concurrent
 import scala.collection.mutable
+import scala.util.{Failure, Properties, Success => ScalaSuccess, Try}
 import scala.util.Properties
 
 import com.google.common.cache.CacheBuilder
@@ -38,7 +39,9 @@ import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
+import org.apache.spark.network.sasl.SecretKeyHolder
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
@@ -330,10 +333,30 @@ object SparkEnv extends Logging {
       conf.get(BLOCK_MANAGER_PORT)
     }
 
-    val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+    def instantiateExternalShuffleClient(): ExternalBlockStoreClient = {
       val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
-      Some(new ExternalBlockStoreClient(transConf, securityManager,
-        securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
+      val className = conf.get(config.EXTERNAL_BLOCK_STORE_CLIENT_CLASS)
+      val isAuthenticationEnabled = securityManager.isAuthenticationEnabled().
+        asInstanceOf[java.lang.Boolean]
+      val shuffleRegistrationTimeout = conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT).
+        asInstanceOf[java.lang.Long]
+      Try(Utils.classForName(className).getConstructor(classOf[TransportConf],
+        classOf[SecretKeyHolder], java.lang.Boolean.TYPE, java.lang.Long.TYPE).
+        newInstance(transConf, securityManager, isAuthenticationEnabled,
+          shuffleRegistrationTimeout).asInstanceOf[ExternalBlockStoreClient]) match {
+        case ScalaSuccess(value) => value
+        case Failure(exception) =>
+          logInfo(s"Could not find $className, falling back to ExternalShuffleClient")
+          logDebug(s"Unable to instantiate $className", exception)
+          // Load default on exception
+          new ExternalBlockStoreClient(transConf, securityManager,
+            securityManager.isAuthenticationEnabled(),
+            conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
+      }
+    }
+
+    val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+      Some(instantiateExternalShuffleClient())
     } else {
       None
     }

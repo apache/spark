@@ -35,6 +35,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile._
@@ -353,6 +354,20 @@ private[spark] class CoarseGrainedExecutorBackend(
                 // since the start of computing it.
                 if (allBlocksMigrated && (migrationTime > lastTaskRunningTime)) {
                   logInfo("No running tasks, all blocks migrated, stopping.")
+                  if (env.conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+                    logInfo("Marking shuffle as decommissioned")
+                    env.blockManager.blockStoreClient match {
+                      case client: ExternalBlockStoreClient =>
+                        logInfo(s"Informing ExternalBlockServer on $hostname that the" +
+                          s" executor $executorId is decommissioned")
+                        val externalShuffleServicePort = env.blockManager.externalShuffleServicePort
+                        client.executorDecommissioned(hostname,
+                          externalShuffleServicePort, executorId, 10000)
+                      case _ =>
+                        logWarning("ExternalBlockServer not available. Skip informing it" +
+                          "about executor decommission status")
+                    }
+                  }
                   exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
                 } else {
                   logInfo("All blocks not yet migrated.")

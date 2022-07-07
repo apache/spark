@@ -79,8 +79,24 @@ public class ExternalBlockHandler extends RpcHandler
   public ExternalBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
     this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
+            getExternalShuffleBlockResolver(conf, registeredExecutorFile),
       new NoOpMergedShuffleFileManager(conf));
+  }
+
+  private static ExternalShuffleBlockResolver getExternalShuffleBlockResolver(TransportConf conf,
+                                                                              File registeredExecutorFile) throws IOException {
+    String className = "";
+    try {
+      className = conf.get(ShuffleConfigurations.SHUFFLE_SERVICE_RESOLVER_CLASS,
+              ShuffleConfigurations.SHUFFLE_SERVICE_RESOLVER_CLASS_DEFAULT);
+      return (ExternalShuffleBlockResolver) Class.forName(className)
+              .getConstructor(TransportConf.class, File.class)
+              .newInstance(conf, registeredExecutorFile);
+    } catch (Exception e) {
+      logger.error("Unable to instantiate " + className, e);
+      // Load default on exception
+      return new ExternalShuffleBlockResolver(conf, registeredExecutorFile);
+    }
   }
 
   public ExternalBlockHandler(
@@ -88,7 +104,7 @@ public class ExternalBlockHandler extends RpcHandler
       File registeredExecutorFile,
       MergedShuffleFileManager mergeManager) throws IOException {
     this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, registeredExecutorFile), mergeManager);
+            getExternalShuffleBlockResolver(conf, registeredExecutorFile), mergeManager);
   }
 
   @VisibleForTesting
@@ -232,6 +248,11 @@ public class ExternalBlockHandler extends RpcHandler
       // In any cases of the error, diagnoseShuffleBlockCorruption should return UNKNOWN_ISSUE,
       // so it should always reply as success.
       callback.onSuccess(new CorruptionCause(cause).toByteBuffer());
+    } else if (msgObj instanceof ExecutorDecommissioned) {
+      ExecutorDecommissioned msg = (ExecutorDecommissioned) msgObj;
+      checkAuth(client, msg.appId);
+      blockManager.setExecutorDecommissioned(msg.appId, msg.execId);
+      callback.onSuccess(ByteBuffer.wrap(new byte[0]));
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }

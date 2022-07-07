@@ -566,6 +566,11 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val EXTERNAL_BLOCK_STORE_CLIENT_CLASS =
+    ConfigBuilder("spark.shuffle.service.client.class")
+      .doc("The client class to use for fetching shuffle files.")
+      .stringConf.createWithDefault("org.apache.spark.network.shuffle.ExternalBlockStoreClient")
+
   private[spark] val DISKSTORE_SUB_DIRECTORIES =
     ConfigBuilder("spark.diskStore.subDirectories")
       .doc("Number of subdirectories inside each path listed in spark.local.dir for " +

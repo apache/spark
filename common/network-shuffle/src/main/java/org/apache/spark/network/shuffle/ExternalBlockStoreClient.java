@@ -315,6 +315,17 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     return numRemovedBlocksFuture;
   }
 
+  /**
+   * Notify external shuffle service that the executor has offloaded all it's shuffle data.
+   *
+   * @param host Host of shuffle server.
+   * @param port Port of shuffle server.
+   */
+  public void executorDecommissioned(String host, int port, String execId, long timeout)
+          throws InterruptedException, IOException {
+    logger.warn("Default implementation does not support this");
+  }
+
   @Override
   public void close() {
     checkInit();

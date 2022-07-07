@@ -50,7 +50,7 @@ public abstract class BlockTransferMessage implements Encodable {
     FETCH_SHUFFLE_BLOCKS(9), GET_LOCAL_DIRS_FOR_EXECUTORS(10), LOCAL_DIRS_FOR_EXECUTORS(11),
     PUSH_BLOCK_STREAM(12), FINALIZE_SHUFFLE_MERGE(13), MERGE_STATUSES(14),
     FETCH_SHUFFLE_BLOCK_CHUNKS(15), DIAGNOSE_CORRUPTION(16), CORRUPTION_CAUSE(17),
-    PUSH_BLOCK_RETURN_CODE(18);
+    PUSH_BLOCK_RETURN_CODE(18), EXECUTOR_SHUFFLE_DECOMMISSIONED(19);
 
     private final byte id;
 
@@ -88,6 +88,7 @@ public abstract class BlockTransferMessage implements Encodable {
         case 16: return DiagnoseCorruption.decode(buf);
         case 17: return CorruptionCause.decode(buf);
         case 18: return BlockPushReturnCode.decode(buf);
+        case 19: return ExecutorDecommissioned.decode(buf);
         default: throw new IllegalArgumentException("Unknown message type: " + type);
       }
     }
