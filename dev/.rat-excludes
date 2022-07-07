@@ -138,5 +138,4 @@ over10k
 exported_table/*
 ansible-for-test-node/*
 node_modules
-application_1656321732247_0006_1
-application_1656321732247_0006_2
+spark-events-broken/*
