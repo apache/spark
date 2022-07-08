@@ -435,6 +435,8 @@ tableExists <- function(tableName) {
 #' @param tableName the qualified or unqualified name that designates a table/view. If no database
 #'                  identifier is provided, it refers to a table/view in the current database.
 #'                  If \code{databaseName} parameter is specified, this must be an unqualified name.
+#'                  Since 3.4.0 it is allowed to be qualified with catalog name, when databaseName
+#'                  is NULL.
 #' @param databaseName (optional) name of the database
 #' @return a SparkDataFrame of the list of column descriptions.
 #' @rdname listColumns
@@ -442,7 +444,7 @@ tableExists <- function(tableName) {
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' listColumns("mytable")
+#' listColumns("spark_catalog.default.mytable")
 #' }
 #' @note since 2.2.0
 listColumns <- function(tableName, databaseName = NULL) {
@@ -495,12 +497,13 @@ listFunctions <- function(databaseName = NULL) {
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
+#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
 #' @rdname recoverPartitions
 #' @name recoverPartitions
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' recoverPartitions("myTable")
+#' recoverPartitions("spark_catalog.default.myTable")
 #' }
 #' @note since 2.2.0
 recoverPartitions <- function(tableName) {
