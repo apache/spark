@@ -4074,7 +4074,7 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases, get
   expect_equal(db$catalog, "spark_catalog")
 })
 
-test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
+test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, functionExists", {
   tb <- listTables()
   count <- count(tables())
   expect_equal(nrow(listTables("default")), count)
@@ -4101,7 +4101,7 @@ test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
                paste("Error in listColumns : analysis error - Table",
                      "'zxwtyswklpf' does not exist in database 'default'"))
 
-  f <- listFunctions()
+  f <- listFunctions("spark_catalog.default")
   expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
                c("name", "catalog", "namespace", "description", "className", "isTemporary"))
@@ -4110,6 +4110,25 @@ test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
   expect_error(listFunctions("zxwtyswklpf_db"),
                paste("Error in listFunctions : no such database - Database",
                      "'zxwtyswklpf_db' not found"))
+
+  expect_true(functionExists("abs"))
+  expect_false(functionExists("aabbss"))
+
+  sql("CREATE FUNCTION func1 AS 'org.apache.spark.sql.catalyst.expressions.Add'")
+
+  expect_true(functionExists("func1"))
+  expect_true(functionExists("default.func1"))
+  expect_true(functionExists("spark_catalog.default.func1"))
+
+  expect_false(functionExists("func2"))
+  expect_false(functionExists("default.func2"))
+  expect_false(functionExists("spark_catalog.default.func2"))
+
+  sql("DROP FUNCTION func1")
+
+  expect_false(functionExists("func1"))
+  expect_false(functionExists("default.func1"))
+  expect_false(functionExists("spark_catalog.default.func1"))
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),

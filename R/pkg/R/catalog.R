@@ -582,14 +582,15 @@ listColumns <- function(tableName, databaseName = NULL) {
 #' Returns a list of functions registered in the specified database.
 #' This includes all temporary functions.
 #'
-#' @param databaseName (optional) name of the database
+#' @param databaseName (optional) name of the database. Since 3.4.0 it is allowed
+#'                     to be qualified with catalog name.
 #' @return a SparkDataFrame of the list of function descriptions.
 #' @rdname listFunctions
 #' @name listFunctions
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' listFunctions()
+#' listFunctions(spark_catalog.default)
 #' }
 #' @note since 2.2.0
 listFunctions <- function(databaseName = NULL) {
@@ -604,6 +605,28 @@ listFunctions <- function(databaseName = NULL) {
     handledCallJMethod(catalog, "listFunctions", databaseName)
   }
   dataFrame(callJMethod(jdst, "toDF"))
+}
+
+#' Checks if the function with the specified name exists.
+#'
+#' Checks if the function with the specified name exists.
+#'
+#' @param functionName name of the function, allowed to be qualified with catalog name
+#' @rdname functionExists
+#' @name functionExists
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' functionExists("spark_catalog.default.myFunc")
+#' }
+#' @note since 3.4.0
+functionExists <- function(functionName) {
+  sparkSession <- getSparkSession()
+  if (class(functionName) != "character") {
+    stop("functionName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "functionExists", functionName)
 }
 
 #' Recovers all the partitions in the directory of a table and update the catalog
