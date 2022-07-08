@@ -35,8 +35,11 @@ private[sql] object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
+  private val distinctUnsupportedAggregateFunctions =
+    Set("COVAR_POP", "COVAR_SAMP", "CORR", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
+
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
-    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR")
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
 
   private val supportedFunctions = supportedAggregateFunctions ++
     Set("ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LOG", "LOG10", "LN", "EXP",
@@ -49,14 +52,13 @@ private[sql] object H2Dialect extends JdbcDialect {
 
   class H2SQLBuilder extends JDBCSQLBuilder {
     override def visitAggregateFunction(
-        funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
-      funcName match {
-        case "COVAR_POP" | "COVAR_SAMP" | "CORR" if isDistinct =>
-          throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
-            s"support aggregate function: $funcName with DISTINCT");
-        case _ => super.visitAggregateFunction(funcName, isDistinct, inputs)
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
+      if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
+        throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
+          s"support aggregate function: $funcName with DISTINCT");
+      } else {
+        super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
-    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
