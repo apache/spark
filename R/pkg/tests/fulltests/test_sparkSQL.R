@@ -3478,6 +3478,8 @@ test_that("Method str()", {
 
   # Test utils:::str
   expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
+
+  dropTempView("irisView")
 })
 
 test_that("Histogram", {
