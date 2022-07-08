@@ -224,8 +224,9 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
     override def visitLiteral(literal: Literal[_]): String = {
-      compileValue(
-        CatalystTypeConverters.convertToScala(literal.value(), literal.dataType())).toString
+      Option(literal.value()).map(v =>
+        compileValue(CatalystTypeConverters.convertToScala(v, literal.dataType())).toString)
+        .getOrElse(super.visitLiteral(literal))
     }
 
     override def visitNamedReference(namedRef: NamedReference): String = {
