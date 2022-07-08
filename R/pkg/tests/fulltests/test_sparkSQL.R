@@ -654,19 +654,14 @@ test_that("read/write json files - compression option", {
 test_that("test tableNames and tables", {
   count <- count(listTables())
 
-  schema <- structType(structField("name", "string"), structField("age", "integer"),
-                       structField("height", "float"))
-  createTable("people", source = "json", schema = schema)
-
+  df <- read.json(jsonPath)
+  createOrReplaceTempView(df, "table1")
   expect_equal(length(tableNames()), count + 1)
   expect_equal(length(tableNames("default")), count + 1)
-  expect_equal(length(tableNames("spark_catalog.default")), count + 1)
 
   tables <- listTables()
   expect_equal(count(tables), count + 1)
   expect_equal(count(tables()), count(tables))
-  expect_equal(count(tables("default")), count + 1)
-  expect_equal(count(tables("spark_catalog.default")), count + 1)
   expect_true("tableName" %in% colnames(tables()))
   expect_true(all(c("tableName", "namespace", "isTemporary") %in% colnames(tables())))
 
@@ -678,6 +673,22 @@ test_that("test tableNames and tables", {
 
   tables <- listTables()
   expect_equal(count(tables), count + 0)
+
+  count2 <- count(listTables())
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("people", source = "json", schema = schema)
+
+  expect_equal(length(tableNames()), count2 + 1)
+  expect_equal(length(tableNames("default")), count2 + 1)
+  expect_equal(length(tableNames("spark_catalog.default")), count2 + 1)
+
+  tables <- listTables()
+  expect_equal(count(tables), count2 + 1)
+  expect_equal(count(tables()), count(tables))
+  expect_equal(count(tables("default")), count2 + 1)
+  expect_equal(count(tables("spark_catalog.default")), count2 + 1)
+  sql("DROP TABLE IF EXISTS people")
 })
 
 test_that(
