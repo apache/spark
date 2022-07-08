@@ -1802,7 +1802,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df1,
       """
         |PushedAggregates: [REGR_INTERCEPT(BONUS, BONUS), REGR_R2(BONUS, BONUS),
-        |REGR_SLOPE(BONUS, BONUS), REGR_SXY(BONUS, B...,
+        |REGR_SLOPE(BONUS, BONUS), REGR_SXY(BONUS, BONUS)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
