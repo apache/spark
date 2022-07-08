@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.Extract;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
@@ -41,6 +42,9 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof Cast) {
       Cast cast = (Cast) expr;
       return visitCast(build(cast.expression()), cast.dataType());
+    } else if (expr instanceof Extract) {
+      Extract extract = (Extract) expr;
+      return visitExtract(extract.field(), build(extract.source()));
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
       String name = e.name();
@@ -131,6 +135,9 @@ public class V2ExpressionSQLBuilder {
         case "UPPER":
         case "LOWER":
         case "TRANSLATE":
+        case "DATE_ADD":
+        case "DATE_DIFF":
+        case "TRUNC":
           return visitSQLFunction(name,
             Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "CASE_WHEN": {
@@ -287,5 +294,9 @@ public class V2ExpressionSQLBuilder {
     } else {
       return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
     }
+  }
+
+  protected String visitExtract(String field, String source) {
+    return "EXTRACT(" + field + " FROM " + source + ")";
   }
 }

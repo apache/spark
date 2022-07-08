@@ -106,6 +106,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "(1, 'bottle', 11111111111111111111.123)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
         "(1, 'bottle', 99999999999999999999.123)").executeUpdate()
+
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"datetime\" (name TEXT(32), date1 DATE, time1 TIMESTAMP)")
+        .executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
+        "('amy', '2022-05-19', '2022-05-19 00:00:00')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
+        "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
     }
     H2Dialect.registerFunction("my_avg", IntegralAverage)
   }
@@ -123,9 +131,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String*): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        checkKeywordsExistsInExplain(df, expectedPlanFragment: _*)
+    withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
+      df.queryExecution.optimizedPlan.collect {
+        case _: DataSourceV2ScanRelation =>
+          checkKeywordsExistsInExplain(df, expectedPlanFragment: _*)
+      }
     }
   }
 
@@ -668,8 +678,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkSortRemoved(df9)
     checkLimitRemoved(df9)
     checkPushedInfo(df9, "PushedFilters: [], " +
-      "PushedTopN: ORDER BY [CASE WHEN (SALARY > 8000.00) AND " +
-      "(SALARY < 10000.00) THEN SALARY ELSE 0.00 END ASC NULL..., ")
+      "PushedTopN: " +
+      "ORDER BY [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
+      "ASC NULLS FIRST, DEPT ASC NULLS FIRST, SALARY ASC NULLS FIRST] LIMIT 3,")
     checkAnswer(df9,
       Seq(Row(1, "amy", 10000, 0), Row(2, "david", 10000, 0), Row(2, "alex", 12000, 0)))
 
@@ -686,8 +697,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkSortRemoved(df10, false)
     checkLimitRemoved(df10, false)
     checkPushedInfo(df10, "PushedFilters: [], " +
-      "PushedTopN: ORDER BY [CASE WHEN (SALARY > 8000.00) AND " +
-      "(SALARY < 10000.00) THEN SALARY ELSE 0.00 END ASC NULL..., ")
+      "PushedTopN: " +
+      "ORDER BY [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
+      "ASC NULLS FIRST, DEPT ASC NULLS FIRST, SALARY ASC NULLS FIRST] LIMIT 3,")
     checkAnswer(df10,
       Seq(Row(1, "amy", 10000, 0), Row(2, "david", 10000, 0), Row(2, "alex", 12000, 0)))
   }
@@ -752,8 +764,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df7 = spark.table("h2.test.employee").filter(not($"is_manager") === true)
     checkFiltersRemoved(df7)
-    checkPushedInfo(df7,
-      "PushedFilters: [IS_MANAGER IS NOT NULL, NOT (IS_MANAGER = true) = TRUE], ")
+    checkPushedInfo(df7, "PushedFilters: [IS_MANAGER IS NOT NULL, NOT (IS_MANAGER = true) = TRUE], ")
     checkAnswer(df7, Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "alex", 12000, 1200, false)))
 
     val df8 = spark.table("h2.test.employee").filter($"is_manager" === true)
@@ -805,8 +816,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter(floor($"bonus") === 1200)
       .filter(ceil($"bonus") === 1200)
     checkFiltersRemoved(df13)
-    checkPushedInfo(df13, "PushedFilters: [BONUS IS NOT NULL, LN(BONUS) > 7.0, EXP(BONUS) > 0.0, " +
-      "(POWER(BONUS, 2.0)) = 1440000.0, SQRT(BONU...,")
+    checkPushedInfo(df13, "PushedFilters: " +
+      "[BONUS IS NOT NULL, LN(BONUS) > 7.0, EXP(BONUS) > 0.0, (POWER(BONUS, 2.0)) = 1440000.0, " +
+      "SQRT(BONUS) > 34.0, FLOOR(BONUS) = 1200, CEIL(BONUS) = 1200],")
     checkAnswer(df13, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
@@ -828,8 +840,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter(radians($"bonus") > 20)
       .filter(signum($"bonus") === 1)
     checkFiltersRemoved(df15)
-    checkPushedInfo(df15, "PushedFilters: [BONUS IS NOT NULL, (LOG(2.0, BONUS)) > 10.0, " +
-      "LOG10(BONUS) > 3.0, (ROUND(BONUS, 0)) = 1200.0, DEG...,")
+    checkPushedInfo(df15, "PushedFilters: " +
+      "[BONUS IS NOT NULL, (LOG(2.0, BONUS)) > 10.0, LOG10(BONUS) > 3.0, " +
+      "(ROUND(BONUS, 0)) = 1200.0, DEGREES(BONUS) > 68754.0, RADIANS(BONUS) > 20.0, " +
+      "SIGN(BONUS) = 1.0],")
     checkAnswer(df15, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
@@ -845,8 +859,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter(atan($"bonus") > 1.4)
       .filter(atan2($"bonus", $"bonus") > 0.7)
     checkFiltersRemoved(df16)
-    checkPushedInfo(df16, "PushedFilters: [BONUS IS NOT NULL, SIN(BONUS) < -0.08, " +
-      "SINH(BONUS) > 200.0, COS(BONUS) > 0.9, COSH(BONUS) > 200....,")
+    checkPushedInfo(df16, "PushedFilters: [" +
+      "BONUS IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, COS(BONUS) > 0.9, " +
+      "COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, " +
+      "ASIN(BONUS) > 0.1, ACOS(BONUS) > 1.4, ATAN(BONUS) > 1.4, (ATAN2(BONUS, BONUS)) > 0.7],")
     checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
@@ -949,16 +965,90 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
             |AND cast(dept as short) > 1
             |AND cast(bonus as decimal(20, 2)) > 1200""".stripMargin)
         checkFiltersRemoved(df6, ansiMode)
-        val expectedPlanFragment8 = if (ansiMode) {
+        val expectedPlanFragment6 = if (ansiMode) {
           "PushedFilters: [BONUS IS NOT NULL, DEPT IS NOT NULL, " +
-            "CAST(BONUS AS string) LIKE '%30%', CAST(DEPT AS byte) > 1, ...,"
+            "CAST(BONUS AS string) LIKE '%30%', CAST(DEPT AS byte) > 1, " +
+            "CAST(DEPT AS short) > 1, CAST(BONUS AS decimal(20,2)) > 1200.00]"
         } else {
           "PushedFilters: [BONUS IS NOT NULL, DEPT IS NOT NULL],"
         }
-        checkPushedInfo(df6, expectedPlanFragment8)
+        checkPushedInfo(df6, expectedPlanFragment6)
         checkAnswer(df6, Seq(Row(2, "david", 10000, 1300, true)))
       }
     }
+  }
+
+  test("scan with filter push-down with date time functions") {
+    val df1 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
+    checkFiltersRemoved(df1)
+    val expectedPlanFragment1 =
+      "PushedFilters: [DATE1 IS NOT NULL, EXTRACT(DAY_OF_YEAR FROM DATE1) > 100, " +
+        "EXTRACT(DAY FROM DATE1) > 10]"
+    checkPushedInfo(df1, expectedPlanFragment1)
+    checkAnswer(df1, Seq(Row("amy"), Row("alex")))
+
+    val df2 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "year(date1) = 2022 AND quarter(date1) = 2")
+    checkFiltersRemoved(df2)
+    val expectedPlanFragment2 =
+      "[DATE1 IS NOT NULL, EXTRACT(YEAR FROM DATE1) = 2022, " +
+        "EXTRACT(QUARTER FROM DATE1) = 2]"
+    checkPushedInfo(df2, expectedPlanFragment2)
+    checkAnswer(df2, Seq(Row("amy"), Row("alex")))
+
+    val df3 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "second(time1) = 0 AND month(date1) = 5")
+    checkFiltersRemoved(df3)
+    val expectedPlanFragment3 =
+      "PushedFilters: [TIME1 IS NOT NULL, DATE1 IS NOT NULL, " +
+        "EXTRACT(SECOND FROM TIME1) = 0, EXTRACT(MONTH FROM DATE1) = 5]"
+    checkPushedInfo(df3, expectedPlanFragment3)
+    checkAnswer(df3, Seq(Row("amy"), Row("alex")))
+
+    val df4 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "hour(time1) = 0 AND minute(time1) = 0")
+    checkFiltersRemoved(df4)
+    val expectedPlanFragment4 =
+      "PushedFilters: [TIME1 IS NOT NULL, EXTRACT(HOUR FROM TIME1) = 0, " +
+        "EXTRACT(MINUTE FROM TIME1) = 0]"
+    checkPushedInfo(df4, expectedPlanFragment4)
+    checkAnswer(df4, Seq(Row("amy"), Row("alex")))
+
+    val df5 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "extract(WEEk from date1) > 10 AND extract(YEAROFWEEK from date1) = 2022")
+    checkFiltersRemoved(df5)
+    val expectedPlanFragment5 =
+      "PushedFilters: [DATE1 IS NOT NULL, EXTRACT(WEEK FROM DATE1) > 10, " +
+        "EXTRACT(YEAR_OF_WEEK FROM DATE1) = 2022]"
+    checkPushedInfo(df5, expectedPlanFragment5)
+    checkAnswer(df5, Seq(Row("alex"), Row("amy")))
+
+    // H2 does not support
+    val df6 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "trunc(date1, 'week') = date'2022-05-16' AND date_add(date1, 1) = date'2022-05-20' " +
+      "AND datediff(date1, '2022-05-10') > 0")
+    checkFiltersRemoved(df6, false)
+    val expectedPlanFragment6 =
+      "PushedFilters: [DATE1 IS NOT NULL]"
+    checkPushedInfo(df6, expectedPlanFragment6)
+    checkAnswer(df6, Seq(Row("amy")))
+
+    val df7 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "weekday(date1) = 2")
+    checkFiltersRemoved(df7)
+    val expectedPlanFragment7 =
+      "PushedFilters: [DATE1 IS NOT NULL, (EXTRACT(DAY_OF_WEEK FROM DATE1) - 1) = 2]"
+    checkPushedInfo(df7, expectedPlanFragment7)
+    checkAnswer(df7, Seq(Row("alex")))
+
+    val df8 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "dayofweek(date1) = 4")
+    checkFiltersRemoved(df8)
+    val expectedPlanFragment8 =
+      "PushedFilters: [DATE1 IS NOT NULL, ((EXTRACT(DAY_OF_WEEK FROM DATE1) % 7) + 1) = 4]"
+    checkPushedInfo(df8, expectedPlanFragment8)
+    checkAnswer(df8, Seq(Row("alex")))
   }
 
   test("scan with column pruning") {
@@ -1012,7 +1102,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(sql("SHOW TABLES IN h2.test"),
       Seq(Row("test", "people", false), Row("test", "empty_table", false),
         Row("test", "employee", false), Row("test", "item", false), Row("test", "dept", false),
-        Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false)))
+        Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
+        Row("test", "datetime", false)))
   }
 
   test("SQL API: create table as select") {
@@ -1110,7 +1201,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkFiltersRemoved(df2)
     val expectedPlanFragment2 =
       "PushedFilters: [NAME IS NOT NULL, TRIM(BOTH FROM NAME) = 'jen', " +
-      "(TRIM(BOTH 'j' FROM NAME)) = 'en', (TRANSLATE(NA..."
+      "(TRIM(BOTH 'j' FROM NAME)) = 'en', (TRANSLATE(NAME, 'e', '1')) = 'j1n']"
     checkPushedInfo(df2, expectedPlanFragment2)
     checkAnswer(df2, Seq(Row(6, "jen", 12000, 1200, true)))
 
@@ -1626,10 +1717,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       """.stripMargin)
     checkAggregateRemoved(df)
     checkPushedInfo(df,
-      "PushedAggregates: [COUNT(CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00)" +
-      " THEN SALARY ELSE 0.00 END), COUNT(CAS..., " +
-      "PushedFilters: [], " +
-      "PushedGroupByExpressions: [DEPT], ")
+      "PushedAggregates: " +
+        "[COUNT(CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END), " +
+        "COUNT(CASE WHEN (SALARY > 8000.00) AND (SALARY <= 13000.00) THEN SALARY ELSE 0.00 END), " +
+        "COUNT(CASE WHEN (SALARY > 11000.00) OR (SALARY < 10000.00) THEN SALARY ELSE 0.00 END), " +
+        "COUNT(CASE WHEN (SALARY >= 12000.00) OR (SALARY < 9000.00) THEN SALARY ELSE 0.00 END), " +
+        "MAX(CASE WHEN (SALARY <= 10000.00) AND (SALARY >= 8000.00) THEN SALARY ELSE 0.00 END), " +
+        "MAX(CASE WHEN (SALARY <= 9000.00) OR (SALARY > 10000.00) THEN SALARY ELSE 0.00 END), " +
+        "MAX(CASE WHEN (SALARY = 0.00) OR (SALARY >= 8000.00) THEN SALARY ELSE 0.00 END), " +
+        "MAX(CASE WHEN (SALARY <= 8000.00) OR (SALARY >= 10000.00) THEN 0.00 ELSE SALARY END), " +
+        "MIN(CASE WHEN (SALARY <= 8000.00) AND (SALARY IS NOT NULL) THEN SALARY ELSE 0.00 END), " +
+        "SUM(CASE WHEN SALARY > 10000.00 THEN 2 WHEN SALARY > 8000.00 THEN 1 END), " +
+        "AVG(CASE WHEN (SALARY <= 8000.00) AND (SALARY IS NULL) THEN SALARY ELSE 0.00 END)], " +
+        "PushedFilters: [], " +
+        "PushedGroupByExpressions: [DEPT],")
     checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 0d, 0d, 2, 0d),
       Row(2, 2, 2, 2, 2, 10000d, 12000d, 10000d, 12000d, 0d, 0d, 3, 0d),
       Row(2, 2, 2, 2, 2, 10000d, 9000d, 10000d, 10000d, 9000d, 0d, 2, 0d)))
