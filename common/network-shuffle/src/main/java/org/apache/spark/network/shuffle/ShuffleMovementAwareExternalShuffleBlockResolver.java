@@ -36,8 +36,8 @@ public class ShuffleMovementAwareExternalShuffleBlockResolver
     private static final Logger LOGGER =
             LoggerFactory.getLogger(ShuffleMovementAwareExternalShuffleBlockResolver.class);
     private final ConcurrentSkipListSet<String> executorShuffleSet =
-
             new ConcurrentSkipListSet<>();
+
     public ShuffleMovementAwareExternalShuffleBlockResolver(
             TransportConf conf,
             File registeredExecutorFile)
