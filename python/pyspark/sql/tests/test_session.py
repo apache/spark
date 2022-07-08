@@ -385,6 +385,10 @@ class CreateDataFrameTest(ReusedSQLTestCase):
             self.spark.createDataFrame([1, 2, 3]).collect(),
             self.spark.createDataFrame([(1,), (2,), (3,)]).collect(),
         )
+        self.assertEqual(
+            self.spark.createDataFrame([1]).collect(),
+            self.spark.createDataFrame([(1,)]).collect(),
+        )
 
         self.assertEqual(
             self.spark.createDataFrame(["x", "y"]).collect(),
