@@ -22,14 +22,13 @@ import java.nio.file.Files
 
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.{Logger, LoggerContext}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
-class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
+class ReplSuite extends SparkFunSuite {
 
   private var originalClassLoader: ClassLoader = null
 
