@@ -4101,7 +4101,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
                paste("Error in listColumns : analysis error - Table",
                      "'zxwtyswklpf' does not exist in database 'default'"))
 
-  f <- listFunctions("spark_catalog.default")
+  f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
                c("name", "catalog", "namespace", "description", "className", "isTemporary"))
