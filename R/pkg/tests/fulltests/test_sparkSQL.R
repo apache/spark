@@ -4049,7 +4049,7 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_error(listTables("bar"),
                "Error in listTables : no such database - Database 'bar' not found")
 
-  c <- listColumns("cars")
+  c <- listColumns("spark_catalog.default.cars")
   expect_equal(nrow(c), 2)
   expect_equal(colnames(c),
                c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
