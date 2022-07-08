@@ -254,7 +254,7 @@ jobs:
   infra-image:
     needs: precondition
     # Currently, only enable docker build from cache for `master` branch jobs
-    if: fromJson(needs.precondition.outputs.required).pyspark == 'true' && ${{ inputs.branch }} == 'master'
+    if: fromJson(needs.precondition.outputs.required).pyspark == 'true' && inputs.branch == 'master'
     runs-on: ubuntu-latest
     outputs:
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
