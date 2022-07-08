@@ -654,14 +654,19 @@ test_that("read/write json files - compression option", {
 test_that("test tableNames and tables", {
   count <- count(listTables())
 
-  df <- read.json(jsonPath)
-  createOrReplaceTempView(df, "table1")
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("people", source = "json", schema = schema)
+
   expect_equal(length(tableNames()), count + 1)
   expect_equal(length(tableNames("default")), count + 1)
+  expect_equal(length(tableNames("spark_catalog.default")), count + 1)
 
   tables <- listTables()
   expect_equal(count(tables), count + 1)
   expect_equal(count(tables()), count(tables))
+  expect_equal(count(tables("default")), count + 1)
+  expect_equal(count(tables("spark_catalog.default")), count + 1)
   expect_true("tableName" %in% colnames(tables()))
   expect_true(all(c("tableName", "namespace", "isTemporary") %in% colnames(tables())))
 
@@ -4039,6 +4044,12 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_error(setCurrentDatabase("zxwtyswklpf"),
                paste0("Error in setCurrentDatabase : no such database - Database ",
                "'zxwtyswklpf' not found"))
+
+  expect_true(databaseExists("default"))
+  expect_true(databaseExists("spark_catalog.default"))
+  expect_false(databaseExists("some_db"))
+  expect_false(databaseExists("spark_catalog.some_db"))
+
   dbs <- collect(listDatabases())
   expect_equal(names(dbs), c("name", "catalog", "description", "locationUri"))
   expect_equal(which(dbs[, 1] == "default"), 1)
@@ -4047,6 +4058,8 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
 test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
   tb <- listTables()
   count <- count(tables())
+  expect_equal(nrow(listTables("default")), count)
+  expect_equal(nrow(listTables("spark_catalog.default")), count)
   expect_equal(nrow(tb), count)
   expect_equal(colnames(tb),
                c("name", "catalog", "namespace", "description", "tableType", "isTemporary"))

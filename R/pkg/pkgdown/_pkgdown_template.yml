@@ -263,6 +263,7 @@ reference:
 - contents:
   - currentCatalog
   - currentDatabase
+  - databaseExists
   - dropTempTable
   - dropTempView
   - getTable

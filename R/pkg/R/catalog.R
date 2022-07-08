@@ -277,14 +277,15 @@ dropTempView <- function(viewName) {
 #'
 #' Returns a SparkDataFrame containing names of tables in the given database.
 #'
-#' @param databaseName (optional) name of the database
+#' @param databaseName (optional) name of the database, since 3.4.0 it is allowed to be
+#'                     qualified with catalog name.
 #' @return a SparkDataFrame
 #' @rdname tables
 #' @seealso \link{listTables}
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' tables("hive")
+#' tables("spark_catalog.hive")
 #' }
 #' @name tables
 #' @note tables since 1.4.0
@@ -297,13 +298,14 @@ tables <- function(databaseName = NULL) {
 #'
 #' Returns the names of tables in the given database as an array.
 #'
-#' @param databaseName (optional) name of the database
+#' @param databaseName (optional) name of the database, since 3.4.0 it is allowed to be
+#'                     qualified with catalog name.
 #' @return a list of table names
 #' @rdname tableNames
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' tableNames("hive")
+#' tableNames("spark_catalog.hive")
 #' }
 #' @name tableNames
 #' @note tableNames since 1.4.0
@@ -356,6 +358,28 @@ setCurrentDatabase <- function(databaseName) {
   invisible(handledCallJMethod(catalog, "setCurrentDatabase", databaseName))
 }
 
+#' Checks if the database with the specified name exists.
+#'
+#' Checks if the database with the specified name exists.
+#'
+#' @param databaseName name of the database, allowed to be qualified with catalog name
+#' @rdname databaseExists
+#' @name databaseExists
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' databaseExists("spark_catalog.default")
+#' }
+#' @note since 3.4.0
+databaseExists <- function(databaseName) {
+  sparkSession <- getSparkSession()
+  if (class(databaseName) != "character") {
+    stop("databaseName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "databaseExists", databaseName)
+}
+
 #' Returns a list of databases available
 #'
 #' Returns a list of databases available.
@@ -380,7 +404,8 @@ listDatabases <- function() {
 #' Returns a list of tables or views in the specified database.
 #' This includes all temporary views.
 #'
-#' @param databaseName (optional) name of the database
+#' @param databaseName (optional) name of the database, since 3.4.0 it is allowed to be
+#'                     qualified with catalog name.
 #' @return a SparkDataFrame of the list of tables.
 #' @rdname listTables
 #' @name listTables
@@ -389,7 +414,7 @@ listDatabases <- function() {
 #' \dontrun{
 #' sparkR.session()
 #' listTables()
-#' listTables("default")
+#' listTables("spark_catalog.default")
 #' }
 #' @note since 2.2.0
 listTables <- function(databaseName = NULL) {
