@@ -244,7 +244,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       if (isSupportedFunction(funcName)) {
-        s"""${dialectFunctionName(funcName).getOrElse(funcName)}(${inputs.mkString(", ")})"""
+        s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
       } else {
         // The framework will catch the error and give up the push-down.
         // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
@@ -256,15 +256,14 @@ abstract class JdbcDialect extends Serializable with Logging {
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
       if (isSupportedFunction(funcName)) {
-        super.visitAggregateFunction(
-          dialectFunctionName(funcName).getOrElse(funcName), isDistinct, inputs)
+        super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
       } else {
         throw new UnsupportedOperationException(
           s"${this.getClass.getSimpleName} does not support aggregate function: $funcName");
       }
     }
 
-    protected def dialectFunctionName(funcName: String): Option[String] = None
+    protected def dialectFunctionName(funcName: String): String = funcName
 
     override def visitOverlay(inputs: Array[String]): String = {
       if (isSupportedFunction("OVERLAY")) {

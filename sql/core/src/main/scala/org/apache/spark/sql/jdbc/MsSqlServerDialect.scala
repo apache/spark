@@ -63,11 +63,11 @@ private object MsSqlServerDialect extends JdbcDialect {
     supportedFunctions.contains(funcName)
 
   class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
-    override def dialectFunctionName(funcName: String): Option[String] = funcName match {
-      case "VAR_POP" => Some("VARP")
-      case "VAR_SAMP" => Some("VAR")
-      case "STDDEV_POP" => Some("STDEVP")
-      case "STDDEV_SAMP" => Some("STDEV")
+    override def dialectFunctionName(funcName: String): String = funcName match {
+      case "VAR_POP" => "VARP"
+      case "VAR_SAMP" => "VAR"
+      case "STDDEV_POP" => "STDEVP"
+      case "STDDEV_SAMP" => "STDEV"
       case _ => super.dialectFunctionName(funcName)
     }
   }

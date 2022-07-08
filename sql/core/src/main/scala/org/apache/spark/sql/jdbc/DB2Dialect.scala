@@ -41,13 +41,13 @@ private object DB2Dialect extends JdbcDialect {
     supportedFunctions.contains(funcName)
 
   class DB2SQLBuilder extends JDBCSQLBuilder {
-    override def dialectFunctionName(funcName: String): Option[String] = funcName match {
-      case "VAR_POP" => Some("VARIANCE")
-      case "VAR_SAMP" => Some("VARIANCE_SAMP")
-      case "STDDEV_POP" => Some("STDDEV")
-      case "STDDEV_SAMP" => Some("STDDEV_SAMP")
-      case "COVAR_POP" => Some("COVARIANCE")
-      case "COVAR_SAMP" => Some("COVARIANCE_SAMP")
+    override def dialectFunctionName(funcName: String): String = funcName match {
+      case "VAR_POP" => "VARIANCE"
+      case "VAR_SAMP" => "VARIANCE_SAMP"
+      case "STDDEV_POP" => "STDDEV"
+      case "STDDEV_SAMP" => "STDDEV_SAMP"
+      case "COVAR_POP" => "COVARIANCE"
+      case "COVAR_SAMP" => "COVARIANCE_SAMP"
       case _ => super.dialectFunctionName(funcName)
     }
   }
