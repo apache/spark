@@ -2630,11 +2630,9 @@ class AdaptiveQueryExecSuite
         checkResultPartition(
           sql("""
                 |SELECT * FROM
-                |(SELECT * FROM t3) t3
-                |join (
+                |t3 join (
                 |SELECT t1.key, t2.value FROM
-                |(SELECT * FROM t1 ) t1
-                |join (SELECT * FROM t2) t2
+                |t1 join t2
                 |on t1.value = t2.value) t
                 |on t3.key = t.key or t3.value=t.value
             """.stripMargin),
@@ -2644,10 +2642,9 @@ class AdaptiveQueryExecSuite
         checkResultPartition(
           sql("""
                 |SELECT * FROM
-                |(SELECT * FROM t1)
-                |t1 join (SELECT * FROM t2)
-                |t2 on t1.key = t2.key
-                |or t1.value=t2.value
+                |t1 join t2
+                |on t1.key = t2.key
+                |or t1.value = t2.value
                 """.stripMargin),
           numShuffleReader = 0,
           numPartition = 8
