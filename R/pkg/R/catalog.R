@@ -17,6 +17,66 @@
 
 # catalog.R: SparkSession catalog functions
 
+#' Returns the current default catalog
+#'
+#' Returns the current default catalog.
+#'
+#' @return name of the current default catalog.
+#' @rdname currentCatalog
+#' @name currentCatalog
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' currentCatalog()
+#' }
+#' @note since 3.4.0
+currentCatalog <- function() {
+  sparkSession <- getSparkSession()
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "currentCatalog")
+}
+
+#' Sets the current default catalog
+#'
+#' Sets the current default catalog.
+#'
+#' @param catalogName name of the catalog
+#' @rdname setCurrentCatalog
+#' @name setCurrentCatalog
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' setCurrentCatalog("spark_catalog")
+#' }
+#' @note since 3.4.0
+setCurrentCatalog <- function(catalogName) {
+  sparkSession <- getSparkSession()
+  if (class(catalogName) != "character") {
+    stop("catalogName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  invisible(handledCallJMethod(catalog, "setCurrentCatalog", catalogName))
+}
+
+#' Returns a list of catalog available
+#'
+#' Returns a list of catalog available.
+#'
+#' @return a SparkDataFrame of the list of catalog.
+#' @rdname listCatalogs
+#' @name listCatalogs
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' listCatalogs()
+#' }
+#' @note since 3.4.0
+listCatalogs <- function() {
+  sparkSession <- getSparkSession()
+  catalog <- callJMethod(sparkSession, "catalog")
+  dataFrame(callJMethod(callJMethod(catalog, "listCatalogs"), "toDF"))
+}
+
 #' (Deprecated) Create an external table
 #'
 #' Creates an external table based on the dataset in a data source,
