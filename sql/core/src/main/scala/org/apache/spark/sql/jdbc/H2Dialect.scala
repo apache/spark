@@ -22,10 +22,12 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
@@ -122,5 +124,29 @@ private[sql] object H2Dialect extends JdbcDialect {
       case _ => // do nothing
     }
     super.classifyException(message, e)
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val jdbcSQLBuilder = new H2JDBCSQLBuilder()
+    try {
+      Some(jdbcSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  class H2JDBCSQLBuilder extends JDBCSQLBuilder {
+
+    override def visitExtract(field: String, source: String): String = {
+      val newField = field match {
+        case "DAY_OF_WEEK" => "ISO_DAY_OF_WEEK"
+        case "WEEK" => "ISO_WEEK"
+        case "YEAR_OF_WEEK" => "ISO_WEEK_YEAR"
+        case _ => field
+      }
+      s"EXTRACT($newField FROM $source)"
+    }
   }
 }
