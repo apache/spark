@@ -3029,7 +3029,10 @@ object SQLConf {
           " in memory, otherwise do a global sort which spills to disk if necessary.")
       .version("2.4.0")
       .intConf
-      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+      .checkValue(_ <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+        "The top-K sort fallback threshold should be less than or equal to " +
+          s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+      .createWithDefault(800000)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
