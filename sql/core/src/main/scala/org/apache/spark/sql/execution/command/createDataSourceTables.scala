@@ -152,7 +152,6 @@ case class CreateDataSourceTableAsSelectCommand(
       outputColumns,
       query,
       SparkSession.active.sessionState.conf.resolver)
-    // We do not need the path option from the table location to get writer bucket spec.
     val options = table.storage.properties
     V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
   }

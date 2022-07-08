@@ -412,6 +412,14 @@ object SQLConf {
       .longConf
       .createWithDefault(67108864L)
 
+  val PLANNED_WRITE_ENABLED = buildConf("spark.sql.optimizer.plannedWrite.enabled")
+    .internal()
+    .doc("When set to true, Spark optimizer will add logical sort operators to V1 write commands " +
+      "if needed so that `FileFormatWriter` does not need to insert physical sorts.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -3780,14 +3788,6 @@ object SQLConf {
     .version("3.2.0")
     .intConf
     .createWithDefault(0)
-
-  val PLANNED_WRITE_ENABLED = buildConf("spark.sql.plannedWrite.enabled")
-    .internal()
-    .doc("When set to true, Spark adds logical sorts to V1 write commands if needed so that " +
-      "`FileFormatWriter` does not need to insert physical sorts.")
-    .version("3.2.0")
-    .booleanConf
-    .createWithDefault(false)
 
   val INFER_NESTED_DICT_AS_STRUCT = buildConf("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
     .doc("PySpark's SparkSession.createDataFrame infers the nested dict as a map by default. " +

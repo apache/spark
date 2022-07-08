@@ -30,7 +30,7 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
@@ -213,6 +213,13 @@ case class AdaptiveSparkPlanExec(
   override def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
     executedPlan.resetMetrics()
+  }
+
+  override def outputOrdering: Seq[SortOrder] = {
+    // AQE will not change the output ordering if it is defined in the logical plan.
+    // Use inputPlan's logicalLink here in case some top level physical nodes may be
+    // removed in `initialPlan`.
+    inputPlan.logicalLink.map(_.outputOrdering).getOrElse(Nil)
   }
 
   private def getExecutionId: Option[Long] = {

@@ -19,18 +19,14 @@ package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.datasources.V1WriteCommandSuiteBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 
 class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingleton {
 
   test("create hive table as select") {
-    Seq(true, false).foreach { enabled =>
-      withSQLConf(
-        SQLConf.PLANNED_WRITE_ENABLED.key -> enabled.toString,
-        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
-        withTable("t") {
-          val logAppender = new LogAppender("create hive table")
-          withLogAppender(logAppender) {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
             sql(
               """
                 |CREATE TABLE t
@@ -38,7 +34,6 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
                 |PARTITIONED BY (k)
                 |AS SELECT * FROM t0
                 |""".stripMargin)
-            checkOrdering(logAppender, matched = enabled)
           }
         }
       }
@@ -46,23 +41,18 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
   }
 
   test("insert into hive table") {
-    Seq(true, false).foreach { enabled =>
-      withSQLConf(
-        SQLConf.PLANNED_WRITE_ENABLED.key -> enabled.toString,
-        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
-        withTable("t") {
-          sql(
-            """
-              |CREATE TABLE t (i INT, j INT)
-              |STORED AS PARQUET
-              |PARTITIONED BY (k STRING)
-              |CLUSTERED BY (i, j) SORTED BY (j) INTO 2 BUCKETS
-              |""".stripMargin)
-
-          val logAppender = new LogAppender("insert into hive table")
-          withLogAppender(logAppender) {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t (i INT, j INT)
+            |STORED AS PARQUET
+            |PARTITIONED BY (k STRING)
+            |CLUSTERED BY (i, j) SORTED BY (j) INTO 2 BUCKETS
+            |""".stripMargin)
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
             sql("INSERT OVERWRITE t SELECT * FROM t0")
-            checkOrdering(logAppender, matched = enabled)
           }
         }
       }

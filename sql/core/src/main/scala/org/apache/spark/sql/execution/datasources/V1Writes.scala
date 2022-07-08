@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, BitwiseAnd, HiveHash, Literal, Pmod, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, BitwiseAnd, Expression, HiveHash, Literal, Pmod, SortOrder, String2StringExpression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.unsafe.types.UTF8String
 
 trait V1WriteCommand extends DataWritingCommand {
   // Specify the required ordering for the V1 write command. `FileFormatWriter` will
@@ -51,6 +53,8 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
   private def prepareQuery(write: V1WriteCommand, query: LogicalPlan): LogicalPlan = {
     val requiredOrdering = write.requiredOrdering
     val outputOrdering = query.outputOrdering
+    // Check if the ordering is already matched. It is needed to ensure the
+    // idempotency of the rule.
     val orderingMatched = if (requiredOrdering.length > outputOrdering.length) {
       false
     } else {
@@ -61,13 +65,31 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     if (orderingMatched) {
       query
     } else {
-      // TODO: check if we need Empty2Null conversion before sort.
       Sort(requiredOrdering, global = false, query)
     }
   }
 }
 
 object V1WritesUtils {
+
+  /** A function that converts the empty string to null for partition values. */
+  case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
+    override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
+    override def nullable: Boolean = true
+    override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+      nullSafeCodeGen(ctx, ev, c => {
+        s"""if ($c.numBytes() == 0) {
+           |  ${ev.isNull} = true;
+           |  ${ev.value} = null;
+           |} else {
+           |  ${ev.value} = $c;
+           |}""".stripMargin
+      })
+    }
+
+    override protected def withNewChildInternal(newChild: Expression): Empty2Null =
+      copy(child = newChild)
+  }
 
   def getWriterBucketSpec(
       bucketSpec: Option[BucketSpec],
@@ -127,8 +149,18 @@ object V1WritesUtils {
       Seq.empty
     } else {
       // We should first sort by partition columns, then bucket id, and finally sorting columns.
-      (partitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
-        .map(SortOrder(_, Ascending))
+      val requiredOrdering =
+        partitionColumns ++writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
+
+      // Convert empty string partition columns to null when sorting the columns.
+      // TODO: this will cause output ordering mismatch in FileFormatWriter.
+      // requiredOrdering.map {
+      //  case a: Attribute if partitionSet.contains(a) && a.dataType == StringType && a.nullable =>
+      //    Empty2Null(a)
+      //  case o => o
+      // }.map(SortOrder(_, Ascending))
+
+      requiredOrdering.map(SortOrder(_, Ascending))
     }
   }
 }

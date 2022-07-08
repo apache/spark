@@ -35,13 +35,11 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -52,25 +50,6 @@ object FileFormatWriter extends Logging {
       outputPath: String,
       customPartitionLocations: Map[TablePartitionSpec, String],
       outputColumns: Seq[Attribute])
-
-  /** A function that converts the empty string to null for partition values. */
-  case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
-    override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
-    override def nullable: Boolean = true
-    override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-      nullSafeCodeGen(ctx, ev, c => {
-        s"""if ($c.numBytes() == 0) {
-           |  ${ev.isNull} = true;
-           |  ${ev.value} = null;
-           |} else {
-           |  ${ev.value} = $c;
-           |}""".stripMargin
-      })
-    }
-
-    override protected def withNewChildInternal(newChild: Expression): Empty2Null =
-      copy(child = newChild)
-  }
 
   /** Describes how concurrent output writers should be executed. */
   case class ConcurrentOutputWriterSpec(
@@ -120,7 +99,7 @@ object FileFormatWriter extends Logging {
     val projectList: Seq[NamedExpression] = plan.output.map {
       case p if partitionSet.contains(p) && p.dataType == StringType && p.nullable =>
         needConvert = true
-        Alias(Empty2Null(p), p.name)()
+        Alias(V1WritesUtils.Empty2Null(p), p.name)()
       case attr => attr
     }
     val empty2NullPlan = if (needConvert) ProjectExec(projectList, plan) else plan
@@ -180,7 +159,14 @@ object FileFormatWriter extends Logging {
 
     try {
       val (rdd, concurrentOutputWriterSpec) = if (orderingMatched) {
-        logInfo(s"Output ordering is matched for write job ${description.uuid}")
+        // When planned write is enabled, the optimizer rule V1Writes will add logical sort
+        // operator based on the required ordering of the V1 write command. So the output
+        // ordering of the physical plan should always match the required ordering.
+        // There are two cases where FileFormatWriter still needs to add physical sort:
+        // 1) When the planned write config is disabled.
+        // 2) When the concurrent writers are enabled (in this case the required ordering of a
+        //    V1 write command will be empty).
+        logInfo(s"Output ordering is matched for write job ${description.uuid}.")
         (empty2NullPlan.execute(), None)
       } else {
         // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
