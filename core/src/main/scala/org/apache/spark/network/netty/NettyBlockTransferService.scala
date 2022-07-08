@@ -37,7 +37,6 @@ import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBoot
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockTransferListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockTransferor}
-import org.apache.spark.network.shuffle.BlockStoreClient._
 import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEndpointRef
