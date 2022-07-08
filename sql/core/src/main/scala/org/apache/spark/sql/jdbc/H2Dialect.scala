@@ -23,11 +23,13 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -65,18 +67,27 @@ private[sql] object H2Dialect extends JdbcDialect {
           assert(f.children().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
           Some(s"STDDEV_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" =>
+        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && !f.isDistinct =>
           assert(f.children().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"COVAR_POP($distinct${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" =>
+          Some(s"COVAR_POP(${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && !f.isDistinct =>
           assert(f.children().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"COVAR_SAMP($distinct${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "CORR" =>
+          Some(s"COVAR_SAMP(${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "CORR" && !f.isDistinct =>
           assert(f.children().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"CORR($distinct${f.children().head}, ${f.children().last})")
+          Some(s"CORR(${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "REGR_INTERCEPT" && !f.isDistinct =>
+          assert(f.children().length == 2)
+          Some(s"REGR_INTERCEPT(${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "REGR_R2" && !f.isDistinct =>
+          assert(f.children().length == 2)
+          Some(s"REGR_R2(${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "REGR_SLOPE" && !f.isDistinct =>
+          assert(f.children().length == 2)
+          Some(s"REGR_SLOPE(${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "REGR_SXY" && !f.isDistinct =>
+          assert(f.children().length == 2)
+          Some(s"REGR_SXY(${f.children().head}, ${f.children().last})")
         case _ => None
       }
     )
@@ -107,11 +118,11 @@ private[sql] object H2Dialect extends JdbcDialect {
   }
 
   override def createIndex(
-    indexName: String,
-    tableIdent: Identifier,
-    columns: Array[NamedReference],
-    columnsProperties: util.Map[NamedReference, util.Map[String, String]],
-    properties: util.Map[String, String]): String = {
+      indexName: String,
+      tableIdent: Identifier,
+      columns: Array[NamedReference],
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): String = {
     val columnList = columns.map(col => col.fieldNames.head)
     val (indexType, _) = JdbcUtils.processIndexProperties(properties, "h2")
     s"CREATE INDEX ${indexNameWithSchema(tableIdent, indexName)} $indexType ON " +
@@ -123,10 +134,10 @@ private[sql] object H2Dialect extends JdbcDialect {
   }
 
   override def indexExists(
-    conn: Connection,
-    indexName: String,
-    tableIdent: Identifier,
-    options: JDBCOptions): Boolean = {
+      conn: Connection,
+      indexName: String,
+      tableIdent: Identifier,
+      options: JDBCOptions): Boolean = {
     val sql = s"SELECT * FROM INFORMATION_SCHEMA.INDEXES WHERE " +
       s"TABLE_NAME = '${tableIdent.name()}' AND INDEX_NAME = '$indexName'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
@@ -165,5 +176,29 @@ private[sql] object H2Dialect extends JdbcDialect {
       case _ => // do nothing
     }
     super.classifyException(message, e)
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val jdbcSQLBuilder = new H2JDBCSQLBuilder()
+    try {
+      Some(jdbcSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  class H2JDBCSQLBuilder extends JDBCSQLBuilder {
+
+    override def visitExtract(field: String, source: String): String = {
+      val newField = field match {
+        case "DAY_OF_WEEK" => "ISO_DAY_OF_WEEK"
+        case "WEEK" => "ISO_WEEK"
+        case "YEAR_OF_WEEK" => "ISO_WEEK_YEAR"
+        case _ => field
+      }
+      s"EXTRACT($newField FROM $source)"
+    }
   }
 }

@@ -142,7 +142,7 @@ case class FunctionIdentifier(funcName: String, database: Option[String], catalo
   override val identifier: String = funcName
 
   def this(funcName: String) = this(funcName, None, None)
-  def this(table: String, database: Option[String]) = this(table, database, None)
+  def this(funcName: String, database: Option[String]) = this(funcName, database, None)
 
   override def toString: String = unquotedString
 }
