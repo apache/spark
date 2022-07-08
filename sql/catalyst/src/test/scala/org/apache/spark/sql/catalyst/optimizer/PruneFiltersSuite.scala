@@ -163,32 +163,6 @@ class PruneFiltersSuite extends PlanTest {
     }
   }
 
-  test("Pruning deterministic filter conditions with rand") {
-    val tr = LocalRelation($"a".int, $"b".int, $"c".int)
-    val literal1d = Literal(1d)
-    val rand1 = rand(1)
-
-    Seq(
-      literal1d > rand1,
-      literal1d >= rand1,
-      rand1 < literal1d,
-      rand1 <= literal1d).foreach { condition =>
-      val queryWithUselessFilter = tr.where(condition)
-      val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-      comparePlans(optimized, tr)
-    }
-
-    Seq(
-      literal1d <= rand1,
-      literal1d < rand1,
-      rand1 >= literal1d,
-      rand1 > literal1d).foreach { condition =>
-      val queryWithUselessFilter = tr.where(condition)
-      val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-      comparePlans(optimized, tr)
-    }
-  }
-
   test("SPARK-35273: CombineFilters support non-deterministic expressions") {
     val x = testRelation.where(!$"a".attr.in(1, 3, 5)).subquery("x")
 

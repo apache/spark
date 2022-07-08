@@ -470,6 +470,52 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   }
 }
 
+/**
+ * Optimize Rand expressions in binary comparison:
+ * 1. Converts the binary comparison to true when the comparison value must be true.
+ * 2. Converts the binary comparison to false when the comparison value must be false.
+ */
+object OptimizeRand extends Rule[LogicalPlan] with PredicateHelper {
+  val oneLiteral = Literal(1d)
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(EXPRESSION_WITH_RANDOM_SEED), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+      _.containsAnyPattern(EXPRESSION_WITH_RANDOM_SEED), ruleId) {
+      case GreaterThan(left, Rand(_, _))
+        if left.foldable && left.deterministic && eval(GreaterThanOrEqual(left, oneLiteral)) =>
+        TrueLiteral
+      case GreaterThanOrEqual(left, Rand(_, _))
+        if left.foldable && left.deterministic && eval(GreaterThanOrEqual(left, oneLiteral)) =>
+        TrueLiteral
+      case LessThan(Rand(_, _), right)
+        if right.foldable && right.deterministic && eval(LessThanOrEqual(oneLiteral, right)) =>
+        TrueLiteral
+      case LessThanOrEqual(Rand(_, _), right)
+        if right.foldable && right.deterministic && eval(LessThanOrEqual(oneLiteral, right)) =>
+        TrueLiteral
+      case LessThanOrEqual(left, Rand(_, _))
+        if left.foldable && left.deterministic && eval(GreaterThanOrEqual(left, oneLiteral)) =>
+        FalseLiteral
+      case LessThan(left, Rand(_, _))
+        if left.foldable && left.deterministic && eval(GreaterThanOrEqual(left, oneLiteral)) =>
+        FalseLiteral
+      case GreaterThanOrEqual(Rand(_, _), right)
+        if right.foldable && right.deterministic && eval(LessThanOrEqual(oneLiteral, right)) =>
+        FalseLiteral
+      case GreaterThan(Rand(_, _), right)
+        if right.foldable && right.deterministic && eval(LessThanOrEqual(oneLiteral, right)) =>
+        FalseLiteral
+    }
+  }
+
+  private def eval(cond: Expression): Boolean =
+    try {
+      cond.eval(EmptyRow).asInstanceOf[Boolean]
+    } catch {
+      case NonFatal(_) => false
+    }
+}
 
 /**
  * Simplifies binary comparisons with semantically-equal expressions:

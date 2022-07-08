@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
@@ -108,6 +107,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ConstantPropagation,
         FoldablePropagation,
         OptimizeIn,
+        OptimizeRand,
         ConstantFolding,
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
@@ -1511,8 +1511,6 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
-  val oneLiteral = Literal(1d)
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(FILTER), ruleId) {
     // If the filter condition always evaluate to true, remove the filter.
@@ -1528,52 +1526,16 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(fc, p: LogicalPlan) =>
       val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
-          cond.deterministic && p.constraints.contains(cond) || pruneDeterministicPredicate(cond)
+          cond.deterministic && p.constraints.contains(cond)
         }
-      if (remainingPredicates.isEmpty) {
-        p
-      } else if (remainingPredicates.exists(isDeterministicFalsePredicate)) {
-        LocalRelation(p.output, data = Seq.empty, isStreaming = plan.isStreaming)
-      } else if (prunedPredicates.isEmpty) {
+      if (prunedPredicates.isEmpty) {
         f
+      } else if (remainingPredicates.isEmpty) {
+        p
       } else {
         val newCond = remainingPredicates.reduce(And)
         Filter(newCond, p)
       }
-  }
-
-  private def pruneDeterministicPredicate(predicate: Expression): Boolean = predicate match {
-    case GreaterThan(left, Rand(_, _)) if left.foldable && left.deterministic =>
-      eval(GreaterThanOrEqual(left, oneLiteral))
-    case GreaterThanOrEqual(left, Rand(_, _)) if left.foldable && left.deterministic =>
-      eval(GreaterThanOrEqual(left, oneLiteral))
-    case LessThan(Rand(_, _), right) if right.foldable && right.deterministic =>
-      eval(LessThanOrEqual(oneLiteral, right))
-    case LessThanOrEqual(Rand(_, _), right) if right.foldable && right.deterministic =>
-      eval(LessThanOrEqual(oneLiteral, right))
-    case _ => false
-  }
-
-  private def isDeterministicFalsePredicate(predicate: Expression): Boolean = predicate match {
-    case LessThanOrEqual(left, Rand(_, _)) if left.foldable && left.deterministic =>
-      eval(GreaterThanOrEqual(left, oneLiteral))
-    case LessThan(left, Rand(_, _)) if left.foldable && left.deterministic =>
-      eval(GreaterThanOrEqual(left, oneLiteral))
-    case GreaterThanOrEqual(Rand(_, _), right) if right.foldable && right.deterministic =>
-      eval(LessThanOrEqual(oneLiteral, right))
-    case GreaterThan(Rand(_, _), right) if right.foldable && right.deterministic =>
-      eval(LessThanOrEqual(oneLiteral, right))
-    case _ => false
-  }
-
-  private def eval(cond: Expression): Boolean = if (cond.foldable) {
-    try {
-      cond.eval(EmptyRow).asInstanceOf[Boolean]
-    } catch {
-      case NonFatal(_) => false
-    }
-  } else {
-    false
   }
 }
 

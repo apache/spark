@@ -180,25 +180,6 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     }
   }
 
-  test("Simplify filter conditions with rand") {
-    val literal10d = doubleToLiteral(10d)
-    val rand5 = rand(5)
-    Seq(literal10d > rand5,
-      literal10d >= rand5,
-      rand5 < literal10d,
-      rand5 <= literal10d,
-      literal10d <= rand5,
-      literal10d < rand5,
-      rand5 >= literal10d,
-      rand5 > literal10d
-    ).foreach { condition =>
-      val plan = nonNullableRelation.where(condition).analyze
-      val actual = Optimize.execute(plan)
-      val correctAnswer = nonNullableRelation.analyze
-      comparePlans(actual, correctAnswer)
-    }
-  }
-
   test("SPARK-36359: Coalesce drop all expressions after the first non nullable expression") {
     val testRelation = LocalRelation(
       $"a".int.withNullability(false),
