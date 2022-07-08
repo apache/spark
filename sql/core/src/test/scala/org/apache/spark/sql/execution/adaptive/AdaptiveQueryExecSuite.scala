@@ -2605,8 +2605,8 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-39624 Support coalesce partition through CartesianProduct") {
     def checkResultPartition(
-       df: Dataset[Row],
-       numShuffleReader: Int,
+        df: Dataset[Row],
+        numShuffleReader: Int,
        numPartition: Int): Unit = {
       df.collect()
       assert(collect(df.queryExecution.executedPlan) {
@@ -2638,7 +2638,7 @@ class AdaptiveQueryExecSuite
             """.stripMargin),
           numShuffleReader = 2,
           numPartition = 4)
-        // negative test
+        // negative test: children of cartesian product do not have shuffles
         checkResultPartition(
           sql("""
                 |SELECT * FROM
