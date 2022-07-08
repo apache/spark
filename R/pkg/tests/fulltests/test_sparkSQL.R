@@ -4011,6 +4011,17 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
 })
 
+test_that("catalog APIs, listCatalogs, setCurrentCatalog, currentCatalog", {
+  expect_equal(currentCatalog(), "spark_catalog")
+  expect_error(setCurrentCatalog("spark_catalog"), NA)
+  expect_error(setCurrentCatalog("zxwtyswklpf"),
+               paste0("Error in setCurrentCatalog : ",
+               "org.apache.spark.sql.connector.catalog.CatalogNotFoundException: ",
+               "Catalog 'zxwtyswklpf' plugin class not found: ",
+               "spark.sql.catalog.zxwtyswklpf is not defined"))
+  catalogs <- collect(listCatalogs())
+})
+
 test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
