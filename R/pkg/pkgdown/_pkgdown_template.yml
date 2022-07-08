@@ -275,6 +275,7 @@ reference:
   - recoverPartitions
   - setCurrentCatalog
   - setCurrentDatabase
+  - tableExists
   - tableNames
   - tables
   - uncacheTable

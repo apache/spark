@@ -696,16 +696,27 @@ test_that(
   expect_true(dropTempView("dfView"))
 })
 
-test_that("test cache, uncache and clearCache", {
-  df <- read.json(jsonPath)
-  createOrReplaceTempView(df, "table1")
-  cacheTable("table1")
-  uncacheTable("table1")
+test_that("test tableExists, cache, uncache and clearCache", {
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("table1", source = "json", schema = schema)
+
+  cacheTable("default.table1")
+  uncacheTable("spark_catalog.default.table1")
   clearCache()
-  expect_true(dropTempView("table1"))
 
   expect_error(uncacheTable("zxwtyswklpf"),
       "Error in uncacheTable : analysis error - Table or view not found: zxwtyswklpf")
+
+  expect_true(tableExists("table1"))
+  expect_true(tableExists("default.table1"))
+  expect_true(tableExists("spark_catalog.default.table1"))
+
+  sql("DROP TABLE IF EXISTS spark_catalog.default.table1")
+
+  expect_false(tableExists("table1"))
+  expect_false(tableExists("default.table1"))
+  expect_false(tableExists("spark_catalog.default.table1"))
 })
 
 test_that("insertInto() on a registered table", {
@@ -1342,7 +1353,7 @@ test_that("test HiveContext", {
 
     schema <- structType(structField("name", "string"), structField("age", "integer"),
                          structField("height", "float"))
-    createTable("people", source = "json", schema = schema)
+    createTable("spark_catalog.default.people", source = "json", schema = schema)
     df <- read.df(jsonPathNa, "json", schema)
     insertInto(df, "people")
     expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age, c(16))

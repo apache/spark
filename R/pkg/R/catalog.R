@@ -118,6 +118,7 @@ createExternalTable <- function(tableName, path = NULL, source = NULL, schema = 
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
+#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
 #' @param path (optional) the path of files to load.
 #' @param source (optional) the name of the data source.
 #' @param schema (optional) the schema of the data required for some data sources.
@@ -129,7 +130,7 @@ createExternalTable <- function(tableName, path = NULL, source = NULL, schema = 
 #' sparkR.session()
 #' df <- createTable("myjson", path="path/to/json", source="json", schema)
 #'
-#' createTable("people", source = "json", schema = schema)
+#' createTable("spark_catalog.default.people", source = "json", schema = schema)
 #' insertInto(df, "people")
 #' }
 #' @name createTable
@@ -160,6 +161,7 @@ createTable <- function(tableName, path = NULL, source = NULL, schema = NULL, ..
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
+#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
 #' @return SparkDataFrame
 #' @rdname cacheTable
 #' @examples
@@ -184,6 +186,7 @@ cacheTable <- function(tableName) {
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
+#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
 #' @return SparkDataFrame
 #' @rdname uncacheTable
 #' @examples
@@ -403,6 +406,28 @@ listTables <- function(databaseName = NULL) {
   dataFrame(callJMethod(jdst, "toDF"))
 }
 
+#' Checks if the table with the specified name exists.
+#'
+#' Checks if the table with the specified name exists.
+#'
+#' @param tableName name of the table, allowed to be qualified with catalog name
+#' @rdname tableExists
+#' @name tableExists
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' databaseExists("spark_catalog.default.myTable")
+#' }
+#' @note since 3.4.0
+tableExists <- function(tableName) {
+  sparkSession <- getSparkSession()
+  if (class(tableName) != "character") {
+    stop("tableName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "tableExists", tableName)
+}
+
 #' Returns a list of columns for the given table/view in the specified database
 #'
 #' Returns a list of columns for the given table/view in the specified database.
@@ -496,12 +521,13 @@ recoverPartitions <- function(tableName) {
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
+#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
 #' @rdname refreshTable
 #' @name refreshTable
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' refreshTable("myTable")
+#' refreshTable("spark_catalog.default.myTable")
 #' }
 #' @note since 2.2.0
 refreshTable <- function(tableName) {
