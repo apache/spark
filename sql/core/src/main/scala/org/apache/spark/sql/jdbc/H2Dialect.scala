@@ -28,7 +28,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
 
@@ -36,7 +35,13 @@ private[sql] object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
-  private val supportedFunctions =
+  private val distinctUnsupportedAggregateFunctions =
+    Set("COVAR_POP", "COVAR_SAMP", "CORR", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
+
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
+
+  private val supportedFunctions = supportedAggregateFunctions ++
     Set("ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LOG", "LOG10", "LN", "EXP",
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
@@ -44,51 +49,6 @@ private[sql] object H2Dialect extends JdbcDialect {
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
-
-  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    super.compileAggregate(aggFunction).orElse(
-      aggFunction match {
-        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_POP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_POP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && !f.isDistinct =>
-          assert(f.children().length == 2)
-          Some(s"COVAR_POP(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && !f.isDistinct =>
-          assert(f.children().length == 2)
-          Some(s"COVAR_SAMP(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "CORR" && !f.isDistinct =>
-          assert(f.children().length == 2)
-          Some(s"CORR(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "REGR_INTERCEPT" && !f.isDistinct =>
-          assert(f.children().length == 2)
-          Some(s"REGR_INTERCEPT(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "REGR_R2" && !f.isDistinct =>
-          assert(f.children().length == 2)
-          Some(s"REGR_R2(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "REGR_SLOPE" && !f.isDistinct =>
-          assert(f.children().length == 2)
-          Some(s"REGR_SLOPE(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "REGR_SXY" && !f.isDistinct =>
-          assert(f.children().length == 2)
-          Some(s"REGR_SXY(${f.children().head}, ${f.children().last})")
-        case _ => None
-      }
-    )
-  }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Option(JdbcType("CLOB", Types.CLOB))
@@ -136,9 +96,9 @@ private[sql] object H2Dialect extends JdbcDialect {
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
-    val jdbcSQLBuilder = new H2JDBCSQLBuilder()
+    val h2SQLBuilder = new H2SQLBuilder()
     try {
-      Some(jdbcSQLBuilder.build(expr))
+      Some(h2SQLBuilder.build(expr))
     } catch {
       case NonFatal(e) =>
         logWarning("Error occurs while compiling V2 expression", e)
@@ -146,7 +106,15 @@ private[sql] object H2Dialect extends JdbcDialect {
     }
   }
 
-  class H2JDBCSQLBuilder extends JDBCSQLBuilder {
+  class H2SQLBuilder extends JDBCSQLBuilder {
+    override def visitAggregateFunction(
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
+      if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
+        throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
+          s"support aggregate function: $funcName with DISTINCT");
+      } else {
+        super.visitAggregateFunction(funcName, isDistinct, inputs)
+      }
 
     override def visitExtract(field: String, source: String): String = {
       val newField = field match {
