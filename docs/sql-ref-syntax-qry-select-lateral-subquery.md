@@ -39,10 +39,10 @@ queries simpler and more efficient.
   * Table relation
   * aliased query
 
-    Syntax: `query [ [ AS ] alias ]`
+    Syntax: `( query ) [ [ AS ] alias ]`
   * aliased relation
 
-    Syntax: `relation [ [ AS ] alias ]`
+    Syntax: `( relation ) [ [ AS ] alias ]`
   * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
   * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
 
