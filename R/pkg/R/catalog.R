@@ -452,21 +452,21 @@ getTable <- function(tableName) {
   jtbl <- handledCallJMethod(catalog, "getTable", tableName)
 
   ret <- data.frame("name" = callJMethod(jtbl, "name"))
-  jcata = callJMethod(jtbl, "catalog")
+  jcata <- callJMethod(jtbl, "catalog")
   if (is.null(jcata)) {
-    ret$catalog <- jcata
-  } else {
     ret$catalog <- "NULL"
+  } else {
+    ret$catalog <- jcata
   }
 
-  jns = callJMethod(jtbl, "namespace")
+  jns <- callJMethod(jtbl, "namespace")
   if (is.null(jns)) {
     ret$namespace <- "NULL"
   } else {
-    ret$namespace <- paste(jns, collapse=".")
+    ret$namespace <- paste(jns, collapse = ".")
   }
 
-  jdesc = callJMethod(jtbl, "description")
+  jdesc <- callJMethod(jtbl, "description")
   if (is.null(jdesc)) {
     ret$description <- "NULL"
   } else {

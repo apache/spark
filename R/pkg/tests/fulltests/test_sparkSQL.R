@@ -4099,7 +4099,9 @@ test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
 
   tbl <- getTable("spark_catalog.default.people")
   expect_equal(tbl$name, "people")
+  expect_equal(tbl$catalog, "spark_catalog")
   expect_equal(tbl$namespace, "default")
+  expect_equal(view$tableType, "MANAGED")
   expect_false(tbl$isTemporary)
 
   sql("DROP TABLE people")
