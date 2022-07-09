@@ -4101,10 +4101,10 @@ test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
   expect_equal(tbl$name, "people")
   expect_equal(tbl$catalog, "spark_catalog")
   expect_equal(tbl$namespace, "default")
-  expect_equal(view$tableType, "MANAGED")
+  expect_equal(tbl$tableType, "MANAGED")
   expect_false(tbl$isTemporary)
 
-  sql("DROP TABLE people")
+  sql("DROP TABLE IF EXISTS people")
 })
 
 test_that("assert_true, raise_error", {
