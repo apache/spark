@@ -428,6 +428,56 @@ tableExists <- function(tableName) {
   callJMethod(catalog, "tableExists", tableName)
 }
 
+#' Get the table with the specified name
+#'
+#' Get the table with the specified name
+#'
+#' @param tableName the qualified or unqualified name that designates a table, allowed to be
+#'                  qualified with catalog name
+#' @return A data.frame.
+#' @rdname getTable
+#' @name getTable
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' tbl <- getTable("spark_catalog.default.myTable")
+#' }
+#' @note since 3.4.0
+getTable <- function(tableName) {
+  sparkSession <- getSparkSession()
+  if (class(tableName) != "character") {
+    stop("tableName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  jtbl <- handledCallJMethod(catalog, "getTable", tableName)
+
+  ret <- data.frame("name" = callJMethod(jtbl, "name"))
+  jcata = callJMethod(jtbl, "catalog")
+  if (is.null(jcata)) {
+    ret$catalog <- jcata
+  } else {
+    ret$catalog <- "NULL"
+  }
+
+  jns = callJMethod(jtbl, "namespace")
+  if (is.null(jns)) {
+    ret$namespace <- "NULL"
+  } else {
+    ret$namespace <- paste(jns, collapse=".")
+  }
+
+  jdesc = callJMethod(jtbl, "description")
+  if (is.null(jdesc)) {
+    ret$description <- "NULL"
+  } else {
+    ret$description <- jdesc
+  }
+
+  ret$tableType <- callJMethod(jtbl, "tableType")
+  ret$isTemporary <- callJMethod(jtbl, "isTemporary")
+  ret
+}
+
 #' Returns a list of columns for the given table/view in the specified database
 #'
 #' Returns a list of columns for the given table/view in the specified database.

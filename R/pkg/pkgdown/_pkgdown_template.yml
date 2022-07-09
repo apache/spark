@@ -265,6 +265,7 @@ reference:
   - currentDatabase
   - dropTempTable
   - dropTempView
+  - getTable
   - listCatalogs
   - listColumns
   - listDatabases

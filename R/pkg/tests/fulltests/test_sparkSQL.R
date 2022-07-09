@@ -4044,7 +4044,7 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_equal(which(dbs[, 1] == "default"), 1)
 })
 
-test_that("catalog APIs, listTables, listColumns, listFunctions", {
+test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
   tb <- listTables()
   count <- count(tables())
   expect_equal(nrow(tb), count)
@@ -4086,7 +4086,23 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 
+  view <- getTable("cars")
+  expect_equal(view$name, "cars")
+  expect_equal(view$tableType, "TEMPORARY")
+  expect_true(view$isTemporary)
+
   dropTempView("cars")
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("default.people", source = "json", schema = schema)
+
+  tbl <- getTable("spark_catalog.default.people")
+  expect_equal(tbl$name, "people")
+  expect_equal(tbl$namespace, "default")
+  expect_false(tbl$isTemporary)
+
+  sql("DROP TABLE people")
 })
 
 test_that("assert_true, raise_error", {
