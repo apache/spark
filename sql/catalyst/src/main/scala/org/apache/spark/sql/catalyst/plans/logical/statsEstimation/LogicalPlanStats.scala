@@ -32,9 +32,9 @@ trait LogicalPlanStats { self: LogicalPlan =>
    */
   def stats: Statistics = statsCache.getOrElse {
     if (conf.cboEnabled) {
-      statsCache = Option(BasicStatsPlanVisitor.visit(self))
+      statsCache = Option(AdvancedStatsPlanVisitor.visit(self))
     } else {
-      statsCache = Option(SizeInBytesOnlyStatsPlanVisitor.visit(self))
+      statsCache = Option(BasicStatsPlanVisitor.visit(self))
     }
     statsCache.get
   }

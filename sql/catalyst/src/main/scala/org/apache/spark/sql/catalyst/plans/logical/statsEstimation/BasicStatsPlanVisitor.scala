@@ -17,78 +17,173 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
+import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
- * A [[LogicalPlanVisitor]] that computes the statistics for the cost-based optimizer.
+ * An [[LogicalPlanVisitor]] that computes a single dimension for plan stats: size in bytes.
  */
 object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
-  /** Falls back to the estimation computed by [[SizeInBytesOnlyStatsPlanVisitor]]. */
-  private def fallback(p: LogicalPlan): Statistics = SizeInBytesOnlyStatsPlanVisitor.visit(p)
+  /**
+   * A default, commonly used estimation for unary nodes. We assume the input row number is the
+   * same as the output row number, and compute sizes based on the column types.
+   */
+  private def visitUnaryNode(p: UnaryNode): Statistics = {
+    // There should be some overhead in Row object, the size should not be zero when there is
+    // no columns, this help to prevent divide-by-zero error.
+    val childRowSize = EstimationUtils.getSizePerRow(p.child.output)
+    val outputRowSize = EstimationUtils.getSizePerRow(p.output)
+    // Assume there will be the same number of rows as child has.
+    var sizeInBytes = (p.child.stats.sizeInBytes * outputRowSize) / childRowSize
+    if (sizeInBytes == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      sizeInBytes = 1
+    }
 
-  override def default(p: LogicalPlan): Statistics = fallback(p)
+    // v2 sources can bubble-up rowCount, so always propagate.
+    // Don't propagate attributeStats, since they are not estimated here.
+    Statistics(sizeInBytes = sizeInBytes, rowCount = p.child.stats.rowCount)
+  }
+
+  /**
+   * For leaf nodes, use its `computeStats`. For other nodes, we assume the size in bytes
+   * and rowCount is the product of all of the children's `computeStats`.
+   */
+  override def default(p: LogicalPlan): Statistics = p match {
+    case p: LeafNode => p.computeStats()
+    case _: LogicalPlan =>
+      val stats = p.children.map(_.stats)
+      val rowCount = if (stats.exists(_.rowCount.isEmpty)) {
+        None
+      } else {
+        Some(stats.map(_.rowCount.get).filter(_ > 0L).product)
+      }
+      Statistics(sizeInBytes = stats.map(_.sizeInBytes).filter(_ > 0L).product, rowCount = rowCount)
+  }
 
   override def visitAggregate(p: Aggregate): Statistics = {
-    AggregateEstimation.estimate(p).getOrElse(fallback(p))
+    if (p.groupingExpressions.isEmpty) {
+      Statistics(
+        sizeInBytes = EstimationUtils.getOutputSize(p.output, outputRowCount = 1),
+        rowCount = Some(1))
+    } else {
+      visitUnaryNode(p)
+    }
   }
 
-  override def visitDistinct(p: Distinct): Statistics = {
-    val child = p.child
-    visitAggregate(Aggregate(child.output, child.output, child))
+  override def visitDistinct(p: Distinct): Statistics = visitUnaryNode(p)
+
+  override def visitExcept(p: Except): Statistics = p.left.stats.copy()
+
+  override def visitExpand(p: Expand): Statistics = {
+    val stats = visitUnaryNode(p)
+    val sizeInBytes = stats.sizeInBytes * p.projections.length
+    val rowCount = stats.rowCount.map(_ * p.projections.length)
+    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount)
   }
 
-  override def visitExcept(p: Except): Statistics = fallback(p)
-
-  override def visitExpand(p: Expand): Statistics = fallback(p)
-
-  override def visitFilter(p: Filter): Statistics = {
-    FilterEstimation(p).estimate.getOrElse(fallback(p))
-  }
+  override def visitFilter(p: Filter): Statistics = visitUnaryNode(p)
 
   override def visitGenerate(p: Generate): Statistics = default(p)
 
-  override def visitGlobalLimit(p: GlobalLimit): Statistics = fallback(p)
+  override def visitGlobalLimit(p: GlobalLimit): Statistics = {
+    val limit = p.limitExpr.eval().asInstanceOf[Int]
+    val childStats = p.child.stats
+    val rowCount: BigInt = childStats.rowCount.map(_.min(limit)).getOrElse(limit)
+    // Don't propagate column stats, because we don't know the distribution after limit
+    Statistics(
+      sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
+      rowCount = Some(rowCount))
+  }
 
-  override def visitOffset(p: Offset): Statistics = fallback(p)
+  override def visitOffset(p: Offset): Statistics = {
+    val offset = p.offsetExpr.eval().asInstanceOf[Int]
+    val childStats = p.child.stats
+    val rowCount: BigInt = childStats.rowCount.map(c => c - offset).map(_.max(0)).getOrElse(0)
+    Statistics(
+      sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
+      rowCount = Some(rowCount))
+  }
 
   override def visitIntersect(p: Intersect): Statistics = {
-    fallback(p)
+    val leftStats = p.left.stats
+    val rightStats = p.right.stats
+    val leftSize = leftStats.sizeInBytes
+    val rightSize = rightStats.sizeInBytes
+    if (leftSize < rightSize) {
+      Statistics(sizeInBytes = leftSize, rowCount = leftStats.rowCount)
+    } else {
+      Statistics(sizeInBytes = rightSize, rowCount = rightStats.rowCount)
+    }
   }
 
   override def visitJoin(p: Join): Statistics = {
-    JoinEstimation(p).estimate.getOrElse(fallback(p))
+    JoinEstimation(p).estimate.getOrElse(default(p))
   }
 
-  override def visitLocalLimit(p: LocalLimit): Statistics = fallback(p)
+  override def visitLocalLimit(p: LocalLimit): Statistics = {
+    val limit = p.limitExpr.eval().asInstanceOf[Int]
+    val childStats = p.child.stats
+    if (limit == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      Statistics(sizeInBytes = 1, rowCount = Some(0))
+    } else {
+      // The output row count of LocalLimit should be the sum of row counts from each partition.
+      // However, since the number of partitions is not available here, we just use statistics of
+      // the child. Because the distribution after a limit operation is unknown, we do not propagate
+      // the column stats.
+      childStats.copy(attributeStats = AttributeMap(Nil))
+    }
+  }
 
   override def visitPivot(p: Pivot): Statistics = default(p)
 
-  override def visitProject(p: Project): Statistics = {
-    ProjectEstimation.estimate(p).getOrElse(fallback(p))
+  override def visitProject(p: Project): Statistics = visitUnaryNode(p)
+
+  override def visitRepartition(p: Repartition): Statistics = p.child.stats
+
+  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = p.child.stats
+
+  override def visitRebalancePartitions(p: RebalancePartitions): Statistics = p.child.stats
+
+  override def visitSample(p: Sample): Statistics = {
+    val ratio = p.upperBound - p.lowerBound
+    var sizeInBytes = EstimationUtils.ceil(BigDecimal(p.child.stats.sizeInBytes) * ratio)
+    if (sizeInBytes == 0) {
+      sizeInBytes = 1
+    }
+    val sampleRows = p.child.stats.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
+    // Don't propagate column stats, because we don't know the distribution after a sample operation
+    Statistics(sizeInBytes, sampleRows)
   }
-
-  override def visitRepartition(p: Repartition): Statistics = fallback(p)
-
-  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = fallback(p)
-
-  override def visitRebalancePartitions(p: RebalancePartitions): Statistics = fallback(p)
-
-  override def visitSample(p: Sample): Statistics = fallback(p)
 
   override def visitScriptTransform(p: ScriptTransformation): Statistics = default(p)
 
   override def visitUnion(p: Union): Statistics = {
-    UnionEstimation.estimate(p).getOrElse(fallback(p))
+    val stats = p.children.map(_.stats)
+    val rowCount = if (stats.exists(_.rowCount.isEmpty)) {
+      None
+    } else {
+      Some(stats.map(_.rowCount.get).filter(_ > 0L).sum)
+    }
+    Statistics(sizeInBytes = stats.map(_.sizeInBytes).sum, rowCount = rowCount)
   }
 
-  override def visitWindow(p: Window): Statistics = fallback(p)
+  override def visitWindow(p: Window): Statistics = visitUnaryNode(p)
 
-  override def visitSort(p: Sort): Statistics = fallback(p)
+  override def visitSort(p: Sort): Statistics = p.child.stats
 
   override def visitTail(p: Tail): Statistics = {
-    fallback(p)
+    val limit = p.limitExpr.eval().asInstanceOf[Int]
+    val childStats = p.child.stats
+    val rowCount: BigInt = childStats.rowCount.map(_.min(limit)).getOrElse(limit)
+    Statistics(
+      sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
+      rowCount = Some(rowCount))
   }
 
-  override def visitWithCTE(p: WithCTE): Statistics = fallback(p)
+  override def visitWithCTE(p: WithCTE): Statistics = p.plan.stats
 }
