@@ -21,6 +21,7 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.hive.HiveUtils
@@ -188,7 +189,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       Console.withOut(output) {
         spark.table(tableName).explain(extended = false)
       }
-      assert(output.toString.contains(s"Scan hive default.$tableName"))
+      assert(output.toString.contains(s"Scan hive $SESSION_CATALOG_NAME.default.$tableName"))
     }
   }
 

@@ -18,7 +18,8 @@
 package org.apache.spark
 
 import java.io.File
-import java.nio.file.Path
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
@@ -220,6 +221,19 @@ abstract class SparkFunSuite
     val dir = Utils.createTempDir()
     try f(dir) finally {
       Utils.deleteRecursively(dir)
+    }
+  }
+
+  /**
+   * Creates a temporary directory containing a secret file, which is then passed to `f` and
+   * will be deleted after `f` returns.
+   */
+  protected def withSecretFile(contents: String = "test-secret")(f: File => Unit): Unit = {
+    val secretDir = Utils.createTempDir("temp-secrets")
+    val secretFile = new File(secretDir, "temp-secret.txt")
+    Files.write(secretFile.toPath, contents.getBytes(UTF_8))
+    try f(secretFile) finally {
+      Utils.deleteRecursively(secretDir)
     }
   }
 

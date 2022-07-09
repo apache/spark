@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.connector.InMemoryV1Provider
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -181,7 +182,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("table_name").append()
     }
-    assert(exc.getMessage.contains("Cannot write into v1 table: `default`.`table_name`"))
+    assert(exc.getMessage.contains(
+      s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
   }
 
   test("Overwrite: overwrite by expression: true") {
@@ -284,7 +286,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("table_name").overwrite(lit(true))
     }
-    assert(exc.getMessage.contains("Cannot write into v1 table: `default`.`table_name`"))
+    assert(exc.getMessage.contains(
+      s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
   }
 
   test("OverwritePartitions: overwrite conflicting partitions") {
@@ -387,7 +390,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("table_name").overwritePartitions()
     }
-    assert(exc.getMessage.contains("Cannot write into v1 table: `default`.`table_name`"))
+    assert(exc.getMessage.contains(
+      s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
   }
 
   test("Create: basic behavior") {
@@ -545,7 +549,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .create()
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("table_name"))
 
-      assert(table.identifier === TableIdentifier("table_name", Some("default")))
+      assert(table.identifier ===
+        TableIdentifier("table_name", Some("default"), Some(SESSION_CATALOG_NAME)))
       assert(table.storage.properties.contains("compression"))
       assert(table.storage.properties.getOrElse("compression", "foo") == "zstd")
     }

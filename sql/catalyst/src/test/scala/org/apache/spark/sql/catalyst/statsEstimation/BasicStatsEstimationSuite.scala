@@ -360,7 +360,7 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     checkStats(
       sort,
       expectedStatsCboOn = expectedSortStats,
-      expectedStatsCboOff = Statistics(sizeInBytes = expectedSize))
+      expectedStatsCboOff = expectedSortStats)
   }
 
   /** Check estimated stats when cbo is turned on/off. */

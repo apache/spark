@@ -13,7 +13,7 @@
 :  :  :  :  :                 +- * Project (4)
 :  :  :  :  :                    +- * Filter (3)
 :  :  :  :  :                       +- * ColumnarToRow (2)
-:  :  :  :  :                          +- Scan parquet default.store_sales (1)
+:  :  :  :  :                          +- Scan parquet spark_catalog.default.store_sales (1)
 :  :  :  :  +- BroadcastExchange (21)
 :  :  :  :     +- * HashAggregate (20)
 :  :  :  :        +- Exchange (19)
@@ -24,7 +24,7 @@
 :  :  :  :                       +- * Project (14)
 :  :  :  :                          +- * Filter (13)
 :  :  :  :                             +- * ColumnarToRow (12)
-:  :  :  :                                +- Scan parquet default.store_sales (11)
+:  :  :  :                                +- Scan parquet spark_catalog.default.store_sales (11)
 :  :  :  +- BroadcastExchange (33)
 :  :  :     +- * HashAggregate (32)
 :  :  :        +- Exchange (31)
@@ -35,7 +35,7 @@
 :  :  :                       +- * Project (26)
 :  :  :                          +- * Filter (25)
 :  :  :                             +- * ColumnarToRow (24)
-:  :  :                                +- Scan parquet default.store_sales (23)
+:  :  :                                +- Scan parquet spark_catalog.default.store_sales (23)
 :  :  +- BroadcastExchange (45)
 :  :     +- * HashAggregate (44)
 :  :        +- Exchange (43)
@@ -46,7 +46,7 @@
 :  :                       +- * Project (38)
 :  :                          +- * Filter (37)
 :  :                             +- * ColumnarToRow (36)
-:  :                                +- Scan parquet default.store_sales (35)
+:  :                                +- Scan parquet spark_catalog.default.store_sales (35)
 :  +- BroadcastExchange (57)
 :     +- * HashAggregate (56)
 :        +- Exchange (55)
@@ -57,7 +57,7 @@
 :                       +- * Project (50)
 :                          +- * Filter (49)
 :                             +- * ColumnarToRow (48)
-:                                +- Scan parquet default.store_sales (47)
+:                                +- Scan parquet spark_catalog.default.store_sales (47)
 +- BroadcastExchange (69)
    +- * HashAggregate (68)
       +- Exchange (67)
@@ -68,10 +68,10 @@
                      +- * Project (62)
                         +- * Filter (61)
                            +- * ColumnarToRow (60)
-                              +- Scan parquet default.store_sales (59)
+                              +- Scan parquet spark_catalog.default.store_sales (59)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4, ss_sold_date_sk#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -125,7 +125,7 @@ Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), cou
 Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#11]
 Results [3]: [cast((avg(UnscaledValue(ss_list_price#3))#6 / 100.0) as decimal(11,6)) AS B1_LP#13, count(ss_list_price#3)#7 AS B1_CNT#14, count(ss_list_price#3)#11 AS B1_CNTD#15]
 
-(11) Scan parquet default.store_sales
+(11) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_quantity#16, ss_wholesale_cost#17, ss_list_price#18, ss_coupon_amt#19, ss_sold_date_sk#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -186,7 +186,7 @@ Arguments: IdentityBroadcastMode, [plan_id=5]
 (22) BroadcastNestedLoopJoin [codegen id : 18]
 Join condition: None
 
-(23) Scan parquet default.store_sales
+(23) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_quantity#31, ss_wholesale_cost#32, ss_list_price#33, ss_coupon_amt#34, ss_sold_date_sk#35]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -247,7 +247,7 @@ Arguments: IdentityBroadcastMode, [plan_id=8]
 (34) BroadcastNestedLoopJoin [codegen id : 18]
 Join condition: None
 
-(35) Scan parquet default.store_sales
+(35) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_quantity#46, ss_wholesale_cost#47, ss_list_price#48, ss_coupon_amt#49, ss_sold_date_sk#50]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -308,7 +308,7 @@ Arguments: IdentityBroadcastMode, [plan_id=11]
 (46) BroadcastNestedLoopJoin [codegen id : 18]
 Join condition: None
 
-(47) Scan parquet default.store_sales
+(47) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_quantity#61, ss_wholesale_cost#62, ss_list_price#63, ss_coupon_amt#64, ss_sold_date_sk#65]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -369,7 +369,7 @@ Arguments: IdentityBroadcastMode, [plan_id=14]
 (58) BroadcastNestedLoopJoin [codegen id : 18]
 Join condition: None
 
-(59) Scan parquet default.store_sales
+(59) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_quantity#76, ss_wholesale_cost#77, ss_list_price#78, ss_coupon_amt#79, ss_sold_date_sk#80]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]

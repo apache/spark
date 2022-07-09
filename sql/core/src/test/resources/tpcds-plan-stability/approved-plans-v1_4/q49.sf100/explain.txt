@@ -23,14 +23,14 @@ TakeOrderedAndProject (86)
             :                                   :           :- * Project (4)
             :                                   :           :  +- * Filter (3)
             :                                   :           :     +- * ColumnarToRow (2)
-            :                                   :           :        +- Scan parquet default.web_sales (1)
+            :                                   :           :        +- Scan parquet spark_catalog.default.web_sales (1)
             :                                   :           +- ReusedExchange (5)
             :                                   +- * Sort (15)
             :                                      +- Exchange (14)
             :                                         +- * Project (13)
             :                                            +- * Filter (12)
             :                                               +- * ColumnarToRow (11)
-            :                                                  +- Scan parquet default.web_returns (10)
+            :                                                  +- Scan parquet spark_catalog.default.web_returns (10)
             :- * Project (54)
             :  +- * Filter (53)
             :     +- Window (52)
@@ -50,14 +50,14 @@ TakeOrderedAndProject (86)
             :                                   :           :- * Project (31)
             :                                   :           :  +- * Filter (30)
             :                                   :           :     +- * ColumnarToRow (29)
-            :                                   :           :        +- Scan parquet default.catalog_sales (28)
+            :                                   :           :        +- Scan parquet spark_catalog.default.catalog_sales (28)
             :                                   :           +- ReusedExchange (32)
             :                                   +- * Sort (42)
             :                                      +- Exchange (41)
             :                                         +- * Project (40)
             :                                            +- * Filter (39)
             :                                               +- * ColumnarToRow (38)
-            :                                                  +- Scan parquet default.catalog_returns (37)
+            :                                                  +- Scan parquet spark_catalog.default.catalog_returns (37)
             +- * Project (81)
                +- * Filter (80)
                   +- Window (79)
@@ -77,17 +77,17 @@ TakeOrderedAndProject (86)
                                                 :           :- * Project (58)
                                                 :           :  +- * Filter (57)
                                                 :           :     +- * ColumnarToRow (56)
-                                                :           :        +- Scan parquet default.store_sales (55)
+                                                :           :        +- Scan parquet spark_catalog.default.store_sales (55)
                                                 :           +- ReusedExchange (59)
                                                 +- * Sort (69)
                                                    +- Exchange (68)
                                                       +- * Project (67)
                                                          +- * Filter (66)
                                                             +- * ColumnarToRow (65)
-                                                               +- Scan parquet default.store_returns (64)
+                                                               +- Scan parquet spark_catalog.default.store_returns (64)
 
 
-(1) Scan parquet default.web_sales
+(1) Scan parquet spark_catalog.default.web_sales
 Output [6]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_net_profit#5, ws_sold_date_sk#6]
 Batched: true
 Location: InMemoryFileIndex []
@@ -126,7 +126,7 @@ Arguments: hashpartitioning(ws_order_number#2, ws_item_sk#1, 5), ENSURE_REQUIREM
 Input [4]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4]
 Arguments: [ws_order_number#2 ASC NULLS FIRST, ws_item_sk#1 ASC NULLS FIRST], false, 0
 
-(10) Scan parquet default.web_returns
+(10) Scan parquet spark_catalog.default.web_returns
 Output [5]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_amt#12, wr_returned_date_sk#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
@@ -207,7 +207,7 @@ Condition : ((return_rank#33 <= 10) OR (currency_rank#34 <= 10))
 Output [5]: [web AS channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Input [5]: [item#30, return_ratio#31, currency_ratio#32, return_rank#33, currency_rank#34]
 
-(28) Scan parquet default.catalog_sales
+(28) Scan parquet spark_catalog.default.catalog_sales
 Output [6]: [cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cs_net_profit#40, cs_sold_date_sk#41]
 Batched: true
 Location: InMemoryFileIndex []
@@ -246,7 +246,7 @@ Arguments: hashpartitioning(cs_order_number#37, cs_item_sk#36, 5), ENSURE_REQUIR
 Input [4]: [cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
 Arguments: [cs_order_number#37 ASC NULLS FIRST, cs_item_sk#36 ASC NULLS FIRST], false, 0
 
-(37) Scan parquet default.catalog_returns
+(37) Scan parquet spark_catalog.default.catalog_returns
 Output [5]: [cr_item_sk#43, cr_order_number#44, cr_return_quantity#45, cr_return_amount#46, cr_returned_date_sk#47]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_returns]
@@ -327,7 +327,7 @@ Condition : ((return_rank#67 <= 10) OR (currency_rank#68 <= 10))
 Output [5]: [catalog AS channel#69, item#64, return_ratio#65, return_rank#67, currency_rank#68]
 Input [5]: [item#64, return_ratio#65, currency_ratio#66, return_rank#67, currency_rank#68]
 
-(55) Scan parquet default.store_sales
+(55) Scan parquet spark_catalog.default.store_sales
 Output [6]: [ss_item_sk#70, ss_ticket_number#71, ss_quantity#72, ss_net_paid#73, ss_net_profit#74, ss_sold_date_sk#75]
 Batched: true
 Location: InMemoryFileIndex []
@@ -366,7 +366,7 @@ Arguments: hashpartitioning(ss_ticket_number#71, ss_item_sk#70, 5), ENSURE_REQUI
 Input [4]: [ss_item_sk#70, ss_ticket_number#71, ss_quantity#72, ss_net_paid#73]
 Arguments: [ss_ticket_number#71 ASC NULLS FIRST, ss_item_sk#70 ASC NULLS FIRST], false, 0
 
-(64) Scan parquet default.store_returns
+(64) Scan parquet spark_catalog.default.store_returns
 Output [5]: [sr_item_sk#77, sr_ticket_number#78, sr_return_quantity#79, sr_return_amt#80, sr_returned_date_sk#81]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
@@ -478,10 +478,10 @@ BroadcastExchange (91)
 +- * Project (90)
    +- * Filter (89)
       +- * ColumnarToRow (88)
-         +- Scan parquet default.date_dim (87)
+         +- Scan parquet spark_catalog.default.date_dim (87)
 
 
-(87) Scan parquet default.date_dim
+(87) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#8, d_year#104, d_moy#105]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
