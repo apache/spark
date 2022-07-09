@@ -133,7 +133,7 @@
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.3</parquet.version>
     <orc.version>1.7.5</orc.version>
-    <jetty.version>9.4.46.v20220331</jetty.version>
+    <jetty.version>9.4.48.v20220622</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.0</ivy.version>
