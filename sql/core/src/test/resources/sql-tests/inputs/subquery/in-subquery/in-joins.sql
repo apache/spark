@@ -140,7 +140,7 @@ where           t1a IN
                        WHERE t2c IS NOT NULL)
 AND             t1b != t3b
 AND             t1a = 'val1b'
-ORDER BY        t1a;
+ORDER BY        t1a, t3b;
 
 -- TC 01.05
 SELECT     Count(DISTINCT(t1a)),

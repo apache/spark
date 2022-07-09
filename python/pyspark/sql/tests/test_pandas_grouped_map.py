@@ -225,7 +225,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         def foo(pdf):
             return pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id)
 
-        result = df.groupby("id").apply(foo).sort("id").toPandas()
+        result = df.groupby("id").apply(foo).sort("id", "v").toPandas()
         expected = df.toPandas().groupby("id").apply(foo.func).reset_index(drop=True)
         assert_frame_equal(expected, result)
 
@@ -353,7 +353,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             PandasUDFType.GROUPED_MAP,
         )
 
-        result = df.groupby("id").apply(foo_udf).sort("id").toPandas()
+        result = df.groupby("id").apply(foo_udf).sort("id", "v2").toPandas()
         expected = df.toPandas().groupby("id").apply(foo_udf.func).reset_index(drop=True)
         assert_frame_equal(expected, result)
 

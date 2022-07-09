@@ -15,19 +15,6 @@ struct<>
 
 
 -- !query
-select * from data order by 1 desc
--- !query schema
-struct<a:int,b:int>
--- !query output
-3	2
-3	1
-2	2
-2	1
-1	1
-1	2
-
-
--- !query
 select * from data order by 1 desc, b desc
 -- !query schema
 struct<a:int,b:int>
@@ -58,11 +45,11 @@ select * from data order by 1 + 0 desc, b desc
 -- !query schema
 struct<a:int,b:int>
 -- !query output
-3	2
 1	2
+3	2
 2	2
-3	1
 1	1
+3	1
 2	1
 
 

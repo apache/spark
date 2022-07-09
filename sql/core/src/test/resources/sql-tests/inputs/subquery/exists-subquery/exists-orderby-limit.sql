@@ -55,7 +55,7 @@ WHERE  EXISTS (SELECT dept.dept_id
                FROM   dept 
                WHERE  emp.dept_id = dept.dept_id 
                ORDER  BY state) 
-ORDER  BY hiredate DESC; 
+ORDER  BY hiredate DESC, id;
 
 -- order by with not exists 
 -- TC.01.03
@@ -65,7 +65,7 @@ WHERE  NOT EXISTS (SELECT dept.dept_id
                    FROM   dept 
                    WHERE  emp.dept_id = dept.dept_id 
                    ORDER  BY state) 
-ORDER  BY hiredate; 
+ORDER  BY hiredate, id;
 
 -- group by + order by with not exists
 -- TC.01.04

@@ -248,7 +248,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
       checkAnswer(
-        sql("select month, product, sum(product + 1) over() from windowData order by area"),
+        sql(
+          "select month, product, sum(product + 1) over() from windowData order by area, product"),
         Seq(
           (2, 6, 57),
           (3, 7, 57),

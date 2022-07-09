@@ -1210,10 +1210,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
-    checkAnswer(
-      sql("SELECT a + b FROM testData2 ORDER BY a"),
-      Seq(2, 3, 3, 4, 4, 5).map(Row(_))
-    )
+    Seq(-1, 100).foreach { threshold =>
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+        val result = if (threshold > 0) {
+          Seq(3, 2, 3, 4, 4, 5).map(Row(_))
+        } else {
+          Seq(2, 3, 3, 4, 4, 5).map(Row(_))
+        }
+        checkAnswer(sql("SELECT a + b FROM testData2 ORDER BY a"), result)
+      }
+    }
   }
 
   test("order by asc by default when not specify ascending and descending") {
@@ -1492,8 +1498,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("external sorting updates peak execution memory") {
-    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
-      sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC").collect()
+    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "-1") {
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
+        sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC").collect()
+      }
     }
   }
 
