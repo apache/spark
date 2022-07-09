@@ -150,16 +150,21 @@ abstract class RemoveRedundantSortsSuiteBase
         |ORDER BY t1.key ASC
       """.stripMargin
 
-      Seq(("MERGE", 3), ("SHUFFLE_HASH", 1)).foreach { case (hint, count) =>
-        val query = queryTemplate.format(hint)
-        val df = sql(query)
-        val sparkPlan = df.queryExecution.sparkPlan
-        val join = sparkPlan.collect { case j: ShuffledJoin => j }.head
-        val leftPartitioning = join.left.outputPartitioning
-        assert(leftPartitioning.isInstanceOf[RangePartitioning])
-        assert(leftPartitioning.numPartitions == 2)
-        assert(join.right.outputPartitioning == UnknownPartitioning(0))
-        checkSorts(query, count, count)
+      Seq(-1, 100000).foreach { threshold =>
+        withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+          Seq(("MERGE", if (threshold > 0) 2 else 3),
+            ("SHUFFLE_HASH", if (threshold > 0) 0 else 1)).foreach { case (hint, count) =>
+            val query = queryTemplate.format(hint)
+            val df = sql(query)
+            val sparkPlan = df.queryExecution.sparkPlan
+            val join = sparkPlan.collect { case j: ShuffledJoin => j }.head
+            val leftPartitioning = join.left.outputPartitioning
+            assert(leftPartitioning.isInstanceOf[RangePartitioning])
+            assert(leftPartitioning.numPartitions == 2)
+            assert(join.right.outputPartitioning == UnknownPartitioning(0))
+            checkSorts(query, count, count)
+          }
+        }
       }
     }
   }

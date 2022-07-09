@@ -30,8 +30,8 @@ struct<col1:int,col2:int,col3:int,sum_col2:bigint>
 6	10	NULL	41
 6	12	10	43
 6	15	8	55
-6	15	8	56
 6	11	4	56
+6	15	8	56
 6	7	8	58
 6	7	4	58
 

@@ -874,22 +874,22 @@ ORDER BY department
 -- !query schema
 struct<employee_name:string,department:string,salary:int,highest_salary:string,second_highest_salary:string>
 -- !query output
-Gerard Bondur	Accounting	11472	Gerard Bondur	Mary Patterson
 Mary Patterson	Accounting	9998	Gerard Bondur	Mary Patterson
-Jeff Firrelli	Accounting	8992	Gerard Bondur	Mary Patterson
-William Patterson	Accounting	8870	Gerard Bondur	Mary Patterson
 Diane Murphy	Accounting	8435	Gerard Bondur	Mary Patterson
 Anthony Bow	Accounting	6627	Gerard Bondur	Mary Patterson
+Gerard Bondur	Accounting	11472	Gerard Bondur	Mary Patterson
+Jeff Firrelli	Accounting	8992	Gerard Bondur	Mary Patterson
+William Patterson	Accounting	8870	Gerard Bondur	Mary Patterson
 Leslie Jennings	IT	8113	Leslie Jennings	Leslie Thompson
 Leslie Thompson	IT	5186	Leslie Jennings	Leslie Thompson
+Barry Jones	SCM	10586	Larry Bott	Pamela Castillo
+Gerard Hernandez	SCM	6949	Larry Bott	Pamela Castillo
 Larry Bott	SCM	11798	Larry Bott	Pamela Castillo
 Pamela Castillo	SCM	11303	Larry Bott	Pamela Castillo
-Barry Jones	SCM	10586	Larry Bott	Pamela Castillo
 Loui Bondur	SCM	10449	Larry Bott	Pamela Castillo
-Gerard Hernandez	SCM	6949	Larry Bott	Pamela Castillo
 George Vanauf	Sales	10563	George Vanauf	Steve Patterson
-Steve Patterson	Sales	9441	George Vanauf	Steve Patterson
 Julie Firrelli	Sales	9181	George Vanauf	Steve Patterson
+Steve Patterson	Sales	9441	George Vanauf	Steve Patterson
 Foon Yue Tseng	Sales	6660	George Vanauf	Steve Patterson
 
 

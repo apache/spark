@@ -130,15 +130,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, projectList, planLater(child)))
-      case Sort(order, true, child)
-          if child.maxRows.exists(_ < conf.topKSortFallbackThreshold) =>
+      case Sort(order, true, child) if supportTakeOrdered(child) =>
         Some(TakeOrderedAndProjectExec(
           child.maxRows.get.toInt, order, child.output, planLater(child)))
-      case Project(projectList, Sort(order, true, child))
-          if child.maxRows.exists(_ < conf.topKSortFallbackThreshold) =>
+      case Project(projectList, Sort(order, true, child)) if supportTakeOrdered(child) =>
         Some(TakeOrderedAndProjectExec(
           child.maxRows.get.toInt, order, projectList, planLater(child)))
       case _ => None
+    }
+
+    private def supportTakeOrdered(plan: LogicalPlan): Boolean = {
+      plan.maxRows.exists(_ < math.min(conf.topKSortFallbackThreshold, 800000)) &&
+        // The plan should not contain global sort, to avoid sorting it again.
+        !plan.exists {
+          case s: Sort => s.global
+          case _ => false
+        }
     }
   }
 

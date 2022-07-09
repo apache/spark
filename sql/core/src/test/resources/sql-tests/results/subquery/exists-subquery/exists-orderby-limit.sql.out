@@ -62,9 +62,9 @@ struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
 300	emp 3	2002-01-01	300.0	20
 200	emp 2	2003-01-01	200.0	10
-100	emp 1	2005-01-01	100.0	10
-100	emp 1	2005-01-01	100.0	10
 400	emp 4	2005-01-01	400.0	30
+100	emp 1	2005-01-01	100.0	10
+100	emp 1	2005-01-01	100.0	10
 800	emp 8	2016-01-01	150.0	70
 
 
@@ -81,9 +81,9 @@ ORDER  BY hiredate DESC
 struct<id:int,hiredate:date>
 -- !query output
 800	2016-01-01
-100	2005-01-01
-100	2005-01-01
 400	2005-01-01
+100	2005-01-01
+100	2005-01-01
 200	2003-01-01
 300	2002-01-01
 
@@ -99,8 +99,8 @@ ORDER  BY hiredate
 -- !query schema
 struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-500	emp 5	2001-01-01	400.0	NULL
 600	emp 6 - no dept	2001-01-01	400.0	100
+500	emp 5	2001-01-01	400.0	NULL
 700	emp 7	2010-01-01	400.0	100
 
 

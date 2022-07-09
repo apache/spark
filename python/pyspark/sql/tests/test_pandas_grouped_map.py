@@ -234,7 +234,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
         foo = pandas_udf(lambda pdf: pdf, "id long, v double", PandasUDFType.GROUPED_MAP)
 
-        result = df.groupby("id").apply(foo).sort("id").toPandas()
+        result = df.groupby("id").apply(foo).sort("id", "v").toPandas()
         expected = df.toPandas().groupby("id").apply(foo.func).reset_index(drop=True)
         expected = expected.assign(v=expected.v.astype("float64"))
         assert_frame_equal(expected, result)

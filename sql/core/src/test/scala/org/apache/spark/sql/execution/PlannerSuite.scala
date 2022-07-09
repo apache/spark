@@ -1297,16 +1297,29 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-39698: Use TakeOrderedAndProject if maxRows below the topKSortFallbackThreshold") {
-    Seq(2, 10).foreach { threshold =>
+    Seq(-1, 10).foreach { threshold =>
       withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
         val df = Seq(1 -> "a", 2 -> "b", 3 -> "c", 4 -> "d", 5 -> "e").toDF("i", "j").orderBy($"i")
         assert(df.queryExecution.optimizedPlan.maxRows === Some(5))
-        if (threshold < 5) {
+        if (threshold < 0) {
           assert(df.queryExecution.sparkPlan.isInstanceOf[execution.SortExec])
         } else {
           assert(df.queryExecution.sparkPlan.isInstanceOf[execution.TakeOrderedAndProjectExec])
         }
       }
+    }
+  }
+
+  test("SPARK-39698: Do not use TakeOrderedAndProject if children contain global sort") {
+    val sparkPlan = Seq(1 -> "a", 2 -> "b", 3 -> "c", 4 -> "d", 5 -> "e").toDF("i", "j")
+      .orderBy($"i").limit(4).orderBy($"i")
+      .queryExecution.sparkPlan
+
+    sparkPlan match {
+      case SortExec(_, _,
+        TakeOrderedAndProjectExec(_, _, _, ProjectExec(_, _: LocalTableScanExec), _), _) =>
+      case _ =>
+        fail("Plan do not match.")
     }
   }
 }
