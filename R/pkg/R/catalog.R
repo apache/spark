@@ -629,6 +629,55 @@ functionExists <- function(functionName) {
   callJMethod(catalog, "functionExists", functionName)
 }
 
+#' Get the function with the specified name
+#'
+#' Get the function with the specified name
+#'
+#' @param functionName name of the function, allowed to be qualified with catalog name
+#' @return A data.frame.
+#' @rdname getFunction
+#' @name getFunction
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' func <- getFunction("spark_catalog.default.myFunc")
+#' }
+#' @note since 3.4.0
+getFunction <- function(functionName) {
+  sparkSession <- getSparkSession()
+  if (class(functionName) != "character") {
+    stop("functionName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  jfunc <- handledCallJMethod(catalog, "getFunction", functionName)
+
+  ret <- data.frame("name" = callJMethod(jfunc, "name"))
+  jcata <- callJMethod(jfunc, "catalog")
+  if (is.null(jcata)) {
+    ret$catalog <- "NULL"
+  } else {
+    ret$catalog <- jcata
+  }
+
+  jns <- callJMethod(jfunc, "namespace")
+  if (is.null(jns)) {
+    ret$namespace <- "NULL"
+  } else {
+    ret$namespace <- paste(jns, collapse = ".")
+  }
+
+  jdesc <- callJMethod(jfunc, "description")
+  if (is.null(jdesc)) {
+    ret$description <- "NULL"
+  } else {
+    ret$description <- jdesc
+  }
+
+  ret$className <- callJMethod(jfunc, "className")
+  ret$isTemporary <- callJMethod(jfunc, "isTemporary")
+  ret
+}
+
 #' Recovers all the partitions in the directory of a table and update the catalog
 #'
 #' Recovers all the partitions in the directory of a table and update the catalog. The name should
