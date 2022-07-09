@@ -70,7 +70,8 @@ public class ShuffleMovementAwareExternalShuffleIntegrationSuite {
         dataContext0.create();
         dataContext0.insertSortShuffleData(0, 0, exec0Blocks);
         dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK, exec0RddBlockValid);
-        dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK_TO_RM, exec0RddBlockToRemove);
+        dataContext0.insertCachedRddData(
+                RDD_ID, SPLIT_INDEX_VALID_BLOCK_TO_RM, exec0RddBlockToRemove);
         HashMap<String, String> config = new HashMap<>();
         config.put("spark.shuffle.io.maxRetries", "0");
         config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "true");
@@ -79,12 +80,14 @@ public class ShuffleMovementAwareExternalShuffleIntegrationSuite {
                 new OneForOneStreamManager(),
                 new ShuffleMovementAwareExternalShuffleBlockResolver(conf, null) {
                     @Override
-                    public ManagedBuffer getRddBlockData(String appId, String execId, int rddId, int splitIdx) {
+                    public ManagedBuffer getRddBlockData(
+                            String appId, String execId, int rddId, int splitIdx) {
                         ManagedBuffer res;
                         if (rddId == RDD_ID) {
                             switch (splitIdx) {
                                 case SPLIT_INDEX_CORRUPT_LENGTH:
-                                    res = new FileSegmentManagedBuffer(conf, new File("missing.file"), 0, 12);
+                                    res = new FileSegmentManagedBuffer(
+                                            conf, new File("missing.file"), 0, 12);
                                     break;
                                 default:
                                     res = super.getRddBlockData(appId, execId, rddId, splitIdx);
@@ -110,14 +113,17 @@ public class ShuffleMovementAwareExternalShuffleIntegrationSuite {
     }
     @Test
     public void testShuffleOffloadingCompletion() throws Exception {
-        ExternalBlockStoreClient client = new ShuffleMovementAwareExternalBlockStoreClient(conf, null, false, 5000);
+        ExternalBlockStoreClient client = new ShuffleMovementAwareExternalBlockStoreClient(
+                conf, null, false, 5000);
         client.init(APP_ID);
         client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
                 "exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-        assert(!((ShuffleMovementAwareExternalShuffleBlockResolver)handler.blockManager).getCompletionState());
+        assert(!((ShuffleMovementAwareExternalShuffleBlockResolver)handler.blockManager)
+                .getCompletionState());
         client.executorDecommissioned(TestUtils.getLocalHost(), server.getPort(),
                 "exec-0", 1000);
-        assert(((ShuffleMovementAwareExternalShuffleBlockResolver)handler.blockManager).getCompletionState());
+        assert(((ShuffleMovementAwareExternalShuffleBlockResolver)handler.blockManager)
+                .getCompletionState());
     }
 }
 

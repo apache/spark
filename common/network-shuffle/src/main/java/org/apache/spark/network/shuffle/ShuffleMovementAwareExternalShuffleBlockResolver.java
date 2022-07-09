@@ -81,8 +81,8 @@ public class ShuffleMovementAwareExternalShuffleBlockResolver
 
     private void initializeMetrics() {
         try {
-            StandardMBean bean =
-                    new StandardMBean(this, ShuffleMovementAwareExternalShuffleBlockResolverMBean.class);
+            StandardMBean bean = new StandardMBean(
+                            this, ShuffleMovementAwareExternalShuffleBlockResolverMBean.class);
             MBeans
                     .register("YarnShuffleService", "ExternalFsFileMonitorMetrics", bean);
         } catch (NotCompliantMBeanException e) {

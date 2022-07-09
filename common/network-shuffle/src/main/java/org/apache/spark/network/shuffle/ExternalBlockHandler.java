@@ -83,8 +83,9 @@ public class ExternalBlockHandler extends RpcHandler
       new NoOpMergedShuffleFileManager(conf));
   }
 
-  private static ExternalShuffleBlockResolver getExternalShuffleBlockResolver(TransportConf conf,
-                                                                              File registeredExecutorFile) throws IOException {
+  private static ExternalShuffleBlockResolver getExternalShuffleBlockResolver(
+          TransportConf conf,
+          File registeredExecutorFile) throws IOException {
     String className = "";
     try {
       className = conf.get(ShuffleConfigurations.SHUFFLE_SERVICE_RESOLVER_CLASS,
