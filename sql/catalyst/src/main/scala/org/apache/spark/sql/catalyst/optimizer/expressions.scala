@@ -470,6 +470,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   }
 }
 
+
 /**
  * Simplifies binary comparisons with semantically-equal expressions:
  * 1) Replace '<=>' with 'true' literal.
