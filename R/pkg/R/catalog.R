@@ -399,6 +399,47 @@ listDatabases <- function() {
   dataFrame(callJMethod(callJMethod(catalog, "listDatabases"), "toDF"))
 }
 
+#' Get the database with the specified name
+#'
+#' Get the database with the specified name
+#'
+#' @param databaseName name of the database, allowed to be qualified with catalog name
+#' @return A data.frame.
+#' @rdname getDatabase
+#' @name getDatabase
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' db <- getDatabase("default")
+#' }
+#' @note since 3.4.0
+getDatabase <- function(databaseName) {
+  sparkSession <- getSparkSession()
+  if (class(databaseName) != "character") {
+    stop("databaseName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  jdb <- handledCallJMethod(catalog, "getDatabase", databaseName)
+
+  ret <- data.frame("name" = callJMethod(jdb, "name"))
+  jcata <- callJMethod(jdb, "catalog")
+  if (is.null(jcata)) {
+    ret$catalog <- "NULL"
+  } else {
+    ret$catalog <- jcata
+  }
+
+  jdesc <- callJMethod(jdb, "description")
+  if (is.null(jdesc)) {
+    ret$description <- "NULL"
+  } else {
+    ret$description <- jdesc
+  }
+
+  ret$locationUri <- callJMethod(jdb, "locationUri")
+  ret
+}
+
 #' Returns a list of tables or views in the specified database
 #'
 #' Returns a list of tables or views in the specified database.

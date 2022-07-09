@@ -4053,7 +4053,7 @@ test_that("catalog APIs, listCatalogs, setCurrentCatalog, currentCatalog", {
   catalogs <- collect(listCatalogs())
 })
 
-test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
+test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases, getDatabase", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
   expect_error(setCurrentDatabase("zxwtyswklpf"),
@@ -4068,6 +4068,10 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   dbs <- collect(listDatabases())
   expect_equal(names(dbs), c("name", "catalog", "description", "locationUri"))
   expect_equal(which(dbs[, 1] == "default"), 1)
+
+  db <- getDatabase("spark_catalog.default")
+  expect_equal(db$name, "default")
+  expect_equal(db$catalog, "spark_catalog")
 })
 
 test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
