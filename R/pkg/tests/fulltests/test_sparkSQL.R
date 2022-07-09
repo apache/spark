@@ -4123,7 +4123,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
 
   func1 <- getFunction("spark_catalog.default.func1")
   expect_equal(func1$name, "func1")
-  expect_equal(func1$catalog, "spark_catalogs")
+  expect_equal(func1$catalog, "spark_catalog")
   expect_equal(func1$namespace, "default")
   expect_equal(func1$className, "org.apache.spark.sql.catalyst.expressions.Add")
   expect_false(func1$isTemporary)
