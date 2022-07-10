@@ -36,6 +36,7 @@ class CatalogMetadata(NamedTuple):
 
 class Database(NamedTuple):
     name: str
+    catalog: Optional[str]
     description: Optional[str]
     locationUri: str
 
@@ -67,6 +68,8 @@ class Column(NamedTuple):
 
 class Function(NamedTuple):
     name: str
+    catalog: Optional[str]
+    namespace: Optional[List[str]]
     description: Optional[str]
     className: str
     isTemporary: bool
@@ -139,10 +142,39 @@ class Catalog:
             jdb = iter.next()
             databases.append(
                 Database(
-                    name=jdb.name(), description=jdb.description(), locationUri=jdb.locationUri()
+                    name=jdb.name(),
+                    catalog=jdb.catalog(),
+                    description=jdb.description(),
+                    locationUri=jdb.locationUri(),
                 )
             )
         return databases
+
+    def getDatabase(self, dbName: str) -> Database:
+        """Get the database with the specified name.
+        This throws an :class:`AnalysisException` when the database cannot be found.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        dbName : str
+             name of the database to check existence.
+
+        Examples
+        --------
+        >>> spark.catalog.getDatabase("default")
+        Database(name='default', catalog=None, description='default database', ...
+        >>> spark.catalog.getDatabase("spark_catalog.default")
+        Database(name='default', catalog='spark_catalog', description='default database', ...
+        """
+        jdb = self._jcatalog.getDatabase(dbName)
+        return Database(
+            name=jdb.name(),
+            catalog=jdb.catalog(),
+            description=jdb.description(),
+            locationUri=jdb.locationUri(),
+        )
 
     def databaseExists(self, dbName: str) -> bool:
         """Check if the database with the specified name exists.
@@ -212,7 +244,7 @@ class Catalog:
 
     def getTable(self, tableName: str) -> Table:
         """Get the table or view with the specified name. This table can be a temporary view or a
-        table/view. This throws an AnalysisException when no Table can be found.
+        table/view. This throws an :class:`AnalysisException` when no Table can be found.
 
         .. versionadded:: 3.4.0
 
@@ -257,6 +289,9 @@ class Catalog:
 
         If no database is specified, the current database is used.
         This includes all temporary functions.
+
+        .. versionchanged:: 3.4
+           Allowed ``dbName`` to be qualified with catalog name.
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -264,9 +299,17 @@ class Catalog:
         functions = []
         while iter.hasNext():
             jfunction = iter.next()
+            jnamespace = jfunction.namespace()
+            if jnamespace is not None:
+                namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
+            else:
+                namespace = None
+
             functions.append(
                 Function(
                     name=jfunction.name(),
+                    catalog=jfunction.catalog(),
+                    namespace=namespace,
                     description=jfunction.description(),
                     className=jfunction.className(),
                     isTemporary=jfunction.isTemporary(),
@@ -288,19 +331,75 @@ class Catalog:
             name of the database to check function existence in.
             If no database is specified, the current database is used
 
+           .. deprecated:: 3.4.0
+
+
         Returns
         -------
         bool
             Indicating whether the function exists
 
+        .. versionchanged:: 3.4
+           Allowed ``functionName`` to be qualified with catalog name
+
         Examples
         --------
         >>> spark.catalog.functionExists("unexisting_function")
         False
+        >>> spark.catalog.functionExists("default.unexisting_function")
+        False
+        >>> spark.catalog.functionExists("spark_catalog.default.unexisting_function")
+        False
         """
         if dbName is None:
-            dbName = self.currentDatabase()
-        return self._jcatalog.functionExists(dbName, functionName)
+            return self._jcatalog.functionExists(functionName)
+        else:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use functionExists(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
+            return self._jcatalog.functionExists(dbName, functionName)
+
+    def getFunction(self, functionName: str) -> Function:
+        """Get the function with the specified name. This function can be a temporary function or a
+        function. This throws an :class:`AnalysisException` when the function cannot be found.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        tableName : str
+                    name of the function to check existence.
+
+        Examples
+        --------
+        >>> func = spark.sql("CREATE FUNCTION my_func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+        >>> spark.catalog.getFunction("my_func1")
+        Function(name='my_func1', catalog=None, namespace=['default'], ...
+        >>> spark.catalog.getFunction("default.my_func1")
+        Function(name='my_func1', catalog=None, namespace=['default'], ...
+        >>> spark.catalog.getFunction("spark_catalog.default.my_func1")
+        Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
+        >>> spark.catalog.getFunction("my_func2")
+        Traceback (most recent call last):
+            ...
+        pyspark.sql.utils.AnalysisException: ...
+        """
+        jfunction = self._jcatalog.getFunction(functionName)
+        jnamespace = jfunction.namespace()
+        if jnamespace is not None:
+            namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
+        else:
+            namespace = None
+        return Function(
+            name=jfunction.name(),
+            catalog=jfunction.catalog(),
+            namespace=namespace,
+            description=jfunction.description(),
+            className=jfunction.className(),
+            isTemporary=jfunction.isTemporary(),
+        )
 
     def listColumns(self, tableName: str, dbName: Optional[str] = None) -> List[Column]:
         """Returns a list of columns for the given table/view in the specified database.
@@ -309,14 +408,33 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        Parameters
+        ----------
+        tableName : str
+                    name of the table to check existence
+        dbName : str, optional
+                 name of the database to check table existence in.
+
+           .. deprecated:: 3.4.0
+
+        .. versionchanged:: 3.4
+           Allowed ``tableName`` to be qualified with catalog name when ``dbName`` is None.
+
          Notes
          -----
          the order of arguments here is different from that of its JVM counterpart
          because Python does not support method overloading.
         """
         if dbName is None:
-            dbName = self.currentDatabase()
-        iter = self._jcatalog.listColumns(dbName, tableName).toLocalIterator()
+            iter = self._jcatalog.listColumns(tableName).toLocalIterator()
+        else:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use listColumns(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
+            iter = self._jcatalog.listColumns(dbName, tableName).toLocalIterator()
+
         columns = []
         while iter.hasNext():
             jcolumn = iter.next()
@@ -590,7 +708,11 @@ class Catalog:
 
     @since(2.0)
     def refreshTable(self, tableName: str) -> None:
-        """Invalidates and refreshes all the cached data and metadata of the given table."""
+        """Invalidates and refreshes all the cached data and metadata of the given table.
+
+        .. versionchanged:: 3.4
+           Allowed ``tableName`` to be qualified with catalog name.
+        """
         self._jcatalog.refreshTable(tableName)
 
     @since("2.1.1")

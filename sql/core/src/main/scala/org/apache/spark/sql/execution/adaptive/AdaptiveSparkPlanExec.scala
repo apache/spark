@@ -662,7 +662,7 @@ case class AdaptiveSparkPlanExec(
       // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
       // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan is
       // already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
-      val finalPlan = currentPhysicalPlan match {
+      val finalPlan = inputPlan match {
         case b: BroadcastExchangeLike
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
         case _ => newPlan

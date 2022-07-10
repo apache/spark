@@ -72,6 +72,7 @@ private[spark] class BasicExecutorFeatureStep(
     kubernetesConf.sparkConf,
     isPythonApp,
     Map.empty)
+  assert(execResources.cores.nonEmpty)
 
   private val executorMemoryString = s"${execResources.executorMemoryMiB}m"
   // we don't include any kubernetes conf specific requests or limits when using custom
@@ -80,7 +81,7 @@ private[spark] class BasicExecutorFeatureStep(
     if (isDefaultProfile && kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
       kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
     } else {
-      execResources.cores.toString
+      execResources.cores.get.toString
     }
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
@@ -123,7 +124,7 @@ private[spark] class BasicExecutorFeatureStep(
     val executorEnv: Seq[EnvVar] = {
         (Seq(
           (ENV_DRIVER_URL, driverUrl),
-          (ENV_EXECUTOR_CORES, execResources.cores.toString),
+          (ENV_EXECUTOR_CORES, execResources.cores.get.toString),
           (ENV_EXECUTOR_MEMORY, executorMemoryString),
           (ENV_APPLICATION_ID, kubernetesConf.appId),
           // This is to set the SPARK_CONF_DIR to be /opt/spark/conf

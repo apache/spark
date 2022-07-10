@@ -4011,6 +4011,17 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
 })
 
+test_that("catalog APIs, listCatalogs, setCurrentCatalog, currentCatalog", {
+  expect_equal(currentCatalog(), "spark_catalog")
+  expect_error(setCurrentCatalog("spark_catalog"), NA)
+  expect_error(setCurrentCatalog("zxwtyswklpf"),
+               paste0("Error in setCurrentCatalog : ",
+               "org.apache.spark.sql.connector.catalog.CatalogNotFoundException: ",
+               "Catalog 'zxwtyswklpf' plugin class not found: ",
+               "spark.sql.catalog.zxwtyswklpf is not defined"))
+  catalogs <- collect(listCatalogs())
+})
+
 test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
@@ -4050,12 +4061,12 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
-               c("name", "database", "description", "className", "isTemporary"))
+               c("name", "catalog", "namespace", "description", "className", "isTemporary"))
   expect_equal(take(orderBy(f, "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("zxwtyswklpf_db"),
-               paste("Error in listFunctions : analysis error - Database",
-                     "'zxwtyswklpf_db' does not exist"))
+               paste("Error in listFunctions : no such database - Database",
+                     "'zxwtyswklpf_db' not found"))
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),

@@ -29,12 +29,17 @@ Catalog
     Catalog.clearCache
     Catalog.createExternalTable
     Catalog.createTable
+    Catalog.currentCatalog
     Catalog.currentDatabase
     Catalog.databaseExists
     Catalog.dropGlobalTempView
     Catalog.dropTempView
     Catalog.functionExists
+    Catalog.getDatabase
+    Catalog.getFunction
+    Catalog.getTable
     Catalog.isCached
+    Catalog.listCatalogs
     Catalog.listColumns
     Catalog.listDatabases
     Catalog.listFunctions
@@ -43,6 +48,7 @@ Catalog
     Catalog.refreshByPath
     Catalog.refreshTable
     Catalog.registerFunction
+    Catalog.setCurrentCatalog
     Catalog.setCurrentDatabase
     Catalog.tableExists
     Catalog.uncacheTable

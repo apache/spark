@@ -20,9 +20,10 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -760,6 +761,13 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock))
     assert(e.getMessage.contains("No pod was found named i-do-not-exist in the cluster in the" +
       " namespace default"))
+  }
+
+  test("SPARK-39688: getReusablePVCs should handle accounts with no PVC permission") {
+    val getReusablePVCs =
+      PrivateMethod[mutable.Buffer[PersistentVolumeClaim]](Symbol("getReusablePVCs"))
+    when(persistentVolumeClaimList.getItems).thenThrow(new KubernetesClientException("Error"))
+    podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq.empty[String])
   }
 
   private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =

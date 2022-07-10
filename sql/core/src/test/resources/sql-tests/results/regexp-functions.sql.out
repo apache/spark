@@ -435,3 +435,59 @@ SELECT regexp_count('abc', null)
 struct<regexp_count(abc, NULL):int>
 -- !query output
 NULL
+
+
+-- !query
+SELECT regexp_substr('1a 2b 14m', '\\d+')
+-- !query schema
+struct<regexp_substr(1a 2b 14m, \d+):string>
+-- !query output
+1
+
+
+-- !query
+SELECT regexp_substr('1a 2b 14m', '\\d+ ')
+-- !query schema
+struct<regexp_substr(1a 2b 14m, \d+ ):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT regexp_substr('1a 2b 14m', '\\d+(a|b|m)')
+-- !query schema
+struct<regexp_substr(1a 2b 14m, \d+(a|b|m)):string>
+-- !query output
+1a
+
+
+-- !query
+SELECT regexp_substr('1a 2b 14m', '\\d{2}(a|b|m)')
+-- !query schema
+struct<regexp_substr(1a 2b 14m, \d{2}(a|b|m)):string>
+-- !query output
+14m
+
+
+-- !query
+SELECT regexp_substr('1a 2b 14m', '')
+-- !query schema
+struct<regexp_substr(1a 2b 14m, ):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT regexp_substr('Spark', null)
+-- !query schema
+struct<regexp_substr(Spark, NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT regexp_substr(null, '.*')
+-- !query schema
+struct<regexp_substr(NULL, .*):string>
+-- !query output
+NULL
