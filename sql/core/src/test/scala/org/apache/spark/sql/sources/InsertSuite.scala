@@ -1740,8 +1740,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-39557 INSERT INTO statements with tables with map defaults") {
     // Positive tests: map types are supported as default values.
     case class TestCase(
-                         dataSource: String,
-                         insertNullsToStorage: Boolean = true)
+        dataSource: String,
+        insertNullsToStorage: Boolean = true)
     Seq(
       TestCase(
         "parquet"),
