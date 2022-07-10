@@ -11,19 +11,19 @@
                      :  +- * BroadcastHashJoin Inner BuildRight (8)
                      :     :- * Filter (3)
                      :     :  +- * ColumnarToRow (2)
-                     :     :     +- Scan parquet default.partsupp (1)
+                     :     :     +- Scan parquet spark_catalog.default.partsupp (1)
                      :     +- BroadcastExchange (7)
                      :        +- * Filter (6)
                      :           +- * ColumnarToRow (5)
-                     :              +- Scan parquet default.supplier (4)
+                     :              +- Scan parquet spark_catalog.default.supplier (4)
                      +- BroadcastExchange (14)
                         +- * Project (13)
                            +- * Filter (12)
                               +- * ColumnarToRow (11)
-                                 +- Scan parquet default.nation (10)
+                                 +- Scan parquet spark_catalog.default.nation (10)
 
 
-(1) Scan parquet default.partsupp
+(1) Scan parquet spark_catalog.default.partsupp
 Output [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/partsupp]
@@ -37,7 +37,7 @@ Input [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
 Input [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
 Condition : isnotnull(ps_suppkey#2)
 
-(4) Scan parquet default.supplier
+(4) Scan parquet spark_catalog.default.supplier
 Output [2]: [s_suppkey#5, s_nationkey#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/supplier]
@@ -64,7 +64,7 @@ Join condition: None
 Output [4]: [ps_partkey#1, ps_availqty#3, ps_supplycost#4, s_nationkey#6]
 Input [6]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4, s_suppkey#5, s_nationkey#6]
 
-(10) Scan parquet default.nation
+(10) Scan parquet spark_catalog.default.nation
 Output [2]: [n_nationkey#7, n_name#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]
@@ -137,12 +137,12 @@ Subquery:1 Hosting operator id = 20 Hosting Expression = Subquery scalar-subquer
             :  +- * BroadcastHashJoin Inner BuildRight (27)
             :     :- * Filter (25)
             :     :  +- * ColumnarToRow (24)
-            :     :     +- Scan parquet default.partsupp (23)
+            :     :     +- Scan parquet spark_catalog.default.partsupp (23)
             :     +- ReusedExchange (26)
             +- ReusedExchange (29)
 
 
-(23) Scan parquet default.partsupp
+(23) Scan parquet spark_catalog.default.partsupp
 Output [3]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/partsupp]

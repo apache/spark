@@ -8,13 +8,13 @@
                +- * BroadcastHashJoin LeftAnti BuildRight (7)
                   :- * Filter (3)
                   :  +- * ColumnarToRow (2)
-                  :     +- Scan parquet default.customer (1)
+                  :     +- Scan parquet spark_catalog.default.customer (1)
                   +- BroadcastExchange (6)
                      +- * ColumnarToRow (5)
-                        +- Scan parquet default.orders (4)
+                        +- Scan parquet spark_catalog.default.orders (4)
 
 
-(1) Scan parquet default.customer
+(1) Scan parquet spark_catalog.default.customer
 Output [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -28,7 +28,7 @@ Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
 Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
 Condition : ((isnotnull(c_acctbal#3) AND substring(c_phone#2, 1, 2) IN (13,31,23,29,30,18,17)) AND (cast(c_acctbal#3 as decimal(14,4)) > Subquery scalar-subquery#4, [id=#5]))
 
-(4) Scan parquet default.orders
+(4) Scan parquet spark_catalog.default.orders
 Output [1]: [o_custkey#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
@@ -85,10 +85,10 @@ Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery
       +- * Project (17)
          +- * Filter (16)
             +- * ColumnarToRow (15)
-               +- Scan parquet default.customer (14)
+               +- Scan parquet spark_catalog.default.customer (14)
 
 
-(14) Scan parquet default.customer
+(14) Scan parquet spark_catalog.default.customer
 Output [2]: [c_phone#18, c_acctbal#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]

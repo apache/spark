@@ -879,8 +879,12 @@ private[spark] class MapOutputTrackerMaster(
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
-      shuffleStatus.invalidateSerializedMapOutputStatusCache()
-      shuffleStatus.invalidateSerializedMergeOutputStatusCache()
+      // SPARK-39553: Add protection for Scala 2.13 due to https://github.com/scala/bug/issues/12613
+      // We should revert this if Scala 2.13 solves this issue.
+      if (shuffleStatus != null) {
+        shuffleStatus.invalidateSerializedMapOutputStatusCache()
+        shuffleStatus.invalidateSerializedMergeOutputStatusCache()
+      }
     }
   }
 

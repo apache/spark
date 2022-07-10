@@ -17,30 +17,30 @@
                   :     :     :     :     :- * Project (4)
                   :     :     :     :     :  +- * Filter (3)
                   :     :     :     :     :     +- * ColumnarToRow (2)
-                  :     :     :     :     :        +- Scan parquet default.part (1)
+                  :     :     :     :     :        +- Scan parquet spark_catalog.default.part (1)
                   :     :     :     :     +- BroadcastExchange (8)
                   :     :     :     :        +- * Filter (7)
                   :     :     :     :           +- * ColumnarToRow (6)
-                  :     :     :     :              +- Scan parquet default.lineitem (5)
+                  :     :     :     :              +- Scan parquet spark_catalog.default.lineitem (5)
                   :     :     :     +- BroadcastExchange (14)
                   :     :     :        +- * Filter (13)
                   :     :     :           +- * ColumnarToRow (12)
-                  :     :     :              +- Scan parquet default.supplier (11)
+                  :     :     :              +- Scan parquet spark_catalog.default.supplier (11)
                   :     :     +- BroadcastExchange (20)
                   :     :        +- * Filter (19)
                   :     :           +- * ColumnarToRow (18)
-                  :     :              +- Scan parquet default.partsupp (17)
+                  :     :              +- Scan parquet spark_catalog.default.partsupp (17)
                   :     +- BroadcastExchange (26)
                   :        +- * Filter (25)
                   :           +- * ColumnarToRow (24)
-                  :              +- Scan parquet default.orders (23)
+                  :              +- Scan parquet spark_catalog.default.orders (23)
                   +- BroadcastExchange (32)
                      +- * Filter (31)
                         +- * ColumnarToRow (30)
-                           +- Scan parquet default.nation (29)
+                           +- Scan parquet spark_catalog.default.nation (29)
 
 
-(1) Scan parquet default.part
+(1) Scan parquet spark_catalog.default.part
 Output [2]: [p_partkey#1, p_name#2]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/part]
@@ -58,7 +58,7 @@ Condition : ((isnotnull(p_name#2) AND Contains(p_name#2, green)) AND isnotnull(p
 Output [1]: [p_partkey#1]
 Input [2]: [p_partkey#1, p_name#2]
 
-(5) Scan parquet default.lineitem
+(5) Scan parquet spark_catalog.default.lineitem
 Output [6]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -85,7 +85,7 @@ Join condition: None
 Output [6]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8]
 Input [7]: [p_partkey#1, l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8]
 
-(11) Scan parquet default.supplier
+(11) Scan parquet spark_catalog.default.supplier
 Output [2]: [s_suppkey#9, s_nationkey#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/supplier]
@@ -112,7 +112,7 @@ Join condition: None
 Output [7]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10]
 Input [8]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8, s_suppkey#9, s_nationkey#10]
 
-(17) Scan parquet default.partsupp
+(17) Scan parquet spark_catalog.default.partsupp
 Output [3]: [ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/partsupp]
@@ -139,7 +139,7 @@ Join condition: None
 Output [6]: [l_orderkey#3, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_supplycost#13]
 Input [10]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
 
-(23) Scan parquet default.orders
+(23) Scan parquet spark_catalog.default.orders
 Output [2]: [o_orderkey#14, o_orderdate#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
@@ -166,7 +166,7 @@ Join condition: None
 Output [6]: [l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_supplycost#13, o_orderdate#15]
 Input [8]: [l_orderkey#3, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_supplycost#13, o_orderkey#14, o_orderdate#15]
 
-(29) Scan parquet default.nation
+(29) Scan parquet spark_catalog.default.nation
 Output [2]: [n_nationkey#16, n_name#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]

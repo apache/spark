@@ -64,7 +64,6 @@ case class OrcPartitionReaderFactory(
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
   private val orcFilterPushDown = sqlConf.orcFilterPushDown
-  private val ignoreCorruptFiles = options.ignoreCorruptFiles
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
@@ -73,12 +72,11 @@ case class OrcPartitionReaderFactory(
         s.dataType, sqlConf.orcVectorizedReaderNestedColumnEnabled))
   }
 
-  private def pushDownPredicates(filePath: Path, conf: Configuration): Unit = {
+  private def pushDownPredicates(orcSchema: TypeDescription, conf: Configuration): Unit = {
     if (orcFilterPushDown && filters.nonEmpty) {
-      OrcUtils.readCatalystSchema(filePath, conf, ignoreCorruptFiles).foreach { fileSchema =>
-        OrcFilters.createFilter(fileSchema, filters).foreach { f =>
-          OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
-        }
+      val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
+      OrcFilters.createFilter(fileSchema, filters).foreach { f =>
+        OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
       }
     }
   }
@@ -168,11 +166,13 @@ case class OrcPartitionReaderFactory(
   private def createORCReader(filePath: Path, conf: Configuration): Reader = {
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
-    pushDownPredicates(filePath, conf)
-
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    OrcFile.createReader(filePath, readerOptions)
+    val reader = OrcFile.createReader(filePath, readerOptions)
+
+    pushDownPredicates(reader.getSchema, conf)
+
+    reader
   }
 
   /**

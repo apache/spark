@@ -833,7 +833,9 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-39387: BytesColumnVector should not throw RuntimeException due to overflow") {
+  // SPARK-39519: Ignore this case because it requires more than 4g heap memory to ensure test
+  // stability when use Java 11. Should test it manually when upgrading `hive-storage-api`
+  ignore("SPARK-39387: BytesColumnVector should not throw RuntimeException due to overflow") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df = spark.range(1, 22, 1, 1).map { _ =>

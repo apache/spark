@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.TestPrematureExit
 
 class MesosClusterDispatcherSuite extends SparkFunSuite
-  with TestPrematureExit{
+  with TestPrematureExit {
 
   test("prints usage on empty input") {
     testPrematureExit(Array[String](),

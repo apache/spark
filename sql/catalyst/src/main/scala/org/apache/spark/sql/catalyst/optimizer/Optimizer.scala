@@ -235,6 +235,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CheckCartesianProducts) :+
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
+      PushPredicateThroughJoin,
+      LimitPushDown,
       ColumnPruning,
       CollapseProject,
       RemoveRedundantAliases,
@@ -710,15 +712,13 @@ object LimitPushDown extends Rule[LogicalPlan] {
           left = maybePushLocalLimit(limitExpr, join.left),
           right = maybePushLocalLimit(limitExpr, join.right))
       case LeftSemi | LeftAnti if join.condition.isEmpty =>
-        join.copy(
-          left = maybePushLocalLimit(limitExpr, join.left),
-          right = maybePushLocalLimit(Literal(1, IntegerType), join.right))
+        join.copy(left = maybePushLocalLimit(limitExpr, join.left))
       case _ => join
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(LIMIT), ruleId) {
+    _.containsAnyPattern(LIMIT, LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // Adding extra Limits below UNION ALL for children which are not Limit or do not have Limit
     // descendants whose maxRow is larger. This heuristic is valid assuming there does not exist any
     // Limit push-down rule that is unable to infer the value of maxRows.
@@ -753,6 +753,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
+    // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
+    case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
+      j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
   }
 }
 
@@ -859,12 +862,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
       e.copy(child = prunedChild(child, e.references))
 
     // prune unrequired references
-    // There are 2 types of pruning here:
-    // 1. For attributes in g.child.outputSet that is not used by the generator nor the project,
-    //    we directly remove it from the output list of g.child.
-    // 2. For attributes that is not used by the project but it is used by the generator, we put
-    //    it in g.unrequiredChildIndex to save memory usage.
-    case GeneratorUnrequiredChildrenPruning(rewrittenPlan) => rewrittenPlan
+    case p @ Project(_, g: Generate) if p.references != g.outputSet =>
+      val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
+      val newChild = prunedChild(g.child, requiredAttrs)
+      val unrequired = g.generator.references -- p.references
+      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
+        .map(_._2)
+      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
@@ -925,7 +929,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
   })
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  def prunedChild(c: LogicalPlan, allReferences: AttributeSet): LogicalPlan =
+  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
     if (!c.outputSet.subsetOf(allReferences)) {
       Project(c.output.filter(allReferences.contains), c)
     } else {

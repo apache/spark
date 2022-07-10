@@ -210,3 +210,60 @@ SELECT
 FROM basic_pays
 WINDOW w AS (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY salary;
+
+CREATE OR REPLACE TEMPORARY VIEW intervals AS SELECT * FROM VALUES
+(0, INTERVAL '0' MONTH, INTERVAL '0' SECOND),
+(0, INTERVAL '10' MONTH, INTERVAL '10' SECOND),
+(0, INTERVAL '20' MONTH, INTERVAL '20' SECOND),
+(0, INTERVAL '30' MONTH, INTERVAL '30' SECOND),
+(0, INTERVAL '40' MONTH, INTERVAL '40' SECOND),
+(1, INTERVAL '10' MONTH, INTERVAL '10' SECOND),
+(1, INTERVAL '20' MONTH, INTERVAL '20' SECOND),
+(2, INTERVAL '10' MONTH, INTERVAL '10' SECOND),
+(2, INTERVAL '20' MONTH, INTERVAL '20' SECOND),
+(2, INTERVAL '25' MONTH, INTERVAL '25' SECOND),
+(2, INTERVAL '30' MONTH, INTERVAL '30' SECOND),
+(3, INTERVAL '60' MONTH, INTERVAL '60' SECOND),
+(4, null, null)
+AS intervals(k, dt, ym);
+
+SELECT
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY dt),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY dt DESC)
+FROM intervals;
+
+SELECT
+  k,
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY ym),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY ym DESC)
+FROM intervals
+GROUP BY k
+ORDER BY k;
+
+SELECT
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY dt),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY dt DESC)
+FROM intervals;
+
+SELECT
+  k,
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY ym),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY ym DESC)
+FROM intervals
+GROUP BY k
+ORDER BY k;
+
+SELECT
+  median(dt),
+  percentile(dt, 0.5),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY dt)
+FROM intervals;
+
+SELECT
+  k,
+  median(ym),
+  percentile(ym, 0.5),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY ym)
+FROM intervals
+GROUP BY k
+ORDER BY k;

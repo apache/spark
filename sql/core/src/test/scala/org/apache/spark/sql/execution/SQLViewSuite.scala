@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Divide}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -83,7 +84,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           var e = intercept[AnalysisException] {
             sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
           }.getMessage
-          assert(e.contains("Not allowed to create a permanent view `default`.`jtv1` by " +
+          assert(e.contains("Not allowed to create a permanent view " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`jtv1` by " +
             "referencing a temporary view temp_jtv1. " +
             "Please create a temp view instead by CREATE TEMP VIEW"))
 
@@ -92,7 +94,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           e = intercept[AnalysisException] {
             sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
           }.getMessage
-          assert(e.contains("Not allowed to create a permanent view `default`.`jtv1` by " +
+          assert(e.contains("Not allowed to create a permanent view " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`jtv1` by " +
             "referencing a temporary view global_temp.global_temp_jtv1"))
         }
       }
@@ -241,7 +244,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       var e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $viewName SELECT 1")
       }.getMessage
-      assert(e.contains("Inserting into a view is not allowed. View: `default`.`testview`"))
+      assert(e.contains("Inserting into a view is not allowed. View: " +
+        s"`$SESSION_CATALOG_NAME`.`default`.`testview`"))
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
@@ -704,29 +708,38 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       val e1 = intercept[AnalysisException] {
         sql("ALTER VIEW view1 AS SELECT * FROM view2")
       }.getMessage
-      assert(e1.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
-        "-> `default`.`view2` -> `default`.`view1`)"))
+      assert(e1.contains(s"Recursive view `$SESSION_CATALOG_NAME`.`default`.`view1` " +
+        s"detected (cycle: `$SESSION_CATALOG_NAME`.`default`.`view1` " +
+        s"-> `$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
+        s"`$SESSION_CATALOG_NAME`.`default`.`view1`)"))
 
       // Detect the most left cycle when there exists multiple cyclic view references.
       val e2 = intercept[AnalysisException] {
         sql("ALTER VIEW view1 AS SELECT * FROM view3 JOIN view2")
       }.getMessage
-      assert(e2.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
-        "-> `default`.`view3` -> `default`.`view2` -> `default`.`view1`)"))
+      assert(e2.contains(s"Recursive view `$SESSION_CATALOG_NAME`.`default`.`view1` " +
+        s"detected (cycle: `$SESSION_CATALOG_NAME`.`default`.`view1` " +
+        s"-> `$SESSION_CATALOG_NAME`.`default`.`view3` -> " +
+        s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
+        s"`$SESSION_CATALOG_NAME`.`default`.`view1`)"))
 
       // Detect cyclic view reference on CREATE OR REPLACE VIEW.
       val e3 = intercept[AnalysisException] {
         sql("CREATE OR REPLACE VIEW view1 AS SELECT * FROM view2")
       }.getMessage
-      assert(e3.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
-        "-> `default`.`view2` -> `default`.`view1`)"))
+      assert(e3.contains(s"Recursive view `$SESSION_CATALOG_NAME`.`default`.`view1` " +
+        s"detected (cycle: `$SESSION_CATALOG_NAME`.`default`.`view1` " +
+        s"-> `$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
+        s"`$SESSION_CATALOG_NAME`.`default`.`view1`)"))
 
       // Detect cyclic view reference from subqueries.
       val e4 = intercept[AnalysisException] {
         sql("ALTER VIEW view1 AS SELECT * FROM jt WHERE EXISTS (SELECT 1 FROM view2)")
       }.getMessage
-      assert(e4.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
-        "-> `default`.`view2` -> `default`.`view1`)"))
+      assert(e4.contains(s"Recursive view `$SESSION_CATALOG_NAME`.`default`.`view1` " +
+        s"detected (cycle: `$SESSION_CATALOG_NAME`.`default`.`view1` " +
+        s"-> `$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
+        s"`$SESSION_CATALOG_NAME`.`default`.`view1`)"))
     }
   }
 
@@ -937,7 +950,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           }
           assert(add.isDefined)
           val qualifiedName = if (viewType == "VIEW") {
-            s"default.$viewId"
+            s"$SESSION_CATALOG_NAME.default.$viewId"
           } else {
             viewId
           }

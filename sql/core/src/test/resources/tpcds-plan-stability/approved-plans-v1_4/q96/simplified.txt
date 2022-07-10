@@ -14,7 +14,7 @@ WholeStageCodegen (5)
                           Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk,ss_sold_date_sk]
+                                Scan parquet spark_catalog.default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk,ss_sold_date_sk]
                         InputAdapter
                           BroadcastExchange #2
                             WholeStageCodegen (1)
@@ -22,7 +22,7 @@ WholeStageCodegen (5)
                                 Filter [hd_dep_count,hd_demo_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count]
+                                      Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_dep_count]
                     InputAdapter
                       BroadcastExchange #3
                         WholeStageCodegen (2)
@@ -30,7 +30,7 @@ WholeStageCodegen (5)
                             Filter [t_hour,t_minute,t_time_sk]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                                  Scan parquet spark_catalog.default.time_dim [t_time_sk,t_hour,t_minute]
                 InputAdapter
                   BroadcastExchange #4
                     WholeStageCodegen (3)
@@ -38,4 +38,4 @@ WholeStageCodegen (5)
                         Filter [s_store_name,s_store_sk]
                           ColumnarToRow
                             InputAdapter
-                              Scan parquet default.store [s_store_sk,s_store_name]
+                              Scan parquet spark_catalog.default.store [s_store_sk,s_store_name]

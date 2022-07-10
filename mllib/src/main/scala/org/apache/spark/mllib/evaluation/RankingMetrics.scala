@@ -38,16 +38,14 @@ import org.apache.spark.rdd.RDD
  *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
  */
 @Since("1.2.0")
-class RankingMetrics[T: ClassTag] @Since("3.4.0") (
-    predictionAndLabels: RDD[(Array[T], Array[T], Array[Double])])
+class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <: Product])
     extends Logging
     with Serializable {
 
-  @Since("1.2.0")
-  def this(predictionAndLabelsWithoutRelevance: => RDD[(Array[T], Array[T])]) = {
-    this(predictionAndLabelsWithoutRelevance.map {
-      case (pred, lab) => (pred, lab, Array.empty[Double])
-    })
+  private val rdd = predictionAndLabels.map {
+    case (pred: Array[T], lab: Array[T]) => (pred, lab, Array.empty[Double])
+    case (pred: Array[T], lab: Array[T], rel: Array[Double]) => (pred, lab, rel)
+    case _ => throw new IllegalArgumentException(s"Expected RDD of tuples or triplets")
   }
 
   /**
@@ -70,7 +68,7 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
   @Since("1.2.0")
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab, _) =>
+    rdd.map { case (pred, lab, _) =>
       countRelevantItemRatio(pred, lab, k, k)
     }.mean()
   }
@@ -82,7 +80,7 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
    */
   @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
-    predictionAndLabels.map { case (pred, lab, _) =>
+    rdd.map { case (pred, lab, _) =>
       val labSet = lab.toSet
       val k = math.max(pred.length, labSet.size)
       averagePrecision(pred, labSet, k)
@@ -99,7 +97,7 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
   @Since("3.0.0")
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab, _) =>
+    rdd.map { case (pred, lab, _) =>
       averagePrecision(pred, lab.toSet, k)
     }.mean()
   }
@@ -154,7 +152,7 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
   @Since("1.2.0")
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab, rel) =>
+    rdd.map { case (pred, lab, rel) =>
       val useBinary = rel.isEmpty
       val labSet = lab.toSet
       val relMap = lab.zip(rel).toMap
@@ -224,7 +222,7 @@ class RankingMetrics[T: ClassTag] @Since("3.4.0") (
   @Since("3.0.0")
   def recallAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab, _) =>
+    rdd.map { case (pred, lab, _) =>
       countRelevantItemRatio(pred, lab, k, lab.toSet.size)
     }.mean()
   }
@@ -269,12 +267,22 @@ object RankingMetrics {
   /**
    * Creates a [[RankingMetrics]] instance (for Java users).
    * @param predictionAndLabels a JavaRDD of (predicted ranking, ground truth set) pairs
+   *                            or (predicted ranking, ground truth set,
+   *                            relevance value of ground truth set).
+   *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
    */
   @Since("1.4.0")
-  def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
+  def of[E, T <: jl.Iterable[E], A <: jl.Iterable[Double]](
+      predictionAndLabels: JavaRDD[_ <: Product]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]
-    val rdd = predictionAndLabels.rdd.map { case (predictions, labels) =>
-      (predictions.asScala.toArray, labels.asScala.toArray)
+    val rdd = predictionAndLabels.rdd.map {
+      case (predictions, labels) =>
+        (predictions.asInstanceOf[T].asScala.toArray, labels.asInstanceOf[T].asScala.toArray)
+      case (predictions, labels, rels) =>
+        (
+          predictions.asInstanceOf[T].asScala.toArray,
+          labels.asInstanceOf[T].asScala.toArray,
+          rels.asInstanceOf[A].asScala.toArray)
     }
     new RankingMetrics(rdd)
   }

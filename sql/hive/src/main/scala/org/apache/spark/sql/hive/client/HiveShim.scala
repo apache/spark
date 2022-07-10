@@ -41,7 +41,7 @@ import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTable, CatalogTablePartition, CatalogUtils, ExternalCatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -809,7 +809,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   }
 
   private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
-    val name = FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName))
+    val name = CatalystIdentifier.attachSessionCatalog(
+      FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName)))
     val resources = hf.getResourceUris.asScala.map { uri =>
       val resourceType = uri.getResourceType() match {
         case ResourceType.ARCHIVE => "archive"

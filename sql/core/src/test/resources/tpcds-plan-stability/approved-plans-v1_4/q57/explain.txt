@@ -22,16 +22,16 @@ TakeOrderedAndProject (45)
       :     :                                   :     :  +- * BroadcastHashJoin Inner BuildRight (8)
       :     :                                   :     :     :- * Filter (3)
       :     :                                   :     :     :  +- * ColumnarToRow (2)
-      :     :                                   :     :     :     +- Scan parquet default.item (1)
+      :     :                                   :     :     :     +- Scan parquet spark_catalog.default.item (1)
       :     :                                   :     :     +- BroadcastExchange (7)
       :     :                                   :     :        +- * Filter (6)
       :     :                                   :     :           +- * ColumnarToRow (5)
-      :     :                                   :     :              +- Scan parquet default.catalog_sales (4)
+      :     :                                   :     :              +- Scan parquet spark_catalog.default.catalog_sales (4)
       :     :                                   :     +- ReusedExchange (10)
       :     :                                   +- BroadcastExchange (16)
       :     :                                      +- * Filter (15)
       :     :                                         +- * ColumnarToRow (14)
-      :     :                                            +- Scan parquet default.call_center (13)
+      :     :                                            +- Scan parquet spark_catalog.default.call_center (13)
       :     +- BroadcastExchange (35)
       :        +- * Project (34)
       :           +- Window (33)
@@ -46,7 +46,7 @@ TakeOrderedAndProject (45)
                   +- ReusedExchange (38)
 
 
-(1) Scan parquet default.item
+(1) Scan parquet spark_catalog.default.item
 Output [3]: [i_item_sk#1, i_brand#2, i_category#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -60,7 +60,7 @@ Input [3]: [i_item_sk#1, i_brand#2, i_category#3]
 Input [3]: [i_item_sk#1, i_brand#2, i_category#3]
 Condition : ((isnotnull(i_item_sk#1) AND isnotnull(i_category#3)) AND isnotnull(i_brand#2))
 
-(4) Scan parquet default.catalog_sales
+(4) Scan parquet spark_catalog.default.catalog_sales
 Output [4]: [cs_call_center_sk#4, cs_item_sk#5, cs_sales_price#6, cs_sold_date_sk#7]
 Batched: true
 Location: InMemoryFileIndex []
@@ -100,7 +100,7 @@ Join condition: None
 Output [6]: [i_brand#2, i_category#3, cs_call_center_sk#4, cs_sales_price#6, d_year#10, d_moy#11]
 Input [8]: [i_brand#2, i_category#3, cs_call_center_sk#4, cs_sales_price#6, cs_sold_date_sk#7, d_date_sk#9, d_year#10, d_moy#11]
 
-(13) Scan parquet default.call_center
+(13) Scan parquet spark_catalog.default.call_center
 Output [2]: [cc_call_center_sk#12, cc_name#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/call_center]
@@ -250,10 +250,10 @@ Subquery:1 Hosting operator id = 4 Hosting Expression = cs_sold_date_sk#7 IN dyn
 BroadcastExchange (49)
 +- * Filter (48)
    +- * ColumnarToRow (47)
-      +- Scan parquet default.date_dim (46)
+      +- Scan parquet spark_catalog.default.date_dim (46)
 
 
-(46) Scan parquet default.date_dim
+(46) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#9, d_year#10, d_moy#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

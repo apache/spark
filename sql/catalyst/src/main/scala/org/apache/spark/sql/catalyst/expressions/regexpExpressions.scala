@@ -84,16 +84,12 @@ abstract class StringRegexExpression extends BinaryExpression
     Arguments:
       * str - a string expression
       * pattern - a string expression. The pattern is a string which is matched literally, with
-          exception to the following special symbols:
-
-          _ matches any one character in the input (similar to . in posix regular expressions)
-
+          exception to the following special symbols:<br><br>
+          _ matches any one character in the input (similar to . in posix regular expressions)\
           % matches zero or more characters in the input (similar to .* in posix regular
-          expressions)
-
+          expressions)<br><br>
           Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
-          to match "\abc", the pattern should be "\\abc".
-
+          to match "\abc", the pattern should be "\\abc".<br><br>
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
@@ -189,7 +185,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
     copy(left = newLeft, right = newRight)
 }
 
-// scalastyle:off line.contains.tab
+// scalastyle:off line.contains.tab line.size.limit
 /**
  * Simple RegEx case-insensitive pattern matching function
  */
@@ -200,16 +196,12 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
     Arguments:
       * str - a string expression
       * pattern - a string expression. The pattern is a string which is matched literally and
-          case-insensitively, with exception to the following special symbols:
-
-          _ matches any one character in the input (similar to . in posix regular expressions)
-
+          case-insensitively, with exception to the following special symbols:<br><br>
+          _ matches any one character in the input (similar to . in posix regular expressions)<br><br>
           % matches zero or more characters in the input (similar to .* in posix regular
-          expressions)
-
+          expressions)<br><br>
           Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
-          to match "\abc", the pattern should be "\\abc".
-
+          to match "\abc", the pattern should be "\\abc".<br><br>
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
@@ -237,7 +229,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   """,
   since = "3.3.0",
   group = "predicate_funcs")
-// scalastyle:on line.contains.tab
+// scalastyle:on line.contains.tab line.size.limit
 case class ILike(
     left: Expression,
     right: Expression,
@@ -574,12 +566,10 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
     Arguments:
       * str - a string expression to search for a regular expression pattern match.
       * regexp - a string representing a regular expression. The regex string should be a
-          Java regular expression.
-
+          Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -783,12 +773,10 @@ abstract class RegExpExtractBase
     Arguments:
       * str - a string expression.
       * regexp - a string representing a regular expression. The regex string should be a
-          Java regular expression.
-
+          Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -888,12 +876,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     Arguments:
       * str - a string expression.
       * regexp - a string representing a regular expression. The regex string should be a
-          Java regular expression.
-
+          Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -979,4 +965,81 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpExtractAll =
     copy(subject = newFirst, regexp = newSecond, idx = newThird)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str, regexp) - Returns a count of the number of times that the regular expression pattern `regexp` is matched in the string `str`.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression.
+      * regexp - a string representing a regular expression. The regex string should be a
+          Java regular expression.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en');
+       2
+      > SELECT _FUNC_('abcdefghijklmnopqrstuvwxyz', '[a-z]{3}');
+       8
+  """,
+  since = "3.4.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class RegExpCount(left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression =
+    Size(RegExpExtractAll(left, right, Literal(0)), legacySizeOfNull = false)
+
+  override def prettyName: String = "regexp_count"
+
+  override def children: Seq[Expression] = Seq(left, right)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): RegExpCount =
+    copy(left = newChildren(0), right = newChildren(1))
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str, regexp) - Returns the substring that matches the regular expression `regexp` within the string `str`. If the regular expression is not found, the result is null.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression.
+      * regexp - a string representing a regular expression. The regex string should be a Java regular expression.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en');
+       Steven
+      > SELECT _FUNC_('Steven Jones and Stephen Smith are the best players', 'Jeck');
+       NULL
+  """,
+  since = "3.4.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class RegExpSubStr(left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression =
+    new NullIf(
+      RegExpExtract(subject = left, regexp = right, idx = Literal(0)),
+      Literal(""))
+
+  override def prettyName: String = "regexp_substr"
+
+  override def children: Seq[Expression] = Seq(left, right)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): RegExpSubStr =
+    copy(left = newChildren(0), right = newChildren(1))
 }

@@ -32,8 +32,11 @@ jobs:
       java: 8
       branch: master
       hadoop: hadoop3
-      type: pyspark-coverage-scheduled
       envs: >-
         {
           "PYSPARK_CODECOV": "true"
+        }
+      jobs: >-
+        {
+          "pyspark": "true"
         }

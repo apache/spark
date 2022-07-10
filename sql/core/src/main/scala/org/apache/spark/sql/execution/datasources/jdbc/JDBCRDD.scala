@@ -124,7 +124,8 @@ object JDBCRDD extends Logging {
       groupByColumns: Option[Array[String]] = None,
       sample: Option[TableSampleInfo] = None,
       limit: Int = 0,
-      sortOrders: Array[String] = Array.empty[String]): RDD[InternalRow] = {
+      sortOrders: Array[String] = Array.empty[String],
+      offset: Int = 0): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -145,7 +146,8 @@ object JDBCRDD extends Logging {
       groupByColumns,
       sample,
       limit,
-      sortOrders)
+      sortOrders,
+      offset)
   }
   // scalastyle:on argcount
 }
@@ -167,7 +169,8 @@ private[jdbc] class JDBCRDD(
     groupByColumns: Option[Array[String]],
     sample: Option[TableSampleInfo],
     limit: Int,
-    sortOrders: Array[String])
+    sortOrders: Array[String],
+    offset: Int)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -305,10 +308,11 @@ private[jdbc] class JDBCRDD(
     }
 
     val myLimitClause: String = dialect.getLimitClause(limit)
+    val myOffsetClause: String = dialect.getOffsetClause(offset)
 
     val sqlText = options.prepareQuery +
       s"SELECT $columnList FROM ${options.tableOrQuery} $myTableSampleClause" +
-      s" $myWhereClause $getGroupByClause $getOrderByClause $myLimitClause"
+      s" $myWhereClause $getGroupByClause $getOrderByClause $myLimitClause $myOffsetClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

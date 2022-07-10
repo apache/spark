@@ -27,9 +27,29 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 // DefinedByConstructorParams for the catalog to be able to create encoders for them.
 
 /**
+ * A catalog in Spark, as returned by the `listCatalogs` method defined in [[Catalog]].
+ *
+ * @param name name of the catalog
+ * @param description description of the catalog
+ * @since 3.4.0
+ */
+class CatalogMetadata(
+    val name: String,
+    @Nullable val description: String)
+  extends DefinedByConstructorParams {
+
+  override def toString: String = {
+    "Catalog[" +
+      s"name='$name', " +
+      Option(description).map { d => s"description='$d'] " }.getOrElse("]")
+  }
+}
+
+/**
  * A database in Spark, as returned by the `listDatabases` method defined in [[Catalog]].
  *
  * @param name name of the database.
+ * @param catalog name of the catalog that the table belongs to.
  * @param description description of the database.
  * @param locationUri path (in the form of a uri) to data files.
  * @since 2.0.0
@@ -37,13 +57,19 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 @Stable
 class Database(
     val name: String,
+    @Nullable val catalog: String,
     @Nullable val description: String,
     val locationUri: String)
   extends DefinedByConstructorParams {
 
+  def this(name: String, description: String, locationUri: String) = {
+    this(name, null, description, locationUri)
+  }
+
   override def toString: String = {
     "Database[" +
       s"name='$name', " +
+      Option(catalog).map { c => s"catalog='$c', " }.getOrElse("") +
       Option(description).map { d => s"description='$d', " }.getOrElse("") +
       s"path='$locationUri']"
   }
@@ -142,7 +168,8 @@ class Column(
  * A user-defined function in Spark, as returned by `listFunctions` method in [[Catalog]].
  *
  * @param name name of the function.
- * @param database name of the database the function belongs to.
+ * @param catalog name of the catalog that the table belongs to.
+ * @param namespace the namespace that the table belongs to.
  * @param description description of the function; description can be null.
  * @param className the fully qualified class name of the function.
  * @param isTemporary whether the function is a temporary function or not.
@@ -151,11 +178,25 @@ class Column(
 @Stable
 class Function(
     val name: String,
-    @Nullable val database: String,
+    @Nullable val catalog: String,
+    @Nullable val namespace: Array[String],
     @Nullable val description: String,
     val className: String,
     val isTemporary: Boolean)
   extends DefinedByConstructorParams {
+
+  def this(
+      name: String,
+      database: String,
+      description: String,
+      className: String,
+      isTemporary: Boolean) = {
+    this(name, null, Array(database), description, className, isTemporary)
+  }
+
+  def database: String = {
+    if (namespace != null && namespace.length == 1) namespace(0) else null
+  }
 
   override def toString: String = {
     "Function[" +

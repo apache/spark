@@ -7,10 +7,10 @@
             +- * Project (4)
                +- * Filter (3)
                   +- * ColumnarToRow (2)
-                     +- Scan parquet default.lineitem (1)
+                     +- Scan parquet spark_catalog.default.lineitem (1)
 
 
-(1) Scan parquet default.lineitem
+(1) Scan parquet spark_catalog.default.lineitem
 Output [7]: [l_quantity#1, l_extendedprice#2, l_discount#3, l_tax#4, l_returnflag#5, l_linestatus#6, l_shipdate#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]

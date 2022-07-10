@@ -29,7 +29,7 @@ import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientL
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
-import org.apache.spark.resource.{ResourceProfile, ResourceUtils}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
@@ -82,7 +82,8 @@ private[spark] class StandaloneSchedulerBackend(
       "--hostname", "{{HOSTNAME}}",
       "--cores", "{{CORES}}",
       "--app-id", "{{APP_ID}}",
-      "--worker-url", "{{WORKER_URL}}")
+      "--worker-url", "{{WORKER_URL}}",
+      "--resourceProfileId", "{{RESOURCE_PROFILE_ID}}")
     val extraJavaOpts = sc.conf.get(config.EXECUTOR_JAVA_OPTIONS)
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
     val classPathEntries = sc.conf.get(config.EXECUTOR_CLASS_PATH)
@@ -111,15 +112,18 @@ private[spark] class StandaloneSchedulerBackend(
     // ExecutorAllocationManager will send the real initial limit to the Master later.
     val initialExecutorLimit =
       if (Utils.isDynamicAllocationEnabled(conf)) {
+        if (coresPerExecutor.isEmpty) {
+          logWarning("Dynamic allocation enabled without spark.executor.cores explicitly " +
+            "set, you may get more executors allocated than expected. It's recommended to " +
+            "set spark.executor.cores explicitly. Please check SPARK-30299 for more details.")
+        }
+
         Some(0)
       } else {
         None
       }
-    val executorResourceReqs = ResourceUtils.parseResourceRequirements(conf,
-      config.SPARK_EXECUTOR_PREFIX)
-    val appDesc = ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      webUrl, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit,
-      resourceReqsPerExecutor = executorResourceReqs)
+    val appDesc = ApplicationDescription(sc.appName, maxCores, command,
+      webUrl, defaultProfile = defaultProf, sc.eventLogDir, sc.eventLogCodec, initialExecutorLimit)
     client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
@@ -215,8 +219,7 @@ private[spark] class StandaloneSchedulerBackend(
     // resources profiles not supported
     Option(client) match {
       case Some(c) =>
-        val numExecs = resourceProfileToTotalExecs.getOrElse(defaultProf, 0)
-        c.requestTotalExecutors(numExecs)
+        c.requestTotalExecutors(resourceProfileToTotalExecs)
       case None =>
         logWarning("Attempted to request executors before driver fully initialized.")
         Future.successful(false)

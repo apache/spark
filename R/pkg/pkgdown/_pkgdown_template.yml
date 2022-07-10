@@ -261,9 +261,11 @@ reference:
 
 - title: "SQL Catalog"
 - contents:
+  - currentCatalog
   - currentDatabase
   - dropTempTable
   - dropTempView
+  - listCatalogs
   - listColumns
   - listDatabases
   - listFunctions
@@ -271,6 +273,8 @@ reference:
   - refreshByPath
   - refreshTable
   - recoverPartitions
+  - setCurrentCatalog
+  - setCurrentDatabase
   - tableNames
   - tables
   - uncacheTable
@@ -283,7 +287,6 @@ reference:
   - getLocalProperty
   - install.spark
   - setCheckpointDir
-  - setCurrentDatabase
   - setJobDescription
   - setJobGroup
   - setLocalProperty

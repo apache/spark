@@ -32,9 +32,16 @@ jobs:
       java: 17
       branch: master
       hadoop: hadoop3
-      type: scheduled
       envs: >-
         {
           "SKIP_MIMA": "true",
           "SKIP_UNIDOC": "true"
+        }
+      jobs: >-
+        {
+          "build": "true",
+          "pyspark": "true",
+          "sparkr": "true",
+          "tpcds-1g": "true",
+          "docker-integration-tests": "true"
         }
