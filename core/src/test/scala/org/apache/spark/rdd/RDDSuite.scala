@@ -1255,6 +1255,26 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(numPartsPerLocation(locations(1)) > 0.4 * numCoalescedPartitions)
   }
 
+  test("Add a config to limit the number of RDD partitions") {
+    val numPartitions = 20
+    val rdd = sc.range(1, 50, 1, numPartitions)
+    try {
+      Seq(10, 100).foreach { rddMaxPartitions =>
+        sc.conf.set(RDD_MAX_PARTITIONS, rddMaxPartitions)
+        if (rddMaxPartitions < numPartitions) {
+          val e = intercept[SparkException] {
+            rdd.collect()
+          }
+          assert(e.getMessage.contains("The number of RDD partition exceeds 10"))
+        } else {
+          rdd.collect()
+        }
+      }
+    } finally {
+      sc.conf.remove(RDD_MAX_PARTITIONS.key)
+    }
+  }
+
   // NOTE
   // Below tests calling sc.stop() have to be the last tests in this suite. If there are tests
   // running after them and if they access sc those tests will fail as sc is already closed, because
@@ -1278,26 +1298,6 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     }
     assertFails { sc.parallelize(1 to 100) }
     assertFails { sc.textFile("/nonexistent-path") }
-  }
-
-  test("SPARK-39655: Add a config to limit the number of RDD partitions") {
-    val numPartitions = 20
-    val rdd = sc.range(1, 50, 1, numPartitions)
-    try {
-      Seq(10, 100).foreach { rddMaxPartitions =>
-        sc.conf.set(RDD_MAX_PARTITIONS, rddMaxPartitions)
-        if (rddMaxPartitions < numPartitions) {
-          val e = intercept[SparkException] {
-            rdd.collect()
-          }
-          assert(e.getMessage.contains("The number of RDD partition exceeds 10"))
-        } else {
-          rdd.collect()
-        }
-      }
-    } finally {
-      sc.conf.remove(RDD_MAX_PARTITIONS.key)
-    }
   }
 }
 
