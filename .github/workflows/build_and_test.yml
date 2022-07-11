@@ -56,6 +56,11 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
+      image_url: >-
+        ${{
+          (inputs.branch == 'master' && steps.infra-image-outputs.outputs.image_url)
+          || 'dongjoon/apache-spark-github-action-image:20220207'
+        }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -108,6 +113,14 @@ jobs:
           precondition="${precondition//$'\n'/'%0A'}"
           echo "::set-output name=required::$precondition"
         fi
+    - name: Generate infra image url
+      id: infra-image-outputs
+      run: |
+        # Convert to lowercase to meet docker repo name requirement
+        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        echo ::set-output name=image_url::$IMG_URL
 
   # Build: build Spark and run the tests for specified modules.
   build:
@@ -260,21 +273,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).lint == 'true') &&
       inputs.branch == 'master'
     runs-on: ubuntu-latest
-    outputs:
-      image_url: >-
-        ${{
-          (inputs.branch == 'master' && steps.infra-image-outputs.outputs.image_url)
-          || 'dongjoon/apache-spark-github-action-image:20220207'
-        }}
     steps:
-      - name: Generate image name and url
-        id: infra-image-outputs
-        run: |
-          # Convert to lowercase to meet docker repo name requirement
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
-          IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
-          echo ::set-output name=image_url::$IMG_URL
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
@@ -306,7 +305,7 @@ jobs:
           context: ./dev/infra/
           push: true
           tags: |
-            ${{ steps.infra-image-outputs.outputs.image_url }}
+            ${{ needs.precondition.outputs.image_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
 
@@ -317,7 +316,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: ${{ needs.infra-image.outputs.image_url }}
+      image: ${{ needs.precondition.outputs.image_url }}
     strategy:
       fail-fast: false
       matrix:
@@ -498,7 +497,7 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
     container:
-      image: ${{ needs.infra-image.outputs.image_url }}
+      image: ${{ needs.precondition.outputs.image_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
