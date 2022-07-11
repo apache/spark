@@ -277,8 +277,8 @@ dropTempView <- function(viewName) {
 #'
 #' Returns a SparkDataFrame containing names of tables in the given database.
 #'
-#' @param databaseName (optional) name of the database, since 3.4.0 it is allowed to be
-#'                     qualified with catalog name.
+#' @param databaseName (optional) name of the database
+#'                     The database name can be qualified with catalog name since 3.4.0.
 #' @return a SparkDataFrame
 #' @rdname tables
 #' @seealso \link{listTables}
@@ -298,8 +298,8 @@ tables <- function(databaseName = NULL) {
 #'
 #' Returns the names of tables in the given database as an array.
 #'
-#' @param databaseName (optional) name of the database, since 3.4.0 it is allowed to be
-#'                     qualified with catalog name.
+#' @param databaseName (optional) name of the database
+#'                     The database name can be qualified with catalog name since 3.4.0.
 #' @return a list of table names
 #' @rdname tableNames
 #' @examples
@@ -404,7 +404,7 @@ listDatabases <- function() {
 #' Get the database with the specified name
 #'
 #' @param databaseName name of the database, allowed to be qualified with catalog name
-#' @return A data.frame.
+#' @return A named list.
 #' @rdname getDatabase
 #' @name getDatabase
 #' @examples
@@ -421,17 +421,17 @@ getDatabase <- function(databaseName) {
   catalog <- callJMethod(sparkSession, "catalog")
   jdb <- handledCallJMethod(catalog, "getDatabase", databaseName)
 
-  ret <- data.frame("name" = callJMethod(jdb, "name"))
+  ret <- list(name = callJMethod(jdb, "name"))
   jcata <- callJMethod(jdb, "catalog")
   if (is.null(jcata)) {
-    ret$catalog <- "NULL"
+    ret$catalog <- NA
   } else {
     ret$catalog <- jcata
   }
 
   jdesc <- callJMethod(jdb, "description")
   if (is.null(jdesc)) {
-    ret$description <- "NULL"
+    ret$description <- NA
   } else {
     ret$description <- jdesc
   }
@@ -445,8 +445,8 @@ getDatabase <- function(databaseName) {
 #' Returns a list of tables or views in the specified database.
 #' This includes all temporary views.
 #'
-#' @param databaseName (optional) name of the database, since 3.4.0 it is allowed to be
-#'                     qualified with catalog name.
+#' @param databaseName (optional) name of the database
+#'                     The database name can be qualified with catalog name since 3.4.0.
 #' @return a SparkDataFrame of the list of tables.
 #' @rdname listTables
 #' @name listTables
