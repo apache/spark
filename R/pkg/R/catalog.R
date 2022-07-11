@@ -582,8 +582,8 @@ listColumns <- function(tableName, databaseName = NULL) {
 #' Returns a list of functions registered in the specified database.
 #' This includes all temporary functions.
 #'
-#' @param databaseName (optional) name of the database. Since 3.4.0 it is allowed
-#'                     to be qualified with catalog name.
+#' @param databaseName (optional) name of the database
+#'                     The database name can be qualified with catalog name since 3.4.0.
 #' @return a SparkDataFrame of the list of function descriptions.
 #' @rdname listFunctions
 #' @name listFunctions
@@ -651,24 +651,24 @@ getFunction <- function(functionName) {
   catalog <- callJMethod(sparkSession, "catalog")
   jfunc <- handledCallJMethod(catalog, "getFunction", functionName)
 
-  ret <- data.frame("name" = callJMethod(jfunc, "name"))
+  ret <- list(name = callJMethod(jfunc, "name"))
   jcata <- callJMethod(jfunc, "catalog")
   if (is.null(jcata)) {
-    ret$catalog <- "NULL"
+    ret$catalog <- NA
   } else {
     ret$catalog <- jcata
   }
 
   jns <- callJMethod(jfunc, "namespace")
   if (is.null(jns)) {
-    ret$namespace <- "NULL"
+    ret$namespace <- NA
   } else {
-    ret$namespace <- paste(jns, collapse = ".")
+    ret$namespace <- jns
   }
 
   jdesc <- callJMethod(jfunc, "description")
   if (is.null(jdesc)) {
-    ret$description <- "NULL"
+    ret$description <- NA
   } else {
     ret$description <- jdesc
   }
