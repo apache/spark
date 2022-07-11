@@ -204,7 +204,11 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
+            // compatibility only if no custom pattern has been set. If there is a custom pattern,
+            // fail since it may be different from the default pattern.
+            if (options.timestampFormatInRead.isDefined) {
+              throw e
+            }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
         }
@@ -222,7 +226,11 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
+            // compatibility only if no custom pattern has been set. If there is a custom pattern,
+            // fail since it may be different from the default pattern.
+            if (options.dateFormatInRead.isDefined) {
+              throw e
+            }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToDate(str).getOrElse(throw e)
         }
