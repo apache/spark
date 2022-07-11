@@ -1680,9 +1680,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       set.add(2)
       set.add(3)
       set.add(7)
-      set.add(null)
       set.add(6)
-      assertResult(Some(FilterApi.in(intColumn("a"), set))) {
+      assertResult(
+        Some(or(FilterApi.eq(intColumn("a"), null: Integer), FilterApi.in(intColumn("a"), set)))
+      ) {
         parquetFilters.createFilter(sources.In("a", Array(2, 3, 7, null, 6)))
       }
 
