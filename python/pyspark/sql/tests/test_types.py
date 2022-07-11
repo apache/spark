@@ -62,7 +62,6 @@ from pyspark.testing.sqlutils import (
     PythonOnlyUDT,
     ExamplePoint,
     PythonOnlyPoint,
-    MyObject,
 )
 
 
@@ -373,12 +372,6 @@ class TypesTests(ReusedSQLTestCase):
             self.assertEqual(actual, [0, 10])
         finally:
             self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false")
-
-    def test_create_dataframe_from_objects(self):
-        data = [MyObject(1, "1"), MyObject(2, "2")]
-        df = self.spark.createDataFrame(data)
-        self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
-        self.assertEqual(df.first(), Row(key=1, value="1"))
 
     def test_apply_schema(self):
         from datetime import date, datetime, timedelta

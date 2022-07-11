@@ -21,7 +21,7 @@ import unittest
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.sql.functions import col
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase, MyObject
 from pyspark.testing.utils import PySparkTestCase
 
 
@@ -404,6 +404,12 @@ class CreateDataFrameTest(ReusedSQLTestCase):
             self.spark.createDataFrame([(1,), ("x",)])
         with self.assertRaisesRegex(TypeError, expected_err_msg_regex):
             self.spark.createDataFrame([1, "x"])  # Same error message as its above case
+
+    def test_create_dataframe_from_objects(self):
+        data = [MyObject(1, "1"), MyObject(2, "2")]
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
+        self.assertEqual(df.first(), Row(key=1, value="1"))
 
 
 if __name__ == "__main__":
