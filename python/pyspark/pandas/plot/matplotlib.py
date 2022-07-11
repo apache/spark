@@ -392,7 +392,8 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
             kwds = self.kwds.copy()
 
             label = pprint_thing(label if len(label) > 1 else label[0])
-            # `if hasattr(...)` makes plotting compatible with pandas < 1.3, see pandas-dev/pandas#40078.
+            # `if hasattr(...)` makes plotting compatible with pandas < 1.3,
+            # see pandas-dev/pandas#40078.
             label = (
                 self._mark_right_label(label, index=i)
                 if hasattr(self, "_mark_right_label")
@@ -406,7 +407,8 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
 
             kwds = self._make_plot_keywords(kwds, y)
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
-            # `if hasattr(...)` makes plotting compatible with pandas < 1.3, see pandas-dev/pandas#40078.
+            # `if hasattr(...)` makes plotting compatible with pandas < 1.3,
+            # see pandas-dev/pandas#40078.
             self._append_legend_handles_labels(artists[0], label) if hasattr(
                 self, "_append_legend_handles_labels"
             ) else self._add_legend_handle(artists[0], label, index=i)
@@ -492,7 +494,8 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
             kwds = self.kwds.copy()
 
             label = pprint_thing(label if len(label) > 1 else label[0])
-            # `if hasattr(...)` makes plotting compatible with pandas < 1.3, see pandas-dev/pandas#40078.
+            # `if hasattr(...)` makes plotting compatible with pandas < 1.3,
+            # see pandas-dev/pandas#40078.
             label = (
                 self._mark_right_label(label, index=i)
                 if hasattr(self, "_mark_right_label")
@@ -506,7 +509,8 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
 
             kwds = self._make_plot_keywords(kwds, y)
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
-            # `if hasattr(...)` makes plotting compatible with pandas < 1.3, see pandas-dev/pandas#40078.
+            # `if hasattr(...)` makes plotting compatible with pandas < 1.3,
+            # see pandas-dev/pandas#40078.
             self._append_legend_handles_labels(artists[0], label) if hasattr(
                 self, "_append_legend_handles_labels"
             ) else self._add_legend_handle(artists[0], label, index=i)
