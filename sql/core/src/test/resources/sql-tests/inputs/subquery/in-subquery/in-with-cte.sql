@@ -286,5 +286,5 @@ WHERE    t1b NOT IN
                     RIGHT JOIN cte1 cte3 ON cte1.t1b = cte3.t1b
                     JOIN cte1 cte4 ON cte1.t1c = cte4.t1c) AND
          t1c IS NOT NULL
-ORDER BY t1c DESC;
+ORDER BY t1c DESC, t1h;
 

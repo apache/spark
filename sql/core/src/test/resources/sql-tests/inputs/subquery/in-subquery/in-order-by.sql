@@ -62,7 +62,7 @@ SELECT *
 FROM   t1
 WHERE  t1a IN (SELECT t2a
                FROM   t2)
-ORDER  BY t1a;
+ORDER  BY t1a, t1h;
 
 -- TC 01.02
 SELECT t1a
@@ -127,7 +127,7 @@ SELECT *
 FROM   t1
 WHERE  t1a NOT IN (SELECT t2a
                    FROM   t2)
-ORDER  BY t1a;
+ORDER  BY t1a, t1h;
 
 -- TC 01.09
 SELECT t1a,

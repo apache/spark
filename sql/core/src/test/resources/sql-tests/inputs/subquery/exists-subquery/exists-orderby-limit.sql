@@ -45,7 +45,7 @@ WHERE  EXISTS (SELECT dept.dept_id
                FROM   dept 
                WHERE  emp.dept_id = dept.dept_id 
                ORDER  BY state) 
-ORDER  BY hiredate; 
+ORDER  BY hiredate, id;
 
 -- TC.01.02
 SELECT id, 

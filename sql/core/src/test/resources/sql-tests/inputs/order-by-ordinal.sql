@@ -16,7 +16,7 @@ select * from data order by 1 desc, b desc;
 select * from data order by 1 desc, 2 desc;
 
 -- 1 + 0 is considered a constant (not an ordinal) and thus ignored
-select * from data order by 1 + 0 desc, b desc;
+select * from data order by 1 + 0 desc, b desc, a;
 
 -- negative cases: ordinal position out of range
 select * from data order by 0;
