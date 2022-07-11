@@ -38,8 +38,8 @@ import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOut
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
+import org.apache.spark.sql.catalyst.{TableIdentifier, WalkedTypePath}
 import org.apache.spark.sql.catalyst.ScalaReflection.Schema
-import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
@@ -1755,11 +1755,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s" ${maxBroadcastTableBytes >> 30}GB: ${dataSize >> 30} GB")
   }
 
-  def notEnoughMemoryToBuildAndBroadcastTableError(oe: OutOfMemoryError): Throwable = {
+  def notEnoughMemoryToBuildAndBroadcastTableError(
+      oe: OutOfMemoryError, tables: Seq[TableIdentifier]): Throwable = {
+    val analyzeTblMsg = if (tables.nonEmpty) {
+      " or analyze these tables through: " +
+        s"${tables.map(t => s"ANALYZE TABLE $t COMPUTE STATISTICS;").mkString(" ")}."
+    } else {
+      "."
+    }
     new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
       "worker nodes. As a workaround, you can either disable broadcast by setting " +
       s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
-      s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
+      s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value$analyzeTblMsg")
       .initCause(oe.getCause)
   }
 
