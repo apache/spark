@@ -748,7 +748,13 @@ class ParquetFilters(
             makeEq.lift(fieldType).map(_(fieldNames, v))
           }.reduceLeftOption(FilterApi.or)
         } else if (canPartialPushDownConjuncts) {
-          makeInPredicate.lift(fieldType).map(_(fieldNames, values))
+          if (values.contains(null)) {
+            Seq(makeEq.lift(fieldType).map(_(fieldNames, null)),
+              makeInPredicate.lift(fieldType).map(_(fieldNames, values.filter(_ != null)))
+            ).flatten.reduceLeftOption(FilterApi.or)
+          } else {
+            makeInPredicate.lift(fieldType).map(_(fieldNames, values))
+          }
         } else {
           None
         }
