@@ -602,7 +602,7 @@ trait ColumnarExpression extends Expression with Serializable {
     if (!super.equals(other)) {
       return false
     }
-    return other.isInstanceOf[ColumnarExpression]
+    other.isInstanceOf[ColumnarExpression]
   }
 
   override def hashCode(): Int = super.hashCode()
@@ -718,7 +718,7 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     if (!super.equals(other)) {
       return false
     }
-    return other.isInstanceOf[ColumnarProjectExec]
+    other.isInstanceOf[ColumnarProjectExec]
   }
 
   override def hashCode(): Int = super.hashCode()
@@ -901,7 +901,7 @@ class ReplacedRowToColumnarExec(override val child: SparkPlan)
     if (!super.equals(other)) {
       return false
     }
-    return other.isInstanceOf[ReplacedRowToColumnarExec]
+    other.isInstanceOf[ReplacedRowToColumnarExec]
   }
 
   override def hashCode(): Int = super.hashCode()
