@@ -405,7 +405,7 @@ class CreateDataFrameTest(ReusedSQLTestCase):
         with self.assertRaisesRegex(TypeError, expected_err_msg_regex):
             self.spark.createDataFrame([1, "x"])  # Same error message as its above case
 
-    def test_create_dataframe_from_objects(self):
+    def test_from_list_of_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
