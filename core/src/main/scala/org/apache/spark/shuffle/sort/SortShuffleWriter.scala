@@ -80,9 +80,9 @@ private[spark] class SortShuffleWriter[K, V, C](
       }
       stopping = true
       if (success) {
-        return Option(mapStatus)
+        Option(mapStatus)
       } else {
-        return None
+        None
       }
     } finally {
       // Clean up our sorter, which may have its own intermediate files

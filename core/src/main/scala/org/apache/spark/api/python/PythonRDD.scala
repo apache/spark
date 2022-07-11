@@ -892,7 +892,7 @@ private[spark] class DechunkedInputStream(wrapped: InputStream) extends InputStr
       }
     }
     assert(destSpace == 0 || remainingInChunk == -1)
-    return destPos - off
+    destPos - off
   }
 
   override def close(): Unit = wrapped.close()
