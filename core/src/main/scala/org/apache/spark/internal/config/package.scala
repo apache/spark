@@ -1947,6 +1947,13 @@ package object config {
       .intConf
       .createWithDefault(4)
 
+  private[spark] val RDD_MAX_PARTITIONS = ConfigBuilder("spark.rdd.maxPartitions")
+    .doc("The maximum number of partitions allowed when constructing a RDD.")
+    .version("3.4.0")
+    .intConf
+    .checkValue(_ > 0, "The maximum number of partitions must be greater than 0.")
+    .createWithDefault(Int.MaxValue)
+
   private[spark] val SERIALIZER = ConfigBuilder("spark.serializer")
     .version("0.5.0")
     .stringConf

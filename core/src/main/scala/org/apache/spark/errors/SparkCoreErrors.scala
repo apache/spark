@@ -115,6 +115,10 @@ private[spark] object SparkCoreErrors {
     new SparkException("Can only zip RDDs with same number of elements in each partition")
   }
 
+  def rddExceedMaxPartitions(numPartitions: Int): Throwable = {
+    new SparkException(s"The number of RDD partition exceeds $numPartitions")
+  }
+
   def emptyCollectionError(): Throwable = {
     new UnsupportedOperationException("empty collection")
   }

@@ -2023,9 +2023,4 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(errorClass = "NULL_COMPARISON_RESULT",
       messageParameters = Array(), cause = null)
   }
-
-  def cartesianProductExceedMaxPartitions(join: String, maxPartitions: Int): Throwable = {
-    new SparkException(s"Detected cartesian product's partition number exceeded $maxPartitions " +
-      s"for:\n${join}.Please check if the join condition is correct.")
-  }
 }

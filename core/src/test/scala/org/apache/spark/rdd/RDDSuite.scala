@@ -32,7 +32,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
+import org.apache.spark.internal.config.{RDD_MAX_PARTITIONS, RDD_PARALLEL_LISTING_THRESHOLD}
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -1278,6 +1278,26 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     }
     assertFails { sc.parallelize(1 to 100) }
     assertFails { sc.textFile("/nonexistent-path") }
+  }
+
+  test("SPARK-39655: Add a config to limit the number of RDD partitions") {
+    val numPartitions = 20
+    val rdd = sc.range(1, 50, 1, numPartitions)
+    try {
+      Seq(10, 100).foreach { rddMaxPartitions =>
+        sc.conf.set(RDD_MAX_PARTITIONS, rddMaxPartitions)
+        if (rddMaxPartitions < numPartitions) {
+          val e = intercept[SparkException] {
+            rdd.collect()
+          }
+          assert(e.getMessage.contains("The number of RDD partition exceeds 10"))
+        } else {
+          rdd.collect()
+        }
+      }
+    } finally {
+      sc.conf.remove(RDD_MAX_PARTITIONS.key)
+    }
   }
 }
 

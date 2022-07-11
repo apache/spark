@@ -297,6 +297,9 @@ abstract class RDD[T: ClassTag](
           }
         }
       }
+      if (partitions_.length > conf.get(RDD_MAX_PARTITIONS)) {
+        throw SparkCoreErrors.rddExceedMaxPartitions(conf.get(RDD_MAX_PARTITIONS))
+      }
       partitions_
     }
   }
