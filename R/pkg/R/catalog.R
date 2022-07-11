@@ -118,7 +118,7 @@ createExternalTable <- function(tableName, path = NULL, source = NULL, schema = 
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
-#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
+#'                  The table name can be fully qualified with catalog name since 3.4.0.
 #' @param path (optional) the path of files to load.
 #' @param source (optional) the name of the data source.
 #' @param schema (optional) the schema of the data required for some data sources.
@@ -161,7 +161,7 @@ createTable <- function(tableName, path = NULL, source = NULL, schema = NULL, ..
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
-#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
+#'                  The table name can be fully qualified with catalog name since 3.4.0.
 #' @return SparkDataFrame
 #' @rdname cacheTable
 #' @examples
@@ -186,7 +186,7 @@ cacheTable <- function(tableName) {
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
-#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
+#'                  The table name can be fully qualified with catalog name since 3.4.0.
 #' @return SparkDataFrame
 #' @rdname uncacheTable
 #' @examples
@@ -485,7 +485,7 @@ getTable <- function(tableName) {
 #' @param tableName the qualified or unqualified name that designates a table/view. If no database
 #'                  identifier is provided, it refers to a table/view in the current database.
 #'                  If \code{databaseName} parameter is specified, this must be an unqualified name.
-#'                  Since 3.4.0 it is allowed to be qualified with catalog name, when databaseName
+#'                  The table name can be qualified with catalog name since 3.4.0, when databaseName
 #'                  is NULL.
 #' @param databaseName (optional) name of the database
 #' @return a SparkDataFrame of the list of column descriptions.
@@ -547,7 +547,7 @@ listFunctions <- function(databaseName = NULL) {
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
-#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
+#'                  The table name can be fully qualified with catalog name since 3.4.0.
 #' @rdname recoverPartitions
 #' @name recoverPartitions
 #' @examples
@@ -574,7 +574,7 @@ recoverPartitions <- function(tableName) {
 #'
 #' @param tableName the qualified or unqualified name that designates a table. If no database
 #'                  identifier is provided, it refers to a table in the current database.
-#'                  Since 3.4.0 it is allowed to be qualified with catalog name.
+#'                  The table name can be fully qualified with catalog name since 3.4.0.
 #' @rdname refreshTable
 #' @name refreshTable
 #' @examples
