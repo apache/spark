@@ -1025,7 +1025,15 @@ class SparkSession(SparkConversionMixin):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         elif isinstance(data, list) and schema is None:
             # Wrap each element with a tuple if there is any scalar in the list
-            has_scalar = any(isinstance(x, str) or not isinstance(x, Sized) for x in data)
+
+            has_scalar = any(
+                isinstance(x, str)
+                or (
+                    not isinstance(x, Sized)
+                    and (type(x).__module__ == object.__module__)  # built-in
+                )
+                for x in data
+            )
             converted_data = [(x,) for x in data] if has_scalar else data
 
             rdd, struct = self._createFromLocal(map(prepare, converted_data), schema)
