@@ -152,7 +152,7 @@ class Catalog:
 
     def getDatabase(self, dbName: str) -> Database:
         """Get the database with the specified name.
-        This throws an AnalysisException when the database cannot be found.
+        This throws an :class:`AnalysisException` when the database cannot be found.
 
         .. versionadded:: 3.4.0
 
@@ -244,7 +244,7 @@ class Catalog:
 
     def getTable(self, tableName: str) -> Table:
         """Get the table or view with the specified name. This table can be a temporary view or a
-        table/view. This throws an AnalysisException when no Table can be found.
+        table/view. This throws an :class:`AnalysisException` when no Table can be found.
 
         .. versionadded:: 3.4.0
 
@@ -359,11 +359,11 @@ class Catalog:
                 "a future version. Use functionExists(`dbName.tableName`) instead.",
                 FutureWarning,
             )
-            return self._jcatalog.functionExists(self.currentDatabase(), functionName)
+            return self._jcatalog.functionExists(dbName, functionName)
 
     def getFunction(self, functionName: str) -> Function:
         """Get the function with the specified name. This function can be a temporary function or a
-        function. This throws an AnalysisException when the function cannot be found.
+        function. This throws an :class:`AnalysisException` when the function cannot be found.
 
         .. versionadded:: 3.4.0
 

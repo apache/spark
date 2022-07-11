@@ -21,6 +21,7 @@ import scala.util.Random
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial}
+import breeze.stats.distributions.Rand.FixedSeed.randBasis
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, SparkFunSuite}

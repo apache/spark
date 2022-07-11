@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, UserDefinedScalarFunc}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, UserDefinedScalarFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -344,6 +344,59 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       } else {
         None
       }
+    case date: DateAdd =>
+      val childrenExpressions = date.children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == date.children.length) {
+        Some(new GeneralScalarExpression("DATE_ADD", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case date: DateDiff =>
+      val childrenExpressions = date.children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == date.children.length) {
+        Some(new GeneralScalarExpression("DATE_DIFF", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case date: TruncDate =>
+      val childrenExpressions = date.children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == date.children.length) {
+        Some(new GeneralScalarExpression("TRUNC", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case Second(child, _) =>
+      generateExpression(child).map(v => new V2Extract("SECOND", v))
+    case Minute(child, _) =>
+      generateExpression(child).map(v => new V2Extract("MINUTE", v))
+    case Hour(child, _) =>
+      generateExpression(child).map(v => new V2Extract("HOUR", v))
+    case Month(child) =>
+      generateExpression(child).map(v => new V2Extract("MONTH", v))
+    case Quarter(child) =>
+      generateExpression(child).map(v => new V2Extract("QUARTER", v))
+    case Year(child) =>
+      generateExpression(child).map(v => new V2Extract("YEAR", v))
+    // DayOfWeek uses Sunday = 1, Monday = 2, ... and ISO standard is Monday = 1, ...,
+    // so we use the formula ((ISO_standard % 7) + 1) to do translation.
+    case DayOfWeek(child) =>
+      generateExpression(child).map(v => new GeneralScalarExpression("+",
+        Array[V2Expression](new GeneralScalarExpression("%",
+          Array[V2Expression](new V2Extract("DAY_OF_WEEK", v), LiteralValue(7, IntegerType))),
+          LiteralValue(1, IntegerType))))
+    // WeekDay uses Monday = 0, Tuesday = 1, ... and ISO standard is Monday = 1, ...,
+    // so we use the formula (ISO_standard - 1) to do translation.
+    case WeekDay(child) =>
+      generateExpression(child).map(v => new GeneralScalarExpression("-",
+        Array[V2Expression](new V2Extract("DAY_OF_WEEK", v), LiteralValue(1, IntegerType))))
+    case DayOfMonth(child) =>
+      generateExpression(child).map(v => new V2Extract("DAY", v))
+    case DayOfYear(child) =>
+      generateExpression(child).map(v => new V2Extract("DAY_OF_YEAR", v))
+    case WeekOfYear(child) =>
+      generateExpression(child).map(v => new V2Extract("WEEK", v))
+    case YearOfWeek(child) =>
+      generateExpression(child).map(v => new V2Extract("YEAR_OF_WEEK", v))
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))

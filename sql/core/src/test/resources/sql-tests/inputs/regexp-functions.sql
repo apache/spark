@@ -60,3 +60,12 @@ SELECT regexp_count('the fox', '(?i)FOX');
 SELECT regexp_count('passwd7 plain A1234 a1234', '(?=[^ ]*[a-z])(?=[^ ]*[0-9])[^ ]+');
 SELECT regexp_count(null, 'abc');
 SELECT regexp_count('abc', null);
+
+-- regexp_substr
+SELECT regexp_substr('1a 2b 14m', '\\d+');
+SELECT regexp_substr('1a 2b 14m', '\\d+ ');
+SELECT regexp_substr('1a 2b 14m', '\\d+(a|b|m)');
+SELECT regexp_substr('1a 2b 14m', '\\d{2}(a|b|m)');
+SELECT regexp_substr('1a 2b 14m', '');
+SELECT regexp_substr('Spark', null);
+SELECT regexp_substr(null, '.*');

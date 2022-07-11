@@ -34,6 +34,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
@@ -2294,6 +2295,40 @@ abstract class CSVSuite
       spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect
     }.getMessage
     assert(errMsg2.contains("'lineSep' can contain only 1 character"))
+  }
+
+  Seq(true, false).foreach { multiLine =>
+    test(s"""lineSep with 2 chars when multiLine set to $multiLine""") {
+      Seq("\r\n", "||", "|").foreach { newLine =>
+        val logAppender = new LogAppender("lineSep WARN logger")
+        withTempDir { dir =>
+          val inputData = if (multiLine) {
+            s"""name,"i am the${newLine} column1"${newLine}jack,30${newLine}tom,18"""
+          } else {
+            s"name,age${newLine}jack,30${newLine}tom,18"
+          }
+          Files.write(new File(dir, "/data.csv").toPath, inputData.getBytes())
+          withLogAppender(logAppender) {
+            val df = spark.read
+              .options(
+                Map("header" -> "true", "multiLine" -> multiLine.toString, "lineSep" -> newLine))
+              .csv(dir.getCanonicalPath)
+            // Due to the limitation of Univocity parser:
+            // multiple chars of newlines cannot be properly handled when they exist within quotes.
+            // Leave 2-char lineSep as an undocumented features and logWarn user
+            if (newLine != "||" || !multiLine) {
+              checkAnswer(df, Seq(Row("jack", "30"), Row("tom", "18")))
+            }
+            if (newLine.length == 2) {
+              val message = "It is not recommended to set 'lineSep' with 2 characters due to"
+              assert(logAppender.loggingEvents.exists(
+                e => e.getLevel == Level.WARN && e.getMessage.getFormattedMessage.contains(message)
+              ))
+            }
+          }
+        }
+      }
+    }
   }
 
   test("SPARK-26208: write and read empty data to csv file with headers") {

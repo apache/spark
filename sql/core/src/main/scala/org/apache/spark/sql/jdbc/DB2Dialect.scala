@@ -20,9 +20,11 @@ package org.apache.spark.sql.jdbc
 import java.sql.{SQLException, Types}
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.types._
 
 private object DB2Dialect extends JdbcDialect {
@@ -31,34 +33,34 @@ private object DB2Dialect extends JdbcDialect {
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
 
   // See https://www.ibm.com/docs/en/db2/11.5?topic=functions-aggregate
-  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    super.compileAggregate(aggFunction).orElse(
-      aggFunction match {
-        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VARIANCE($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VARIANCE_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
-          assert(f.children().length == 2)
-          Some(s"COVARIANCE(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
-          assert(f.children().length == 2)
-          Some(s"COVARIANCE_SAMP(${f.children().head}, ${f.children().last})")
-        case _ => None
-      }
-    )
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP")
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
+
+  class DB2SQLBuilder extends JDBCSQLBuilder {
+    override def dialectFunctionName(funcName: String): String = funcName match {
+      case "VAR_POP" => "VARIANCE"
+      case "VAR_SAMP" => "VARIANCE_SAMP"
+      case "STDDEV_POP" => "STDDEV"
+      case "STDDEV_SAMP" => "STDDEV_SAMP"
+      case "COVAR_POP" => "COVARIANCE"
+      case "COVAR_SAMP" => "COVARIANCE_SAMP"
+      case _ => super.dialectFunctionName(funcName)
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val db2SQLBuilder = new DB2SQLBuilder()
+    try {
+      Some(db2SQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
   }
 
   override def getCatalystType(

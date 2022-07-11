@@ -133,7 +133,7 @@
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.3</parquet.version>
     <orc.version>1.7.5</orc.version>
-    <jetty.version>9.4.46.v20220331</jetty.version>
+    <jetty.version>9.4.48.v20220622</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.0</ivy.version>
@@ -191,7 +191,7 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.0.16</janino.version>
     <jersey.version>2.35</jersey.version>
-    <joda.version>2.10.13</joda.version>
+    <joda.version>2.10.14</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -1084,7 +1084,7 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>1.2</version>
+        <version>2.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.apache.commons</groupId>
@@ -3745,26 +3745,6 @@
         <maven.surefire.debug>${jdwp.arg.line}</maven.surefire.debug>
         <debugForkedProcess>${test.debug.suite}</debugForkedProcess>
       </properties>
-    </profile>
-
-    <!--
-      Deprecated: com.github.fommil.netlib has been replaced by dev.ludovic.netlib which
-      doesn't package or distribute any GPL/LGPL dependencies. There should now be hardware
-      acceleration out-of-the-box without enabling any additional profile.
-      However, we need to keep the dependency for now because the last release of
-      org.scalanlp:breeze still depends on `com.github.fommil.netlib`. It's been updated with
-      https://github.com/scalanlp/breeze/pull/811 but it hasn't been released yet.
-    -->
-    <profile>
-      <id>netlib-lgpl</id>
-      <dependencies>
-        <dependency>
-          <groupId>com.github.fommil.netlib</groupId>
-          <artifactId>all</artifactId>
-          <version>${netlib.java.version}</version>
-          <type>pom</type>
-        </dependency>
-      </dependencies>
     </profile>
     <profile>
       <id>only-eclipse</id>
