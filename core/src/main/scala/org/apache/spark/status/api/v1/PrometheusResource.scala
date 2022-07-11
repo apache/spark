@@ -52,26 +52,64 @@ private[v1] class PrometheusResource extends ApiRequestContext {
         "application_name" -> store.applicationInfo.name,
         "executor_id" -> executor.id
       ).map { case (k, v) => s"""$k="$v"""" }.mkString("{", ", ", "}")
+
+      sb.append(s"# TYPE ${prefix}rddBlocks gauge\n")
       sb.append(s"${prefix}rddBlocks$labels ${executor.rddBlocks}\n")
+
+      sb.append(s"# TYPE ${prefix}memoryUsed_bytes gauge\n")
       sb.append(s"${prefix}memoryUsed_bytes$labels ${executor.memoryUsed}\n")
+
+      sb.append(s"# TYPE ${prefix}diskUsed_bytes gauge\n")
       sb.append(s"${prefix}diskUsed_bytes$labels ${executor.diskUsed}\n")
+
+      sb.append(s"# TYPE ${prefix}totalCores gauge\n")
       sb.append(s"${prefix}totalCores$labels ${executor.totalCores}\n")
+
+      sb.append(s"# TYPE ${prefix}maxTasks gauge\n")
       sb.append(s"${prefix}maxTasks$labels ${executor.maxTasks}\n")
+
+      sb.append(s"# TYPE ${prefix}activeTasks gauge\n")
       sb.append(s"${prefix}activeTasks$labels ${executor.activeTasks}\n")
+
+      sb.append(s"# TYPE ${prefix}failedTasks_total gauge\n")
       sb.append(s"${prefix}failedTasks_total$labels ${executor.failedTasks}\n")
+
+      sb.append(s"# TYPE ${prefix}completedTasks_total gauge\n")
       sb.append(s"${prefix}completedTasks_total$labels ${executor.completedTasks}\n")
+
+      sb.append(s"# TYPE ${prefix}totalTasks_total gauge\n")
       sb.append(s"${prefix}totalTasks_total$labels ${executor.totalTasks}\n")
+
+      sb.append(s"# TYPE ${prefix}totalDuration_seconds_total gauge\n")
       sb.append(s"${prefix}totalDuration_seconds_total$labels ${executor.totalDuration * 0.001}\n")
+
+      sb.append(s"# TYPE ${prefix}totalGCTime_seconds_total gauge\n")
       sb.append(s"${prefix}totalGCTime_seconds_total$labels ${executor.totalGCTime * 0.001}\n")
+
+      sb.append(s"# TYPE ${prefix}totalInputBytes_bytes_total gauge\n")
       sb.append(s"${prefix}totalInputBytes_bytes_total$labels ${executor.totalInputBytes}\n")
+
+      sb.append(s"# TYPE ${prefix}totalShuffleRead_bytes_total gauge\n")
       sb.append(s"${prefix}totalShuffleRead_bytes_total$labels ${executor.totalShuffleRead}\n")
+
+      sb.append(s"# TYPE ${prefix}totalShuffleWrite_bytes_total gauge\n")
       sb.append(s"${prefix}totalShuffleWrite_bytes_total$labels ${executor.totalShuffleWrite}\n")
+
+      sb.append(s"# TYPE ${prefix}maxMemory_bytes gauge\n")
       sb.append(s"${prefix}maxMemory_bytes$labels ${executor.maxMemory}\n")
       executor.executorLogs.foreach { case (k, v) => }
       executor.memoryMetrics.foreach { m =>
+
+        sb.append(s"# TYPE ${prefix}usedOnHeapStorageMemory_bytes gauge\n")
         sb.append(s"${prefix}usedOnHeapStorageMemory_bytes$labels ${m.usedOnHeapStorageMemory}\n")
+
+        sb.append(s"# TYPE ${prefix}usedOffHeapStorageMemory_bytes gauge\n")
         sb.append(s"${prefix}usedOffHeapStorageMemory_bytes$labels ${m.usedOffHeapStorageMemory}\n")
+
+        sb.append(s"# TYPE ${prefix}totalOnHeapStorageMemory_bytes gauge\n")
         sb.append(s"${prefix}totalOnHeapStorageMemory_bytes$labels ${m.totalOnHeapStorageMemory}\n")
+
+        sb.append(s"# TYPE ${prefix}totalOffHeapStorageMemory_bytes gauge\n")
         sb.append(s"${prefix}totalOffHeapStorageMemory_bytes$labels " +
           s"${m.totalOffHeapStorageMemory}\n")
       }
@@ -95,12 +133,15 @@ private[v1] class PrometheusResource extends ApiRequestContext {
           "ProcessTreeOtherRSSMemory"
         )
         names.foreach { name =>
+          sb.append(s"# TYPE $prefix${name}_bytes gauge\n")
           sb.append(s"$prefix${name}_bytes$labels ${m.getMetricValue(name)}\n")
         }
         Seq("MinorGCCount", "MajorGCCount").foreach { name =>
+          sb.append(s"# TYPE $prefix${name}_total counter\n")
           sb.append(s"$prefix${name}_total$labels ${m.getMetricValue(name)}\n")
         }
         Seq("MinorGCTime", "MajorGCTime").foreach { name =>
+          sb.append(s"# TYPE $prefix${name}_seconds_total counter\n")
           sb.append(s"$prefix${name}_seconds_total$labels ${m.getMetricValue(name) * 0.001}\n")
         }
       }
