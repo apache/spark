@@ -21,10 +21,11 @@ test_that("Check masked functions", {
   # Check that we are not masking any new function from base, stats, testthat unexpectedly
   # NOTE: We should avoid adding entries to *namesOfMaskedCompletely* as masked functions make it
   # hard for users to use base R functions. Please check when in doubt.
-  namesOfMaskedCompletely <- c("cov", "filter", "sample", "not")
+  namesOfMaskedCompletely <- c("cov", "filter", "sample", "not", "getFunction")
   namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
-                     "summary", "transform", "drop", "window", "as.data.frame", "union", "not")
+                     "summary", "transform", "drop", "window", "as.data.frame", "union", "not",
+                     "getFunction")
   version <- packageVersion("base")
   is33Above <- as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3
   is40Above <- as.numeric(version$major) >= 4

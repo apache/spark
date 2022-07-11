@@ -634,7 +634,7 @@ functionExists <- function(functionName) {
 #' Get the function with the specified name
 #'
 #' @param functionName name of the function, allowed to be qualified with catalog name
-#' @return A data.frame.
+#' @return A named list.
 #' @rdname getFunction
 #' @name getFunction
 #' @examples
