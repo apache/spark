@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-`LATERAL SUBQUERY` is a subquery that is preceded by the keyword `LATERAL`. It provides a way to cross-reference columns in the preceding FROM clause.
+`LATERAL SUBQUERY` is a subquery that is preceded by the keyword `LATERAL`. It provides a way to reference columns in the preceding `FROM` clause.
 Without the `LATERAL` keyword, subqueries can only refer to columns in the outer query, but not in the `FROM` clause. `LATERAL SUBQUERY` makes the complicated
 queries simpler and more efficient.
 
@@ -37,10 +37,10 @@ queries simpler and more efficient.
 
   Specifies the primary relation. It can be one of the following:
   * Table relation
-  * aliased query
+  * Aliased query
 
     Syntax: `( query ) [ [ AS ] alias ]`
-  * aliased relation
+  * Aliased relation
 
     Syntax: `( relation ) [ [ AS ] alias ]`
   * [Table-value function](sql-ref-syntax-qry-select-tvf.html)

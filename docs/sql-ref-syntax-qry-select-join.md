@@ -236,3 +236,4 @@ SELECT * FROM employee ANTI JOIN department ON employee.deptno = department.dept
 
 * [SELECT](sql-ref-syntax-qry-select.html)
 * [Hints](sql-ref-syntax-qry-select-hints.html)
+* [LATERAL Subquery](sql-ref-syntax-qry-select-lateral-subquery.html)
