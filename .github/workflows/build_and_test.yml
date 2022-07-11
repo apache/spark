@@ -251,13 +251,71 @@ jobs:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/unit-tests.log"
 
-  pyspark:
+  infra-image:
+    name: "Base image build"
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).pyspark == 'true'
+    # Currently, only enable docker build from cache for `master` branch jobs
+    if: fromJson(needs.precondition.outputs.required).pyspark == 'true' && inputs.branch == 'master'
+    runs-on: ubuntu-latest
+    outputs:
+      image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
+    steps:
+      - name: Generate image name and url
+        id: infra-image-outputs
+        run: |
+          # Convert to lowercase to meet docker repo name requirement
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
+          IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+          echo ::set-output name=image_url::$IMG_URL
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout Spark repository
+        uses: actions/checkout@v2
+        # In order to fetch changed files
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          context: ./dev/infra/
+          push: true
+          tags: |
+            ${{ steps.infra-image-outputs.outputs.image_url }}
+          # Use the infra image cache to speed up
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
+
+  pyspark:
+    needs: [precondition, infra-image]
+    # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
+    if: always() && fromJson(needs.precondition.outputs.required).pyspark == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20220207
+      # Currently, only enable docker build from cache for `master` branch jobs
+      image: >-
+        ${{
+          (inputs.branch == 'master' && needs.infra-image.outputs.image_url)
+          || 'dongjoon/apache-spark-github-action-image:20220207'
+        }}
     strategy:
       fail-fast: false
       matrix:

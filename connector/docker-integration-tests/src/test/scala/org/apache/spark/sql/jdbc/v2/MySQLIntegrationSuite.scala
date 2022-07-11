@@ -119,6 +119,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 
   override def supportsIndex: Boolean = true
 
+  override def supportListIndexes: Boolean = true
+
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
 
   testVarPop()

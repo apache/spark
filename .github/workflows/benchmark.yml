@@ -59,6 +59,7 @@ jobs:
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
   tpcds-1g-gen:
     name: "Generate an input dataset for TPCDSQueryBenchmark with SF=1"
+    if: contains(github.event.inputs.class, 'TPCDSQueryBenchmark') || contains(github.event.inputs.class, '*')
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
@@ -113,6 +114,7 @@ jobs:
 
   benchmark:
     name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, Scala ${{ github.event.inputs.scala }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
+    if: always()
     needs: [matrix-gen, tpcds-1g-gen]
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
@@ -158,6 +160,7 @@ jobs:
       with:
         java-version: ${{ github.event.inputs.jdk }}
     - name: Cache TPC-DS generated data
+      if: contains(github.event.inputs.class, 'TPCDSQueryBenchmark') || contains(github.event.inputs.class, '*')
       id: cache-tpcds-sf-1
       uses: actions/cache@v2
       with:

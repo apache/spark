@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
@@ -244,7 +244,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       if (isSupportedFunction(funcName)) {
-        s"""$funcName(${inputs.mkString(", ")})"""
+        s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
       } else {
         // The framework will catch the error and give up the push-down.
         // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
@@ -252,6 +252,18 @@ abstract class JdbcDialect extends Serializable with Logging {
           s"${this.getClass.getSimpleName} does not support function: $funcName")
       }
     }
+
+    override def visitAggregateFunction(
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support aggregate function: $funcName");
+      }
+    }
+
+    protected def dialectFunctionName(funcName: String): String = funcName
 
     override def visitOverlay(inputs: Array[String]): String = {
       if (isSupportedFunction("OVERLAY")) {
@@ -303,26 +315,8 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return Converted value.
    */
   @Since("3.3.0")
-  def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    aggFunction match {
-      case min: Min =>
-        compileExpression(min.column).map(v => s"MIN($v)")
-      case max: Max =>
-        compileExpression(max.column).map(v => s"MAX($v)")
-      case count: Count =>
-        val distinct = if (count.isDistinct) "DISTINCT " else ""
-        compileExpression(count.column).map(v => s"COUNT($distinct$v)")
-      case sum: Sum =>
-        val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        compileExpression(sum.column).map(v => s"SUM($distinct$v)")
-      case _: CountStar =>
-        Some("COUNT(*)")
-      case avg: Avg =>
-        val distinct = if (avg.isDistinct) "DISTINCT " else ""
-        compileExpression(avg.column).map(v => s"AVG($distinct$v)")
-      case _ => None
-    }
-  }
+  @deprecated("use org.apache.spark.sql.jdbc.JdbcDialect.compileExpression instead.", "3.4.0")
+  def compileAggregate(aggFunction: AggregateFunc): Option[String] = compileExpression(aggFunction)
 
   /**
    * List the user-defined functions in jdbc dialect.

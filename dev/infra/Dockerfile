@@ -18,6 +18,8 @@
 # Image for building and testing Spark branches. Based on Ubuntu 20.04.
 FROM ubuntu:20.04
 
+ENV FULL_REFRESH_DATE 20220706
+
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
 

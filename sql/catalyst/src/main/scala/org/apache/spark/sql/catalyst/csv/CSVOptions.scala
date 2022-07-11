@@ -215,7 +215,11 @@ class CSVOptions(
    */
   val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
     require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
-    require(sep.length == 1, "'lineSep' can contain only 1 character.")
+    // Intentionally allow it up to 2 for Window's CRLF although multiple
+    // characters have an issue with quotes. This is intentionally undocumented.
+    require(sep.length <= 2, "'lineSep' can contain only 1 character.")
+    if (sep.length == 2) logWarning("It is not recommended to set 'lineSep' " +
+      "with 2 characters due to the limitation of supporting multi-char 'lineSep' within quotes.")
     sep
   }
 
