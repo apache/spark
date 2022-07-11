@@ -180,7 +180,7 @@ Note that the format string used in most of these examples expects:
   "12,454.8-"
 
 > SELECT to_char(decimal(12454.8), 'L99,999.9');
-  Error: cannot resolve 'try_to_char(Decimal(12454.8), 'L99,999.9')' due to data type mismatch:
+  Error: cannot resolve 'to_char(Decimal(12454.8), 'L99,999.9')' due to data type mismatch:
   Unexpected character 'L' found in the format string 'L99,999.9'; the structure of the format
   string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]; line 1 pos 25
 ```
