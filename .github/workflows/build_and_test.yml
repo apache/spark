@@ -113,10 +113,10 @@ jobs:
           precondition="${precondition//$'\n'/'%0A'}"
           echo "::set-output name=required::$precondition"
         fi
-    - name: Generate infra image url
+    - name: Generate infra image URL
       id: infra-image-outputs
       run: |
-        # Convert to lowercase to meet docker repo name requirement
+        # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
         IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
