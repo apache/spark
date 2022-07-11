@@ -261,7 +261,6 @@ jobs:
       inputs.branch == 'master'
     runs-on: ubuntu-latest
     outputs:
-      # Currently, only enable docker build from cache for `master` branch jobs
       image_url: >-
         ${{
           (inputs.branch == 'master' && steps.infra-image-outputs.outputs.image_url)
@@ -318,7 +317,6 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      # Currently, only enable docker build from cache for `master` branch jobs
       image: ${{ needs.infra-image.outputs.image_url }}
     strategy:
       fail-fast: false
