@@ -179,7 +179,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                     finalAggregates,
                     normalizedGroupingExpressions,
                     aggExprToOutputOrdinal))
-                  child
+                  sHolder
                 } else {
                   val (groupAttrs, aggOutput, groupByExprToOutputOrdinal, scanRelation) =
                     readScanSchema(
