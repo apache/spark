@@ -491,3 +491,51 @@ SELECT regexp_substr(null, '.*')
 struct<regexp_substr(NULL, .*):string>
 -- !query output
 NULL
+
+
+-- !query
+SELECT regexp_instr('abc', 'b')
+-- !query schema
+struct<regexp_instr(abc, b, 0):int>
+-- !query output
+2
+
+
+-- !query
+SELECT regexp_instr('abc', 'x')
+-- !query schema
+struct<regexp_instr(abc, x, 0):int>
+-- !query output
+0
+
+
+-- !query
+SELECT regexp_instr('ABC', '(?-i)b')
+-- !query schema
+struct<regexp_instr(ABC, (?-i)b, 0):int>
+-- !query output
+0
+
+
+-- !query
+SELECT regexp_instr('1a 2b 14m', '\\d{2}(a|b|m)')
+-- !query schema
+struct<regexp_instr(1a 2b 14m, \d{2}(a|b|m), 0):int>
+-- !query output
+7
+
+
+-- !query
+SELECT regexp_instr('abc', null)
+-- !query schema
+struct<regexp_instr(abc, NULL, 0):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT regexp_instr(null, 'b')
+-- !query schema
+struct<regexp_instr(NULL, b, 0):int>
+-- !query output
+NULL

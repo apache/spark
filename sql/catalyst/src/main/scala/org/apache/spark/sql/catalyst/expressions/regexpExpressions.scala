@@ -1074,11 +1074,15 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   def this(s: Expression, r: Expression) = this(s, r, Literal(0))
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
-    val m = getLastMatcher(s, p)
-    if (m.find) {
-      m.toMatchResult.start() + 1
-    } else {
-      0
+    try {
+      val m = getLastMatcher(s, p)
+      if (m.find) {
+        m.toMatchResult.start() + 1
+      } else {
+        0
+      }
+    } catch {
+      case _: IllegalStateException => 0
     }
   }
 
@@ -1100,19 +1104,24 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, _) => {
       s"""
-      if (!$regexp.equals($termLastRegex)) {
-        // regex value changed
-        $termLastRegex = $regexp.clone();
-        $termPattern = $classNamePattern.compile($termLastRegex.toString());
-      }
-      java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
-      if ($matcher.find()) {
-        ${ev.value} = $matcher.toMatchResult().start($idx) + 1;
-        $setEvNotNull
-      } else {
-        ${ev.value} = 0;
-        $setEvNotNull
-      }"""
+         |try {
+         |  if (!$regexp.equals($termLastRegex)) {
+         |    // regex value changed
+         |    $termLastRegex = $regexp.clone();
+         |    $termPattern = $classNamePattern.compile($termLastRegex.toString());
+         |  }
+         |  java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+         |  $setEvNotNull
+         |  if ($matcher.find()) {
+         |    ${ev.value} = $matcher.toMatchResult().start($idx) + 1;
+         |  } else {
+         |    ${ev.value} = 0;
+         |  }
+         |} catch (IllegalStateException e) {
+         |  $setEvNotNull
+         |  ${ev.value} = 0;
+         |}
+         |""".stripMargin
     })
   }
 
