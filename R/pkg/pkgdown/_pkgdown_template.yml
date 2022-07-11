@@ -263,8 +263,10 @@ reference:
 - contents:
   - currentCatalog
   - currentDatabase
+  - databaseExists
   - dropTempTable
   - dropTempView
+  - getDatabase
   - getTable
   - listCatalogs
   - listColumns
