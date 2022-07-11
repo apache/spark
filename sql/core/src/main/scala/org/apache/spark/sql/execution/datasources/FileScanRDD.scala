@@ -215,6 +215,17 @@ class FileScanRDD(
         }
       }
 
+      private def isDFSClientClosedException(e: IOException): Boolean = {
+        e.getStackTrace.foreach { ste: StackTraceElement =>
+          if (ste != null && ste.getMethodName != null && ste.getClassName != null
+            && ste.getClassName.contains("DFSClient")
+            && ste.getMethodName.contains("checkOpen")) {
+            true
+          }
+        }
+        false
+      }
+
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
         if (files.hasNext) {
@@ -253,8 +264,13 @@ class FileScanRDD(
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
                   case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-                    if (e.getMessage.contains("Filesystem closed")) {
-                      throw e
+                    e match {
+                      // If DFSClient closed by other threads, an IOException "Filesystem closed"
+                      // could throw out when using this client. Should not skip files
+                      // if caused by this exception, for details see SPARK-39389.
+                      case ioe: IOException if isDFSClientClosedException(ioe) =>
+                        throw e
+                      case _ =>
                     }
                     logWarning(
                       s"Skipped the rest of the content in the corrupted file: $currentFile", e)
