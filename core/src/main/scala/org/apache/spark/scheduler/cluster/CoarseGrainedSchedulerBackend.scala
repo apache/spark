@@ -763,7 +763,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     val response = synchronized {
       val defaultProf = scheduler.sc.resourceProfileManager.defaultResourceProfile
-      val numExisting = requestedTotalExecutorsPerResourceProfile.getOrElse(defaultProf, 0)
+      val numExisting = requestedTotalExecutorsPerResourceProfile.get(defaultProf) match {
+        case Some(s) => s
+        case _ => scheduler.sc.getExecutorIds().size
+      }
       requestedTotalExecutorsPerResourceProfile(defaultProf) = numExisting + numAdditionalExecutors
       // Account for executors pending to be added or removed
       updateExecRequestTime(defaultProf.id, numAdditionalExecutors)
@@ -877,14 +880,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         withLock {
           val rpId = executorDataMap(exec).resourceProfileId
           val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
-          if (requestedTotalExecutorsPerResourceProfile.isEmpty) {
-            // Assume that we are killing an executor that was started by default and
-            // not through the request api
-            requestedTotalExecutorsPerResourceProfile(rp) = 0
+          val requestedTotalForRp = if (requestedTotalExecutorsPerResourceProfile.isEmpty) {
+            scheduler.sc.getExecutorIds().size
           } else {
-            val requestedTotalForRp = requestedTotalExecutorsPerResourceProfile(rp)
-            requestedTotalExecutorsPerResourceProfile(rp) = math.max(requestedTotalForRp - 1, 0)
+            requestedTotalExecutorsPerResourceProfile(rp)
           }
+          requestedTotalExecutorsPerResourceProfile(rp) = math.max(requestedTotalForRp - 1, 0)
         }
       }
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)

@@ -379,6 +379,32 @@ class StandaloneDynamicAllocationSuite
     assert(apps.head.getExecutorLimit === 1)
   }
 
+  test("kill executors first and then request (SPARK-39742)") {
+    sc = new SparkContext(appConf
+      .set(config.EXECUTOR_CORES, 2)
+      .set(config.CORES_MAX, 8))
+    val appId = sc.applicationId
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.size === 1)
+      assert(apps.head.id === appId)
+      assert(apps.head.executors.size === 4) // 8 cores total
+      assert(apps.head.getExecutorLimit === Int.MaxValue)
+    }
+    // sync executors between the Master and the driver, needed because
+    // the driver refuses to kill executors it does not know about
+    syncExecutors(sc)
+    val executors = getExecutorIds(sc)
+    assert(executors.size === 4)
+    // kill 2 executors
+    assert(sc.killExecutors(executors.take(3)))
+    val apps = getApplications()
+    assert(apps.head.executors.size === 1)
+    // add 2 executors
+    assert(sc.requestExecutors(3))
+    assert(apps.head.executors.size === 4)
+  }
+
   test("the pending replacement executors should not be lost (SPARK-10515)") {
     sc = new SparkContext(appConf)
     val appId = sc.applicationId
