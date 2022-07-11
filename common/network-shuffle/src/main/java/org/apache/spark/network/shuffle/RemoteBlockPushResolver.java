@@ -374,7 +374,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AppShuffleInfo appShuffleInfo = ref.get();
     if (null != appShuffleInfo) {
       submitCleanupTask(
-        () -> closeAndDeletePartitions(appShuffleInfo, cleanupLocalDirs, true));
+        () -> closeAndDeletePartitions(appShuffleInfo, cleanupLocalDirs));
     }
   }
 
@@ -387,8 +387,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   void closeAndDeletePartitions(
       AppShuffleInfo appShuffleInfo,
-      boolean cleanupLocalDirs,
-      boolean removeFromDb) {
+      boolean cleanupLocalDirs) {
     appShuffleInfo.shuffles.forEach((shuffleId, shuffleInfo) -> shuffleInfo.shuffleMergePartitions
       .forEach((shuffleMergeId, partitionInfo) -> {
         synchronized (partitionInfo) {
@@ -398,9 +397,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (cleanupLocalDirs) {
       deleteExecutorDirs(appShuffleInfo);
     }
-    if (removeFromDb) {
-      removeAppShuffleInfoFromDB(appShuffleInfo);
-    }
+    removeAppShuffleInfoFromDB(appShuffleInfo);
   }
 
   /**
@@ -759,7 +756,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 "application attempt registered", appId, appShuffleInfo.attemptId);
             // Clean up all the merge shuffle related information in the DB for the former attempt
             submitCleanupTask(
-              () -> closeAndDeletePartitions(appShuffleInfo, true, true)
+              () -> closeAndDeletePartitions(appShuffleInfo, true)
             );
           }
         }

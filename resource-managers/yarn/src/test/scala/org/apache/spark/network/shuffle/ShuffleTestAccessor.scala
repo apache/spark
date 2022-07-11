@@ -103,9 +103,8 @@ object ShuffleTestAccessor {
     new RemoteBlockPushResolver(transportConf, file) {
       override private[shuffle] def closeAndDeletePartitions(
           appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo,
-          cleanupLocalDirs: Boolean,
-          removeFromDb: Boolean): Unit = {
-        super.closeAndDeletePartitions(appShuffleInfo, cleanupLocalDirs, false)
+          cleanupLocalDirs: Boolean): Unit = {
+        super.closeAndDeletePartitions(appShuffleInfo, cleanupLocalDirs)
       }
       override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
         task.run()

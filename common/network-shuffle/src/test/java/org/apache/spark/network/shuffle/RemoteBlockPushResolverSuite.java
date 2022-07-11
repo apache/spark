@@ -900,10 +900,9 @@ public class RemoteBlockPushResolverSuite {
       @Override
       void closeAndDeletePartitions(
         AppShuffleInfo appShuffleInfo,
-        boolean cleanupLocalDirs,
-        boolean removeFromDb) {
+        boolean cleanupLocalDirs) {
         super.closeAndDeletePartitions(
-            appShuffleInfo, cleanupLocalDirs, removeFromDb);
+            appShuffleInfo, cleanupLocalDirs);
         closed.release();
       }
     };
@@ -999,10 +998,9 @@ public class RemoteBlockPushResolverSuite {
       @Override
       void closeAndDeletePartitions(
           AppShuffleInfo appShuffleInfo,
-          boolean cleanupLocalDirs,
-          boolean removeFromDb) {
+          boolean cleanupLocalDirs) {
         super.closeAndDeletePartitions(
-            appShuffleInfo, cleanupLocalDirs, removeFromDb);
+            appShuffleInfo, cleanupLocalDirs);
         closed.release();
       }
     };
