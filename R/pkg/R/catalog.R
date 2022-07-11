@@ -434,7 +434,7 @@ tableExists <- function(tableName) {
 #'
 #' @param tableName the qualified or unqualified name that designates a table, allowed to be
 #'                  qualified with catalog name
-#' @return A data.frame.
+#' @return A named list.
 #' @rdname getTable
 #' @name getTable
 #' @examples
@@ -451,24 +451,24 @@ getTable <- function(tableName) {
   catalog <- callJMethod(sparkSession, "catalog")
   jtbl <- handledCallJMethod(catalog, "getTable", tableName)
 
-  ret <- data.frame("name" = callJMethod(jtbl, "name"))
+  ret <- list(name = callJMethod(jtbl, "name"))
   jcata <- callJMethod(jtbl, "catalog")
   if (is.null(jcata)) {
-    ret$catalog <- "NULL"
+    ret$catalog <- NA
   } else {
     ret$catalog <- jcata
   }
 
   jns <- callJMethod(jtbl, "namespace")
   if (is.null(jns)) {
-    ret$namespace <- "NULL"
+    ret$namespace <- NA
   } else {
-    ret$namespace <- paste(jns, collapse = ".")
+    ret$namespace <- jns
   }
 
   jdesc <- callJMethod(jtbl, "description")
   if (is.null(jdesc)) {
-    ret$description <- "NULL"
+    ret$description <- NA
   } else {
     ret$description <- jdesc
   }

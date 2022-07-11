@@ -4100,7 +4100,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
   tbl <- getTable("spark_catalog.default.people")
   expect_equal(tbl$name, "people")
   expect_equal(tbl$catalog, "spark_catalog")
-  expect_equal(tbl$namespace, "default")
+  expect_equal(length(tbl$namespace), 1)
+  expect_equal(tbl$namespace[[1]], "default")
   expect_equal(tbl$tableType, "MANAGED")
   expect_false(tbl$isTemporary)
 
