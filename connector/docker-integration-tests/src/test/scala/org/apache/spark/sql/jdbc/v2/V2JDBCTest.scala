@@ -197,6 +197,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def supportsIndex: Boolean = false
 
+  def supportListIndexes: Boolean = false
+
   def indexOptions: String = ""
 
   test("SPARK-36895: Test INDEX Using SQL") {
@@ -219,11 +221,21 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           s" The supported Index Types are:"))
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
+        assert(jdbcTable.indexExists("i1"))
+        if (supportListIndexes) {
+          val indexes = jdbcTable.listIndexes()
+          assert(indexes.size == 1)
+          assert(indexes.head.indexName() == "i1")
+        }
+
         sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
           s" OPTIONS ($indexOptions)")
-
-        assert(jdbcTable.indexExists("i1") == true)
-        assert(jdbcTable.indexExists("i2") == true)
+        assert(jdbcTable.indexExists("i2"))
+        if (supportListIndexes) {
+          val indexes = jdbcTable.listIndexes()
+          assert(indexes.size == 2)
+          assert(indexes.map(_.indexName()).sorted === Array("i1", "i2"))
+        }
 
         // This should pass without exception
         sql(s"CREATE index IF NOT EXISTS i1 ON $catalogName.new_table (col1)")
@@ -234,10 +246,18 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(m.contains("Failed to create index i1 in new_table"))
 
         sql(s"DROP index i1 ON $catalogName.new_table")
-        sql(s"DROP index i2 ON $catalogName.new_table")
-
         assert(jdbcTable.indexExists("i1") == false)
+        if (supportListIndexes) {
+          val indexes = jdbcTable.listIndexes()
+          assert(indexes.size == 1)
+          assert(indexes.head.indexName() == "i2")
+        }
+
+        sql(s"DROP index i2 ON $catalogName.new_table")
         assert(jdbcTable.indexExists("i2") == false)
+        if (supportListIndexes) {
+          assert(jdbcTable.listIndexes().isEmpty)
+        }
 
         // This should pass without exception
         sql(s"DROP index IF EXISTS i1 ON $catalogName.new_table")

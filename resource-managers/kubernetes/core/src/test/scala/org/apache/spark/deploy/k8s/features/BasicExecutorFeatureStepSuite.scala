@@ -16,10 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import java.io.File
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-
 import scala.collection.JavaConverters._
 
 import com.google.common.net.InternetDomainName
@@ -283,21 +279,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Auth secret shouldn't propagate if files are loaded.") {
-    val secretDir = Utils.createTempDir("temp-secret")
-    val secretFile = new File(secretDir, "secret-file.txt")
-    Files.write(secretFile.toPath, "some-secret".getBytes(StandardCharsets.UTF_8))
-    val conf = baseConf.clone()
-      .set(config.NETWORK_AUTH_ENABLED, true)
-      .set(config.AUTH_SECRET_FILE, secretFile.getAbsolutePath)
-      .set("spark.master", "k8s://127.0.0.1")
-    val secMgr = new SecurityManager(conf)
-    secMgr.initializeAuth()
-    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
-      secMgr, defaultProfile)
+    withSecretFile("some-secret") { secretFile =>
+      val conf = baseConf.clone()
+        .set(config.NETWORK_AUTH_ENABLED, true)
+        .set(config.AUTH_SECRET_FILE, secretFile.getAbsolutePath)
+        .set("spark.master", "k8s://127.0.0.1")
+      val secMgr = new SecurityManager(conf)
+      secMgr.initializeAuth()
+      val step = new BasicExecutorFeatureStep(
+        KubernetesTestConf.createExecutorConf(sparkConf = conf), secMgr, defaultProfile)
 
-    val executor = step.configurePod(SparkPod.initialPod())
-    assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(
-      executor.container, SecurityManager.ENV_AUTH_SECRET))
+      val executor = step.configurePod(SparkPod.initialPod())
+      assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(
+        executor.container, SecurityManager.ENV_AUTH_SECRET))
+    }
   }
 
   test("SPARK-32661 test executor offheap memory") {

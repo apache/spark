@@ -5024,7 +5024,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             if regex:
                 # to_replace must be a string
-                cond = self.spark.column.rlike(to_replace)
+                cond = self.spark.column.rlike(cast(str, to_replace))
             else:
                 cond = self.spark.column.isin(to_replace)
                 # to_replace may be a scalar
