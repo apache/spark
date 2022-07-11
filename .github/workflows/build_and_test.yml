@@ -255,10 +255,17 @@ jobs:
     name: "Base image build"
     needs: precondition
     # Currently, only enable docker build from cache for `master` branch jobs
-    if: fromJson(needs.precondition.outputs.required).pyspark == 'true' && inputs.branch == 'master'
+    if: >-
+      (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
+      fromJson(needs.precondition.outputs.required).lint == 'true') &&
+      inputs.branch == 'master'
     runs-on: ubuntu-latest
     outputs:
-      image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
+      image_url: >-
+        ${{
+          (inputs.branch == 'master' && steps.infra-image-outputs.outputs.image_url)
+          || 'dongjoon/apache-spark-github-action-image:20220207'
+        }}
     steps:
       - name: Generate image name and url
         id: infra-image-outputs
@@ -310,12 +317,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      # Currently, only enable docker build from cache for `master` branch jobs
-      image: >-
-        ${{
-          (inputs.branch == 'master' && needs.infra-image.outputs.image_url)
-          || 'dongjoon/apache-spark-github-action-image:20220207'
-        }}
+      image: ${{ needs.infra-image.outputs.image_url }}
     strategy:
       fail-fast: false
       matrix:
@@ -485,8 +487,9 @@ jobs:
 
   # Static analysis, and documentation build
   lint:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).lint == 'true'
+    needs: [precondition, infra-image]
+    # always run if lint == 'true', even infra-image is skip (such as non-master job)
+    if: always() && fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
     env:
@@ -495,7 +498,7 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
     container:
-      image: dongjoon/apache-spark-github-action-image:20220207
+      image: ${{ needs.infra-image.outputs.image_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2

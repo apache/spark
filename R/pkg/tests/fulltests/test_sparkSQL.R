@@ -673,6 +673,22 @@ test_that("test tableNames and tables", {
 
   tables <- listTables()
   expect_equal(count(tables), count + 0)
+
+  count2 <- count(listTables())
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("people", source = "json", schema = schema)
+
+  expect_equal(length(tableNames()), count2 + 1)
+  expect_equal(length(tableNames("default")), count2 + 1)
+  expect_equal(length(tableNames("spark_catalog.default")), count2 + 1)
+
+  tables <- listTables()
+  expect_equal(count(tables), count2 + 1)
+  expect_equal(count(tables()), count(tables))
+  expect_equal(count(tables("default")), count2 + 1)
+  expect_equal(count(tables("spark_catalog.default")), count2 + 1)
+  sql("DROP TABLE IF EXISTS people")
 })
 
 test_that(
@@ -696,16 +712,27 @@ test_that(
   expect_true(dropTempView("dfView"))
 })
 
-test_that("test cache, uncache and clearCache", {
-  df <- read.json(jsonPath)
-  createOrReplaceTempView(df, "table1")
-  cacheTable("table1")
-  uncacheTable("table1")
+test_that("test tableExists, cache, uncache and clearCache", {
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("table1", source = "json", schema = schema)
+
+  cacheTable("default.table1")
+  uncacheTable("spark_catalog.default.table1")
   clearCache()
-  expect_true(dropTempView("table1"))
 
   expect_error(uncacheTable("zxwtyswklpf"),
       "Error in uncacheTable : analysis error - Table or view not found: zxwtyswklpf")
+
+  expect_true(tableExists("table1"))
+  expect_true(tableExists("default.table1"))
+  expect_true(tableExists("spark_catalog.default.table1"))
+
+  sql("DROP TABLE IF EXISTS spark_catalog.default.table1")
+
+  expect_false(tableExists("table1"))
+  expect_false(tableExists("default.table1"))
+  expect_false(tableExists("spark_catalog.default.table1"))
 })
 
 test_that("insertInto() on a registered table", {
@@ -1342,7 +1369,7 @@ test_that("test HiveContext", {
 
     schema <- structType(structField("name", "string"), structField("age", "integer"),
                          structField("height", "float"))
-    createTable("people", source = "json", schema = schema)
+    createTable("spark_catalog.default.people", source = "json", schema = schema)
     df <- read.df(jsonPathNa, "json", schema)
     insertInto(df, "people")
     expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age, c(16))
@@ -3411,6 +3438,8 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
                "Length of type vector should match the number of columns for SparkDataFrame")
   expect_error(coltypes(df) <- c("environment", "list"),
                "Only atomic type is supported for column types")
+
+  dropTempView("dfView")
 })
 
 test_that("Method str()", {
@@ -3450,6 +3479,8 @@ test_that("Method str()", {
 
   # Test utils:::str
   expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
+
+  dropTempView("irisView")
 })
 
 test_that("Histogram", {
@@ -4022,20 +4053,32 @@ test_that("catalog APIs, listCatalogs, setCurrentCatalog, currentCatalog", {
   catalogs <- collect(listCatalogs())
 })
 
-test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
+test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases, getDatabase", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
   expect_error(setCurrentDatabase("zxwtyswklpf"),
                paste0("Error in setCurrentDatabase : no such database - Database ",
                "'zxwtyswklpf' not found"))
+
+  expect_true(databaseExists("default"))
+  expect_true(databaseExists("spark_catalog.default"))
+  expect_false(databaseExists("some_db"))
+  expect_false(databaseExists("spark_catalog.some_db"))
+
   dbs <- collect(listDatabases())
   expect_equal(names(dbs), c("name", "catalog", "description", "locationUri"))
   expect_equal(which(dbs[, 1] == "default"), 1)
+
+  db <- getDatabase("spark_catalog.default")
+  expect_equal(db$name, "default")
+  expect_equal(db$catalog, "spark_catalog")
 })
 
-test_that("catalog APIs, listTables, listColumns, listFunctions", {
+test_that("catalog APIs, listTables, listColumns, listFunctions, getTable", {
   tb <- listTables()
   count <- count(tables())
+  expect_equal(nrow(listTables("default")), count)
+  expect_equal(nrow(listTables("spark_catalog.default")), count)
   expect_equal(nrow(tb), count)
   expect_equal(colnames(tb),
                c("name", "catalog", "namespace", "description", "tableType", "isTemporary"))
@@ -4075,7 +4118,26 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 
+  view <- getTable("cars")
+  expect_equal(view$name, "cars")
+  expect_equal(view$tableType, "TEMPORARY")
+  expect_true(view$isTemporary)
+
   dropTempView("cars")
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("default.people", source = "json", schema = schema)
+
+  tbl <- getTable("spark_catalog.default.people")
+  expect_equal(tbl$name, "people")
+  expect_equal(tbl$catalog, "spark_catalog")
+  expect_equal(length(tbl$namespace), 1)
+  expect_equal(tbl$namespace[[1]], "default")
+  expect_equal(tbl$tableType, "MANAGED")
+  expect_false(tbl$isTemporary)
+
+  sql("DROP TABLE IF EXISTS people")
 })
 
 test_that("assert_true, raise_error", {

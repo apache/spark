@@ -263,8 +263,11 @@ reference:
 - contents:
   - currentCatalog
   - currentDatabase
+  - databaseExists
   - dropTempTable
   - dropTempView
+  - getDatabase
+  - getTable
   - listCatalogs
   - listColumns
   - listDatabases
@@ -275,6 +278,7 @@ reference:
   - recoverPartitions
   - setCurrentCatalog
   - setCurrentDatabase
+  - tableExists
   - tableNames
   - tables
   - uncacheTable
