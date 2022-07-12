@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.types.StructType
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -96,6 +98,27 @@ case class FlatMapCoGroupsInPandas(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapCoGroupsInPandas =
     copy(left = newLeft, right = newRight)
+}
+
+case class PythonFlatMapGroupsWithState(
+    functionExpr: Expression,
+    groupingAttributes: Seq[Attribute],
+    outputAttrs: Seq[Attribute],
+    stateType: StructType,
+    outputMode: OutputMode,
+    isMapGroupsWithState: Boolean = false,
+    timeout: GroupStateTimeout,
+    child: LogicalPlan) extends UnaryNode {
+  if (isMapGroupsWithState) {
+    assert(outputMode == OutputMode.Update)
+  }
+
+  override def output: Seq[Attribute] = outputAttrs
+
+  override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): PythonFlatMapGroupsWithState = copy(child = newChild)
 }
 
 trait BaseEvalPython extends UnaryNode {
