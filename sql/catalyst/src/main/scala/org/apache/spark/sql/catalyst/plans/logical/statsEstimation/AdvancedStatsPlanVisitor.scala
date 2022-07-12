@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
- * A [[LogicalPlanVisitor]] that computes the statistics for the cost-based optimizer.
+ * A [[LogicalPlanVisitor]] that computes size in bytes, row count,
+ * column stats (NDV / min / max etc.) for the cost-based optimizer.
  */
 object AdvancedStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
@@ -82,9 +83,7 @@ object AdvancedStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitSort(p: Sort): Statistics = fallback(p)
 
-  override def visitTail(p: Tail): Statistics = {
-    fallback(p)
-  }
+  override def visitTail(p: Tail): Statistics = fallback(p)
 
   override def visitWithCTE(p: WithCTE): Statistics = fallback(p)
 }

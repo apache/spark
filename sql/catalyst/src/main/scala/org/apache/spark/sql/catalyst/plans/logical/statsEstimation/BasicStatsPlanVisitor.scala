@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
- * An [[LogicalPlanVisitor]] that computes a single dimension for plan stats: size in bytes.
+ * A [[LogicalPlanVisitor]] that computes size in bytes, row count for plan stats.
  */
 object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
