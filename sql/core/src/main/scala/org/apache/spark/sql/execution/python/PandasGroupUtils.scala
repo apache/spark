@@ -30,7 +30,9 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 /**
  * Base functionality for plans which execute grouped python udfs.
  */
-private[python] object PandasGroupUtils {
+// FIXME: should we move PythonFlatMapGroupsWithStateExec to python package?
+// private[python]
+object PandasGroupUtils {
   /**
    * passes the data to the python runner and coverts the resulting
    * columnarbatch into internal rows.

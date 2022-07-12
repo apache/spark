@@ -685,6 +685,44 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Strategy to convert [[UntypedFlatMapGroupsWithState]] logical operator to physical operator
+   * in streaming plans. Conversion for batch plans is handled by [[BasicOperators]].
+   */
+  object UntypedFlatMapGroupsWithStateStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case UntypedFlatMapGroupsWithState(
+        func, groupAttr, outputAttr, stateType, outputMode, _, timeout, child) =>
+        val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
+        val execPlan = UntypedFlatMapGroupsWithStateExec(
+          func, groupAttr, outputAttr, stateType, None, stateVersion, outputMode, timeout,
+          batchTimestampMs = None, eventTimeWatermark = None, planLater(child)
+        )
+        execPlan :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
+  /**
+   * Strategy to convert [[UntypedFlatMapGroupsWithState]] logical operator to physical operator
+   * in streaming plans. Conversion for batch plans is handled by [[BasicOperators]].
+   */
+  object PythonFlatMapGroupsWithStateStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case PythonFlatMapGroupsWithState(
+        func, groupAttr, outputAttr, stateType, outputMode, _, timeout, child) =>
+        val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
+        val execPlan = PythonFlatMapGroupsWithStateExec(
+          func, groupAttr, outputAttr, stateType, None, stateVersion, outputMode, timeout,
+          batchTimestampMs = None, eventTimeWatermark = None, planLater(child)
+        )
+        execPlan :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
+  /**
    * Strategy to convert EvalPython logical operator to physical operator.
    */
   object PythonEvals extends Strategy {
@@ -793,6 +831,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           initialStateGroupAttrs, data, initialStateDataAttrs, output, timeout,
           hasInitialState, planLater(initialState), planLater(child)
         ) :: Nil
+        // FIXME: implement it!
+      case _: logical.UntypedFlatMapGroupsWithState =>
+        throw new UnsupportedOperationException("Not yet implemented for batch query!")
+        // FIXME: implement it!
+      case _: PythonFlatMapGroupsWithState =>
+        throw new UnsupportedOperationException("Not yet implemented for batch query!")
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
         execution.CoGroupExec(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,

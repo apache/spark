@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
+import org.apache.spark.api.java.function.{UntypedFlatMapGroupsWithStateFunction, UntypedMapGroupsWithStateFunction}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedFunction}
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.{NumericType, StructType}
 
 /**
@@ -617,6 +619,110 @@ class RelationalGroupedDataset protected[sql](
     val plan = FlatMapCoGroupsInPandas(
       leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
       expr, output, left, right)
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  def mapGroupsWithState(
+      func: UntypedMapGroupsWithStateFunction,
+      outputStructType: StructType,
+      stateStructType: StructType,
+      timeoutConf: GroupStateTimeout): DataFrame = {
+    mapGroupsWithState(
+      outputStructType, stateStructType, timeoutConf)(
+      (key: Row, it: Iterator[Row], s: GroupState[Row]) => func.call(key, it.asJava, s)
+    )
+  }
+
+  def mapGroupsWithState(
+      outputStructType: StructType,
+      stateStructType: StructType,
+      timeoutConf: GroupStateTimeout)(
+      func: (Row, Iterator[Row], GroupState[Row]) => Row): DataFrame = {
+    val flatMapFunc = (key: Row, it: Iterator[Row], s: GroupState[Row]) =>
+      Iterator(func(key, it, s))
+
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+    val outputAttrs = outputStructType.toAttributes
+    val plan = UntypedFlatMapGroupsWithState(
+      flatMapFunc.asInstanceOf[(Row, Iterator[Row], LogicalGroupState[Row]) => Iterator[Row]],
+      groupingAttrs,
+      outputAttrs,
+      stateStructType,
+      OutputMode.Update(),
+      isMapGroupsWithState = true,
+      timeoutConf,
+      child = df.logicalPlan)
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  def flatMapGroupsWithState(
+      func: UntypedFlatMapGroupsWithStateFunction,
+      outputStructType: StructType,
+      stateStructType: StructType,
+      outputMode: OutputMode,
+      timeoutConf: GroupStateTimeout): DataFrame = {
+    val f = (key: Row, it: Iterator[Row], s: GroupState[Row]) =>
+      func.call(key, it.asJava, s).asScala
+    flatMapGroupsWithState(outputStructType, stateStructType, outputMode, timeoutConf)(f)
+  }
+
+  def flatMapGroupsWithState(
+      outputStructType: StructType,
+      stateStructType: StructType,
+      outputMode: OutputMode,
+      timeoutConf: GroupStateTimeout)(
+      func: (Row, Iterator[Row], GroupState[Row]) => Iterator[Row]): DataFrame = {
+    if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
+      throw new IllegalArgumentException("The output mode of function should be append or update")
+    }
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+    val outputAttrs = outputStructType.toAttributes
+    val plan = UntypedFlatMapGroupsWithState(
+      func.asInstanceOf[(Row, Iterator[Row], LogicalGroupState[Row]) => Iterator[Row]],
+      groupingAttrs,
+      outputAttrs,
+      stateStructType,
+      outputMode,
+      isMapGroupsWithState = false,
+      timeoutConf,
+      child = df.logicalPlan)
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  // FIXME: probably we have to change the type as String for outputMode and timeoutConf to provide
+  //  parameters from Python?
+  private[sql] def pythonFlatMapGroupsWithState(
+      func: PythonUDF,
+      outputStructType: StructType,
+      stateStructType: StructType,
+      outputMode: OutputMode,
+      timeoutConf: GroupStateTimeout): DataFrame = {
+    if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
+      throw new IllegalArgumentException("The output mode of function should be append or update")
+    }
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+    val outputAttrs = outputStructType.toAttributes
+    val plan = PythonFlatMapGroupsWithState(
+      func,
+      groupingAttrs,
+      outputAttrs,
+      stateStructType,
+      outputMode,
+      isMapGroupsWithState = false,
+      timeoutConf,
+      child = df.logicalPlan)
     Dataset.ofRows(df.sparkSession, plan)
   }
 
