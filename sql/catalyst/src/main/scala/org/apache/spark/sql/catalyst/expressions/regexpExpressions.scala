@@ -1047,7 +1047,7 @@ case class RegExpSubStr(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, regexp) - Searches a string for a regular expression and returns an integer that indicates the beginning position matched substring. Positions are 1-based, not 0-based. If no match is found, returns 0.
+    _FUNC_(str, regexp) - Searches a string for a regular expression and returns an integer that indicates the beginning position of the matched substring. Positions are 1-based, not 0-based. If no match is found, returns 0.
   """,
   arguments = """
     Arguments:
