@@ -333,8 +333,8 @@ private[spark] class ApplicationMaster(
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + StringUtils.stringifyException(e))
         if (!unregistered) {
-          unregister(finalStatus, finalMsg)
           cleanupStagingDir(stagingDir)
+          unregister(finalStatus, finalMsg)
         }
     } finally {
       try {
@@ -354,8 +354,8 @@ private[spark] class ApplicationMaster(
       finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
     }
     if (!unregistered) {
-      unregister(finalStatus, finalMsg)
       cleanupStagingDir(stagingDir)
+      unregister(finalStatus, finalMsg)
     }
   }
 
