@@ -36,19 +36,19 @@ object OptimizeRand extends Rule[LogicalPlan] {
       EXPRESSION_WITH_RANDOM_SEED, LITERAL, BINARY_COMPARISON), ruleId) {
     case GreaterThan(DoubleLiteral(value), _: Rand) if value >= 1.0 =>
       TrueLiteral
+    case GreaterThan(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
+      FalseLiteral
     case GreaterThanOrEqual(DoubleLiteral(value), _: Rand) if value >= 1.0 =>
       TrueLiteral
+    case GreaterThanOrEqual(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
+      FalseLiteral
     case LessThan(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
       TrueLiteral
+    case LessThan(DoubleLiteral(value), _: Rand) if value >= 1.0 =>
+      FalseLiteral
     case LessThanOrEqual(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
       TrueLiteral
     case LessThanOrEqual(DoubleLiteral(value), _: Rand) if value >= 1.0 =>
-      FalseLiteral
-    case LessThan(DoubleLiteral(value), _: Rand) if value >= 1.0 =>
-      FalseLiteral
-    case GreaterThanOrEqual(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
-      FalseLiteral
-    case GreaterThan(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
       FalseLiteral
     case other => other
   }
