@@ -4114,14 +4114,14 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
   expect_true(functionExists("abs"))
   expect_false(functionExists("aabbss"))
 
-  func0 <- getFunction("abs")
+  func0 <- getFunc("abs")
   expect_equal(func0$name, "abs")
   expect_equal(func0$className, "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_true(func0$isTemporary)
 
   sql("CREATE FUNCTION func1 AS 'org.apache.spark.sql.catalyst.expressions.Add'")
 
-  func1 <- getFunction("spark_catalog.default.func1")
+  func1 <- getFunc("spark_catalog.default.func1")
   expect_equal(func1$name, "func1")
   expect_equal(func1$catalog, "spark_catalog")
   expect_equal(length(func1$namespace), 1)

@@ -635,15 +635,16 @@ functionExists <- function(functionName) {
 #'
 #' @param functionName name of the function, allowed to be qualified with catalog name
 #' @return A named list.
-#' @rdname getFunction
-#' @name getFunction
+#' @rdname getFunc
+#' @name getFunc
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' func <- getFunction("spark_catalog.default.myFunc")
+#' func <- getFunc("spark_catalog.default.myFunc")
 #' }
-#' @note since 3.4.0
-getFunction <- function(functionName) {
+#' @note since 3.4.0. Use different name with the scala/python side, to avoid the
+#'       signature conflict with built-in "getFunction".
+getFunc <- function(functionName) {
   sparkSession <- getSparkSession()
   if (class(functionName) != "character") {
     stop("functionName must be a string.")
