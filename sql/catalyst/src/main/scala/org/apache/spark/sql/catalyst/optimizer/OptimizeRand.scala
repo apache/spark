@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{DoubleLiteral, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Rand}
+import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, DoubleLiteral, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Rand}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -34,22 +34,30 @@ object OptimizeRand extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformAllExpressionsWithPruning(_.containsAllPatterns(
       EXPRESSION_WITH_RANDOM_SEED, LITERAL, BINARY_COMPARISON), ruleId) {
-      case gt @ GreaterThan(DoubleLiteral(value), _: Rand) =>
-        if (value >= 1.0) TrueLiteral else if (value <= 0.0) FalseLiteral else gt
-      case gt @ GreaterThan(_: Rand, DoubleLiteral(value)) =>
-        if (value < 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else gt
-      case gte @ GreaterThanOrEqual(DoubleLiteral(value), _: Rand) =>
-        if (value >= 1.0) TrueLiteral else if (value < 0.0) FalseLiteral else gte
-      case gte @ GreaterThanOrEqual(_: Rand, DoubleLiteral(value)) =>
-        if (value <= 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else gte
-      case lt @ LessThan(_: Rand, DoubleLiteral(value)) =>
-        if (value >= 1.0) TrueLiteral else if (value <= 0.0) FalseLiteral else lt
-      case lt @ LessThan(DoubleLiteral(value), _: Rand) =>
-        if (value < 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else lt
-      case lte @ LessThanOrEqual(_: Rand, DoubleLiteral(value)) =>
-        if (value >= 1.0) TrueLiteral else if (value < 0.0) FalseLiteral else lte
-      case lte @ LessThanOrEqual(DoubleLiteral(value), _: Rand) =>
-        if (value <= 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else lte
-      case other => other
+      case op @ BinaryComparison(DoubleLiteral(_), _: Rand) => eliminateRand(swapComparison(op))
+      case op @ BinaryComparison(_: Rand, DoubleLiteral(_)) => eliminateRand(op)
+  }
+
+  /**
+   * Swaps the left and right sides of some binary comparisons. e.g., transform "a < b" to "b > a"
+   */
+  private def swapComparison(comparison: BinaryComparison): BinaryComparison = comparison match {
+    case a LessThan b => GreaterThan(b, a)
+    case a LessThanOrEqual b => GreaterThanOrEqual(b, a)
+    case a GreaterThan b => LessThan(b, a)
+    case a GreaterThanOrEqual b => LessThanOrEqual(b, a)
+    case o => o
+  }
+
+  private def eliminateRand(op: BinaryComparison): Expression = op match {
+    case GreaterThan(_: Rand, DoubleLiteral(value)) =>
+      if (value < 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else op
+    case GreaterThanOrEqual(_: Rand, DoubleLiteral(value)) =>
+      if (value <= 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else op
+    case LessThan(_: Rand, DoubleLiteral(value)) =>
+      if (value >= 1.0) TrueLiteral else if (value <= 0.0) FalseLiteral else op
+    case LessThanOrEqual(_: Rand, DoubleLiteral(value)) =>
+      if (value >= 1.0) TrueLiteral else if (value < 0.0) FalseLiteral else op
+    case other => other
   }
 }

@@ -82,14 +82,10 @@ class OptimizeRandSuite extends PlanTest {
 
     // Rand cannot be eliminated.
     Seq(
-      literalHalf > rand5,
       rand5 > literal0d,
-      literal0d >= rand5,
       rand5 >= literalHalf,
       rand5 < literalHalf,
-      literal0d < rand5,
-      rand5 <= literal0d,
-      literalHalf < rand5
+      rand5 <= literal0d
     ).foreach { comparison =>
       val plan = testRelation.select(comparison.as("flag")).analyze
       val actual = Optimize.execute(plan)
