@@ -170,16 +170,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                 if (pushedAggregates.isEmpty) {
                   aggNode // return original plan node
                 } else if (r.supportCompletePushDown(pushedAggregates.get)) {
+                  val newScanBuilderHolder = sHolder.copy(output = aggNode.schema.toAttributes)
+                  newScanBuilderHolder.pushedPredicates = sHolder.pushedPredicates
                   // If we can push down the aggregation completely, we need to consider
                   // pushing down the Limit or Offset operator, so keep the information about
                   // aggregation push down and push down aggregation later.
-                  sHolder.pushedAggregation = Some(PushedAggregation(
+                  newScanBuilderHolder.pushedAggregation = Some(PushedAggregation(
                     pushedAggregates,
                     finalResultExpressions,
                     finalAggregates,
                     normalizedGroupingExpressions,
                     aggExprToOutputOrdinal))
-                  sHolder
+                  newScanBuilderHolder
                 } else {
                   val (groupAttrs, aggOutput, groupByExprToOutputOrdinal, scanRelation) =
                     readScanSchema(
