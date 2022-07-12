@@ -1105,20 +1105,19 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
     nullSafeCodeGen(ctx, ev, (subject, regexp, _) => {
       s"""
          |try {
+         |  $setEvNotNull
          |  if (!$regexp.equals($termLastRegex)) {
          |    // regex value changed
          |    $termLastRegex = $regexp.clone();
          |    $termPattern = $classNamePattern.compile($termLastRegex.toString());
          |  }
          |  java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
-         |  $setEvNotNull
          |  if ($matcher.find()) {
          |    ${ev.value} = $matcher.toMatchResult().start($idx) + 1;
          |  } else {
          |    ${ev.value} = 0;
          |  }
          |} catch (IllegalStateException e) {
-         |  $setEvNotNull
          |  ${ev.value} = 0;
          |}
          |""".stripMargin
