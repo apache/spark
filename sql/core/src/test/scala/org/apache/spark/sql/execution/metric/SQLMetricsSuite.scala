@@ -111,11 +111,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val df = testData2.groupBy().count() // 2 partitions
     val expected1 = Seq(
       Map("number of output rows" -> 2L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L),
       Map("number of output rows" -> 1L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L))
     val shuffleExpected1 = Map(
@@ -133,11 +133,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val df2 = testData2.groupBy($"a").count()
     val expected2 = Seq(
       Map("number of output rows" -> 4L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L),
       Map("number of output rows" -> 3L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L))
 
@@ -186,7 +186,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       }
       val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
       nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe bucket list iters").toString
+        val probes = metrics(nodeId)._2("avg hash probes per key").toString
         if (!probes.contains("\n")) {
           // It's a single metrics value
           assert(probes.toDouble > 1.0)
