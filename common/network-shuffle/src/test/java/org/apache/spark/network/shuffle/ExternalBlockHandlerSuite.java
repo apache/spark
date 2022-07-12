@@ -34,7 +34,6 @@ import org.mockito.ArgumentCaptor;
 import org.roaringbitmap.RoaringBitmap;
 
 import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
