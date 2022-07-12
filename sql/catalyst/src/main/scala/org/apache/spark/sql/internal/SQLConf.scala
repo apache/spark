@@ -418,7 +418,7 @@ object SQLConf {
       "if needed so that `FileFormatWriter` does not need to insert physical sorts.")
     .version("3.4.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
