@@ -1073,9 +1073,9 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(0))
 
-  override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
+  override def nullSafeEval(s: Any, r: Any, i: Any): Any = {
     try {
-      val m = getLastMatcher(s, p)
+      val m = getLastMatcher(s, r)
       if (m.find) {
         m.toMatchResult.start() + 1
       } else {
@@ -1113,7 +1113,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
          |  }
          |  java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
          |  if ($matcher.find()) {
-         |    ${ev.value} = $matcher.toMatchResult().start($idx) + 1;
+         |    ${ev.value} = $matcher.toMatchResult().start() + 1;
          |  } else {
          |    ${ev.value} = 0;
          |  }
