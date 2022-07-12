@@ -266,7 +266,9 @@ reference:
   - databaseExists
   - dropTempTable
   - dropTempView
+  - functionExists
   - getDatabase
+  - getFunc
   - getTable
   - listCatalogs
   - listColumns
