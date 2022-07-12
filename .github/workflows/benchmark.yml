@@ -110,7 +110,7 @@ jobs:
           java-version: ${{ github.event.inputs.jdk }}
       - name: Generate TPC-DS (SF=1) table data
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        run: build/sbt "sql/test:runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
+        run: build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
 
   benchmark:
     name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, Scala ${{ github.event.inputs.scala }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
