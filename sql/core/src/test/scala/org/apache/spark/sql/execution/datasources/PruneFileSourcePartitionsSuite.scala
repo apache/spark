@@ -69,26 +69,35 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
   }
 
   test("SPARK-20986 Reset table's statistics after PruneFileSourcePartitions rule") {
-    withTable("tbl") {
-      spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
-      sql(s"ANALYZE TABLE tbl COMPUTE STATISTICS")
-      val tableStats = spark.sessionState.catalog.getTableMetadata(TableIdentifier("tbl")).stats
-      assert(tableStats.isDefined && tableStats.get.sizeInBytes > 0, "tableStats is lost")
+    Seq(false, true).foreach { cboEnabled =>
+      withSQLConf(SQLConf.CBO_ENABLED.key -> cboEnabled.toString) {
+        withTable("tbl") {
+          spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
+          sql(s"ANALYZE TABLE tbl COMPUTE STATISTICS")
+          val tableStats = spark.sessionState.catalog.getTableMetadata(TableIdentifier("tbl")).stats
+          assert(tableStats.isDefined && tableStats.get.sizeInBytes > 0, "tableStats is lost")
 
-      val df = sql("SELECT * FROM tbl WHERE p = 1")
-      val sizes1 = df.queryExecution.analyzed.collect {
-        case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
-      }
-      assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-      assert(sizes1(0) == tableStats.get.sizeInBytes)
+          val df = sql("SELECT * FROM tbl WHERE p = 1")
+          val sizes1 = df.queryExecution.analyzed.collect {
+            case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
+          }
+          assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
+          assert(sizes1(0) === tableStats.get.sizeInBytes)
 
-      val relations = df.queryExecution.optimizedPlan.collect {
-        case relation: LogicalRelation => relation
+          val relations = df.queryExecution.optimizedPlan.collect {
+            case relation: LogicalRelation => relation
+          }
+          assert(relations.size === 1, s"Size wrong for:\n ${df.queryExecution}")
+          val size2 = relations(0).stats.sizeInBytes
+          if (!cboEnabled) {
+            assert(size2 === relations(0).catalogTable.get.stats.get.sizeInBytes)
+            assert(size2 < tableStats.get.sizeInBytes)
+          } else {
+            assert(size2 < relations(0).catalogTable.get.stats.get.sizeInBytes)
+            assert(size2 < tableStats.get.sizeInBytes)
+          }
+        }
       }
-      assert(relations.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-      val size2 = relations(0).stats.sizeInBytes
-      assert(size2 == relations(0).catalogTable.get.stats.get.sizeInBytes)
-      assert(size2 < tableStats.get.sizeInBytes)
     }
   }
 

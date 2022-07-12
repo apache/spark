@@ -49,7 +49,7 @@ abstract class DynamicPartitionPruningHiveScanSuiteBase
   }
 
   override protected def afterAll(): Unit = {
-    super.beforeAll()
+    super.afterAll()
     conf.unsetConf(SQLConf.CBO_ENABLED)
   }
 }
