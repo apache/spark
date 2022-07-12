@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(str) - Translates a string into {@code application/x-www-form-urlencoded} format using a specific encoding scheme.
+    _FUNC_(str) - Translates a string into 'application/x-www-form-urlencoded' format using a specific encoding scheme.
   """,
   arguments = """
     Arguments:
@@ -70,7 +70,7 @@ case class UrlEncode(child: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(str) - Decodes a {@code application/x-www-form-urlencoded} `str`.
+    _FUNC_(str) - Decodes a `str` in 'application/x-www-form-urlencoded' format using a specific encoding scheme.
   """,
   arguments = """
     Arguments:
