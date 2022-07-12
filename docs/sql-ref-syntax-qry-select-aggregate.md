@@ -23,10 +23,6 @@ license: |
 
 Aggregate functions operate on values across rows to perform mathematical calculations such as sum, average, counting, minimum/maximum values, standard deviation, and estimation, as well as some non-mathematical operations.
 
-### General Aggregation
-
-These aggregate Functions use general syntax.
-
 #### Syntax
 
 ```sql
