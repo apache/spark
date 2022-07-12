@@ -1306,7 +1306,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("cast Decimal to string") {
+  test("SPARK-39749: cast Decimal to string") {
     val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
     checkEvaluation(cast(input, StringType), "0.000000123")
     withSQLConf(SQLConf.LEGACY_DECIMAL_TO_STRING.key -> "true") {
