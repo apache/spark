@@ -26,7 +26,7 @@ Aggregate functions operate on values across rows to perform mathematical calcul
 ### Syntax
 
 ```sql
-aggregate_function FILTER (WHERE boolean_expression)
+aggregate_function(input1 [, input2, ...]) FILTER (WHERE boolean_expression)
 ```
 
 ### Parameters
