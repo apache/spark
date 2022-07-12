@@ -69,3 +69,11 @@ SELECT regexp_substr('1a 2b 14m', '\\d{2}(a|b|m)');
 SELECT regexp_substr('1a 2b 14m', '');
 SELECT regexp_substr('Spark', null);
 SELECT regexp_substr(null, '.*');
+
+-- regexp_instr
+SELECT regexp_instr('abc', 'b');
+SELECT regexp_instr('abc', 'x');
+SELECT regexp_instr('ABC', '(?-i)b');
+SELECT regexp_instr('1a 2b 14m', '\\d{2}(a|b|m)');
+SELECT regexp_instr('abc', null);
+SELECT regexp_instr(null, 'b');

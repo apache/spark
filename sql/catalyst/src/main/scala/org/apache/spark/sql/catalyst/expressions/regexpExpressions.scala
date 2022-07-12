@@ -1043,3 +1043,88 @@ case class RegExpSubStr(left: Expression, right: Expression)
       newChildren: IndexedSeq[Expression]): RegExpSubStr =
     copy(left = newChildren(0), right = newChildren(1))
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str, regexp) - Searches a string for a regular expression and returns an integer that indicates the beginning position of the matched substring. Positions are 1-based, not 0-based. If no match is found, returns 0.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression.
+      * regexp - a string representing a regular expression. The regex string should be a
+          Java regular expression.<br><br>
+          Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
+          parser. For example, to match "\abc", a regular expression for `regexp` can be
+          "^\\abc$".<br><br>
+          There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
+          fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('user@spark.apache.org', '@[^.]*');
+       5
+  """,
+  since = "3.4.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
+  extends RegExpExtractBase {
+  def this(s: Expression, r: Expression) = this(s, r, Literal(0))
+
+  override def nullSafeEval(s: Any, r: Any, i: Any): Any = {
+    try {
+      val m = getLastMatcher(s, r)
+      if (m.find) {
+        m.toMatchResult.start() + 1
+      } else {
+        0
+      }
+    } catch {
+      case _: IllegalStateException => 0
+    }
+  }
+
+  override def dataType: DataType = IntegerType
+  override def prettyName: String = "regexp_instr"
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val matcher = ctx.freshName("matcher")
+
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+
+    val setEvNotNull = if (nullable) {
+      s"${ev.isNull} = false;"
+    } else {
+      ""
+    }
+
+    nullSafeCodeGen(ctx, ev, (subject, regexp, _) => {
+      s"""
+         |try {
+         |  $setEvNotNull
+         |  if (!$regexp.equals($termLastRegex)) {
+         |    // regex value changed
+         |    $termLastRegex = $regexp.clone();
+         |    $termPattern = $classNamePattern.compile($termLastRegex.toString());
+         |  }
+         |  java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+         |  if ($matcher.find()) {
+         |    ${ev.value} = $matcher.toMatchResult().start() + 1;
+         |  } else {
+         |    ${ev.value} = 0;
+         |  }
+         |} catch (IllegalStateException e) {
+         |  ${ev.value} = 0;
+         |}
+         |""".stripMargin
+    })
+  }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpInStr =
+    copy(subject = newFirst, regexp = newSecond, idx = newThird)
+}
