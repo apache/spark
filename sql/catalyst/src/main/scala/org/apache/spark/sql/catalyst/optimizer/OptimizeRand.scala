@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, EXPRE
 
 /**
  * Rand() generates a random column with i.i.d. uniformly distributed values in [0, 1), so
- * compare double literal value with 1.0 could eliminate Rand() in binary comparison.
+ * compare double literal value with 1.0 or 0.0 could eliminate Rand() in binary comparison.
  *
  * 1. Converts the binary comparison to true literal when the comparison value must be true.
  * 2. Converts the binary comparison to false literal when the comparison value must be false.
@@ -34,22 +34,22 @@ object OptimizeRand extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformAllExpressionsWithPruning(_.containsAllPatterns(
       EXPRESSION_WITH_RANDOM_SEED, LITERAL, BINARY_COMPARISON), ruleId) {
-    case GreaterThan(DoubleLiteral(value), _: Rand) if value >= 1.0 =>
-      TrueLiteral
-    case GreaterThan(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
-      FalseLiteral
-    case GreaterThanOrEqual(DoubleLiteral(value), _: Rand) if value >= 1.0 =>
-      TrueLiteral
-    case GreaterThanOrEqual(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
-      FalseLiteral
-    case LessThan(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
-      TrueLiteral
-    case LessThan(DoubleLiteral(value), _: Rand) if value >= 1.0 =>
-      FalseLiteral
-    case LessThanOrEqual(_: Rand, DoubleLiteral(value)) if value >= 1.0 =>
-      TrueLiteral
-    case LessThanOrEqual(DoubleLiteral(value), _: Rand) if value >= 1.0 =>
-      FalseLiteral
-    case other => other
+      case gt @ GreaterThan(DoubleLiteral(value), _: Rand) =>
+        if (value >= 1.0) TrueLiteral else if (value <= 0.0) FalseLiteral else gt
+      case gt @ GreaterThan(_: Rand, DoubleLiteral(value)) =>
+        if (value < 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else gt
+      case gte @ GreaterThanOrEqual(DoubleLiteral(value), _: Rand) =>
+        if (value >= 1.0) TrueLiteral else if (value < 0.0) FalseLiteral else gte
+      case gte @ GreaterThanOrEqual(_: Rand, DoubleLiteral(value)) =>
+        if (value <= 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else gte
+      case lt @ LessThan(_: Rand, DoubleLiteral(value)) =>
+        if (value >= 1.0) TrueLiteral else if (value <= 0.0) FalseLiteral else lt
+      case lt @ LessThan(DoubleLiteral(value), _: Rand) =>
+        if (value < 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else lt
+      case lte @ LessThanOrEqual(_: Rand, DoubleLiteral(value)) =>
+        if (value >= 1.0) TrueLiteral else if (value < 0.0) FalseLiteral else lte
+      case lte @ LessThanOrEqual(DoubleLiteral(value), _: Rand) =>
+        if (value <= 0.0) TrueLiteral else if (value >= 1.0) FalseLiteral else lte
+      case other => other
   }
 }

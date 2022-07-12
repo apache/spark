@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Literal, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -38,17 +38,24 @@ class OptimizeRandSuite extends PlanTest {
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
   val x = testRelation.where($"a".attr.in(1, 3, 5)).subquery("x")
-  val literal10d = doubleToLiteral(10d)
+  val literal0d = Literal(0d)
+  val literal1d = Literal(1d)
+  val literalHalf = Literal(0.5)
+  val negativeLiteral1d = Literal(-1d)
   val rand5 = rand(5)
 
   test("Optimize binary comparison with rand") {
 
     // Optimize Rand to true literals.
     Seq(
-      literal10d > rand5,
-      literal10d >= rand5,
-      rand5 < literal10d,
-      rand5 <= literal10d
+      literal1d > rand5,
+      rand5 > negativeLiteral1d,
+      literal1d >= rand5,
+      rand5 >= literal0d,
+      rand5 < literal1d,
+      negativeLiteral1d < rand5,
+      rand5 <= literal1d,
+      literal0d <= rand5
     ).foreach { comparison =>
       val plan = testRelation.select(comparison.as("flag")).analyze
       val actual = Optimize.execute(plan)
@@ -58,15 +65,35 @@ class OptimizeRandSuite extends PlanTest {
 
     // Optimize Rand to false literals.
     Seq(
-      literal10d <= rand5,
-      literal10d < rand5,
-      rand5 >= literal10d,
-      rand5 > literal10d
+      literal0d > rand5,
+      rand5 > literal1d,
+      negativeLiteral1d >= rand5,
+      rand5 >= literal1d,
+      rand5 < literal0d,
+      literal1d < rand5,
+      rand5 <= negativeLiteral1d,
+      literal1d < rand5
     ).foreach { comparison =>
       val plan = testRelation.select(comparison.as("flag")).analyze
       val actual = Optimize.execute(plan)
       val correctAnswer = testRelation.select(Alias(FalseLiteral, "flag")()).analyze
       comparePlans(actual, correctAnswer)
+    }
+
+    // Rand cannot be eliminated.
+    Seq(
+      literalHalf > rand5,
+      rand5 > literal0d,
+      literal0d >= rand5,
+      rand5 >= literalHalf,
+      rand5 < literalHalf,
+      literal0d < rand5,
+      rand5 <= literal0d,
+      literalHalf < rand5
+    ).foreach { comparison =>
+      val plan = testRelation.select(comparison.as("flag")).analyze
+      val actual = Optimize.execute(plan)
+      comparePlans(actual, plan)
     }
   }
 
@@ -74,10 +101,10 @@ class OptimizeRandSuite extends PlanTest {
 
     // Optimize Rand to true literals.
     Seq(
-      literal10d > rand5,
-      literal10d >= rand5,
-      rand5 < literal10d,
-      rand5 <= literal10d
+      literal1d > rand5,
+      literal1d >= rand5,
+      rand5 < literal1d,
+      rand5 <= literal1d
     ).foreach { condition =>
       val plan = x.where(condition).analyze
       val actual = Optimize.execute(plan)
@@ -87,10 +114,10 @@ class OptimizeRandSuite extends PlanTest {
 
     // Optimize Rand to false literals.
     Seq(
-      literal10d <= rand5,
-      literal10d < rand5,
-      rand5 >= literal10d,
-      rand5 > literal10d
+      literal1d <= rand5,
+      literal1d < rand5,
+      rand5 >= literal1d,
+      rand5 > literal1d
     ).foreach { condition =>
       val plan = x.where(condition).analyze
       val actual = Optimize.execute(plan)
@@ -102,8 +129,8 @@ class OptimizeRandSuite extends PlanTest {
   test("Constant folding with rand") {
 
     Seq(
-      And(literal10d > rand5, literal10d >= rand5),
-      And(rand5 < literal10d, rand5 <= literal10d)
+      And(literal1d > rand5, literal1d >= rand5),
+      And(rand5 < literal1d, rand5 <= literal1d)
     ).foreach { condition =>
       val plan = x.where(condition).analyze
       val actual = Optimize.execute(plan)
@@ -112,8 +139,8 @@ class OptimizeRandSuite extends PlanTest {
     }
 
     Seq(
-      Or(literal10d <= rand5, literal10d < rand5),
-      Or(rand5 >= literal10d, rand5 > literal10d)
+      Or(literal1d <= rand5, literal1d < rand5),
+      Or(rand5 >= literal1d, rand5 > literal1d)
     ).foreach { condition =>
       val plan = x.where(condition).analyze
       val actual = Optimize.execute(plan)
@@ -126,10 +153,10 @@ class OptimizeRandSuite extends PlanTest {
     val aIsNotNull = $"a".isNotNull
 
     Seq(
-      And(literal10d > rand5, aIsNotNull),
-      And(literal10d >= rand5, aIsNotNull),
-      And(rand5 < literal10d, aIsNotNull),
-      And(rand5 <= literal10d, aIsNotNull)
+      And(literal1d > rand5, aIsNotNull),
+      And(literal1d >= rand5, aIsNotNull),
+      And(rand5 < literal1d, aIsNotNull),
+      And(rand5 <= literal1d, aIsNotNull)
     ).foreach { condition =>
       val plan = testRelation.where(condition).analyze
       val actual = Optimize.execute(plan)
@@ -138,10 +165,10 @@ class OptimizeRandSuite extends PlanTest {
     }
 
     Seq(
-      Or(literal10d <= rand5, aIsNotNull),
-      Or(literal10d < rand5, aIsNotNull),
-      Or(rand5 >= literal10d, aIsNotNull),
-      Or(rand5 > literal10d, aIsNotNull)
+      Or(literal1d <= rand5, aIsNotNull),
+      Or(literal1d < rand5, aIsNotNull),
+      Or(rand5 >= literal1d, aIsNotNull),
+      Or(rand5 > literal1d, aIsNotNull)
     ).foreach { condition =>
       val plan = testRelation.where(condition).analyze
       val actual = Optimize.execute(plan)
