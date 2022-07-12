@@ -270,7 +270,8 @@ jobs:
     # Currently, only enable docker build from cache for `master` branch jobs
     if: >-
       (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
-      fromJson(needs.precondition.outputs.required).lint == 'true') &&
+      fromJson(needs.precondition.outputs.required).lint == 'true' ||
+      fromJson(needs.precondition.outputs.required).sparkr == 'true') &&
       inputs.branch == 'master'
     runs-on: ubuntu-latest
     steps:
@@ -416,12 +417,13 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).sparkr == 'true'
+    needs: [precondition, infra-image]
+    # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
+    if: always() && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20220207
+      image: ${{ needs.precondition.outputs.image_url }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
