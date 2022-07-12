@@ -25,7 +25,27 @@ Aggregate functions operate on values across rows to perform mathematical calcul
 
 ### General Aggregation
 
-Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) document for a complete list of Spark aggregate functions.
+These aggregate Functions use general syntax.
+
+#### Syntax
+
+```sql
+aggregate_function FILTER (WHERE boolean_expression)
+```
+
+#### Parameters
+
+* **aggregate_function**
+
+    Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) document for a complete list of Spark aggregate functions.
+
+* **boolean_expression**
+
+    Specifies any expression that evaluates to a result type boolean. Two or more expressions may be combined together using the logical operators ( AND, OR ).
+
+#### Examples
+
+Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) document for all the examples of Spark aggregate functions.
 
 ### Ordered-Set Aggregate Functions
 
@@ -45,7 +65,7 @@ These aggregate Functions use different syntax than the other aggregate function
 
 * **order_by_expression**
 
-    The expression (typically a column name) by which to order the values.
+    The expression (typically a column name) by which to order the values before aggregating them.
 
 * **boolean_expression**
 
