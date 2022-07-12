@@ -356,6 +356,16 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
 
     val optionsWithPattern = new CSVOptions(
       Map("timestampFormat" -> "invalid", "dateFormat" -> "invalid"), false, "UTC")
-    check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern))
+
+    // With legacy parser enabled, we are still able to parse dates and timestamps.
+    check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern) {
+      override val isLegacyParserPolicy: Boolean = true
+    })
+
+    // With legacy parser disabled, parsing results in error.
+    val err = intercept[IllegalArgumentException] {
+      check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern))
+    }
+    assert(err.getMessage.contains("Illegal pattern character: n"))
   }
 }

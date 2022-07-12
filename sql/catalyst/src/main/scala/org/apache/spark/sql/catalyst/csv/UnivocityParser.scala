@@ -119,6 +119,12 @@ class UnivocityParser(
     new NoopFilters
   }
 
+  // Flag is needed to distinguish parsing mode when inferring timestamp and date types.
+  // For more information, see the comments for TimestampType and DateType converter functions.
+  // Available for testing.
+  val isLegacyParserPolicy =
+    SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY
+
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
     val currentContent = tokenizer.getContext.currentParsedContent()
@@ -204,9 +210,11 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility only if no custom pattern has been set. If there is a custom pattern,
-            // fail since it may be different from the default pattern.
-            if (options.timestampFormatInRead.isDefined) {
+            // compatibility only if no custom pattern has been set.
+            //
+            // If a custom pattern was provided and parser policy is not legacy, throw exception
+            // without applying legacy behavior to avoid producing incorrect results.
+            if (!isLegacyParserPolicy && options.timestampFormatInRead.isDefined) {
               throw e
             }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
@@ -226,9 +234,11 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility only if no custom pattern has been set. If there is a custom pattern,
-            // fail since it may be different from the default pattern.
-            if (options.dateFormatInRead.isDefined) {
+            // compatibility only if no custom pattern has been set.
+            //
+            // If a custom pattern was provided and parser policy is not legacy, throw exception
+            // without applying legacy behavior to avoid producing incorrect results.
+            if (!isLegacyParserPolicy && options.dateFormatInRead.isDefined) {
               throw e
             }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
