@@ -25,8 +25,6 @@ import com.google.common.base.Throwables;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
 
-import static org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode.*;
-
 /**
  * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
  * and logged.
