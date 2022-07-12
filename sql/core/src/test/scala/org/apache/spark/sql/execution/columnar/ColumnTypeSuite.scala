@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
@@ -30,7 +29,7 @@ import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class ColumnTypeSuite extends SparkFunSuite with Logging {
+class ColumnTypeSuite extends SparkFunSuite {
   private val DEFAULT_BUFFER_SIZE = 512
   private val MAP_TYPE = MAP(MapType(IntegerType, StringType))
   private val ARRAY_TYPE = ARRAY(ArrayType(IntegerType))

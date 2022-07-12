@@ -34,7 +34,6 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.{AllocatedBlocks, _}
@@ -42,8 +41,7 @@ import org.apache.spark.streaming.util._
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
-class ReceivedBlockTrackerSuite
-  extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
+class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with Matchers {
 
   val hadoopConf = new Configuration()
   val streamId = 1

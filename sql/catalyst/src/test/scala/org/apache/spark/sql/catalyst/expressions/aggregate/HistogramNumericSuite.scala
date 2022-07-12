@@ -21,7 +21,6 @@ import java.sql.Timestamp
 import java.time.{Duration, Period}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -35,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.NumericHistogram
 
-class HistogramNumericSuite extends SparkFunSuite with SQLHelper with Logging {
+class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
 
   private val random = new java.util.Random()
 

@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.hive.test.TestHiveContext
 
-class ConcurrentHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
+class ConcurrentHiveSuite extends SparkFunSuite {
   ignore("multiple instances not supported") {
     test("Multiple Hive Instances") {
       (1 to 10).map { i =>

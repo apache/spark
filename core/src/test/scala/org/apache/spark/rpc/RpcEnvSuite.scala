@@ -30,7 +30,6 @@ import scala.concurrent.duration._
 import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException, SparkFunSuite}
@@ -41,7 +40,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * Common tests for an RpcEnv implementation.
  */
-abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
+abstract class RpcEnvSuite extends SparkFunSuite {
 
   var env: RpcEnv = _
 

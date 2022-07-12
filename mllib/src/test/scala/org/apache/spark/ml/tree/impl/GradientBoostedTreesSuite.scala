@@ -18,7 +18,6 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.mllib.tree.{GradientBoostedTreesSuite => OldGBTSuite}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
@@ -30,7 +29,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 /**
  * Test suite for [[GradientBoostedTrees]].
  */
-class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
+class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("runWithValidation stops early and performs better on a validation dataset") {
     // Set numIterations large enough so that it stops early.
