@@ -76,7 +76,8 @@ class JacksonParser(
     options.dateFormatInRead,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true)
+    isParsing = true,
+    isInferring = false)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
