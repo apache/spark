@@ -209,11 +209,13 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     // `MergeScalarSubqueries` can duplicate subqueries in the optimized plan and would make testing
     // complicated.
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, MergeScalarSubqueries.ruleName)
+    conf.setConf(SQLConf.CBO_ENABLED, false)
   }
 
   protected override def afterAll(): Unit = try {
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
       SQLConf.OPTIMIZER_EXCLUDED_RULES.defaultValueString)
+    conf.unsetConf(SQLConf.CBO_ENABLED)
 
     sql("DROP TABLE IF EXISTS bf1")
     sql("DROP TABLE IF EXISTS bf2")

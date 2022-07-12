@@ -23,6 +23,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 abstract class DynamicPartitionPruningHiveScanSuiteBase
@@ -40,6 +41,16 @@ abstract class DynamicPartitionPruningHiveScanSuiteBase
       }
       case _ => Nil
     }
+  }
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.CBO_ENABLED, false)
+  }
+
+  override protected def afterAll(): Unit = {
+    super.beforeAll()
+    conf.unsetConf(SQLConf.CBO_ENABLED)
   }
 }
 

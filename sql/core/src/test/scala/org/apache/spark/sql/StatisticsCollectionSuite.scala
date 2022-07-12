@@ -353,16 +353,24 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("invalidation of tableRelationCache after inserts") {
     val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTable(table) {
-          spark.range(100).write.saveAsTable(table)
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          spark.table(table)
-          val initialSizeInBytes = getTableFromCatalogCache(table).stats.sizeInBytes
-          spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
-          spark.table(table)
-          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
+    Seq(false, true).foreach { cboEnabled =>
+      Seq(false, true).foreach { autoUpdate =>
+        withSQLConf(
+          SQLConf.CBO_ENABLED.key -> cboEnabled.toString,
+          SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+          withTable(table) {
+            spark.range(100).write.saveAsTable(table)
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+            spark.table(table)
+            val initialSizeInBytes = getTableFromCatalogCache(table).stats.sizeInBytes
+            spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
+            spark.table(table)
+            if (!cboEnabled) {
+              assert(getTableFromCatalogCache(table).stats.sizeInBytes === 2 * initialSizeInBytes)
+            } else {
+              assert(getTableFromCatalogCache(table).stats.sizeInBytes > initialSizeInBytes)
+            }
+          }
         }
       }
     }
@@ -370,31 +378,40 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("invalidation of tableRelationCache after alter table add partition") {
     val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTempDir { dir =>
-          withTable(table) {
-            val path = dir.getCanonicalPath
-            sql(s"""
-              |CREATE TABLE $table (col1 int, col2 int)
-              |USING PARQUET
-              |PARTITIONED BY (col2)
-              |LOCATION '${dir.toURI}'""".stripMargin)
-            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-            spark.table(table)
-            assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
-            spark.catalog.recoverPartitions(table)
-            val df = Seq((1, 2), (1, 2)).toDF("col2", "col1")
-            df.write.parquet(s"$path/col2=1")
-            sql(s"ALTER TABLE $table ADD PARTITION (col2=1) LOCATION '${dir.toURI}'")
-            spark.table(table)
-            val cachedTable = getTableFromCatalogCache(table)
-            val cachedTableSizeInBytes = cachedTable.stats.sizeInBytes
-            val defaultSizeInBytes = conf.defaultSizeInBytes
-            if (autoUpdate) {
-              assert(cachedTableSizeInBytes != defaultSizeInBytes && cachedTableSizeInBytes > 0)
-            } else {
-              assert(cachedTableSizeInBytes == defaultSizeInBytes)
+    Seq(false, true).foreach { cboEnabled =>
+      Seq(false, true).foreach { autoUpdate =>
+        withSQLConf(
+          SQLConf.CBO_ENABLED.key -> cboEnabled.toString,
+          SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+          withTempDir { dir =>
+            withTable(table) {
+              val path = dir.getCanonicalPath
+              sql(
+                s"""
+                   |CREATE TABLE $table (col1 int, col2 int)
+                   |USING PARQUET
+                   |PARTITIONED BY (col2)
+                   |LOCATION '${dir.toURI}'""".stripMargin)
+              sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+              spark.table(table)
+              if (!cboEnabled) {
+                assert(getTableFromCatalogCache(table).stats.sizeInBytes === 0)
+              } else {
+                assert(getTableFromCatalogCache(table).stats.sizeInBytes === 1)
+              }
+              spark.catalog.recoverPartitions(table)
+              val df = Seq((1, 2), (1, 2)).toDF("col2", "col1")
+              df.write.parquet(s"$path/col2=1")
+              sql(s"ALTER TABLE $table ADD PARTITION (col2=1) LOCATION '${dir.toURI}'")
+              spark.table(table)
+              val cachedTable = getTableFromCatalogCache(table)
+              val cachedTableSizeInBytes = cachedTable.stats.sizeInBytes
+              val defaultSizeInBytes = conf.defaultSizeInBytes
+              if (autoUpdate) {
+                assert(cachedTableSizeInBytes != defaultSizeInBytes && cachedTableSizeInBytes > 0)
+              } else {
+                assert(cachedTableSizeInBytes == defaultSizeInBytes)
+              }
             }
           }
         }

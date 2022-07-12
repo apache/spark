@@ -304,18 +304,27 @@ class AdaptiveQueryExecSuite
         coalescedReads.foreach(r => assert(r.partitionSpecs.length == 1))
       }
 
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
-        val testDf = df1.where($"a" > 10)
-          .join(df2.where($"b" > 10), Seq("id"), "left_outer")
-          .groupBy($"a").count()
-        checkAnswer(testDf, Seq())
-        val plan = testDf.queryExecution.executedPlan
-        assert(find(plan)(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
-        val coalescedReads = collect(plan) {
-          case r: AQEShuffleReadExec => r
+      Seq(true, false).foreach { cboEnabled =>
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
+          SQLConf.CBO_ENABLED.key -> cboEnabled.toString) {
+          val testDf = df1.where($"a" > 10)
+            .join(df2.where($"b" > 10), Seq("id"), "left_outer")
+            .groupBy($"a").count()
+          checkAnswer(testDf, Seq())
+          val plan = testDf.queryExecution.executedPlan
+          assert(find(plan)(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
+          val coalescedReads = collect(plan) {
+            case r: AQEShuffleReadExec => r
+          }
+          if (!cboEnabled) {
+            assert(coalescedReads.length === 3, s"$plan")
+            coalescedReads.foreach(r => assert(r.isLocalRead || r.partitionSpecs.length == 1))
+          } else {
+            // Will be planed as BroadcastHashJoin if CBO is enabled.
+            assert(coalescedReads.isEmpty, s"$plan")
+          }
         }
-        assert(coalescedReads.length == 3, s"$plan")
-        coalescedReads.foreach(r => assert(r.isLocalRead || r.partitionSpecs.length == 1))
       }
     }
   }
