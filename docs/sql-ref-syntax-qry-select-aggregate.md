@@ -23,13 +23,13 @@ license: |
 
 Aggregate functions operate on values across rows to perform mathematical calculations such as sum, average, counting, minimum/maximum values, standard deviation, and estimation, as well as some non-mathematical operations.
 
-#### Syntax
+### Syntax
 
 ```sql
 aggregate_function FILTER (WHERE boolean_expression)
 ```
 
-#### Parameters
+### Parameters
 
 * **aggregate_function**
 
@@ -39,7 +39,7 @@ aggregate_function FILTER (WHERE boolean_expression)
 
     Specifies any expression that evaluates to a result type boolean. Two or more expressions may be combined together using the logical operators ( AND, OR ).
 
-#### Examples
+### Examples
 
 Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) document for all the examples of Spark aggregate functions.
 
