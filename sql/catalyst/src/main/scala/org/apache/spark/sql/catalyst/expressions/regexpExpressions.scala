@@ -763,6 +763,29 @@ abstract class RegExpExtractBase
     }
     pattern.matcher(s.toString)
   }
+
+  protected def initLastMatcherCode(
+      ctx: CodegenContext,
+      subject: String,
+      regexp: String,
+      matcher: String): String = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+
+    s"""
+      |if (!$regexp.equals($termLastRegex)) {
+      |  // regex value changed
+      |  $termLastRegex = $regexp.clone();
+      |  try {
+      |    $termPattern = $classNamePattern.compile($termLastRegex.toString());
+      |  } catch (java.util.regex.PatternSyntaxException e) {
+      |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
+      |  }
+      |}
+      |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+      |""".stripMargin
+  }
 }
 
 /**
@@ -824,13 +847,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
-
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
 
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
@@ -840,17 +859,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-      if (!$regexp.equals($termLastRegex)) {
-        // regex value changed
-        $termLastRegex = $regexp.clone();
-        try {
-          $termPattern = $classNamePattern.compile($termLastRegex.toString());
-        } catch (java.util.regex.PatternSyntaxException e) {
-          throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
-        }
-      }
-      java.util.regex.Matcher $matcher =
-        $termPattern.matcher($subject.toString());
+      ${initLastMatcherCode(ctx, subject, regexp, matcher)}
       if ($matcher.find()) {
         java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
         $classNameRegExpExtractBase.checkGroupIndex($matchResult.groupCount(), $idx);
@@ -949,16 +958,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     }
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-         | if (!$regexp.equals($termLastRegex)) {
-         |   // regex value changed
-         |   $termLastRegex = $regexp.clone();
-         |   try {
-         |     $termPattern = $classNamePattern.compile($termLastRegex.toString());
-         |   } catch (java.util.regex.PatternSyntaxException e) {
-         |     throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
-         |   }
-         | }
-         | java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+         | ${initLastMatcherCode(ctx, subject, regexp, matcher)}
          | java.util.ArrayList $matchResults = new java.util.ArrayList<UTF8String>();
          | while ($matcher.find()) {
          |   java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
@@ -1120,16 +1120,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
       s"""
          |try {
          |  $setEvNotNull
-         |  if (!$regexp.equals($termLastRegex)) {
-         |    // regex value changed
-         |    $termLastRegex = $regexp.clone();
-         |    try {
-         |      $termPattern = $classNamePattern.compile($termLastRegex.toString());
-         |    } catch (java.util.regex.PatternSyntaxException e) {
-         |      throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
-         |    }
-         |  }
-         |  java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+         |  ${initLastMatcherCode(ctx, subject, regexp, matcher)}
          |  if ($matcher.find()) {
          |    ${ev.value} = $matcher.toMatchResult().start() + 1;
          |  } else {
