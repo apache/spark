@@ -752,9 +752,10 @@ abstract class RegExpExtractBase
   protected def getLastMatcher(s: Any, p: Any): Matcher = {
     if (p != lastRegex) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = try {
-        Pattern.compile(lastRegex.toString)
+      try {
+        val r = p.asInstanceOf[UTF8String].clone()
+        pattern = Pattern.compile(r.toString)
+        lastRegex = r
       } catch {
         case e: PatternSyntaxException =>
           throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern)
@@ -776,9 +777,10 @@ abstract class RegExpExtractBase
     s"""
       |if (!$regexp.equals($termLastRegex)) {
       |  // regex value changed
-      |  $termLastRegex = $regexp.clone();
       |  try {
-      |    $termPattern = $classNamePattern.compile($termLastRegex.toString());
+      |    UTF8String r = $regexp.clone();
+      |    $termPattern = $classNamePattern.compile(r.toString());
+      |    $termLastRegex = r;
       |  } catch (java.util.regex.PatternSyntaxException e) {
       |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
       |  }
