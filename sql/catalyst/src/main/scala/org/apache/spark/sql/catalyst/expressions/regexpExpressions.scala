@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
-import java.util.regex.{Matcher, MatchResult, Pattern}
+import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -753,7 +753,13 @@ abstract class RegExpExtractBase
     if (p != lastRegex) {
       // regex value changed
       lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
+      pattern = try {
+        Pattern.compile(lastRegex.toString)
+      } catch {
+        case e: PatternSyntaxException =>
+          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern)
+
+      }
     }
     pattern.matcher(s.toString)
   }
@@ -837,7 +843,11 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       if (!$regexp.equals($termLastRegex)) {
         // regex value changed
         $termLastRegex = $regexp.clone();
-        $termPattern = $classNamePattern.compile($termLastRegex.toString());
+        try {
+          $termPattern = $classNamePattern.compile($termLastRegex.toString());
+        } catch (java.util.regex.PatternSyntaxException e) {
+          throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
+        }
       }
       java.util.regex.Matcher $matcher =
         $termPattern.matcher($subject.toString());
@@ -942,7 +952,11 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
          | if (!$regexp.equals($termLastRegex)) {
          |   // regex value changed
          |   $termLastRegex = $regexp.clone();
-         |   $termPattern = $classNamePattern.compile($termLastRegex.toString());
+         |   try {
+         |     $termPattern = $classNamePattern.compile($termLastRegex.toString());
+         |   } catch (java.util.regex.PatternSyntaxException e) {
+         |     throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
+         |   }
          | }
          | java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
          | java.util.ArrayList $matchResults = new java.util.ArrayList<UTF8String>();
@@ -1109,7 +1123,11 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
          |  if (!$regexp.equals($termLastRegex)) {
          |    // regex value changed
          |    $termLastRegex = $regexp.clone();
-         |    $termPattern = $classNamePattern.compile($termLastRegex.toString());
+         |    try {
+         |      $termPattern = $classNamePattern.compile($termLastRegex.toString());
+         |    } catch (java.util.regex.PatternSyntaxException e) {
+         |      throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
+         |    }
          |  }
          |  java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
          |  if ($matcher.find()) {

@@ -2031,4 +2031,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(errorClass = "NULL_COMPARISON_RESULT",
       messageParameters = Array(), cause = null)
   }
+
+  def invalidPatternError(funcName: String, pattern: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "regexp",
+        toSQLId(funcName),
+        pattern))
+  }
 }
