@@ -522,7 +522,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def listIndexes(
       conn: Connection,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
     throw new UnsupportedOperationException("listIndexes is not supported")
   }
