@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ProjectExec, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
@@ -1789,11 +1789,20 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-39672: Don't remove project before filter for in or correlated exists subquery") {
+  test("SPARK-39672: Fix removing project before filter with correlated subquery") {
     withTempView("v1", "v2") {
       Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c").createTempView("v1")
       Seq((1, 3, 5), (4, 5, 6)).toDF("a", "b", "c").createTempView("v2")
-      checkAnswer(sql(
+      
+      def findProjectExec(df: DataFrame): Seq[ProjectExec] = {
+        df.queryExecution.sparkPlan.collect {
+          case p: ProjectExec => p
+        }
+      }
+ 
+      // project before filter cannot be removed since subquery has conflicting attributes
+      // with outer reference
+      val df1 = sql(
         """
          |select * from
          |(
@@ -1809,7 +1818,30 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
          |  from v2
          |  where t3.a=v2.a and t3.b=v2.b and t3.c=v2.c
          |)
-         |""".stripMargin), Row(1, 2, 5))
+         |""".stripMargin)
+      checkAnswer(df1, Row(1, 2, 5))
+      assert(findProjectExec(df1).size == 4)
+
+      // project before filter can be removed when there are no conflicting attributes
+      val df2 = sql(
+        """
+         |select * from
+         |(
+         |select
+         |v1.b,
+         |v2.c
+         |from v1
+         |inner join v2
+         |on v1.b=v2.c) t3
+         |where not exists (
+         |  select 1
+         |  from v2
+         |  where t3.b=v2.b and t3.c=v2.c
+         |)
+         |""".stripMargin)
+
+      checkAnswer(df2, Row(5, 5))
+      assert(findProjectExec(df2).size == 3)
     }
   }
 }

@@ -746,8 +746,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
       if p2.outputSet.subsetOf(child.outputSet) &&
         // We only remove attribute-only project.
         p2.projectList.forall(_.isInstanceOf[AttributeReference]) &&
-        !SubqueryExpression.hasInOrCorrelatedExistsSubquery(e) =>
+        !hasConflictingAttrsWithSubquery(e, child) =>
       p1.copy(child = f.copy(child = child))
+  }
+
+  private def hasConflictingAttrsWithSubquery(e: Expression, child: LogicalPlan): Boolean = {
+    SubqueryExpression.hasInOrCorrelatedExistsSubquery(e) &&
+      child.outputSet.intersect(e.references).nonEmpty
   }
 }
 
