@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.DoubleType
 
-class ScanOperationSuite extends SparkFunSuite {
+class PhysicalOperationSuite extends SparkFunSuite {
   private val relation = TestRelations.testRelation2
   private val colA = relation.output(0)
   private val colB = relation.output(1)
@@ -34,7 +34,7 @@ class ScanOperationSuite extends SparkFunSuite {
   test("Project with a non-deterministic field and a deterministic child Filter") {
     val project1 = Project(Seq(colB, aliasR), Filter(EqualTo(colA, Literal(1)), relation))
     project1 match {
-      case ScanOperation(projects, filters, _: LocalRelation) =>
+      case PhysicalOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
         assert(projects(0) === colB)
         assert(projects(1) === aliasR)
@@ -46,7 +46,7 @@ class ScanOperationSuite extends SparkFunSuite {
   test("Project with all deterministic fields but a non-deterministic child Filter") {
     val project2 = Project(Seq(colA, colB), Filter(EqualTo(aliasR, Literal(1)), relation))
     project2 match {
-      case ScanOperation(projects, filters, _: LocalRelation) =>
+      case PhysicalOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
         assert(projects(0) === colA)
         assert(projects(1) === colB)
@@ -58,7 +58,7 @@ class ScanOperationSuite extends SparkFunSuite {
   test("Project which has the same non-deterministic expression with its child Project") {
     val project3 = Project(Seq(colA, colR), Project(Seq(colA, aliasR), relation))
     project3 match {
-      case ScanOperation(projects, filters, _: Project) =>
+      case PhysicalOperation(projects, filters, _: Project) =>
         assert(projects.size === 2)
         assert(projects(0) === colA)
         assert(projects(1) === colR)
@@ -70,7 +70,7 @@ class ScanOperationSuite extends SparkFunSuite {
   test("Project which has different non-deterministic expressions with its child Project") {
     val project4 = Project(Seq(colA, aliasId), Project(Seq(colA, aliasR), relation))
     project4 match {
-      case ScanOperation(projects, _, _: LocalRelation) =>
+      case PhysicalOperation(projects, _, _: LocalRelation) =>
         assert(projects.size === 2)
         assert(projects(0) === colA)
         assert(projects(1) === aliasId)
@@ -81,7 +81,7 @@ class ScanOperationSuite extends SparkFunSuite {
   test("Filter with non-deterministic Project") {
     val filter1 = Filter(EqualTo(colA, Literal(1)), Project(Seq(colA, aliasR), relation))
     filter1 match {
-      case ScanOperation(projects, filters, _: Filter) =>
+      case PhysicalOperation(projects, filters, _: Filter) =>
         assert(projects.size === 2)
         assert(filters.isEmpty)
       case _ => assert(false)
@@ -92,7 +92,7 @@ class ScanOperationSuite extends SparkFunSuite {
     val filter2 = Filter(EqualTo(MonotonicallyIncreasingID(), Literal(1)),
       Project(Seq(colA, colB), relation))
     filter2 match {
-      case ScanOperation(projects, filters, _: LocalRelation) =>
+      case PhysicalOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
         assert(projects(0) === colA)
         assert(projects(1) === colB)
@@ -105,7 +105,7 @@ class ScanOperationSuite extends SparkFunSuite {
   test("Deterministic filter which has a non-deterministic child Filter") {
     val filter3 = Filter(EqualTo(colA, Literal(1)), Filter(EqualTo(aliasR, Literal(1)), relation))
     filter3 match {
-      case ScanOperation(projects, filters, _: Filter) =>
+      case PhysicalOperation(projects, filters, _: Filter) =>
         assert(filters.isEmpty)
       case _ => assert(false)
     }
