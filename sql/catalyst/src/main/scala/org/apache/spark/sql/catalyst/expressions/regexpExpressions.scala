@@ -852,7 +852,6 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
-
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
@@ -943,16 +942,11 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override def prettyName: String = "regexp_extract_all"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val arrayClass = classOf[GenericArrayData].getName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
     val matchResults = ctx.freshName("matchResults")
-
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
@@ -1106,12 +1100,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   override def prettyName: String = "regexp_instr"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
     val matcher = ctx.freshName("matcher")
-
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
