@@ -2080,4 +2080,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(errorClass = "INVALID_BUCKET_FILE", messageParameters = Array(path),
       cause = null)
   }
+
+  def invalidPatternError(funcName: String, pattern: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "regexp",
+        toSQLId(funcName),
+        pattern))
+  }
 }
