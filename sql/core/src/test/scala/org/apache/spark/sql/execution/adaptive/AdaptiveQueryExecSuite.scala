@@ -2607,7 +2607,7 @@ class AdaptiveQueryExecSuite
     def checkResultPartition(
         df: Dataset[Row],
         numShuffleReader: Int,
-       numPartition: Int): Unit = {
+        numPartition: Int): Unit = {
       df.collect()
       assert(collect(df.queryExecution.executedPlan) {
         case r: AQEShuffleReadExec => r
