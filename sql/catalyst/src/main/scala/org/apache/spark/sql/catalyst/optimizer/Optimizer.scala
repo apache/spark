@@ -750,8 +750,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
       p1.copy(child = f.copy(child = child))
   }
 
-  private def hasConflictingAttrsWithSubquery(predicate: Expression,
-    child: LogicalPlan): Boolean = {
+  private def hasConflictingAttrsWithSubquery(
+      predicate: Expression,
+      child: LogicalPlan): Boolean = {
     predicate.find {
       case s: SubqueryExpression if s.plan.outputSet.intersect(child.outputSet).nonEmpty => true
       case _ => false
