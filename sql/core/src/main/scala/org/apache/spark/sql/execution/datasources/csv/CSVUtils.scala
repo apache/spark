@@ -61,6 +61,18 @@ object CSVUtils {
   }
 
   /**
+   * Strip any CRLF character at the last column suffix if lineSeparator is not set.
+   * CRLF includes: \r, \n, and \r\n
+   */
+  def stripNewLineCharacter(rows: Array[String], options: CSVOptions): Array[String] = {
+    if (options.lineSeparator.isEmpty) {
+      rows.update(rows.length - 1,
+        rows.last.stripSuffix("\n").stripSuffix("\r"))
+    }
+    rows
+  }
+
+  /**
    * Generates a header from the given row which is null-safe and duplicate-safe.
    */
   def makeSafeHeader(
@@ -68,15 +80,16 @@ object CSVUtils {
       caseSensitive: Boolean,
       options: CSVOptions): Array[String] = {
     if (options.headerFlag) {
+      val fixedRow = stripNewLineCharacter(row, options)
       val duplicates = {
-        val headerNames = row.filter(_ != null)
+        val headerNames = fixedRow.filter(_ != null)
           // scalastyle:off caselocale
           .map(name => if (caseSensitive) name else name.toLowerCase)
         // scalastyle:on caselocale
         headerNames.diff(headerNames.distinct).distinct
       }
 
-      row.zipWithIndex.map { case (value, index) =>
+      fixedRow.zipWithIndex.map { case (value, index) =>
         if (value == null || value.isEmpty || value == options.nullValue) {
           // When there are empty strings or the values set in `nullValue`, put the
           // index as the suffix.

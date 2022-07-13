@@ -2331,6 +2331,22 @@ abstract class CSVSuite
     }
   }
 
+  test(s"CRLF will not be stripped if lineSep is set") {
+    Seq(true, false).foreach { multiLine =>
+      withTempDir { dir =>
+        val inputData = s"name,age\r\njack,30\r\ntom,18\r\n"
+        Files.write(new File(dir, "/data.csv").toPath, inputData.getBytes())
+        val df = spark.read
+          .options(
+            Map("header" -> "true", "multiLine" -> multiLine.toString, "lineSep" -> "\n"))
+          .csv(dir.getCanonicalPath)
+        assert(df.schema == new StructType()
+          .add(StructField("name", StringType)).add(StructField("age\r", StringType)))
+        checkAnswer(df, Seq(Row("jack", "30\r"), Row("tom", "18\r")))
+      }
+    }
+  }
+
   test("SPARK-26208: write and read empty data to csv file with headers") {
     withTempPath { path =>
       val df1 = spark.range(10).repartition(2).filter(_ < 0).map(_.toString).toDF
