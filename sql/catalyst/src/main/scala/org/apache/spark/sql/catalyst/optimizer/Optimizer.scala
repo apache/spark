@@ -637,7 +637,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
  *
  * p2 is usually inserted by this rule and useless, p1 could prune the columns anyway.
  */
-object ColumnPruning extends Rule[LogicalPlan] with PredicateHelper {
+object ColumnPruning extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
@@ -752,17 +752,10 @@ object ColumnPruning extends Rule[LogicalPlan] with PredicateHelper {
 
   private def hasConflictingAttrsWithSubquery(predicate: Expression,
     child: LogicalPlan): Boolean = {
-    def hasConflictingAttrs(s: SubqueryExpression): Boolean = {
-      s.references.intersect(child.outputSet).nonEmpty
-    }
-
-    splitConjunctivePredicates(predicate).exists { e =>
-      e.find {
-        case s: ListQuery if hasConflictingAttrs(s) => true
-        case s: Exists if e.children.nonEmpty && hasConflictingAttrs(s) => true
-        case _ => false
-      }.isDefined
-    }
+    predicate.find {
+      case s: SubqueryExpression if s.plan.outputSet.intersect(child.outputSet).nonEmpty => true
+      case _ => false
+    }.isDefined
   }
 }
 
