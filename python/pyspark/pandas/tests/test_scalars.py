@@ -36,8 +36,20 @@ class ScalarTest(PandasOnSparkTestCase):
         for scalar_name in missing_scalars:
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
-                "The pandas scalar `ps.{0}` is not reimplemented in pyspark.pandas; use `pd.{0}`.".format(
-                    scalar_name
-                ),
+                "The pandas scalar `ps.{0}` is not reimplemented"
+                " in pyspark.pandas; use `pd.{0}`.".format(scalar_name),
             ):
                 getattr(ps, scalar_name)
+
+
+if __name__ == "__main__":
+    import unittest
+    from pyspark.pandas.tests.test_scalars import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
