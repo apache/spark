@@ -1793,13 +1793,13 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("v1", "v2") {
       Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c").createTempView("v1")
       Seq((1, 3, 5), (4, 5, 6)).toDF("a", "b", "c").createTempView("v2")
-      
+
       def findProjectExec(df: DataFrame): Seq[ProjectExec] = {
         df.queryExecution.sparkPlan.collect {
           case p: ProjectExec => p
         }
       }
- 
+
       // project before filter cannot be removed since subquery has conflicting attributes
       // with outer reference
       val df1 = sql(
