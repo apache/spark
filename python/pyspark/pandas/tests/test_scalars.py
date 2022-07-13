@@ -36,8 +36,8 @@ class ScalarTest(PandasOnSparkTestCase):
         for scalar_name in missing_scalars:
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
-                "The pandas scalar `ps.{0}` is not reimplemented"
-                " in pyspark.pandas; use `pd.{0}`.".format(scalar_name),
+                "The scalar `ps.{0}` is not reimplemented in pyspark.pandas;"
+                " use `pd.{0}`.".format(scalar_name),
             ):
                 getattr(ps, scalar_name)
 
