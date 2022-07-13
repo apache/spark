@@ -57,6 +57,7 @@ __all__ = [
     "DataType",
     "NullType",
     "StringType",
+    "VarcharType",
     "BinaryType",
     "BooleanType",
     "DateType",
@@ -179,6 +180,29 @@ class StringType(AtomicType, metaclass=DataTypeSingleton):
     """String data type."""
 
     pass
+
+
+class VarcharType(AtomicType):
+    """Varchar data type
+
+    Parameters
+    ----------
+    length : int
+    the length limitation. Data writing will fail if the input
+    string exceeds the length limitation.
+    """
+
+    def __init__(self, length: int):
+        self.length = length
+
+    def simpleString(self) -> str:
+        return "varchar(%d)" % (self.length)
+
+    def jsonValue(self) -> str:
+        return "varchar(%d)" % (self.length)
+
+    def __repr__(self) -> str:
+        return "Varchar(%d)" % (self.length)
 
 
 class BinaryType(AtomicType, metaclass=DataTypeSingleton):
@@ -625,6 +649,10 @@ class StructType(DataType):
     >>> struct2 = StructType([StructField("f1", StringType(), True)])
     >>> struct1 == struct2
     True
+    >>> struct1 = StructType([StructField("f1", VarcharType(10), True)])
+    >>> struct2 = StructType([StructField("f1", VarcharType(10), True)])
+    >>> struct1 == struct2
+    True
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct2 = StructType([StructField("f1", StringType(), True),
     ...     StructField("f2", IntegerType(), False)])
@@ -944,6 +972,7 @@ class UserDefinedType(DataType):
 
 _atomic_types: List[Type[DataType]] = [
     StringType,
+    VarcharType,
     BinaryType,
     BooleanType,
     DecimalType,
@@ -987,6 +1016,8 @@ def _parse_datatype_string(s: str) -> DataType:
     StructType([StructField('a', ByteType(), True), StructField('b', DecimalType(16,8), True)])
     >>> _parse_datatype_string("a DOUBLE, b STRING")
     StructType([StructField('a', DoubleType(), True), StructField('b', StringType(), True)])
+    >>> _parse_datatype_string("a DOUBLE, b VARCHAR( 50 )")
+    StructType([StructField('a', DoubleType(), True), StructField('b', VarcharType(50), True)])
     >>> _parse_datatype_string("a: array< short>")
     StructType([StructField('a', ArrayType(ShortType(), True), True)])
     >>> _parse_datatype_string(" map<string , string > ")
@@ -1079,6 +1110,7 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     StructField("simpleMap", simple_maptype, True),
     ...     StructField("simpleStruct", simple_structtype, True),
     ...     StructField("boolean", BooleanType(), False),
+    ...     StructField("words", VarcharType(10), False),
     ...     StructField("withMeta", DoubleType(), False, {"name": "age"})])
     >>> check_datatype(complex_structtype)
 
@@ -1549,6 +1581,7 @@ _acceptable_types = {
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
     StringType: (str,),
+    VarcharType: (str,),
     BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),

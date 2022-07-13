@@ -38,8 +38,9 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     MapType,
     StringType,
-    StructType,
     StructField,
+    VarcharType,
+    StructType,
     ArrayType,
     DoubleType,
     LongType,
@@ -739,8 +740,12 @@ class TypesTests(ReusedSQLTestCase):
         from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
 
         for k, t in _all_atomic_types.items():
-            self.assertEqual(t(), _parse_datatype_string(k))
+            if k != "varchar":
+                self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
+        self.assertEqual(VarcharType(1), _parse_datatype_string("varchar(1)"))
+        self.assertEqual(DecimalType(10), _parse_datatype_string("varchar( 10   )"))
+        self.assertEqual(DecimalType(11), _parse_datatype_string("varchar( 11)"))
         self.assertEqual(DecimalType(1, 1), _parse_datatype_string("decimal(1  ,1)"))
         self.assertEqual(DecimalType(10, 1), _parse_datatype_string("decimal( 10,1 )"))
         self.assertEqual(DecimalType(11, 1), _parse_datatype_string("decimal(11,1)"))
@@ -1132,6 +1137,14 @@ class DataTypeTests(unittest.TestCase):
         t3 = DecimalType(8)
         self.assertNotEqual(t2, t3)
 
+    def test_varchar_type(self):
+        v1 = VarcharType(10)
+        v2 = VarcharType(20)
+        self.assertTrue(v2 is not v1)
+        self.assertNotEqual(v1, v2)
+        v3 = VarcharType(10)
+        self.assertEqual(v1, v3)
+
     # regression test for SPARK-10392
     def test_datetype_equal_zero(self):
         dt = DateType()
@@ -1211,6 +1224,13 @@ class DataTypeVerificationTests(unittest.TestCase):
             (1.0, StringType()),
             ([], StringType()),
             ({}, StringType()),
+            # Varchar
+            ("", VarcharType(10)),
+            ("", VarcharType(10)),
+            (1, VarcharType(10)),
+            (1.0, VarcharType(10)),
+            ([], VarcharType(10)),
+            ({}, VarcharType(10)),
             # UDT
             (ExamplePoint(1.0, 2.0), ExamplePointUDT()),
             # Boolean
