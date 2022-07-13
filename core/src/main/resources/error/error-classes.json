@@ -256,6 +256,18 @@
       "Key <keyValue> does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ]
   },
+  "MELT_REQUIRES_VALUE_COLUMNS" : {
+    "message" : [
+      "At least one non-id column is required to melt. All columns are id columns: [<ids>]"
+    ],
+    "sqlState" : "42000"
+  },
+  "MELT_VALUE_DATA_TYPE_MISMATCH" : {
+    "message" : [
+      "Melt value columns must have compatible data types, some data types are not compatible: [<types>]"
+    ],
+    "sqlState" : "42000"
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
       "Unknown static partition column: <columnName>"

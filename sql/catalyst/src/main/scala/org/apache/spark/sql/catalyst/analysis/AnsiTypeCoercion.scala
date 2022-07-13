@@ -74,6 +74,7 @@ import org.apache.spark.sql.types._
  */
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
+    MeltCoercion ::
     WidenSetOperationTypes ::
     new AnsiCombinedTypeCoercionRule(
       InConversion ::

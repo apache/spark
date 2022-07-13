@@ -55,6 +55,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     throw new AnalysisException(msg)
   }
 
+  protected def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
+    throw new AnalysisException(errorClass, messageParameters)
+  }
+
   protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
     exprs.flatMap(_.collect {
       case e: Generator => e
@@ -421,6 +425,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               }
             }
             metrics.foreach(m => checkMetric(m, m))
+
+          // see Analyzer.ResolveMelt
+          case m: Melt if m.childrenResolved && m.ids.forall(_.resolved) && m.values.isEmpty =>
+            failAnalysis("MELT_REQUIRES_VALUE_COLUMNS", Array(m.ids.mkString(", ")))
+          // see TypeCoercionBase.MeltCoercion
+          case m: Melt if m.values.nonEmpty && m.values.forall(_.resolved) && m.valueType.isEmpty =>
+            failAnalysis("MELT_VALUE_DATA_TYPE_MISMATCH", Array(
+              m.values.map(_.dataType).toSet.mkString(", ")
+            ))
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>

@@ -737,6 +737,21 @@ abstract class TypeCoercionBase {
   }
 
   /**
+   * Determines the value type of a [[Melt]].
+   */
+  object MeltCoercion extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan resolveOperators {
+        case m: Melt if m.values.nonEmpty && m.values.forall(_.resolved) && m.valueType.isEmpty =>
+          val valueDataType = findWiderTypeWithoutStringPromotion(m.values.map(_.dataType))
+          val values = valueDataType.map(valueType =>
+            m.values.map(value => Alias(Cast(value, valueType), value.name)())
+          ).getOrElse(m.values)
+          m.copy(valueType = valueDataType, values = values)
+      }
+  }
+
+  /**
    * Cast WindowFrame boundaries to the type they operate upon.
    */
   object WindowFrameCoercion extends TypeCoercionRule {
@@ -806,6 +821,7 @@ abstract class TypeCoercionBase {
 object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
+    MeltCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
       InConversion ::

@@ -1246,6 +1246,43 @@ case class Pivot(
 }
 
 /**
+ * A constructor for creating a melt, which will later be converted to an [[Expand]]
+ * during the query analysis.
+ *
+ * An empty values array will be replaced during analysis with all resolved outputs of child except
+ * the ids. This expansion allows to easily melt all non-id columns.
+ *
+ * @see `org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveMelt`
+ *
+ * The type of the value column is derived from all value columns during analysis once all values
+ * are resolved. All values' types have to be compatible, otherwise the result value column cannot
+ * be assigned the individual values and an AnalysisException is thrown.
+ *
+ * @see `org.apache.spark.sql.catalyst.analysis.TypeCoercionBase.MeltCoercion`
+ *
+ * @param ids                Id columns
+ * @param values             Value columns to melt
+ * @param variableColumnName Name of the variable column
+ * @param valueColumnName    Name of the value column
+ * @param valueType          Type of value column once known
+ * @param child              Child operator
+ */
+case class Melt(
+    ids: Seq[NamedExpression],
+    values: Seq[NamedExpression],
+    variableColumnName: String,
+    valueColumnName: String,
+    valueType: Option[DataType],
+    child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved = false // Melt will be replaced after being resolved.
+  override def output: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(MELT)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Melt = copy(child = newChild)
+}
+
+/**
  * A constructor for creating a logical limit, which is split into two separate logical nodes:
  * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
  *
