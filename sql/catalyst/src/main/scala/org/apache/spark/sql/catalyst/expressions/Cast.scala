@@ -512,6 +512,7 @@ case class Cast(
     TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
 
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
+  private val legacyCastDecimalToStr = SQLConf.get.getConf(SQLConf.LEGACY_DECIMAL_TO_STRING)
   // The brackets that are used in casting structs and maps to strings
   private val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
 
@@ -625,6 +626,8 @@ case class Cast(
     case DayTimeIntervalType(startField, endField) =>
       buildCast[Long](_, i => UTF8String.fromString(
         IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
+    case _: DecimalType if !legacyCastDecimalToStr =>
+      buildCast[Decimal](_, d => UTF8String.fromString(d.toPlainString))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -1475,6 +1478,8 @@ case class Cast(
             $evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style,
               (byte)${i.startField}, (byte)${i.endField}));
           """
+      case _: DecimalType if !legacyCastDecimalToStr =>
+        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
       case _ =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
