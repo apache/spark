@@ -117,13 +117,10 @@ case class LogicalRDD(
     }.asInstanceOf[SortOrder])
 
     val rewrittenOriginLogicalPlan = originLogicalPlan.map { plan =>
-      val newPlan = plan.transformAllExpressions {
-        case e: Attribute => rewrite.getOrElse(e, e)
+      val projectList = output.map { attr =>
+        Alias(attr, attr.name)(exprId = rewrite.getOrElse(attr, attr).exprId)
       }
-      // It's not feasible to transform column stats directly for all logical nodes. Instead, we
-      // invalidate the cache so that the column stats are recalculated with new expression IDs.
-      newPlan.invalidateStatsCache()
-      newPlan
+      Project(projectList, plan)
     }
 
     LogicalRDD(

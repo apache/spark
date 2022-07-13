@@ -2049,24 +2049,28 @@ class DataFrameSuite extends QueryTest
       rowCount = 2,
       size = Some(expectedSize))
 
-    val df = Dataset.ofRows(spark, statsPlan)
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val df = Dataset.ofRows(spark, statsPlan)
 
-    val logicalRDD = LogicalRDD(
-      df.logicalPlan.output, spark.sparkContext.emptyRDD, Some(df.queryExecution.analyzed),
-      isStreaming = true)(spark)
+      val logicalRDD = LogicalRDD(
+        df.logicalPlan.output, spark.sparkContext.emptyRDD, Some(df.queryExecution.analyzed),
+        isStreaming = true)(spark)
 
-    val stats = logicalRDD.computeStats()
-    val expectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
-      attributeStats = buildExpectedColumnStats(logicalRDD.output))
-    assert(stats === expectedStats)
+      val stats = logicalRDD.computeStats()
+      val expectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
+        attributeStats = buildExpectedColumnStats(logicalRDD.output))
+      assert(stats === expectedStats)
 
-    // This method re-issues expression IDs for all outputs. We expect column stats to be
-    // reflected as well.
-    val newLogicalRDD = logicalRDD.newInstance()
-    val newStats = newLogicalRDD.computeStats()
-    val newExpectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
-      attributeStats = buildExpectedColumnStats(newLogicalRDD.output))
-    assert(newStats === newExpectedStats)
+      // This method re-issues expression IDs for all outputs. We expect column stats to be
+      // reflected as well.
+      val newLogicalRDD = logicalRDD.newInstance()
+      val newStats = newLogicalRDD.computeStats()
+      // LogicalRDD.newInstance adds projection to originLogicalPlan, which triggers estimation
+      // on sizeInBytes. We don't intend to check the estimated value.
+      val newExpectedStats = Statistics(sizeInBytes = newStats.sizeInBytes, rowCount = Some(2),
+        attributeStats = buildExpectedColumnStats(newLogicalRDD.output))
+      assert(newStats === newExpectedStats)
+    }
   }
 
   test("SPARK-10656: completely support special chars") {
