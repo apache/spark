@@ -107,6 +107,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ConstantPropagation,
         FoldablePropagation,
         OptimizeIn,
+        OptimizeRand,
         ConstantFolding,
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
