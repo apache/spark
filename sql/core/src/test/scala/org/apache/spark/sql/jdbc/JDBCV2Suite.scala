@@ -28,7 +28,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
+import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -2216,5 +2218,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       JdbcDialects.unregisterDialect(testH2Dialect)
       JdbcDialects.registerDialect(H2Dialect)
     }
+  }
+
+  test("Test INDEX Using SQL") {
+    val loaded = Catalogs.load("h2", conf)
+    val jdbcTable = loaded.asInstanceOf[TableCatalog]
+      .loadTable(Identifier.of(Array("test"), "people"))
+      .asInstanceOf[SupportsIndex]
+    assert(jdbcTable != null)
+    assert(jdbcTable.indexExists("people_index") == false)
+
+    sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
+    assert(jdbcTable.indexExists("people_index"))
+
+    sql(s"DROP INDEX people_index ON TABLE h2.test.people")
+    assert(jdbcTable.indexExists("people_index") == false)
   }
 }

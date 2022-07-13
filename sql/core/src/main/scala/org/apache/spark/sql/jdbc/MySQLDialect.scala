@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuilder
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -150,7 +151,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   // https://dev.mysql.com/doc/refman/8.0/en/create-index.html
   override def createIndex(
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
@@ -159,7 +160,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
     // columnsProperties doesn't apply to MySQL so it is ignored
     s"CREATE INDEX ${quoteIdentifier(indexName)} $indexType ON" +
-      s" ${quoteIdentifier(tableName)} (${columnList.mkString(", ")})" +
+      s" ${quoteIdentifier(tableIdent.name())} (${columnList.mkString(", ")})" +
       s" ${indexPropertyList.mkString(" ")}"
   }
 
@@ -168,14 +169,15 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   override def indexExists(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
-    val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableName)} WHERE key_name = '$indexName'"
+    val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableIdent.name())} " +
+      s"WHERE key_name = '$indexName'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
-  override def dropIndex(indexName: String, tableName: String): String = {
-    s"DROP INDEX ${quoteIdentifier(indexName)} ON $tableName"
+  override def dropIndex(indexName: String, tableIdent: Identifier): String = {
+    s"DROP INDEX ${quoteIdentifier(indexName)} ON ${tableIdent.name()}"
   }
 
   // SHOW INDEX syntax

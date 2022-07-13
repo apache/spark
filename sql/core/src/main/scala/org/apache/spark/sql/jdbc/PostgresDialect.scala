@@ -24,6 +24,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -182,7 +183,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   // https://www.postgresql.org/docs/14/sql-createindex.html
   override def createIndex(
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
@@ -194,7 +195,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       indexProperties = "WITH (" + indexPropertyList.mkString(", ") + ")"
     }
 
-    s"CREATE INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableName)}" +
+    s"CREATE INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableIdent.name())}" +
       s" $indexType (${columnList.mkString(", ")}) $indexProperties"
   }
 
@@ -203,16 +204,16 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   override def indexExists(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
-    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '$tableName' AND" +
+    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '${tableIdent.name()}' AND" +
       s" indexname = '$indexName'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
   // DROP INDEX syntax
   // https://www.postgresql.org/docs/14/sql-dropindex.html
-  override def dropIndex(indexName: String, tableName: String): String = {
+  override def dropIndex(indexName: String, tableIdent: Identifier): String = {
     s"DROP INDEX ${quoteIdentifier(indexName)}"
   }
 
