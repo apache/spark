@@ -71,6 +71,7 @@ Output [1]: [d_date_sk#9]
 (10) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [cs_sold_date_sk#5]
 Right keys [1]: [d_date_sk#9]
+Join type: Inner
 Join condition: None
 
 (11) Project [codegen id : 3]
@@ -102,6 +103,7 @@ Condition : isnotnull((1.3 * avg(cs_ext_discount_amt))#15)
 (16) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [i_item_sk#1]
 Right keys [1]: [cs_item_sk#3]
+Join type: Inner
 Join condition: None
 
 (17) Project [codegen id : 4]
@@ -130,6 +132,7 @@ Condition : (isnotnull(cs_item_sk#16) AND isnotnull(cs_ext_discount_amt#17))
 (22) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [i_item_sk#1]
 Right keys [1]: [cs_item_sk#16]
+Join type: Inner
 Join condition: (cast(cs_ext_discount_amt#17 as decimal(14,7)) > (1.3 * avg(cs_ext_discount_amt))#15)
 
 (23) Project [codegen id : 6]
@@ -142,6 +145,7 @@ Output [1]: [d_date_sk#19]
 (25) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [cs_sold_date_sk#18]
 Right keys [1]: [d_date_sk#19]
+Join type: Inner
 Join condition: None
 
 (26) Project [codegen id : 6]

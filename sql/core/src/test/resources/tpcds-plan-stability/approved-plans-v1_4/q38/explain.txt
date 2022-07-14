@@ -69,6 +69,7 @@ Output [2]: [d_date_sk#4, d_date#5]
 (5) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#2]
 Right keys [1]: [d_date_sk#4]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 3]
@@ -96,6 +97,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_customer_sk#1]
 Right keys [1]: [c_customer_sk#6]
+Join type: Inner
 Join condition: None
 
 (12) Project [codegen id : 3]
@@ -141,6 +143,7 @@ Output [2]: [d_date_sk#11, d_date#12]
 (20) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [cs_sold_date_sk#10]
 Right keys [1]: [d_date_sk#11]
+Join type: Inner
 Join condition: None
 
 (21) Project [codegen id : 6]
@@ -153,6 +156,7 @@ Output [3]: [c_customer_sk#13, c_first_name#14, c_last_name#15]
 (23) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [cs_bill_customer_sk#9]
 Right keys [1]: [c_customer_sk#13]
+Join type: Inner
 Join condition: None
 
 (24) Project [codegen id : 6]
@@ -184,6 +188,7 @@ Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), 
 (29) BroadcastHashJoin [codegen id : 12]
 Left keys [6]: [coalesce(c_last_name#8, ), isnull(c_last_name#8), coalesce(c_first_name#7, ), isnull(c_first_name#7), coalesce(d_date#5, 1970-01-01), isnull(d_date#5)]
 Right keys [6]: [coalesce(c_last_name#15, ), isnull(c_last_name#15), coalesce(c_first_name#14, ), isnull(c_first_name#14), coalesce(d_date#12, 1970-01-01), isnull(d_date#12)]
+Join type: LeftSemi
 Join condition: None
 
 (30) Scan parquet spark_catalog.default.web_sales
@@ -207,6 +212,7 @@ Output [2]: [d_date_sk#18, d_date#19]
 (34) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [ws_sold_date_sk#17]
 Right keys [1]: [d_date_sk#18]
+Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 10]
@@ -219,6 +225,7 @@ Output [3]: [c_customer_sk#20, c_first_name#21, c_last_name#22]
 (37) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [ws_bill_customer_sk#16]
 Right keys [1]: [c_customer_sk#20]
+Join type: Inner
 Join condition: None
 
 (38) Project [codegen id : 10]
@@ -250,6 +257,7 @@ Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), 
 (43) BroadcastHashJoin [codegen id : 12]
 Left keys [6]: [coalesce(c_last_name#8, ), isnull(c_last_name#8), coalesce(c_first_name#7, ), isnull(c_first_name#7), coalesce(d_date#5, 1970-01-01), isnull(d_date#5)]
 Right keys [6]: [coalesce(c_last_name#22, ), isnull(c_last_name#22), coalesce(c_first_name#21, ), isnull(c_first_name#21), coalesce(d_date#19, 1970-01-01), isnull(d_date#19)]
+Join type: LeftSemi
 Join condition: None
 
 (44) Project [codegen id : 12]
