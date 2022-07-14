@@ -98,23 +98,22 @@ class Table(
     val isTemporary: Boolean)
   extends DefinedByConstructorParams {
 
+  if (namespace != null) {
+    assert(namespace.forall(_ != null))
+  }
+
   def this(
       name: String,
       database: String,
       description: String,
       tableType: String,
       isTemporary: Boolean) = {
-    this(name, null, Array(database), description, tableType, isTemporary)
+    this(name, null, if (database != null) Array(database) else null,
+      description, tableType, isTemporary)
   }
 
   def database: String = {
-    if (namespace == null) {
-      null
-    } else if (namespace.length == 1) {
-      namespace(0)
-    } else {
-      null
-    }
+    if (namespace != null && namespace.length == 1) namespace(0) else null
   }
 
   override def toString: String = {
@@ -185,13 +184,18 @@ class Function(
     val isTemporary: Boolean)
   extends DefinedByConstructorParams {
 
+  if (namespace != null) {
+    assert(namespace.forall(_ != null))
+  }
+
   def this(
       name: String,
       database: String,
       description: String,
       className: String,
       isTemporary: Boolean) = {
-    this(name, null, Array(database), description, className, isTemporary)
+    this(name, null, if (database != null) Array(database) else null,
+      description, className, isTemporary)
   }
 
   def database: String = {
