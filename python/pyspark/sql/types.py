@@ -1145,7 +1145,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return DayTimeIntervalType(first_field, second_field)
         elif _LENGTH_VARCHAR.match(json_value):
             m = _LENGTH_VARCHAR.match(json_value)
-            return VarcharType(int(m.group(1)))
+            return VarcharType(int(m.group(1)))  # type: ignore[union-attr]
         else:
             raise ValueError("Could not parse datatype: %s" % json_value)
     else:

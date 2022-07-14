@@ -38,8 +38,8 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     MapType,
     StringType,
-    StructField,
     VarcharType,
+    StructField,
     StructType,
     ArrayType,
     DoubleType,
@@ -1288,6 +1288,8 @@ class DataTypeVerificationTests(unittest.TestCase):
         failure_spec = [
             # String (match anything but None)
             (None, StringType(), ValueError),
+            # VarcharType (match anything but None)
+            (None, VarcharType(10), ValueError),
             # UDT
             (ExamplePoint(1.0, 2.0), PythonOnlyUDT(), ValueError),
             # Boolean
