@@ -915,7 +915,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   /**
    * Reload application attempts local paths information.
    */
-  private List<byte[]> reloadActiveAppAttemptsPathInfo(DB db) throws IOException {
+  @VisibleForTesting
+  List<byte[]> reloadActiveAppAttemptsPathInfo(DB db) throws IOException {
     List<byte[]> dbKeysToBeRemoved = new ArrayList<>();
     if (db != null) {
       DBIterator itr = db.iterator();
@@ -936,6 +937,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                   AppAttemptId existingAppAttemptId = new AppAttemptId(
                       existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId);
                   try {
+                    // Add the former outdated DB key to deletion list
                     dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(existingAppAttemptId));
                   } catch (IOException e) {
                     logger.error("Failed to get the DB key for {}", existingAppAttemptId, e);
@@ -944,6 +946,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 return new AppShuffleInfo(
                     appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
               } else {
+                // Add the current DB key to deletion list as it is outdated
                 dbKeysToBeRemoved.add(entry.getKey());
                 return existingAppShuffleInfo;
               }

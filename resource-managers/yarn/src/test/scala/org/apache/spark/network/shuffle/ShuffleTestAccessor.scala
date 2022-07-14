@@ -58,13 +58,6 @@ object ShuffleTestAccessor {
     }
   }
 
-  def getAppShuffleInfoAfterDBReload(
-      mergeManager: RemoteBlockPushResolver,
-      db: DB): ConcurrentMap[String, RemoteBlockPushResolver.AppShuffleInfo] = {
-    reloadAppShuffleInfo(mergeManager, db)
-    mergeManager.appsShuffleInfo
-  }
-
   def getAppsShuffleInfo(
     mergeManager: RemoteBlockPushResolver
   ): ConcurrentMap[String, RemoteBlockPushResolver.AppShuffleInfo] = {
@@ -97,7 +90,7 @@ object ShuffleTestAccessor {
     }
   }
 
-  def createMergeShuffleFileManagerForTestWithNoDBCleanup(
+  def createMergeShuffleFileManagerForTestWithNoOpAppShuffleInfoDBCleanup(
     transportConf: TransportConf,
     file: File): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
@@ -107,6 +100,34 @@ object ShuffleTestAccessor {
       }
       override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
         task.run()
+      }
+    }
+  }
+
+  def createMergeShuffleFileManagerForTestWithNoDBCleanup(
+    transportConf: TransportConf,
+    file: File): MergedShuffleFileManager = {
+    new RemoteBlockPushResolver(transportConf, file) {
+      override private[shuffle] def removeAppAttemptPathInfoFromDB(
+        appId: String, attemptId: Int): Unit = {
+        // NoOp
+      }
+      override private[shuffle] def removeAppShuffleInfoFromDB(
+        appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo): Unit = {
+        // NoOp
+      }
+      override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
+        task.run()
+      }
+    }
+  }
+
+  def createMergeShuffleFileManagerForTestWithNoDBCleanupDuringDBReload(
+    transportConf: TransportConf,
+    file: File): MergedShuffleFileManager = {
+    new RemoteBlockPushResolver(transportConf, file) {
+      override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
+        // NoOp
       }
     }
   }
@@ -168,11 +189,20 @@ object ShuffleTestAccessor {
     partitionInfo.closeAllFilesAndDeleteIfNeeded(false)
   }
 
+  def clearAppShuffleInfo(mergeMgr: RemoteBlockPushResolver): Unit = {
+    mergeMgr.appsShuffleInfo.clear()
+  }
+
   def reloadAppShuffleInfo(
       mergeMgr: RemoteBlockPushResolver, db: DB): ConcurrentMap[String, AppShuffleInfo] = {
     mergeMgr.appsShuffleInfo.clear()
     mergeMgr.reloadAndCleanUpAppShuffleInfo(db)
     mergeMgr.appsShuffleInfo
+  }
+
+  def reloadActiveAppAttemptsPathInfoAndGetTheCountOfKeysToBeDeleted(
+      mergeMgr: RemoteBlockPushResolver, db: DB): Int = {
+    mergeMgr.reloadActiveAppAttemptsPathInfo(db).size()
   }
 
   def reloadRegisteredExecutors(
