@@ -746,6 +746,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
       if p2.outputSet.subsetOf(child.outputSet) &&
         // We only remove attribute-only project.
         p2.projectList.forall(_.isInstanceOf[AttributeReference]) &&
+        // We can't remove project when the child has conflicting attributes
+        // with the subquery in filter predicate
         !hasConflictingAttrsWithSubquery(e, child) =>
       p1.copy(child = f.copy(child = child))
   }

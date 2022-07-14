@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ProjectExec, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
@@ -1794,9 +1794,9 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c").createTempView("v1")
       Seq((1, 3, 5), (4, 5, 6)).toDF("a", "b", "c").createTempView("v2")
 
-      def findProjectExec(df: DataFrame): Seq[ProjectExec] = {
-        df.queryExecution.sparkPlan.collect {
-          case p: ProjectExec => p
+      def findProject(df: DataFrame): Seq[Project] = {
+        df.queryExecution.optimizedPlan.collect {
+          case p: Project => p
         }
       }
 
@@ -1820,7 +1820,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
          |)
          |""".stripMargin)
       checkAnswer(df1, Row(1, 2, 5))
-      assert(findProjectExec(df1).size == 4)
+      assert(findProject(df1).size == 4)
 
       // project before filter can be removed when there are no conflicting attributes
       val df2 = sql(
@@ -1841,7 +1841,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
          |""".stripMargin)
 
       checkAnswer(df2, Row(5, 5))
-      assert(findProjectExec(df2).size == 3)
+      assert(findProject(df2).size == 3)
     }
   }
 }
