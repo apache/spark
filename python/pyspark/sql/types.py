@@ -202,7 +202,7 @@ class VarcharType(AtomicType):
         return "varchar(%d)" % (self.length)
 
     def __repr__(self) -> str:
-        return "Varchar(%d)" % (self.length)
+        return "VarcharType(%d)" % (self.length)
 
 
 class BinaryType(AtomicType, metaclass=DataTypeSingleton):
@@ -994,7 +994,7 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
-
+_LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 
@@ -1143,6 +1143,9 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             if first_field is not None and second_field is None:
                 return DayTimeIntervalType(first_field)
             return DayTimeIntervalType(first_field, second_field)
+        elif _LENGTH_VARCHAR.match(json_value):
+            m = _LENGTH_VARCHAR.match(json_value)
+            return VarcharType(int(m.group(1)))
         else:
             raise ValueError("Could not parse datatype: %s" % json_value)
     else:
@@ -1692,8 +1695,8 @@ def _make_type_verifier(
                 new_msg("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
             )
 
-    if isinstance(dataType, StringType):
-        # StringType can work with any types
+    if isinstance(dataType, StringType) or isinstance(dataType, VarcharType):
+        # StringType and VarcharType can work with any types
         def verify_value(obj: Any) -> None:
             pass
 

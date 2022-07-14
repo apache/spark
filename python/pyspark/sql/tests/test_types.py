@@ -744,8 +744,8 @@ class TypesTests(ReusedSQLTestCase):
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
         self.assertEqual(VarcharType(1), _parse_datatype_string("varchar(1)"))
-        self.assertEqual(DecimalType(10), _parse_datatype_string("varchar( 10   )"))
-        self.assertEqual(DecimalType(11), _parse_datatype_string("varchar( 11)"))
+        self.assertEqual(VarcharType(10), _parse_datatype_string("varchar( 10   )"))
+        self.assertEqual(VarcharType(11), _parse_datatype_string("varchar( 11)"))
         self.assertEqual(DecimalType(1, 1), _parse_datatype_string("decimal(1  ,1)"))
         self.assertEqual(DecimalType(10, 1), _parse_datatype_string("decimal( 10,1 )"))
         self.assertEqual(DecimalType(11, 1), _parse_datatype_string("decimal(11,1)"))
@@ -1033,6 +1033,7 @@ class TypesTests(ReusedSQLTestCase):
         instances = [
             NullType(),
             StringType(),
+            VarcharType(10),
             BinaryType(),
             BooleanType(),
             DateType(),
