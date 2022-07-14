@@ -239,12 +239,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
 
   def pushDownAggregatesCompletely(plan: LogicalPlan): LogicalPlan = plan.transform {
     case Project(_, sHolder: ScanBuilderHolder) if sHolder.pushedAggregation.isDefined =>
-      parsePushedAggregation(sHolder)
+      rewriteAggregationAsProject(sHolder)
     case sHolder: ScanBuilderHolder if sHolder.pushedAggregation.isDefined =>
-      parsePushedAggregation(sHolder)
+      rewriteAggregationAsProject(sHolder)
   }
 
-  private def parsePushedAggregation(sHolder: ScanBuilderHolder): LogicalPlan = {
+  private def rewriteAggregationAsProject(sHolder: ScanBuilderHolder): LogicalPlan = {
     val pushedAggregation = sHolder.pushedAggregation.get
     val (groupAttrs, aggOutput, groupByExprToOutputOrdinal, scanRelation) =
       readScanSchema(sHolder, pushedAggregation.groupingExpressions,
@@ -342,7 +342,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
          |Pushed Group by:
          | ${pushedAggregates.get.groupByExpressions.mkString(", ")}
          |Output: ${output.mkString(", ")}
-                      """.stripMargin)
+       """.stripMargin)
 
     val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregates)
     val scanRelation =
