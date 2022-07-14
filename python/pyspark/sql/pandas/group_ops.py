@@ -15,18 +15,20 @@
 # limitations under the License.
 #
 import sys
-from typing import List, Union, TYPE_CHECKING
+from typing import List, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import StructType
+from pyspark.sql.streaming.state import GroupStateTimeout
+from pyspark.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
         GroupedMapPandasUserDefinedFunction,
         PandasGroupedMapFunction,
+        PandasGroupedMapFunctionWithState,
         PandasCogroupedMapFunction,
     )
     from pyspark.sql.group import GroupedData
@@ -214,6 +216,45 @@ class PandasGroupedOpsMixin:
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.session)
+
+    def applyInPandasWithState(
+        self,
+        func: "PandasGroupedMapFunctionWithState",
+        outputStructType: Union[StructType, str],
+        stateStructType: Union[StructType, str],
+        outputMode: str,
+        timeoutConf: str,
+    ) -> DataFrame:
+        from pyspark.sql import GroupedData
+        from pyspark.sql.functions import pandas_udf
+
+        assert isinstance(self, GroupedData)
+        assert timeoutConf in [
+            GroupStateTimeout.NoTimeout,
+            GroupStateTimeout.ProcessingTimeTimeout,
+            GroupStateTimeout.EventTimeTimeout,
+        ]
+
+        if isinstance(outputStructType, str):
+            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+        if isinstance(stateStructType, str):
+            stateStructType = cast(StructType, _parse_datatype_string(stateStructType))
+
+        udf = pandas_udf(
+            func,  # type: ignore[call-overload]
+            returnType=outputStructType,
+            functionType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        )
+        df = self._df
+        udf_column = udf(*[df[col] for col in df.columns])
+        jdf = self._jgd.applyInPandasWithState(
+            udf_column._jc.expr(),
+            self.session._jsparkSession.parseDataType(outputStructType.json()),
+            self.session._jsparkSession.parseDataType(stateStructType.json()),
+            outputMode,
+            timeoutConf,
+        )
         return DataFrame(jdf, self.session)
 
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":

@@ -49,7 +49,7 @@ package object state {
     }
 
     /** Map each partition of an RDD along with data in a [[StateStore]]. */
-    private[streaming] def mapPartitionsWithStateStore[U: ClassTag](
+    def mapPartitionsWithStateStore[U: ClassTag](
         stateInfo: StatefulOperatorStateInfo,
         keySchema: StructType,
         valueSchema: StructType,

@@ -23,6 +23,7 @@ import sys
 import time
 from inspect import currentframe, getframeinfo, getfullargspec
 import importlib
+import json
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -62,6 +63,7 @@ from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
+from pyspark.sql.streaming.state import GroupStateImpl
 
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -207,6 +209,37 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
     return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
 
 
+def wrap_grouped_map_pandas_udf_with_state(f, return_type, state):
+    def wrapped(key_series, value_series):
+        import pandas as pd
+
+        key = tuple(s[0] for s in key_series)
+        if state.hasTimedOut:
+            # Timeout processing pass empty iterator. Here we return an empty DataFrame instead.
+            result = f(key, pd.DataFrame(columns=pd.concat(value_series, axis=1).columns), state)
+        else:
+            result = f(key, pd.concat(value_series, axis=1), state)
+
+        if not isinstance(result, pd.DataFrame):
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "pandas.DataFrame, but is {}".format(type(result))
+            )
+        # the number of columns of result have to match the return type
+        # but it is fine for result to have no columns at all if it is empty
+        if not (
+            len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
+        ):
+            raise RuntimeError(
+                "Number of columns of the returned pandas.DataFrame "
+                "doesn't match specified schema. "
+                "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+            )
+        return result
+
+    return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
+
+
 def wrap_grouped_agg_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
@@ -281,7 +314,7 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
     return lambda *a: (wrapped(*a), arrow_return_type)
 
 
-def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
+def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, state=None):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
     chained_func = None
@@ -311,6 +344,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
+        return arg_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type, state)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec)
@@ -327,6 +362,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
 def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
+    # Used for state support in Structured Streaming.
+    state = None
+
     if eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -336,6 +374,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
     ):
 
         # Load conf used for pandas_udf evaluation
@@ -344,6 +383,21 @@ def read_udfs(pickleSer, infile, eval_type):
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
+
+        if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
+            # 1. State properties
+            properties = json.loads(utf8_deserializer.loads(infile))
+
+            # 2. State key
+            length = read_int(infile)
+            row = None
+            if length > 0:
+                row = pickleSer.loads(infile.read(length))
+            # 3. Schema for state key
+            key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
+            properties["optionalValue"] = row
+
+            state = GroupStateImpl(keySchema=key_schema, **properties)
 
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
@@ -438,7 +492,7 @@ def read_udfs(pickleSer, infile, eval_type):
                     )
 
         # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, None, ser, ser, state
 
     def extract_key_value_indexes(grouped_arg_offsets):
         """
@@ -486,6 +540,23 @@ def read_udfs(pickleSer, infile, eval_type):
             vals = [a[o] for o in parsed_offsets[0][1]]
             return f(keys, vals)
 
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        # See PythonFlatMapGroupsWithStateExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, state=state
+        )
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+
+        def mapper(a):
+            keys = [a[o] for o in parsed_offsets[0][0]]
+            vals = a  # it's always all series.
+            return f(keys, vals)
+
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
@@ -519,11 +590,12 @@ def read_udfs(pickleSer, infile, eval_type):
         return map(mapper, it)
 
     # profiling is not supported for UDF
-    return func, None, ser, ser
+    return func, None, ser, ser, state
 
 
 def main(infile, outfile):
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
+    state = None
     try:
         if faulthandler_log_path:
             faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
@@ -585,6 +657,7 @@ def main(infile, outfile):
                 )
 
         # initialize global state
+        state = None
         taskContext = None
         if isBarrier:
             taskContext = BarrierTaskContext._getOrCreate()
@@ -667,7 +740,9 @@ def main(infile, outfile):
         if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
         else:
-            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
+            func, profiler, deserializer, serializer, state = read_udfs(
+                pickleSer, infile, eval_type
+            )
 
         init_time = time.time()
 
@@ -722,6 +797,18 @@ def main(infile, outfile):
 
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
+
+    # Send GroupState back to JVM if exists.
+    if state is not None:
+        # 1. Send JSON-serialized GroupState
+        write_with_length(state.json().encode("utf-8"), outfile)
+
+        # 2. Send pickled Row.
+        if state._value is None:
+            write_int(0, outfile)
+        else:
+            write_with_length(pickleSer.dumps(state._key_schema.toInternal(state._value)), outfile)
+
     write_int(len(_accumulatorRegistry), outfile)
     for (aid, accum) in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)
