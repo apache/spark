@@ -9,6 +9,8 @@ create temporary view data as select * from values
   (3, 2)
   as data(a, b);
 
+select * from data order by 1 desc, 2;
+
 -- mix ordinal and column name
 select * from data order by 1 desc, b desc;
 
