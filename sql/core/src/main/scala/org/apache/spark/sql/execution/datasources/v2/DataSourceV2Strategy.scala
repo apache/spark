@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDelete, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
@@ -502,8 +502,28 @@ private[sql] object DataSourceV2Strategy {
 
   private def translateLeafNodeFilterV2(predicate: Expression): Option[Predicate] = {
     predicate match {
-      case PushablePredicate(expr) => Some(expr)
+      case PushablePredicate(expr) =>
+        if (expr.children().length == 2) {
+          expr.children()(0) match {
+            case LiteralValue(_, _) =>
+              Some(new Predicate(flipComparisonFilterName(expr.name()),
+                Array(expr.children()(1), expr.children()(0))))
+            case _ => Some(expr)
+          }
+        } else {
+          Some(expr)
+        }
       case _ => None
+    }
+  }
+
+  private def flipComparisonFilterName(filterName: String): String = {
+    filterName match {
+      case ">" => "<"
+      case "<" => ">"
+      case ">=" => "<="
+      case "<=" => ">="
+      case _ => filterName
     }
   }
 
