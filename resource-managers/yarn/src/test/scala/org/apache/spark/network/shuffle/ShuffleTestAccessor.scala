@@ -65,7 +65,7 @@ object ShuffleTestAccessor {
     mergeManager.appsShuffleInfo
   }
 
-  def getAppShuffleInfo(
+  def getAppsShuffleInfo(
     mergeManager: RemoteBlockPushResolver
   ): ConcurrentMap[String, RemoteBlockPushResolver.AppShuffleInfo] = {
     mergeManager.appsShuffleInfo
@@ -101,10 +101,9 @@ object ShuffleTestAccessor {
     transportConf: TransportConf,
     file: File): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
-      override private[shuffle] def closeAndDeletePartitions(
-          appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo,
-          cleanupLocalDirs: Boolean): Unit = {
-        super.closeAndDeletePartitions(appShuffleInfo, cleanupLocalDirs)
+      override private[shuffle] def removeAppShuffleInfoFromDB(
+          appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo): Unit = {
+        // NoOp
       }
       override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
         task.run()

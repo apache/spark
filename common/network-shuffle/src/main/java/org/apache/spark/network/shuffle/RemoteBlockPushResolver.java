@@ -360,11 +360,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AtomicReference<AppShuffleInfo> ref = new AtomicReference<>(null);
     appsShuffleInfo.compute(appId, (id, info) -> {
       if (null != info) {
-        try{
-          removeAppAttemptPathInfoFromDB(info.appId, info.attemptId);
-        } catch (Exception e) {
-          logger.error("Error deleting {} from application paths info in DB",
-              new AppAttemptId(info.appId, info.attemptId), e);
+        // Try cleaning up this application attempt local paths information
+        // and also the local paths information from former attempts in DB.
+        removeAppAttemptPathInfoFromDB(info.appId, info.attemptId);
+        if (info.attemptId != UNDEFINED_ATTEMPT_ID) {
+          for (int formerAttemptId = info.attemptId - 1; formerAttemptId >= 0; formerAttemptId--) {
+            removeAppAttemptPathInfoFromDB(info.appId, formerAttemptId);
+          }
         }
         ref.set(info);
       }
@@ -401,20 +403,28 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   /**
-   * Remove the application attempt local paths information from the DB.
+   * Remove the application attempt local paths information from the DB. This method is being
+   * invoked within the lock from the ConcurrentHashmap appsShuffleInfo on the specific
+   * applicationId.
    */
-  private void removeAppAttemptPathInfoFromDB(String appId, int attemptId) throws Exception{
+  @VisibleForTesting
+  void removeAppAttemptPathInfoFromDB(String appId, int attemptId) {
     AppAttemptId appAttemptId = new AppAttemptId(appId, attemptId);
     if (db != null) {
-      db.delete(getDbAppAttemptPathsKey(appAttemptId));
+      try{
+        db.delete(getDbAppAttemptPathsKey(appAttemptId));
+      } catch (Exception e) {
+        logger.error("Failed to remove the application attempt {} local path in DB",
+            appAttemptId, e);
+      }
     }
   }
 
   /**
    * Remove the finalized shuffle partitions information for an application attempt from the DB
-   * @param appShuffleInfo
    */
-  private void removeAppShuffleInfoFromDB(AppShuffleInfo appShuffleInfo) {
+  @VisibleForTesting
+  void removeAppShuffleInfoFromDB(AppShuffleInfo appShuffleInfo) {
     if (db != null) {
       appShuffleInfo.shuffles.forEach((shuffleId, shuffleInfo) ->
           removeAppShufflePartitionInfoFromDB(
@@ -740,8 +750,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                   mergeDir, executorInfo.subDirsPerLocalDir);
               // Clean up the outdated App Attempt local path info in the DB and
               // put the newly registered local path info from newer attempt into the DB.
-              writeNewAppAttemptPathInfoToDBAndRemoveOutdated(
-                  appId, attemptId, appShuffleInfo, appPathsInfo);
+              // Deletion or insertion may fail as of various reasons.
+              if (appShuffleInfo != null) {
+                removeAppAttemptPathInfoFromDB(appId, appShuffleInfo.attemptId);
+              }
+              writeAppPathsInfoToDb(appId, attemptId, appPathsInfo);
               appShuffleInfo =
                 new AppShuffleInfo(
                   appId, attemptId,
@@ -765,27 +778,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
     } else {
       logger.warn("ExecutorShuffleInfo does not have the expected merge directory information");
-    }
-  }
-
-  /**
-   * Remove the former application attempt local paths information from the DB and insert the
-   * local paths information from the newer application attempt. If the deletion fails, the
-   * insertion will also be skipped. This ensures that there will always be a single application
-   * attempt local path information in the DB.
-   */
-  private void writeNewAppAttemptPathInfoToDBAndRemoveOutdated(
-      String appId,
-      int newAttemptId,
-      AppShuffleInfo appShuffleInfo,
-      AppPathsInfo appPathsInfo) {
-    try{
-      if (appShuffleInfo != null) {
-        removeAppAttemptPathInfoFromDB(appId, appShuffleInfo.attemptId);
-      }
-      writeAppPathsInfoToDb(appId, newAttemptId, appPathsInfo);
-    } catch (Exception e) {
-      logger.error("Error deleting {} from application paths info in DB", appId, e);
     }
   }
 
@@ -835,7 +827,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         logger.error("Error saving active app shuffle partition {}", appAttemptShuffleMergeId, e);
       }
     }
-
   }
 
   /**
@@ -890,18 +881,42 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * Reload the DB to recover the meta data stored in the hashmap for merged shuffles.
    * The application attempts local paths information will be firstly reloaded, and then
    * the finalized shuffle merges will be updated.
+   * This method will also try deleting dangling key/values in DB, which includes:
+   * 1) Outdated application attempt local paths information as of some DB deletion failures
+   * 2) The deletion of finalized shuffle merges are triggered asynchronously, there can be cases
+   * that deletions miss the execution during restart. These finalized shuffle merges should have
+   * no relevant application attempts local paths information registered in the DB and the hashmap.
    */
   @VisibleForTesting
   void reloadAndCleanUpAppShuffleInfo(DB db) throws IOException {
     logger.info("Reload applications merged shuffle information from DB");
-    reloadActiveAppAttemptsPathInfo(db);
-    reloadFinalizedAppAttemptsShuffleMergeInfo(db);
+    List<byte[]> dbKeysToBeRemoved = new ArrayList<>();
+    dbKeysToBeRemoved.addAll(reloadActiveAppAttemptsPathInfo(db));
+    dbKeysToBeRemoved.addAll(reloadFinalizedAppAttemptsShuffleMergeInfo(db));
+    // Clean up invalid data stored in DB
+    submitCleanupTask(() ->
+        dbKeysToBeRemoved.forEach(
+            (key) -> {
+              try {
+                if (logger.isDebugEnabled()) {
+                  logger.debug("Removing dangling key {} in DB",
+                      parseDbAppAttemptShufflePartitionKey(
+                          new String(key, StandardCharsets.UTF_8)));
+                }
+                db.delete(key);
+              } catch (Exception e) {
+                logger.error("Error deleting dangling key {} in DB", key, e);
+              }
+            }
+        )
+    );
   }
 
   /**
    * Reload application attempts local paths information.
    */
-  private void reloadActiveAppAttemptsPathInfo(DB db) throws IOException {
+  private List<byte[]> reloadActiveAppAttemptsPathInfo(DB db) throws IOException {
+    List<byte[]> dbKeysToBeRemoved = new ArrayList<>();
     if (db != null) {
       DBIterator itr = db.iterator();
       itr.seek(APP_ATTEMPT_PATH_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
@@ -913,20 +928,35 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
         AppAttemptId appAttemptId = parseDbAppAttemptPathsKey(key);
         AppPathsInfo appPathsInfo = mapper.readValue(entry.getValue(), AppPathsInfo.class);
-        appsShuffleInfo.put(appAttemptId.appId, new AppShuffleInfo(
-            appAttemptId.appId, appAttemptId.attemptId, appPathsInfo));
+        appsShuffleInfo.compute(appAttemptId.appId,
+            (appId, existingAppShuffleInfo) -> {
+              if (existingAppShuffleInfo == null ||
+                  existingAppShuffleInfo.attemptId < appAttemptId.attemptId) {
+                if (existingAppShuffleInfo != null) {
+                  AppAttemptId existingAppAttemptId = new AppAttemptId(
+                      existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId);
+                  try {
+                    dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(existingAppAttemptId));
+                  } catch (IOException e) {
+                    logger.error("Failed to get the DB key for {}", existingAppAttemptId, e);
+                  }
+                }
+                return new AppShuffleInfo(
+                    appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
+              } else {
+                dbKeysToBeRemoved.add(entry.getKey());
+                return existingAppShuffleInfo;
+              }
+            });
       }
     }
+    return dbKeysToBeRemoved;
   }
 
   /**
    * Reload the finalized shuffle merges.
-   * Since the deletion of finalized shuffle merges are triggered asynchronously, there can be
-   * cases that deletions miss the execution during restart. Those dangling finalized shuffle merge
-   * keys in the DB will be cleaned up during this reload, if there are no relevant application
-   * attempts local paths information registered in the hashmap.
    */
-  private void reloadFinalizedAppAttemptsShuffleMergeInfo(DB db) throws IOException {
+  private List<byte[]> reloadFinalizedAppAttemptsShuffleMergeInfo(DB db) throws IOException {
     List<byte[]> dbKeysToBeRemoved = new ArrayList<>();
     if (db != null) {
       DBIterator itr = db.iterator();
@@ -967,23 +997,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
       }
     }
-    // Clean up invalid data stored in DB
-    submitCleanupTask(() ->
-        dbKeysToBeRemoved.forEach(
-            (key) -> {
-              try {
-                if (logger.isDebugEnabled()) {
-                  logger.debug("Removing dangling key {} in DB",
-                      parseDbAppAttemptShufflePartitionKey(
-                          new String(key, StandardCharsets.UTF_8)));
-                }
-                db.delete(key);
-              } catch (Exception e) {
-                logger.error("Error deleting dangling key {} in DB", key, e);
-              }
-            }
-        )
-    );
+    return dbKeysToBeRemoved;
   }
 
   /**
