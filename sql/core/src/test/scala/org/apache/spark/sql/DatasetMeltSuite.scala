@@ -259,7 +259,7 @@ class DatasetMeltSuite extends QueryTest
     }
     checkErrorClass(
       exception = e,
-      errorClass = "MELT_VALUE_DATA_TYPE_MISMATCH",
+      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       msg = "Melt value columns must have compatible data types, " +
         "some data types are not compatible: \\[StringType, IntegerType\\];(\n.*)*",
       matchMsg = true)
@@ -343,7 +343,7 @@ class DatasetMeltSuite extends QueryTest
     }
     checkErrorClass(
       exception = e3,
-      errorClass = "MELT_VALUE_DATA_TYPE_MISMATCH",
+      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       msg = "Melt value columns must have compatible data types, " +
         "some data types are not compatible: \\[IntegerType, StringType, LongType\\];(\n.*)*",
       matchMsg = true)
@@ -359,7 +359,7 @@ class DatasetMeltSuite extends QueryTest
     }
     checkErrorClass(
       exception = e4,
-      errorClass = "MELT_REQUIRES_VALUE_COLUMNS",
+      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       msg = "At least one non-id column is required to melt. All columns are id columns: " +
         "\\[id#\\d+, str1#\\d+, str2#\\d+, int1#\\d+, long1#\\d+L\\];(\n.*)*",
       matchMsg = true)
@@ -376,7 +376,7 @@ class DatasetMeltSuite extends QueryTest
     }
     checkErrorClass(
       exception = e5,
-      errorClass = "MELT_VALUE_DATA_TYPE_MISMATCH",
+      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       msg = "Melt value columns must have compatible data types, " +
         "some data types are not compatible: \\[IntegerType, StringType, LongType\\];(\n.*)*",
       matchMsg = true)
@@ -392,7 +392,7 @@ class DatasetMeltSuite extends QueryTest
     }
     checkErrorClass(
       exception = e6,
-      errorClass = "MELT_REQUIRES_VALUE_COLUMNS",
+      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       msg = "At least one non-id column is required to melt. " +
         "All columns are id columns: \\[id#\\d+, str1#\\d+, str2#\\d+\\];(\n.*)*",
       matchMsg = true)

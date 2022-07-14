@@ -428,10 +428,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           // see Analyzer.ResolveMelt
           case m: Melt if m.childrenResolved && m.ids.forall(_.resolved) && m.values.isEmpty =>
-            failAnalysis("MELT_REQUIRES_VALUE_COLUMNS", Array(m.ids.mkString(", ")))
+            failAnalysis("UNPIVOT_REQUIRES_VALUE_COLUMNS", Array(m.ids.mkString(", ")))
           // see TypeCoercionBase.MeltCoercion
           case m: Melt if m.values.nonEmpty && m.values.forall(_.resolved) && m.valueType.isEmpty =>
-            failAnalysis("MELT_VALUE_DATA_TYPE_MISMATCH", Array(
+            failAnalysis("UNPIVOT_VALUE_DATA_TYPE_MISMATCH", Array(
               m.values.map(_.dataType).toSet.mkString(", ")
             ))
 
