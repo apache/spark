@@ -551,27 +551,6 @@ case class FlatMapGroupsWithState(
     copy(child = newLeft, initialState = newRight)
 }
 
-case class UntypedFlatMapGroupsWithState(
-    func: (Row, Iterator[Row], LogicalGroupState[Row]) => Iterator[Row],
-    groupingAttributes: Seq[Attribute],
-    outputAttrs: Seq[Attribute],
-    stateType: StructType,
-    outputMode: OutputMode,
-    isMapGroupsWithState: Boolean = false,
-    timeout: GroupStateTimeout,
-    child: LogicalPlan) extends UnaryNode {
-  if (isMapGroupsWithState) {
-    assert(outputMode == OutputMode.Update)
-  }
-
-  override def output: Seq[Attribute] = outputAttrs
-
-  override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
-
-  override protected def withNewChildInternal(
-    newChild: LogicalPlan): UntypedFlatMapGroupsWithState = copy(child = newChild)
-}
-
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */
 object FlatMapGroupsInR {
   def apply(

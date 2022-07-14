@@ -56,7 +56,7 @@ trait FlatMapGroupsWithStateExecBase
   protected val batchTimestampMs: Option[Long]
   val eventTimeWatermark: Option[Long]
 
-  protected val isTimeoutEnabled: Boolean = timeoutConf != NoTimeout
+  private val isTimeoutEnabled = timeoutConf != NoTimeout
   protected val watermarkPresent: Boolean = child.output.exists {
     case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
     case _ => false
@@ -271,8 +271,7 @@ trait FlatMapGroupsWithStateExecBase
      */
     def processNewDataWithInitialState(
         childDataIter: Iterator[InternalRow],
-        initStateIter: Iterator[InternalRow]
-      ): Iterator[InternalRow] = {
+        initStateIter: Iterator[InternalRow]): Iterator[InternalRow] = {
 
       if (!childDataIter.hasNext && !initStateIter.hasNext) return Iterator.empty
 
@@ -284,7 +283,7 @@ trait FlatMapGroupsWithStateExecBase
 
       // Create a CoGroupedIterator that will group the two iterators together for every key group.
       new CoGroupedIterator(
-          groupedChildDataIter, groupedInitialStateIter, groupingAttributes).flatMap {
+        groupedChildDataIter, groupedInitialStateIter, groupingAttributes).flatMap {
         case (keyRow, valueRowIter, initialStateRowIter) =>
           val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
           var foundInitialStateForKey = false
@@ -299,8 +298,8 @@ trait FlatMapGroupsWithStateExecBase
           // We apply the values for the key after applying the initial state.
           callFunctionAndUpdateState(
             stateManager.getState(store, keyUnsafeRow),
-              valueRowIter,
-              hasTimedOut = false
+            valueRowIter,
+            hasTimedOut = false
           )
       }
     }
@@ -334,9 +333,9 @@ trait FlatMapGroupsWithStateExecBase
      * @param hasTimedOut Whether this function is being called for a key timeout
      */
     protected def callFunctionAndUpdateState(
-        stateData: StateData,
-        valueRowIter: Iterator[InternalRow],
-        hasTimedOut: Boolean): Iterator[InternalRow]
+         stateData: StateData,
+         valueRowIter: Iterator[InternalRow],
+         hasTimedOut: Boolean): Iterator[InternalRow]
   }
 }
 

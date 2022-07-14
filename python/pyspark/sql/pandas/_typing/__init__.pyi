@@ -22,19 +22,19 @@ from typing import (
     Iterable,
     NewType,
     Tuple,
-    Type,
     TypeVar,
     Union,
 )
 from typing_extensions import Protocol, Literal
 from types import FunctionType
 
-from pyspark.sql._typing import LiteralType
+import pyarrow
 from pandas.core.frame import DataFrame as PandasDataFrame
 from pandas.core.series import Series as PandasSeries
 from numpy import ndarray as NDArray
 
-import pyarrow
+from pyspark.sql._typing import LiteralType
+from pyspark.sql.streaming.state import GroupStateImpl
 
 ArrayLike = NDArray
 DataFrameLike = PandasDataFrame
@@ -51,6 +51,7 @@ PandasScalarIterUDFType = Literal[204]
 PandasMapIterUDFType = Literal[205]
 PandasCogroupedMapUDFType = Literal[206]
 ArrowMapIterUDFType = Literal[207]
+PandasGroupedMapUDFWithStateType = Literal[208]
 
 class PandasVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: DataFrameOrSeriesLike_) -> DataFrameOrSeriesLike_: ...
@@ -253,8 +254,10 @@ PandasScalarIterFunction = Union[
 
 PandasGroupedMapFunction = Union[
     Callable[[DataFrameLike], DataFrameLike],
-    Callable[[Any, DataFrameLike], DataFrameLike],
+    Callable[[Tuple, DataFrameLike], DataFrameLike],
 ]
+
+PandasGroupedMapFunctionWithState = Callable[[Tuple, DataFrameLike, GroupStateImpl], DataFrameLike]
 
 class PandasVariadicGroupedAggFunction(Protocol):
     def __call__(self, *_: SeriesLike) -> LiteralType: ...
