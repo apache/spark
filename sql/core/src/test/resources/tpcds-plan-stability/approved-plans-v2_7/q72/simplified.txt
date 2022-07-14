@@ -1,0 +1,116 @@
+TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_promo,promo]
+  WholeStageCodegen (15)
+    HashAggregate [i_item_desc,w_warehouse_name,d_week_seq,count] [count(1),no_promo,promo,total_cnt,count]
+      InputAdapter
+        Exchange [i_item_desc,w_warehouse_name,d_week_seq] #1
+          WholeStageCodegen (14)
+            HashAggregate [i_item_desc,w_warehouse_name,d_week_seq] [count,count]
+              Project [w_warehouse_name,i_item_desc,d_week_seq]
+                SortMergeJoin [cs_item_sk,cs_order_number,cr_item_sk,cr_order_number]
+                  InputAdapter
+                    WholeStageCodegen (11)
+                      Sort [cs_item_sk,cs_order_number]
+                        InputAdapter
+                          Exchange [cs_item_sk,cs_order_number] #2
+                            WholeStageCodegen (10)
+                              Project [cs_item_sk,cs_order_number,w_warehouse_name,i_item_desc,d_week_seq]
+                                BroadcastHashJoin [cs_promo_sk,p_promo_sk]
+                                  Project [cs_item_sk,cs_promo_sk,cs_order_number,w_warehouse_name,i_item_desc,d_week_seq]
+                                    BroadcastHashJoin [cs_ship_date_sk,d_date_sk,d_date,d_date]
+                                      Project [cs_ship_date_sk,cs_item_sk,cs_promo_sk,cs_order_number,w_warehouse_name,i_item_desc,d_date,d_week_seq]
+                                        BroadcastHashJoin [d_week_seq,inv_date_sk,d_week_seq,d_date_sk]
+                                          Project [cs_ship_date_sk,cs_item_sk,cs_promo_sk,cs_order_number,inv_date_sk,w_warehouse_name,i_item_desc,d_date,d_week_seq]
+                                            BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                              Project [cs_ship_date_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_sold_date_sk,inv_date_sk,w_warehouse_name,i_item_desc]
+                                                BroadcastHashJoin [cs_bill_hdemo_sk,hd_demo_sk]
+                                                  Project [cs_ship_date_sk,cs_bill_hdemo_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_sold_date_sk,inv_date_sk,w_warehouse_name,i_item_desc]
+                                                    BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
+                                                      Project [cs_ship_date_sk,cs_bill_cdemo_sk,cs_bill_hdemo_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_sold_date_sk,inv_date_sk,w_warehouse_name,i_item_desc]
+                                                        BroadcastHashJoin [cs_item_sk,i_item_sk]
+                                                          Project [cs_ship_date_sk,cs_bill_cdemo_sk,cs_bill_hdemo_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_sold_date_sk,inv_date_sk,w_warehouse_name]
+                                                            BroadcastHashJoin [inv_warehouse_sk,w_warehouse_sk]
+                                                              Project [cs_ship_date_sk,cs_bill_cdemo_sk,cs_bill_hdemo_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_sold_date_sk,inv_warehouse_sk,inv_date_sk]
+                                                                BroadcastHashJoin [cs_item_sk,inv_item_sk,inv_quantity_on_hand,cs_quantity]
+                                                                  Filter [cs_quantity,cs_item_sk,cs_bill_cdemo_sk,cs_bill_hdemo_sk,cs_ship_date_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet spark_catalog.default.catalog_sales [cs_ship_date_sk,cs_bill_cdemo_sk,cs_bill_hdemo_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_quantity,cs_sold_date_sk]
+                                                                          SubqueryBroadcast [d_date_sk] #1
+                                                                            BroadcastExchange #3
+                                                                              WholeStageCodegen (1)
+                                                                                Project [d_date_sk,d_date,d_week_seq]
+                                                                                  Filter [d_year,d_date_sk,d_week_seq,d_date]
+                                                                                    ColumnarToRow
+                                                                                      InputAdapter
+                                                                                        Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date,d_week_seq,d_year]
+                                                                  InputAdapter
+                                                                    BroadcastExchange #4
+                                                                      WholeStageCodegen (1)
+                                                                        Filter [inv_quantity_on_hand,inv_item_sk,inv_warehouse_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                                              InputAdapter
+                                                                BroadcastExchange #5
+                                                                  WholeStageCodegen (2)
+                                                                    Filter [w_warehouse_sk]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet spark_catalog.default.warehouse [w_warehouse_sk,w_warehouse_name]
+                                                          InputAdapter
+                                                            BroadcastExchange #6
+                                                              WholeStageCodegen (3)
+                                                                Filter [i_item_sk]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet spark_catalog.default.item [i_item_sk,i_item_desc]
+                                                      InputAdapter
+                                                        BroadcastExchange #7
+                                                          WholeStageCodegen (4)
+                                                            Project [cd_demo_sk]
+                                                              Filter [cd_marital_status,cd_demo_sk]
+                                                                ColumnarToRow
+                                                                  InputAdapter
+                                                                    Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status]
+                                                  InputAdapter
+                                                    BroadcastExchange #8
+                                                      WholeStageCodegen (5)
+                                                        Project [hd_demo_sk]
+                                                          Filter [hd_buy_potential,hd_demo_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_buy_potential]
+                                              InputAdapter
+                                                ReusedExchange [d_date_sk,d_date,d_week_seq] #3
+                                          InputAdapter
+                                            BroadcastExchange #9
+                                              WholeStageCodegen (7)
+                                                Filter [d_week_seq,d_date_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq]
+                                      InputAdapter
+                                        BroadcastExchange #10
+                                          WholeStageCodegen (8)
+                                            Filter [d_date,d_date_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]
+                                  InputAdapter
+                                    BroadcastExchange #11
+                                      WholeStageCodegen (9)
+                                        Filter [p_promo_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet spark_catalog.default.promotion [p_promo_sk]
+                  InputAdapter
+                    WholeStageCodegen (13)
+                      Sort [cr_item_sk,cr_order_number]
+                        InputAdapter
+                          Exchange [cr_item_sk,cr_order_number] #12
+                            WholeStageCodegen (12)
+                              Project [cr_item_sk,cr_order_number]
+                                Filter [cr_item_sk,cr_order_number]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.catalog_returns [cr_item_sk,cr_order_number,cr_returned_date_sk]

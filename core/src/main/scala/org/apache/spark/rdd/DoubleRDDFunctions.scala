@@ -19,6 +19,7 @@ package org.apache.spark.rdd
 
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
@@ -135,8 +136,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))
     }
     if (min.isNaN || max.isNaN || max.isInfinity || min.isInfinity ) {
-      throw new UnsupportedOperationException(
-        "Histogram on either an empty RDD or RDD containing +/-infinity or NaN")
+      throw SparkCoreErrors.histogramOnEmptyRDDOrContainingInfinityOrNaNError()
     }
     val range = if (min != max) {
       // Range.Double.inclusive(min, max, increment)
@@ -173,7 +173,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     if (buckets.length < 2) {
       throw new IllegalArgumentException("buckets array must have at least two elements")
     }
-    // The histogramPartition function computes the partail histogram for a given
+    // The histogramPartition function computes the partial histogram for a given
     // partition. The provided bucketFunction determines which bucket in the array
     // to increment or returns None if there is no bucket. This is done so we can
     // specialize for uniformly distributed buckets and save the O(log n) binary

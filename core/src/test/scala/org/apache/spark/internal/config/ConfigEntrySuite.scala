@@ -70,8 +70,8 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: fallback") {
     val conf = new SparkConf()
-    val parentConf = ConfigBuilder(testKey("parent")).intConf.createWithDefault(1)
-    val confWithFallback = ConfigBuilder(testKey("fallback")).fallbackConf(parentConf)
+    val parentConf = ConfigBuilder(testKey("parent1")).intConf.createWithDefault(1)
+    val confWithFallback = ConfigBuilder(testKey("fallback1")).fallbackConf(parentConf)
     assert(conf.get(confWithFallback) === 1)
     conf.set(confWithFallback, 2)
     assert(conf.get(parentConf) === 1)
@@ -94,6 +94,8 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(bytes) === 1024L)
     conf.set(bytes.key, "1k")
     assert(conf.get(bytes) === 1L)
+    conf.set(bytes.key, "2048")
+    assert(conf.get(bytes) === 2048)
   }
 
   test("conf entry: regex") {
@@ -155,30 +157,33 @@ class ConfigEntrySuite extends SparkFunSuite {
     val e1 = intercept[IllegalArgumentException] {
       conf.get(entry)
     }
-    assert(e1.getMessage == "value must be non-negative")
+    assert(e1.getMessage ===
+      s"'-1' in ${testKey("checkValue")} is invalid. value must be non-negative")
 
     val e2 = intercept[IllegalArgumentException] {
       createEntry(-1)
     }
-    assert(e2.getMessage == "value must be non-negative")
+    assert(e2.getMessage ===
+      s"'-1' in ${testKey("checkValue")} is invalid. value must be non-negative")
   }
 
   test("conf entry: valid values check") {
     val conf = new SparkConf()
-    val enum = ConfigBuilder(testKey("enum"))
+    val enumConf = ConfigBuilder(testKey("enum"))
       .stringConf
       .checkValues(Set("a", "b", "c"))
       .createWithDefault("a")
-    assert(conf.get(enum) === "a")
+    assert(conf.get(enumConf) === "a")
 
-    conf.set(enum, "b")
-    assert(conf.get(enum) === "b")
+    conf.set(enumConf, "b")
+    assert(conf.get(enumConf) === "b")
 
-    conf.set(enum, "d")
+    conf.set(enumConf, "d")
     val enumError = intercept[IllegalArgumentException] {
-      conf.get(enum)
+      conf.get(enumConf)
     }
-    assert(enumError.getMessage === s"The value of ${enum.key} should be one of a, b, c, but was d")
+    assert(enumError.getMessage ===
+      s"The value of ${enumConf.key} should be one of a, b, c, but was d")
   }
 
   test("conf entry: conversion error") {
@@ -287,6 +292,92 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(iConf) === 2)
     conf.remove(testKey("b"))
     assert(conf.get(iConf) === 3)
+  }
+
+  test("conf entry: prepend with default separator") {
+    val conf = new SparkConf()
+    val prependedKey = testKey("prepended1")
+    val prependedConf = ConfigBuilder(prependedKey).stringConf.createOptional
+    val derivedConf = ConfigBuilder(testKey("prepend1"))
+      .withPrepended(prependedKey)
+      .stringConf
+      .createOptional
+
+    conf.set(derivedConf, "1")
+    assert(conf.get(derivedConf) === Some("1"))
+
+    conf.set(prependedConf, "2")
+    assert(conf.get(derivedConf) === Some("2 1"))
+  }
+
+  test("conf entry: prepend with custom separator") {
+    val conf = new SparkConf()
+    val prependedKey = testKey("prepended2")
+    val prependedConf = ConfigBuilder(prependedKey).stringConf.createOptional
+    val derivedConf = ConfigBuilder(testKey("prepend2"))
+      .withPrepended(prependedKey, ",")
+      .stringConf
+      .createOptional
+
+    conf.set(derivedConf, "1")
+    assert(conf.get(derivedConf) === Some("1"))
+
+    conf.set(prependedConf, "2")
+    assert(conf.get(derivedConf) === Some("2,1"))
+  }
+
+  test("conf entry: prepend with fallback") {
+    val conf = new SparkConf()
+    val prependedKey = testKey("prepended3")
+    val prependedConf = ConfigBuilder(prependedKey).stringConf.createOptional
+    val derivedConf = ConfigBuilder(testKey("prepend3"))
+      .withPrepended(prependedKey)
+      .stringConf
+      .createOptional
+    val confWithFallback = ConfigBuilder(testKey("fallback2")).fallbackConf(derivedConf)
+
+    assert(conf.get(confWithFallback) === None)
+
+    conf.set(derivedConf, "1")
+    assert(conf.get(confWithFallback) === Some("1"))
+
+    conf.set(prependedConf, "2")
+    assert(conf.get(confWithFallback) === Some("2 1"))
+
+    conf.set(confWithFallback, Some("3"))
+    assert(conf.get(confWithFallback) === Some("3"))
+  }
+
+  test("conf entry: prepend should work only with string type") {
+    var i = 0
+    def testPrependFail(createConf: (String, String) => Unit): Unit = {
+      intercept[IllegalArgumentException] {
+        createConf(testKey(s"prependedFail$i"), testKey(s"prependFail$i"))
+      }.getMessage.contains("type must be string if prepend used")
+      i += 1
+    }
+
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).intConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).longConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).doubleConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).booleanConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).timeConf(TimeUnit.MILLISECONDS)
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).bytesConf(ByteUnit.BYTE)
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).regexConf
+    )
   }
 
   test("onCreate") {

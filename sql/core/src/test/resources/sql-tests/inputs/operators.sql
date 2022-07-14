@@ -22,6 +22,16 @@ select 5 / 0;
 select 5 / null;
 select null / 5;
 
+-- integral div
+select 5 div 2;
+select 5 div 0;
+select 5 div null;
+select null div 5;
+select cast(51 as decimal(10, 0)) div cast(2 as decimal(2, 0));
+select cast(5 as decimal(1, 0)) div cast(0 as decimal(2, 0));
+select cast(5 as decimal(1, 0)) div cast(null as decimal(2, 0));
+select cast(null as decimal(1, 0)) div cast(5 as decimal(2, 0));
+
 -- other arithmetics
 select 1 + 2;
 select 1 - 2;
@@ -30,6 +40,14 @@ select 5 % 3;
 select pmod(-7, 3);
 
 -- math functions
+select sec(1);
+select sec(null);
+select sec(0);
+select sec(-1);
+select csc(1);
+select csc(null);
+select csc(0);
+select csc(-1);
 select cot(1);
 select cot(null);
 select cot(0);
@@ -71,3 +89,17 @@ select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11);
 -- pmod
 select pmod(-7, 2), pmod(0, 2), pmod(7, 0), pmod(7, null), pmod(null, 2), pmod(null, null);
 select pmod(cast(3.13 as decimal), cast(0 as decimal)), pmod(cast(2 as smallint), cast(0 as smallint));
+
+-- width_bucket
+select width_bucket(5.35, 0.024, 10.06, 5);
+select width_bucket(5.35, 0.024, 10.06, 3 + 2);
+select width_bucket('5.35', '0.024', '10.06', '5');
+select width_bucket(5.35, 0.024, 10.06, 2.5);
+select width_bucket(5.35, 0.024, 10.06, 0.5);
+select width_bucket(null, 0.024, 10.06, 5);
+select width_bucket(5.35, null, 10.06, 5);
+select width_bucket(5.35, 0.024, null, -5);
+select width_bucket(5.35, 0.024, 10.06, null);
+select width_bucket(5.35, 0.024, 10.06, -5);
+select width_bucket(5.35, 0.024, 10.06, 9223372036854775807L); -- long max value
+select width_bucket(5.35, 0.024, 10.06, 9223372036854775807L - 1);

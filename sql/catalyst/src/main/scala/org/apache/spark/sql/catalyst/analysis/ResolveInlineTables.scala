@@ -20,16 +20,18 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.AliasHelper
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[LocalRelation]].
  */
-case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with AliasHelper {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    AlwaysProcess.fn, ruleId) {
     case table: UnresolvedInlineTable if table.expressionsResolved =>
       validateInputDimension(table)
       validateInputEvaluable(table)
@@ -64,7 +66,7 @@ case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with Cas
     table.rows.foreach { row =>
       row.foreach { e =>
         // Note that nondeterministic expressions are not supported since they are not foldable.
-        if (!e.resolved || !e.foldable) {
+        if (!e.resolved || !trimAliases(e).foldable) {
           e.failAnalysis(s"cannot evaluate expression ${e.sql} in inline table definition")
         }
       }

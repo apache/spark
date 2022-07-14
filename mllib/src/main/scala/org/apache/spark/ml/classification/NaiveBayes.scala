@@ -18,17 +18,23 @@
 package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+import org.apache.spark.util.VersionUtils
 
 /**
  * Params for Naive Bayes Classifiers.
@@ -48,16 +54,19 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
 
   /**
    * The model type which is a string (case-sensitive).
-   * Supported options: "multinomial" and "bernoulli".
+   * Supported options: "multinomial", "complement", "bernoulli", "gaussian".
    * (default = multinomial)
    * @group param
    */
   final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
-    "which is a string (case-sensitive). Supported options: multinomial (default) and bernoulli.",
+    "which is a string (case-sensitive). Supported options: multinomial (default), complement, " +
+    "bernoulli and gaussian.",
     ParamValidators.inArray[String](NaiveBayes.supportedModelTypes.toArray))
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
+
+  setDefault(smoothing -> 1.0, modelType -> NaiveBayes.Multinomial)
 }
 
 // scalastyle:off line.size.limit
@@ -71,7 +80,16 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
  * binary (0/1) data, it can also be used as Bernoulli NB
  * (see <a href="http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html">
  * here</a>).
- * The input feature values must be nonnegative.
+ * The input feature values for Multinomial NB and Bernoulli NB must be nonnegative.
+ * Since 3.0.0, it supports Complement NB which is an adaptation of the Multinomial NB. Specifically,
+ * Complement NB uses statistics from the complement of each class to compute the model's coefficients
+ * The inventors of Complement NB show empirically that the parameter estimates for CNB are more stable
+ * than those for Multinomial NB. Like Multinomial NB, the input feature values for Complement NB must
+ * be nonnegative.
+ * Since 3.0.0, it also supports Gaussian NB
+ * (see <a href="https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes">
+ * here</a>)
+ * which can handle continuous data.
  */
 // scalastyle:on line.size.limit
 @Since("1.5.0")
@@ -92,17 +110,15 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setSmoothing(value: Double): this.type = set(smoothing, value)
-  setDefault(smoothing -> 1.0)
 
   /**
    * Set the model type using a string (case-sensitive).
-   * Supported options: "multinomial" and "bernoulli".
+   * Supported options: "multinomial", "complement", "bernoulli", and "gaussian".
    * Default is "multinomial"
    * @group setParam
    */
   @Since("1.5.0")
   def setModelType(value: String): this.type = set(modelType, value)
-  setDefault(modelType -> NaiveBayes.Multinomial)
 
   /**
    * Sets the value of param [[weightCol]].
@@ -115,7 +131,7 @@ class NaiveBayes @Since("1.5.0") (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
-    trainWithLabelCheck(dataset, positiveLabel = true)
+    trainWithLabelCheck(dataset, nonNegativeLabel = true)
   }
 
   /**
@@ -126,81 +142,208 @@ class NaiveBayes @Since("1.5.0") (
    */
   private[spark] def trainWithLabelCheck(
       dataset: Dataset[_],
-      positiveLabel: Boolean): NaiveBayesModel = instrumented { instr =>
+      nonNegativeLabel: Boolean): NaiveBayesModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    if (positiveLabel && isDefined(thresholds)) {
-      val numClasses = getNumClasses(dataset)
-      instr.logNumClasses(numClasses)
-      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-        ".train() called with non-matching numClasses and thresholds.length." +
-        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
-    }
-
-    val modelTypeValue = $(modelType)
-    val requireValues: Vector => Unit = {
-      modelTypeValue match {
-        case Multinomial =>
-          requireNonnegativeValues
-        case Bernoulli =>
-          requireZeroOneBernoulliValues
-        case _ =>
-          // This should never happen.
-          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
-      }
-    }
-
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
       probabilityCol, modelType, smoothing, thresholds)
 
-    val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
-    instr.logNumFeatures(numFeatures)
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val validatedLabelCol = if (nonNegativeLabel) {
+      checkClassificationLabels($(labelCol), get(thresholds).map(_.length))
+    } else {
+      checkRegressionLabels($(labelCol))
+    }
+
+    val validatedWeightCol = checkNonNegativeWeights(get(weightCol))
+
+    val validatedfeaturesCol = $(modelType) match {
+      case Multinomial | Complement =>
+        val checkNonNegativeVector = udf { vector: Vector =>
+          vector match {
+            case dv: DenseVector => dv.values.forall(v => v >= 0 && !v.isInfinity)
+            case sv: SparseVector => sv.values.forall(v => v >= 0 && !v.isInfinity)
+          }
+        }
+        val vecCol = col($(featuresCol))
+        when(vecCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
+          .when(!checkNonNegativeVector(vecCol),
+            raise_error(concat(
+              lit("Vector values MUST NOT be Negative, NaN or Infinity, but got "),
+              vecCol.cast(StringType))))
+          .otherwise(vecCol)
+
+      case Bernoulli =>
+        val checkBinaryVector = udf { vector: Vector =>
+          vector match {
+            case dv: DenseVector => dv.values.forall(v => v == 0 || v == 1)
+            case sv: SparseVector => sv.values.forall(v => v == 0 || v == 1)
+          }
+        }
+        val vecCol = col($(featuresCol))
+        when(vecCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
+          .when(!checkBinaryVector(vecCol),
+            raise_error(concat(
+              lit("Vector values MUST be in {0, 1}, but got "),
+              vecCol.cast(StringType))))
+          .otherwise(vecCol)
+
+      case _ => checkNonNanVectors($(featuresCol))
+    }
+
+    val validated = dataset.select(
+      validatedLabelCol.as("_validated_label_"),
+      validatedWeightCol.as("_validated_weight_"),
+      validatedfeaturesCol.as("_validated_features_")
+    )
+
+    $(modelType) match {
+      case Bernoulli | Multinomial | Complement =>
+        trainDiscreteImpl(validated, instr)
+      case Gaussian =>
+        trainGaussianImpl(validated, instr)
+      case _ =>
+        // This should never happen.
+        throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
+    }
+  }
+
+  private def trainDiscreteImpl(
+      dataset: Dataset[_],
+      instr: Instrumentation): NaiveBayesModel = {
+    val spark = dataset.sparkSession
+    import spark.implicits._
+    val Array(label, weight, featuers) = dataset.schema.fieldNames
 
     // Aggregates term frequencies per label.
-    // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
-    // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
-      .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
-      }.aggregateByKey[(Double, DenseVector, Long)]((0.0, Vectors.zeros(numFeatures).toDense, 0L))(
-      seqOp = {
-         case ((weightSum, featureSum, count), (weight, features)) =>
-           requireValues(features)
-           BLAS.axpy(weight, features, featureSum)
-           (weightSum + weight, featureSum, count + 1)
-      },
-      combOp = {
-         case ((weightSum1, featureSum1, count1), (weightSum2, featureSum2, count2)) =>
-           BLAS.axpy(1.0, featureSum2, featureSum1)
-           (weightSum1 + weightSum2, featureSum1, count1 + count2)
-      }).collect().sortBy(_._1)
+    val aggregated = dataset.groupBy(col(label))
+      .agg(sum(col(weight)).as("weightSum"),
+        Summarizer.metrics("sum", "count").summary(col(featuers), col(weight)).as("summary"))
+      .select(label, "weightSum", "summary.sum", "summary.count")
+      .as[(Double, Double, Vector, Long)]
+      .collect().sortBy(_._1)
 
-    val numSamples = aggregated.map(_._2._3).sum
+    val numFeatures = aggregated.head._3.size
+    instr.logNumFeatures(numFeatures)
+    val numSamples = aggregated.map(_._4).sum
     instr.logNumExamples(numSamples)
     val numLabels = aggregated.length
     instr.logNumClasses(numLabels)
-    val numDocuments = aggregated.map(_._2._1).sum
+    val numDocuments = aggregated.map(_._2).sum
+    instr.logSumOfWeights(numDocuments)
 
     val labelArray = new Array[Double](numLabels)
     val piArray = new Array[Double](numLabels)
     val thetaArray = new Array[Double](numLabels * numFeatures)
 
+    val aggIter = $(modelType) match {
+      case Multinomial | Bernoulli => aggregated.iterator
+      case Complement =>
+        val featureSum = Vectors.zeros(numFeatures)
+        aggregated.foreach { case (_, _, sumTermFreqs, _) =>
+          BLAS.axpy(1.0, sumTermFreqs, featureSum)
+        }
+        aggregated.iterator.map { case (label, n, sumTermFreqs, count) =>
+          val comp = featureSum.copy
+          BLAS.axpy(-1.0, sumTermFreqs, comp)
+          (label, n, comp, count)
+        }
+    }
+
     val lambda = $(smoothing)
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
     var i = 0
-    aggregated.foreach { case (label, (n, sumTermFreqs, _)) =>
+    aggIter.foreach { case (label, n, sumTermFreqs, _) =>
       labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
       val thetaLogDenom = $(modelType) match {
-        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
+        case Multinomial | Complement =>
+          math.log(sumTermFreqs.toArray.sum + numFeatures * lambda)
         case Bernoulli => math.log(n + 2.0 * lambda)
-        case _ =>
-          // This should never happen.
-          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
       }
       var j = 0
+      val offset = i * numFeatures
       while (j < numFeatures) {
-        thetaArray(i * numFeatures + j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        thetaArray(offset + j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        j += 1
+      }
+      i += 1
+    }
+
+    val pi = Vectors.dense(piArray)
+    $(modelType) match {
+      case Multinomial | Bernoulli =>
+        val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
+        new NaiveBayesModel(uid, pi.compressed, theta.compressed, Matrices.zeros(0, 0))
+          .setOldLabels(labelArray)
+      case Complement =>
+        // Since the CNB compute the coefficient in a complement way.
+        val theta = new DenseMatrix(numLabels, numFeatures, thetaArray.map(v => -v), true)
+        new NaiveBayesModel(uid, pi.compressed, theta.compressed, Matrices.zeros(0, 0))
+    }
+  }
+
+  private def trainGaussianImpl(
+      dataset: Dataset[_],
+      instr: Instrumentation): NaiveBayesModel = {
+    val spark = dataset.sparkSession
+    import spark.implicits._
+    val Array(label, weight, featuers) = dataset.schema.fieldNames
+
+    // Aggregates mean vector and square-sum vector per label.
+    val aggregated = dataset.groupBy(col(label))
+      .agg(sum(col(weight)).as("weightSum"),
+        Summarizer.metrics("mean", "normL2").summary(col(featuers), col(weight)).as("summary"))
+      .select(label, "weightSum", "summary.mean", "summary.normL2")
+      .as[(Double, Double, Vector, Vector)]
+      .map { case (label, weightSum, mean, normL2) =>
+        (label, weightSum, mean, Vectors.dense(normL2.toArray.map(v => v * v)))
+      }.collect().sortBy(_._1)
+
+    val numFeatures = aggregated.head._3.size
+    instr.logNumFeatures(numFeatures)
+
+    val numLabels = aggregated.length
+    instr.logNumClasses(numLabels)
+
+    val numInstances = aggregated.map(_._2).sum
+    instr.logSumOfWeights(numInstances)
+
+    // If the ratio of data variance between dimensions is too small, it
+    // will cause numerical errors. To address this, we artificially
+    // boost the variance by epsilon, a small fraction of the standard
+    // deviation of the largest dimension.
+    // Refer to scikit-learn's implementation
+    // [https://github.com/scikit-learn/scikit-learn/blob/0.21.X/sklearn/naive_bayes.py#L348]
+    // and discussion [https://github.com/scikit-learn/scikit-learn/pull/5349] for detail.
+    val epsilon = Iterator.range(0, numFeatures).map { j =>
+      var globalSum = 0.0
+      var globalSqrSum = 0.0
+      aggregated.foreach { case (_, weightSum, mean, squareSum) =>
+        globalSum += mean(j) * weightSum
+        globalSqrSum += squareSum(j)
+      }
+      globalSqrSum / numInstances -
+        globalSum * globalSum / numInstances / numInstances
+    }.max * 1e-9
+
+    val piArray = new Array[Double](numLabels)
+
+    // thetaArray in Gaussian NB store the means of features per label
+    val thetaArray = new Array[Double](numLabels * numFeatures)
+
+    // thetaArray in Gaussian NB store the variances of features per label
+    val sigmaArray = new Array[Double](numLabels * numFeatures)
+
+    var i = 0
+    val logNumInstances = math.log(numInstances)
+    aggregated.foreach { case (_, weightSum, mean, squareSum) =>
+      piArray(i) = math.log(weightSum) - logNumInstances
+      var j = 0
+      val offset = i * numFeatures
+      while (j < numFeatures) {
+        val m = mean(j)
+        thetaArray(offset + j) = m
+        sigmaArray(offset + j) = epsilon + squareSum(j) / weightSum - m * m
         j += 1
       }
       i += 1
@@ -208,7 +351,8 @@ class NaiveBayes @Since("1.5.0") (
 
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
-    new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
+    val sigma = new DenseMatrix(numLabels, numFeatures, sigmaArray, true)
+    new NaiveBayesModel(uid, pi.compressed, theta.compressed, sigma.compressed)
   }
 
   @Since("1.5.0")
@@ -223,26 +367,23 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   /** String name for Bernoulli model type. */
   private[classification] val Bernoulli: String = "bernoulli"
 
+  /** String name for Gaussian model type. */
+  private[classification] val Gaussian: String = "gaussian"
+
+  /** String name for Complement model type. */
+  private[classification] val Complement: String = "complement"
+
   /* Set of modelTypes that NaiveBayes supports */
-  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[classification] val supportedModelTypes =
+    Set(Multinomial, Bernoulli, Gaussian, Complement)
 
-  private[NaiveBayes] def requireNonnegativeValues(v: Vector): Unit = {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-
-    require(values.forall(_ >= 0.0),
+  private[ml] def requireNonnegativeValues(v: Vector): Unit = {
+    require(v.nonZeroIterator.forall(_._2 > 0.0),
       s"Naive Bayes requires nonnegative feature values but found $v.")
   }
 
-  private[NaiveBayes] def requireZeroOneBernoulliValues(v: Vector): Unit = {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-
-    require(values.forall(v => v == 0.0 || v == 1.0),
+  private[ml] def requireZeroOneBernoulliValues(v: Vector): Unit = {
+    require(v.nonZeroIterator.forall(_._2 == 1.0),
       s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
   }
 
@@ -252,19 +393,24 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
 
 /**
  * Model produced by [[NaiveBayes]]
- * @param pi log of class priors, whose dimension is C (number of classes)
+ *
+ * @param pi    log of class priors, whose dimension is C (number of classes)
  * @param theta log of class conditional probabilities, whose dimension is C (number of classes)
  *              by D (number of features)
+ * @param sigma variance of each feature, whose dimension is C (number of classes)
+ *              by D (number of features). This matrix is only available when modelType
+ *              is set Gaussian.
  */
 @Since("1.5.0")
 class NaiveBayesModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("2.0.0") val pi: Vector,
-    @Since("2.0.0") val theta: Matrix)
+    @Since("2.0.0") val theta: Matrix,
+    @Since("3.0.0") val sigma: Matrix)
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
-  import NaiveBayes.{Bernoulli, Multinomial}
+  import NaiveBayes._
 
   /**
    * mllib NaiveBayes is a wrapper of ml implementation currently.
@@ -284,18 +430,44 @@ class NaiveBayesModel private[ml] (
    * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
    * application of this condition (in predict function).
    */
-  private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
-    case Multinomial => (None, None)
+  @transient private lazy val thetaMinusNegTheta = $(modelType) match {
     case Bernoulli =>
-      val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
-      val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
-      val thetaMinusNegTheta = theta.map { value =>
-        value - math.log(1.0 - math.exp(value))
-      }
-      (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
+      theta.map(value => value - math.log1p(-math.exp(value)))
     case _ =>
       // This should never happen.
-      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
+        "Variables thetaMinusNegTheta should only be precomputed in Bernoulli NB.")
+  }
+
+  @transient private lazy val piMinusThetaSum = $(modelType) match {
+    case Bernoulli =>
+      val negTheta = theta.map(value => math.log1p(-math.exp(value)))
+      val ones = new DenseVector(Array.fill(theta.numCols)(1.0))
+      val piMinusThetaSum = pi.toDense.copy
+      BLAS.gemv(1.0, negTheta, ones, 1.0, piMinusThetaSum)
+      piMinusThetaSum
+    case _ =>
+      // This should never happen.
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
+        "Variables piMinusThetaSum should only be precomputed in Bernoulli NB.")
+  }
+
+  /**
+   * Gaussian scoring requires sum of log(Variance).
+   * This precomputes sum of log(Variance) which are used for the linear algebra
+   * application of this condition (in predict function).
+   */
+  @transient private lazy val logVarSum = $(modelType) match {
+    case Gaussian =>
+      Array.tabulate(numClasses) { i =>
+        Iterator.range(0, numFeatures).map { j =>
+          math.log(sigma(i, j))
+        }.sum
+      }
+    case _ =>
+      // This should never happen.
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
+        "Variables logVarSum should only be precomputed in Gaussian NB.")
   }
 
   @Since("1.6.0")
@@ -305,50 +477,81 @@ class NaiveBayesModel private[ml] (
   override val numClasses: Int = pi.size
 
   private def multinomialCalculation(features: Vector) = {
-    val prob = theta.multiply(features)
-    BLAS.axpy(1.0, pi, prob)
+    requireNonnegativeValues(features)
+    val prob = pi.toDense.copy
+    BLAS.gemv(1.0, theta, features, 1.0, prob)
     prob
+  }
+
+  private def complementCalculation(features: Vector) = {
+    requireNonnegativeValues(features)
+    val probArray = theta.multiply(features).toArray
+    // the following lines equal to:
+    // val logSumExp = math.log(probArray.map(math.exp).sum)
+    // However, it easily returns Infinity/NaN values.
+    // Here follows 'scipy.special.logsumexp' (which is used in Scikit-Learn's ComplementNB)
+    // to compute the log of the sum of exponentials of elements in a numeric-stable way.
+    val max = probArray.max
+    var sumExp = 0.0
+    var j = 0
+    while (j < probArray.length) {
+      sumExp += math.exp(probArray(j) - max)
+      j += 1
+    }
+    val logSumExp = math.log(sumExp) + max
+
+    j = 0
+    while (j < probArray.length) {
+      probArray(j) -= logSumExp
+      j += 1
+    }
+    Vectors.dense(probArray)
   }
 
   private def bernoulliCalculation(features: Vector) = {
-    features.foreachActive((_, value) =>
-      require(value == 0.0 || value == 1.0,
-        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
-    )
-    val prob = thetaMinusNegTheta.get.multiply(features)
-    BLAS.axpy(1.0, pi, prob)
-    BLAS.axpy(1.0, negThetaSum.get, prob)
+    requireZeroOneBernoulliValues(features)
+    val prob = piMinusThetaSum.copy
+    BLAS.gemv(1.0, thetaMinusNegTheta, features, 1.0, prob)
     prob
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  private def gaussianCalculation(features: Vector) = {
+    val prob = Array.ofDim[Double](numClasses)
+    var i = 0
+    while (i < numClasses) {
+      var s = 0.0
+      var j = 0
+      while (j < numFeatures) {
+        val d = features(j) - theta(i, j)
+        s += d * d / sigma(i, j)
+        j += 1
+      }
+      prob(i) = pi(i) - (s + logVarSum(i)) / 2
+      i += 1
+    }
+    Vectors.dense(prob)
+  }
+
+  @transient private lazy val predictRawFunc = {
     $(modelType) match {
       case Multinomial =>
-        multinomialCalculation(features)
+        features: Vector => multinomialCalculation(features)
+      case Complement =>
+        features: Vector => complementCalculation(features)
       case Bernoulli =>
-        bernoulliCalculation(features)
-      case _ =>
-        // This should never happen.
-        throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
+        features: Vector => bernoulliCalculation(features)
+      case Gaussian =>
+        features: Vector => gaussianCalculation(features)
     }
   }
+
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = predictRawFunc(features)
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
       case dv: DenseVector =>
-        var i = 0
-        val size = dv.size
-        val maxLog = dv.values.max
-        while (i < size) {
-          dv.values(i) = math.exp(dv.values(i) - maxLog)
-          i += 1
-        }
-        val probSum = dv.values.sum
-        i = 0
-        while (i < size) {
-          dv.values(i) = dv.values(i) / probSum
-          i += 1
-        }
+        Utils.softmax(dv.values)
         dv
       case sv: SparseVector =>
         throw new RuntimeException("Unexpected error in NaiveBayesModel:" +
@@ -358,12 +561,13 @@ class NaiveBayesModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayesModel = {
-    copyValues(new NaiveBayesModel(uid, pi, theta).setParent(this.parent), extra)
+    copyValues(new NaiveBayesModel(uid, pi, theta, sigma).setParent(this.parent), extra)
   }
 
   @Since("1.5.0")
   override def toString: String = {
-    s"NaiveBayesModel (uid=$uid) with ${pi.size} classes"
+    s"NaiveBayesModel: uid=$uid, modelType=${$(modelType)}, numClasses=$numClasses, " +
+      s"numFeatures=$numFeatures"
   }
 
   @Since("1.6.0")
@@ -381,15 +585,23 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
   /** [[MLWriter]] instance for [[NaiveBayesModel]] */
   private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
+    import NaiveBayes._
 
-    private case class Data(pi: Vector, theta: Matrix)
+    private case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: pi, theta
-      val data = Data(instance.pi, instance.theta)
       val dataPath = new Path(path, "data").toString
+
+      instance.getModelType match {
+        case Multinomial | Bernoulli | Complement =>
+          require(instance.sigma.numRows == 0 && instance.sigma.numCols == 0)
+        case Gaussian =>
+          require(instance.sigma.numRows != 0 && instance.sigma.numCols != 0)
+      }
+
+      val data = Data(instance.pi, instance.theta, instance.sigma)
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
@@ -400,15 +612,27 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     private val className = classOf[NaiveBayesModel].getName
 
     override def load(path: String): NaiveBayesModel = {
+      implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
       val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
-      val Row(pi: Vector, theta: Matrix) = MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
-        .select("pi", "theta")
-        .head()
-      val model = new NaiveBayesModel(metadata.uid, pi, theta)
+
+      val model = if (major < 3) {
+        val Row(pi: Vector, theta: Matrix) =
+          MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
+            .select("pi", "theta")
+            .head()
+        new NaiveBayesModel(metadata.uid, pi, theta, Matrices.zeros(0, 0))
+      } else {
+        val Row(pi: Vector, theta: Matrix, sigma: Matrix) =
+          MLUtils.convertMatrixColumnsToML(vecConverted, "theta", "sigma")
+            .select("pi", "theta", "sigma")
+            .head()
+        new NaiveBayesModel(metadata.uid, pi, theta, sigma)
+      }
 
       metadata.getAndSetParams(model)
       model

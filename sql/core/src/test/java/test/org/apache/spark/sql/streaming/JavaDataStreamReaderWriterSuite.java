@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql.streaming;
 
 import java.io.File;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.After;
 import org.junit.Before;
@@ -52,21 +53,18 @@ public class JavaDataStreamReaderWriterSuite {
   }
 
   @Test
-  public void testForeachBatchAPI() {
+  public void testForeachBatchAPI() throws TimeoutException {
     StreamingQuery query = spark
       .readStream()
       .textFile(input)
       .writeStream()
-      .foreachBatch(new VoidFunction2<Dataset<String>, Long>() {
-        @Override
-        public void call(Dataset<String> v1, Long v2) throws Exception {}
-      })
+      .foreachBatch((VoidFunction2<Dataset<String>, Long>) (v1, v2) -> {})
       .start();
     query.stop();
   }
 
   @Test
-  public void testForeachAPI() {
+  public void testForeachAPI() throws TimeoutException {
     StreamingQuery query = spark
       .readStream()
       .textFile(input)

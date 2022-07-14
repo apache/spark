@@ -24,66 +24,143 @@ import org.apache.spark.SparkFunSuite
  */
 class FiltersSuite extends SparkFunSuite {
 
-  test("EqualTo references") {
-    assert(EqualTo("a", "1").references.toSeq == Seq("a"))
-    assert(EqualTo("a", EqualTo("b", "2")).references.toSeq == Seq("a", "b"))
+  private def withFieldNames(f: (String, Array[String]) => Unit): Unit = {
+    Seq(("a", Array("a")),
+      ("a.b", Array("a", "b")),
+      ("`a.b`.c", Array("a.b", "c")),
+      ("`a.b`.`c.d`.`e.f`", Array("a.b", "c.d", "e.f"))
+    ).foreach { case (name, fieldNames) =>
+      f(name, fieldNames)
+    }
   }
 
-  test("EqualNullSafe references") {
-    assert(EqualNullSafe("a", "1").references.toSeq == Seq("a"))
-    assert(EqualNullSafe("a", EqualTo("b", "2")).references.toSeq == Seq("a", "b"))
-  }
+  test("EqualTo references") { withFieldNames { (name, fieldNames) =>
+    assert(EqualTo(name, "1").references.toSeq == Seq(name))
+    assert(EqualTo(name, "1").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
 
-  test("GreaterThan references") {
-    assert(GreaterThan("a", "1").references.toSeq == Seq("a"))
-    assert(GreaterThan("a", EqualTo("b", "2")).references.toSeq == Seq("a", "b"))
-  }
+    assert(EqualTo(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
+    assert(EqualTo("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
 
-  test("GreaterThanOrEqual references") {
-    assert(GreaterThanOrEqual("a", "1").references.toSeq == Seq("a"))
-    assert(GreaterThanOrEqual("a", EqualTo("b", "2")).references.toSeq == Seq("a", "b"))
-  }
+    assert(EqualTo(name, EqualTo("b", "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(fieldNames.toSeq, Seq("b")))
+    assert(EqualTo("b", EqualTo(name, "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(Seq("b"), fieldNames.toSeq))
+  }}
 
-  test("LessThan references") {
-    assert(LessThan("a", "1").references.toSeq == Seq("a"))
+  test("EqualNullSafe references") { withFieldNames { (name, fieldNames) =>
+    assert(EqualNullSafe(name, "1").references.toSeq == Seq(name))
+    assert(EqualNullSafe(name, "1").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
+
+    assert(EqualNullSafe(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
+    assert(EqualNullSafe("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
+
+    assert(EqualNullSafe(name, EqualTo("b", "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(fieldNames.toSeq, Seq("b")))
+    assert(EqualNullSafe("b", EqualTo(name, "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(Seq("b"), fieldNames.toSeq))
+  }}
+
+  test("GreaterThan references") { withFieldNames { (name, fieldNames) =>
+    assert(GreaterThan(name, "1").references.toSeq == Seq(name))
+    assert(GreaterThan(name, "1").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
+
+    assert(GreaterThan(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
+    assert(GreaterThan("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
+
+    assert(GreaterThan(name, EqualTo("b", "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(fieldNames.toSeq, Seq("b")))
+    assert(GreaterThan("b", EqualTo(name, "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(Seq("b"), fieldNames.toSeq))
+  }}
+
+  test("GreaterThanOrEqual references") { withFieldNames { (name, fieldNames) =>
+    assert(GreaterThanOrEqual(name, "1").references.toSeq == Seq(name))
+    assert(GreaterThanOrEqual(name, "1").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
+
+    assert(GreaterThanOrEqual(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
+    assert(GreaterThanOrEqual("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
+
+    assert(GreaterThanOrEqual(name, EqualTo("b", "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(fieldNames.toSeq, Seq("b")))
+    assert(GreaterThanOrEqual("b", EqualTo(name, "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(Seq("b"), fieldNames.toSeq))
+  }}
+
+  test("LessThan references") { withFieldNames { (name, fieldNames) =>
+    assert(LessThan(name, "1").references.toSeq == Seq(name))
+    assert(LessThan(name, "1").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
+
     assert(LessThan("a", EqualTo("b", "2")).references.toSeq == Seq("a", "b"))
-  }
+  }}
 
-  test("LessThanOrEqual references") {
-    assert(LessThanOrEqual("a", "1").references.toSeq == Seq("a"))
-    assert(LessThanOrEqual("a", EqualTo("b", "2")).references.toSeq == Seq("a", "b"))
-  }
+  test("LessThanOrEqual references") { withFieldNames { (name, fieldNames) =>
+    assert(LessThanOrEqual(name, "1").references.toSeq == Seq(name))
+    assert(LessThanOrEqual(name, "1").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
 
-  test("In references") {
-    assert(In("a", Array("1")).references.toSeq == Seq("a"))
-    assert(In("a", Array("1", EqualTo("b", "2"))).references.toSeq == Seq("a", "b"))
-  }
+    assert(LessThanOrEqual(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
+    assert(LessThanOrEqual("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
 
-  test("IsNull references") {
-    assert(IsNull("a").references.toSeq == Seq("a"))
-  }
+    assert(LessThanOrEqual(name, EqualTo("b", "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(fieldNames.toSeq, Seq("b")))
+    assert(LessThanOrEqual("b", EqualTo(name, "2")).v2references.toSeq.map(_.toSeq)
+      == Seq(Seq("b"), fieldNames.toSeq))
+  }}
 
-  test("IsNotNull references") {
-    assert(IsNotNull("a").references.toSeq == Seq("a"))
-  }
+  test("In references") { withFieldNames { (name, fieldNames) =>
+    assert(In(name, Array("1")).references.toSeq == Seq(name))
+    assert(In(name, Array("1")).v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
 
-  test("And references") {
-    assert(And(EqualTo("a", "1"), EqualTo("b", "1")).references.toSeq == Seq("a", "b"))
-  }
+    assert(In(name, Array("1", EqualTo("b", "2"))).references.toSeq == Seq(name, "b"))
+    assert(In("b", Array("1", EqualTo(name, "2"))).references.toSeq == Seq("b", name))
 
-  test("Or references") {
-    assert(Or(EqualTo("a", "1"), EqualTo("b", "1")).references.toSeq == Seq("a", "b"))
-  }
+    assert(In(name, Array("1", EqualTo("b", "2"))).v2references.toSeq.map(_.toSeq)
+      == Seq(fieldNames.toSeq, Seq("b")))
+    assert(In("b", Array("1", EqualTo(name, "2"))).v2references.toSeq.map(_.toSeq)
+      == Seq(Seq("b"), fieldNames.toSeq))
+  }}
 
-  test("StringStartsWith references") {
-    assert(StringStartsWith("a", "str").references.toSeq == Seq("a"))
-  }
+  test("IsNull references") { withFieldNames { (name, fieldNames) =>
+    assert(IsNull(name).references.toSeq == Seq(name))
+    assert(IsNull(name).v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
+  }}
 
-  test("StringEndsWith references") {
-    assert(StringEndsWith("a", "str").references.toSeq == Seq("a"))
-  }
+  test("IsNotNull references") { withFieldNames { (name, fieldNames) =>
+    assert(IsNotNull(name).references.toSeq == Seq(name))
+    assert(IsNull(name).v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
+  }}
 
-  test("StringContains references") {
-    assert(StringContains("a", "str").references.toSeq == Seq("a"))
-  }
+  test("And references") { withFieldNames { (name, fieldNames) =>
+    assert(And(EqualTo(name, "1"), EqualTo("b", "1")).references.toSeq == Seq(name, "b"))
+    assert(And(EqualTo("b", "1"), EqualTo(name, "1")).references.toSeq == Seq("b", name))
+
+    assert(And(EqualTo(name, "1"), EqualTo("b", "1")).v2references.toSeq.map(_.toSeq) ==
+      Seq(fieldNames.toSeq, Seq("b")))
+    assert(And(EqualTo("b", "1"), EqualTo(name, "1")).v2references.toSeq.map(_.toSeq) ==
+      Seq(Seq("b"), fieldNames.toSeq))
+  }}
+
+  test("Or references") { withFieldNames { (name, fieldNames) =>
+    assert(Or(EqualTo(name, "1"), EqualTo("b", "1")).references.toSeq == Seq(name, "b"))
+    assert(Or(EqualTo("b", "1"), EqualTo(name, "1")).references.toSeq == Seq("b", name))
+
+    assert(Or(EqualTo(name, "1"), EqualTo("b", "1")).v2references.toSeq.map(_.toSeq) ==
+      Seq(fieldNames.toSeq, Seq("b")))
+    assert(Or(EqualTo("b", "1"), EqualTo(name, "1")).v2references.toSeq.map(_.toSeq) ==
+      Seq(Seq("b"), fieldNames.toSeq))
+  }}
+
+  test("StringStartsWith references") { withFieldNames { (name, fieldNames) =>
+    assert(StringStartsWith(name, "str").references.toSeq == Seq(name))
+    assert(StringStartsWith(name, "str").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
+  }}
+
+  test("StringEndsWith references") { withFieldNames { (name, fieldNames) =>
+    assert(StringEndsWith(name, "str").references.toSeq == Seq(name))
+    assert(StringEndsWith(name, "str").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
+  }}
+
+  test("StringContains references") { withFieldNames { (name, fieldNames) =>
+    assert(StringContains(name, "str").references.toSeq == Seq(name))
+    assert(StringContains(name, "str").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
+  }}
 }

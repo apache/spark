@@ -21,13 +21,13 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.4.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>spark-assembly_2.12</artifactId>
   <name>Spark Project Assembly</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <packaging>pom</packaging>
 
   <properties>
@@ -117,7 +117,7 @@
           </executions>
           <configuration>
             <target>
-              <delete dir="${basedir}/../python/lib/pyspark.zip"/>
+              <delete file="${basedir}/../python/lib/pyspark.zip"/>
               <zip destfile="${basedir}/../python/lib/pyspark.zip">
                 <fileset dir="${basedir}/../python/" includes="pyspark/**/*"/>
               </zip>
@@ -135,6 +135,10 @@
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-yarn_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-server-web-proxy</artifactId>
         </dependency>
       </dependencies>
     </profile>

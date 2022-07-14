@@ -76,6 +76,36 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
     assert(features ~== expected absTol 1e-14)
   }
 
+  test("indexOf method") {
+    val n = 100
+    val hashingTF = new HashingTF()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setNumFeatures(n)
+    assert(hashingTF.indexOf("a") === 67)
+    assert(hashingTF.indexOf("b") === 65)
+    assert(hashingTF.indexOf("c") === 68)
+    assert(hashingTF.indexOf("d") === 90)
+  }
+
+  test("SPARK-23469: Load HashingTF prior to Spark 3.0") {
+    val hashingTFPath = testFile("ml-models/hashingTF-2.4.4")
+    val loadedHashingTF = HashingTF.load(hashingTFPath)
+    val mLlibHashingTF = new MLlibHashingTF(100)
+    assert(loadedHashingTF.indexOf("a") === mLlibHashingTF.indexOf("a"))
+    assert(loadedHashingTF.indexOf("b") === mLlibHashingTF.indexOf("b"))
+    assert(loadedHashingTF.indexOf("c") === mLlibHashingTF.indexOf("c"))
+    assert(loadedHashingTF.indexOf("d") === mLlibHashingTF.indexOf("d"))
+
+    val metadata = spark.read.json(s"$hashingTFPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.4")
+
+    intercept[IllegalArgumentException] {
+      loadedHashingTF.save(hashingTFPath)
+    }
+  }
+
   test("read/write") {
     val t = new HashingTF()
       .setInputCol("myInputCol")
@@ -89,7 +119,7 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
 object HashingTFSuite {
 
   private[feature] def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
-    Utils.nonNegativeMod(MLlibHashingTF.murmur3Hash(term), numFeatures)
+    Utils.nonNegativeMod(FeatureHasher.murmur3Hash(term), numFeatures)
   }
 
 }

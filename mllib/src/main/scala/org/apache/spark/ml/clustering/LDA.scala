@@ -19,23 +19,26 @@ package org.apache.spark.ml.clustering
 
 import java.util.Locale
 
+import breeze.linalg.normalize
+import breeze.numerics.exp
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Matrix, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
   EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
-  LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
+  LDAOptimizer => OldLDAOptimizer, LDAUtils => OldLDAUtils, LocalLDAModel => OldLocalLDAModel,
   OnlineLDAOptimizer => OldOnlineLDAOptimizer}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
@@ -43,8 +46,9 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, StructType}
+import org.apache.spark.sql.functions.{monotonically_increasing_id, udf}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
@@ -196,8 +200,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     " with estimates of the topic mixture distribution for each document (often called \"theta\"" +
     " in the literature).  Returns a vector of zeros for an empty document.")
 
-  setDefault(topicDistributionCol -> "topicDistribution")
-
   /** @group getParam */
   @Since("1.6.0")
   def getTopicDistributionCol: String = $(topicDistributionCol)
@@ -311,6 +313,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   /** @group expertGetParam */
   @Since("2.0.0")
   def getKeepLastCheckpoint: Boolean = $(keepLastCheckpoint)
+
+  setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
+    learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
+    optimizeDocConcentration -> true, keepLastCheckpoint -> true,
+    topicDistributionCol -> "topicDistribution")
 
   /**
    * Validates and transforms the input schema.
@@ -456,24 +463,58 @@ abstract class LDAModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    if ($(topicDistributionCol).nonEmpty) {
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
-      // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-      val transformer = oldLocalModel.getTopicDistributionMethod
+    val func = getTopicDistributionMethod
+    val transformer = udf(func)
+    dataset.withColumn($(topicDistributionCol),
+      transformer(columnToVector(dataset, getFeaturesCol)),
+      outputSchema($(topicDistributionCol)).metadata)
+  }
 
-      val t = udf { (v: Vector) => transformer(OldVectors.fromML(v)).asML }
-      dataset.withColumn($(topicDistributionCol),
-        t(DatasetUtils.columnToVector(dataset, getFeaturesCol))).toDF()
-    } else {
-      logWarning("LDAModel.transform was called without any output columns. Set an output column" +
-        " such as topicDistributionCol to produce results.")
-      dataset.toDF()
-    }
+  /**
+   * Get a method usable as a UDF for `topicDistributions()`
+   */
+  private def getTopicDistributionMethod: Vector => Vector = {
+    val expElogbeta = exp(OldLDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
+    val oldModel = oldLocalModel
+    val docConcentrationBrz = oldModel.docConcentration.asBreeze
+    val gammaShape = oldModel.gammaShape
+    val k = oldModel.k
+    val gammaSeed = oldModel.seed
+
+    vector: Vector =>
+      if (vector.numNonzeros == 0) {
+        Vectors.zeros(k)
+      } else {
+        val (ids: List[Int], cts: Array[Double]) = vector match {
+          case v: DenseVector => (List.range(0, v.size), v.values)
+          case v: SparseVector => (v.indices.toList, v.values)
+          case other =>
+            throw new UnsupportedOperationException(
+              s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+        }
+
+        val (gamma, _, _) = OldOnlineLDAOptimizer.variationalTopicInference(
+          ids,
+          cts,
+          expElogbeta,
+          docConcentrationBrz,
+          gammaShape,
+          k,
+          gammaSeed)
+        Vectors.dense(normalize(gamma, 1.0).toArray)
+      }
   }
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(topicDistributionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(topicDistributionCol), oldLocalModel.k)
+    }
+    outputSchema
   }
 
   /**
@@ -589,6 +630,11 @@ class LocalLDAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new LocalLDAModel.LocalLDAModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"LocalLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
+  }
 }
 
 
@@ -720,8 +766,6 @@ class DistributedLDAModel private[ml] (
   private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
 
   /**
-   * :: DeveloperApi ::
-   *
    * If using checkpointing and `LDA.keepLastCheckpoint` is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
@@ -731,18 +775,14 @@ class DistributedLDAModel private[ml] (
    *
    * @return  Checkpoint files from training
    */
-  @DeveloperApi
   @Since("2.0.0")
   def getCheckpointFiles: Array[String] = _checkpointFiles
 
   /**
-   * :: DeveloperApi ::
-   *
    * Remove any remaining checkpoint files from training.
    *
    * @see [[getCheckpointFiles]]
    */
-  @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
     val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
@@ -752,6 +792,11 @@ class DistributedLDAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new DistributedLDAModel.DistributedWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"DistributedLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
+  }
 }
 
 
@@ -821,10 +866,6 @@ class LDA @Since("1.6.0") (
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("lda"))
-
-  setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
-    learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
-    optimizeDocConcentration -> true, keepLastCheckpoint -> true)
 
   /**
    * The features for LDA should be a `Vector` representing the word counts in a document.
@@ -904,6 +945,19 @@ class LDA @Since("1.6.0") (
       checkpointInterval, keepLastCheckpoint, optimizeDocConcentration, topicConcentration,
       learningDecay, optimizer, learningOffset, seed)
 
+    val oldData = LDA.getOldDataset(dataset, $(featuresCol))
+      .setName("training instances")
+
+    // The EM solver will transform this oldData to a graph, and use a internal graphCheckpointer
+    // to update and cache the graph, so we do not need to cache it.
+    // The Online solver directly perform sampling on the oldData and update the model.
+    // However, Online solver will not cache the dataset internally.
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE &&
+      getOptimizer.toLowerCase(Locale.ROOT) == "online"
+    if (handlePersistence) {
+      oldData.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+
     val oldLDA = new OldLDA()
       .setK($(k))
       .setDocConcentration(getOldDocConcentration)
@@ -912,14 +966,16 @@ class LDA @Since("1.6.0") (
       .setSeed($(seed))
       .setCheckpointInterval($(checkpointInterval))
       .setOptimizer(getOldOptimizer)
-    // TODO: persist here, or in old LDA?
-    val oldData = LDA.getOldDataset(dataset, $(featuresCol))
+
     val oldModel = oldLDA.run(oldData)
     val newModel = oldModel match {
       case m: OldLocalLDAModel =>
         new LocalLDAModel(uid, m.vocabSize, m, dataset.sparkSession)
       case m: OldDistributedLDAModel =>
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sparkSession, None)
+    }
+    if (handlePersistence) {
+      oldData.unpersist()
     }
 
     instr.logNumFeatures(newModel.vocabSize)
@@ -939,13 +995,10 @@ object LDA extends MLReadable[LDA] {
   private[clustering] def getOldDataset(
        dataset: Dataset[_],
        featuresCol: String): RDD[(Long, OldVector)] = {
-    dataset
-      .withColumn("docId", monotonically_increasing_id())
-      .select(col("docId"), DatasetUtils.columnToVector(dataset, featuresCol))
-      .rdd
-      .map { case Row(docId: Long, features: Vector) =>
-        (docId, OldVectors.fromML(features))
-      }
+    dataset.select(
+      monotonically_increasing_id(),
+      checkNonNanVectors(columnToVector(dataset, featuresCol))
+    ).rdd.map { case Row(docId: Long, f: Vector) => (docId, OldVectors.fromML(f)) }
   }
 
   private class LDAReader extends MLReader[LDA] {

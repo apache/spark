@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.storage.{BlockId, BlockManager}
 
 private[spark] class BlockRDDPartition(val blockId: BlockId, idx: Int) extends Partition {
@@ -35,7 +36,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
 
   override def getPartitions: Array[Partition] = {
     assertValid()
-    (0 until blockIds.length).map { i =>
+    blockIds.indices.map { i =>
       new BlockRDDPartition(blockIds(i), i).asInstanceOf[Partition]
     }.toArray
   }
@@ -47,7 +48,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
     blockManager.get[T](blockId) match {
       case Some(block) => block.data.asInstanceOf[Iterator[T]]
       case None =>
-        throw new Exception(s"Could not compute split, block $blockId of RDD $id not found")
+        throw SparkCoreErrors.rddBlockNotFoundError(blockId, id)
     }
   }
 
@@ -61,7 +62,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
    * irreversible operation, as the data in the blocks cannot be recovered back
    * once removed. Use it with caution.
    */
-  private[spark] def removeBlocks() {
+  private[spark] def removeBlocks(): Unit = {
     blockIds.foreach { blockId =>
       sparkContext.env.blockManager.master.removeBlock(blockId)
     }
@@ -77,10 +78,9 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
   }
 
   /** Check if this BlockRDD is valid. If not valid, exception is thrown. */
-  private[spark] def assertValid() {
+  private[spark] def assertValid(): Unit = {
     if (!isValid) {
-      throw new SparkException(
-        "Attempted to use %s after its blocks have been removed!".format(toString))
+      throw SparkCoreErrors.blockHaveBeenRemovedError(toString)
     }
   }
 

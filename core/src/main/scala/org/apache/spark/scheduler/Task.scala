@@ -23,8 +23,11 @@ import java.util.Properties
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
+import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rdd.InputFileBlockHolder
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util._
 
 /**
@@ -41,6 +44,7 @@ import org.apache.spark.util._
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
+ * @param numPartitions Total number of partitions in the stage that this task belongs to.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
  *                              and sent to executor side.
@@ -56,6 +60,7 @@ private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
+    val numPartitions: Int,
     @transient var localProperties: Properties = new Properties,
     // The default value is only used in tests.
     serializedTaskMetrics: Array[Byte] =
@@ -73,12 +78,19 @@ private[spark] abstract class Task[T](
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
+   * @param resources other host resources (like gpus) that this task attempt can access
    * @return the result of the task along with updates of Accumulators.
    */
   final def run(
       taskAttemptId: Long,
       attemptNumber: Int,
-      metricsSystem: MetricsSystem): T = {
+      metricsSystem: MetricsSystem,
+      cpus: Int,
+      resources: Map[String, ResourceInformation],
+      plugins: Option[PluginContainer]): T = {
+
+    require(cpus > 0, "CPUs per task should be > 0")
+
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
     // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
     // the stage is barrier.
@@ -88,10 +100,13 @@ private[spark] abstract class Task[T](
       partitionId,
       taskAttemptId,
       attemptNumber,
+      numPartitions,
       taskMemoryManager,
       localProperties,
       metricsSystem,
-      metrics)
+      metrics,
+      cpus,
+      resources)
 
     context = if (isBarrier) {
       new BarrierTaskContext(taskContext)
@@ -99,6 +114,7 @@ private[spark] abstract class Task[T](
       taskContext
     }
 
+    InputFileBlockHolder.initialize()
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
@@ -116,6 +132,8 @@ private[spark] abstract class Task[T](
       Option(stageAttemptId),
       Option(taskAttemptId),
       Option(attemptNumber)).setCurrentContext()
+
+    plugins.foreach(_.onTaskStart())
 
     try {
       runTask(context)
@@ -154,6 +172,7 @@ private[spark] abstract class Task[T](
           // Though we unset the ThreadLocal here, the context member variable itself is still
           // queried directly in the TaskRunner to check for FetchFailedExceptions.
           TaskContext.unset()
+          InputFileBlockHolder.unset()
         }
       }
     }
@@ -218,7 +237,7 @@ private[spark] abstract class Task[T](
    * be called multiple times.
    * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
-  def kill(interruptThread: Boolean, reason: String) {
+  def kill(interruptThread: Boolean, reason: String): Unit = {
     require(reason != null)
     _reasonIfKilled = reason
     if (context != null) {

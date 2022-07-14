@@ -66,12 +66,15 @@ public class RpcIntegrationSuite {
           RpcResponseCallback callback) {
         String msg = JavaUtils.bytesToString(message);
         String[] parts = msg.split("/");
-        if (parts[0].equals("hello")) {
-          callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
-        } else if (parts[0].equals("return error")) {
-          callback.onFailure(new RuntimeException("Returned: " + parts[1]));
-        } else if (parts[0].equals("throw error")) {
-          throw new RuntimeException("Thrown: " + parts[1]);
+        switch (parts[0]) {
+          case "hello":
+            callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
+            break;
+          case "return error":
+            callback.onFailure(new RuntimeException("Returned: " + parts[1]));
+            break;
+          case "throw error":
+            throw new RuntimeException("Thrown: " + parts[1]);
         }
       }
 
@@ -175,8 +178,8 @@ public class RpcIntegrationSuite {
     final Semaphore sem = new Semaphore(0);
 
     final RpcResult res = new RpcResult();
-    res.successMessages = Collections.synchronizedSet(new HashSet<String>());
-    res.errorMessages = Collections.synchronizedSet(new HashSet<String>());
+    res.successMessages = Collections.synchronizedSet(new HashSet<>());
+    res.errorMessages = Collections.synchronizedSet(new HashSet<>());
 
     RpcResponseCallback callback = new RpcResponseCallback() {
       @Override
@@ -208,8 +211,8 @@ public class RpcIntegrationSuite {
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     final Semaphore sem = new Semaphore(0);
     RpcResult res = new RpcResult();
-    res.successMessages = Collections.synchronizedSet(new HashSet<String>());
-    res.errorMessages = Collections.synchronizedSet(new HashSet<String>());
+    res.successMessages = Collections.synchronizedSet(new HashSet<>());
+    res.errorMessages = Collections.synchronizedSet(new HashSet<>());
 
     for (String stream : streams) {
       int idx = stream.lastIndexOf('/');
@@ -260,14 +263,14 @@ public class RpcIntegrationSuite {
   @Test
   public void singleRPC() throws Exception {
     RpcResult res = sendRPC("hello/Aaron");
-    assertEquals(res.successMessages, Sets.newHashSet("Hello, Aaron!"));
+    assertEquals(Sets.newHashSet("Hello, Aaron!"), res.successMessages);
     assertTrue(res.errorMessages.isEmpty());
   }
 
   @Test
   public void doubleRPC() throws Exception {
     RpcResult res = sendRPC("hello/Aaron", "hello/Reynold");
-    assertEquals(res.successMessages, Sets.newHashSet("Hello, Aaron!", "Hello, Reynold!"));
+    assertEquals(Sets.newHashSet("Hello, Aaron!", "Hello, Reynold!"), res.successMessages);
     assertTrue(res.errorMessages.isEmpty());
   }
 
@@ -295,15 +298,15 @@ public class RpcIntegrationSuite {
   @Test
   public void sendSuccessAndFailure() throws Exception {
     RpcResult res = sendRPC("hello/Bob", "throw error/the", "hello/Builder", "return error/!");
-    assertEquals(res.successMessages, Sets.newHashSet("Hello, Bob!", "Hello, Builder!"));
+    assertEquals(Sets.newHashSet("Hello, Bob!", "Hello, Builder!"), res.successMessages);
     assertErrorsContain(res.errorMessages, Sets.newHashSet("Thrown: the", "Returned: !"));
   }
 
   @Test
   public void sendOneWayMessage() throws Exception {
     final String message = "no reply";
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
-    try {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       client.send(JavaUtils.stringToBytes(message));
       assertEquals(0, client.getHandler().numOutstandingRequests());
 
@@ -315,8 +318,6 @@ public class RpcIntegrationSuite {
 
       assertEquals(1, oneWayMsgs.size());
       assertEquals(message, oneWayMsgs.get(0));
-    } finally {
-      client.close();
     }
   }
 
@@ -383,6 +384,7 @@ public class RpcIntegrationSuite {
         "closed",
         "Connection reset",
         "java.nio.channels.ClosedChannelException",
+        "io.netty.channel.StacklessClosedChannelException",
         "java.io.IOException: Broken pipe"
     );
     Set<String> containsAndClosed = Sets.newHashSet(expectedError);
@@ -455,7 +457,7 @@ public class RpcIntegrationSuite {
         byte[] expected = new byte[base.remaining()];
         base.get(expected);
         assertEquals(expected.length, result.length);
-        assertTrue("buffers don't match", Arrays.equals(expected, result));
+        assertArrayEquals("buffers don't match", expected, result);
       }
     }
 

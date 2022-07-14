@@ -18,9 +18,17 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.api.java.function.ReduceFunction;
+import org.junit.*;
 
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
@@ -29,9 +37,9 @@ import org.apache.spark.sql.catalyst.util.TimestampFormatter;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
-import org.junit.*;
 
 import org.apache.spark.sql.test.TestSparkSession;
+import scala.Tuple2;
 
 public class JavaBeanDeserializationSuite implements Serializable {
 
@@ -78,7 +86,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
       .as(encoder);
 
     List<ArrayRecord> records = dataset.collectAsList();
-    Assert.assertEquals(records, ARRAY_RECORDS);
+    Assert.assertEquals(ARRAY_RECORDS, records);
   }
 
   private static final List<MapRecord> MAP_RECORDS = new ArrayList<>();
@@ -121,7 +129,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<MapRecord> records = dataset.collectAsList();
 
-    Assert.assertEquals(records, MAP_RECORDS);
+    Assert.assertEquals(MAP_RECORDS, records);
   }
 
   @Test
@@ -178,18 +186,9 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
 
-    try {
-      dataFrame.as(encoder).collect();
-      Assert.fail("Expected AnalysisException, but passed.");
-    } catch (Throwable e) {
-      // Here we need to handle weird case: compiler complains AnalysisException never be thrown
-      // in try statement, but it can be thrown actually. Maybe Scala-Java interop issue?
-      if (e instanceof AnalysisException) {
-        Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
-      } else {
-        throw e;
-      }
-    }
+    AnalysisException e = Assert.assertThrows(AnalysisException.class,
+      () -> dataFrame.as(encoder).collect());
+    Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
   }
 
   private static Row createRecordSpark22000Row(Long index) {
@@ -207,6 +206,17 @@ public class JavaBeanDeserializationSuite implements Serializable {
     return new GenericRow(values);
   }
 
+  private static String timestampToString(Timestamp ts) {
+    String timestampString = String.valueOf(ts);
+    String formatted = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(ts);
+
+    if (timestampString.length() > 19 && !timestampString.substring(19).equals(".0")) {
+      return formatted + timestampString.substring(19);
+    } else {
+      return formatted;
+    }
+  }
+
   private static RecordSpark22000 createRecordSpark22000(Row recordRow) {
     RecordSpark22000 record = new RecordSpark22000();
     record.setShortField(String.valueOf(recordRow.getShort(0)));
@@ -216,7 +226,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     record.setDoubleField(String.valueOf(recordRow.getDouble(4)));
     record.setStringField(recordRow.getString(5));
     record.setBooleanField(String.valueOf(recordRow.getBoolean(6)));
-    record.setTimestampField(String.valueOf(recordRow.getTimestamp(7)));
+    record.setTimestampField(timestampToString(recordRow.getTimestamp(7)));
     // This would figure out that null value will not become "null".
     record.setNullIntField(null);
     return record;
@@ -486,17 +496,17 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public String toString() {
-      return com.google.common.base.Objects.toStringHelper(this)
-              .add("shortField", shortField)
-              .add("intField", intField)
-              .add("longField", longField)
-              .add("floatField", floatField)
-              .add("doubleField", doubleField)
-              .add("stringField", stringField)
-              .add("booleanField", booleanField)
-              .add("timestampField", timestampField)
-              .add("nullIntField", nullIntField)
-              .toString();
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+          .append("shortField", shortField)
+          .append("intField", intField)
+          .append("longField", longField)
+          .append("floatField", floatField)
+          .append("doubleField", doubleField)
+          .append("stringField", stringField)
+          .append("booleanField", booleanField)
+          .append("timestampField", timestampField)
+          .append("nullIntField", nullIntField)
+          .toString();
     }
   }
 
@@ -546,6 +556,96 @@ public class JavaBeanDeserializationSuite implements Serializable {
     }
   }
 
+  @Test
+  public void testSPARK38823NoBeanReuse() {
+    List<Item> items = Arrays.asList(
+            new Item("a", 1),
+            new Item("b", 3),
+            new Item("c", 2),
+            new Item("a", 7));
+
+    Encoder<Item> encoder = Encoders.bean(Item.class);
+
+    Dataset<Item> ds = spark.createDataFrame(items, Item.class)
+            .as(encoder)
+            .coalesce(1);
+
+    MapFunction<Item, String> mf = new MapFunction<Item, String>() {
+      @Override
+      public String call(Item item) throws Exception {
+        return item.getK();
+      }
+    };
+
+    ReduceFunction<Item> rf = new ReduceFunction<Item>() {
+      @Override
+      public Item call(Item item1, Item item2) throws Exception {
+        Assert.assertNotSame(item1, item2);
+        return item1.addValue(item2.getV());
+      }
+    };
+
+    Dataset<Tuple2<String, Item>> finalDs = ds
+            .groupByKey(mf, Encoders.STRING())
+            .reduceGroups(rf);
+
+    List<Tuple2<String, Item>> expectedRecords = Arrays.asList(
+            new Tuple2("a", new Item("a", 8)),
+            new Tuple2("b", new Item("b", 3)),
+            new Tuple2("c", new Item("c", 2)));
+
+    List<Tuple2<String, Item>> result = finalDs.collectAsList();
+
+    Assert.assertEquals(expectedRecords, result);
+  }
+
+  public static class Item implements Serializable {
+    private String k;
+    private int v;
+
+    public String getK() {
+      return k;
+    }
+
+    public int getV() {
+      return v;
+    }
+
+    public void setK(String k) {
+      this.k = k;
+    }
+
+    public void setV(int v) {
+      this.v = v;
+    }
+
+    public Item() { }
+
+    public Item(String k, int v) {
+      this.k = k;
+      this.v = v;
+    }
+
+    public Item addValue(int inc) {
+      return new Item(k, v + inc);
+    }
+
+    public String toString() {
+      return "Item(" + k + "," + v + ")";
+    }
+
+    public boolean equals(Object o) {
+      if (!(o instanceof Item)) {
+        return false;
+      }
+      Item other = (Item) o;
+      if (other.getK().equals(k) && other.getV() == v) {
+        return true;
+      }
+      return false;
+    }
+  }
+
   public static final class LocalDateInstantRecord {
     private String localDateField;
     private String instantField;
@@ -584,11 +684,12 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public String toString() {
-      return com.google.common.base.Objects.toStringHelper(this)
-        .add("localDateField", localDateField)
-        .add("instantField", instantField)
-        .toString();
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+          .append("localDateField", localDateField)
+          .append("instantField", instantField)
+          .toString();
     }
+
   }
 
   private static Row createLocalDateInstantRow(Long index) {

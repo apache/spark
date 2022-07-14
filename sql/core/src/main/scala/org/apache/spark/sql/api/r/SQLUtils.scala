@@ -23,7 +23,7 @@ import java.util.{Locale, Map => JMap}
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
-import org.apache.spark.SparkContext
+import org.apache.spark.TaskContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
@@ -33,17 +33,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
 
 private[sql] object SQLUtils extends Logging {
   SerDe.setSQLReadObject(readSqlObject).setSQLWriteObject(writeSqlObject)
-
-  private[this] def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
-    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-    sc
-  }
 
   def getOrCreateSparkSession(
       jsc: JavaSparkContext,
@@ -61,7 +55,7 @@ private[sql] object SQLUtils extends Logging {
           // So, we intentionally check if Hive classes are loadable or not only when
           // Hive support is explicitly enabled by short-circuiting. See also SPARK-26422.
           SparkSession.hiveClassesArePresent) {
-        SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
+        SparkSession.builder().enableHiveSupport().sparkContext(jsc.sc).getOrCreate()
       } else {
         if (enableHiveSupport) {
           logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
@@ -197,7 +191,7 @@ private[sql] object SQLUtils extends Logging {
     dataType match {
       case 's' =>
         // Read StructType for DataFrame
-        val fields = SerDe.readList(dis, jvmObjectTracker = null).asInstanceOf[Array[Object]]
+        val fields = SerDe.readList(dis, jvmObjectTracker = null)
         Row.fromSeq(fields)
       case _ => null
     }
@@ -216,15 +210,6 @@ private[sql] object SQLUtils extends Logging {
     }
   }
 
-  def getTables(sparkSession: SparkSession, databaseName: String): DataFrame = {
-    databaseName match {
-      case n: String if n != null && n.trim.nonEmpty =>
-        Dataset.ofRows(sparkSession, ShowTablesCommand(Some(n), None))
-      case _ =>
-        Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
-    }
-  }
-
   def getTableNames(sparkSession: SparkSession, databaseName: String): Array[String] = {
     val db = databaseName match {
       case _ if databaseName != null && databaseName.trim.nonEmpty =>
@@ -232,7 +217,7 @@ private[sql] object SQLUtils extends Logging {
       case _ =>
         sparkSession.catalog.currentDatabase
     }
-    sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
+    sparkSession.catalog.listTables(db).collect().map(_.name)
   }
 
   def createArrayType(column: Column): ArrayType = {
@@ -246,7 +231,9 @@ private[sql] object SQLUtils extends Logging {
   def readArrowStreamFromFile(
       sparkSession: SparkSession,
       filename: String): JavaRDD[Array[Byte]] = {
-    ArrowConverters.readArrowStreamFromFile(sparkSession.sqlContext, filename)
+    // Parallelize the record batches to create an RDD
+    val batches = ArrowConverters.readArrowStreamFromFile(filename)
+    JavaRDD.fromRDD(sparkSession.sparkContext.parallelize(batches, batches.length))
   }
 
   /**
@@ -257,6 +244,11 @@ private[sql] object SQLUtils extends Logging {
       arrowBatchRDD: JavaRDD[Array[Byte]],
       schema: StructType,
       sparkSession: SparkSession): DataFrame = {
-    ArrowConverters.toDataFrame(arrowBatchRDD, schema.json, sparkSession.sqlContext)
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val rdd = arrowBatchRDD.rdd.mapPartitions { iter =>
+      val context = TaskContext.get()
+      ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, context)
+    }
+    sparkSession.internalCreateDataFrame(rdd.setName("arrow"), schema)
   }
 }

@@ -29,6 +29,8 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils.{AMOUNT, FPGA, GPU}
 import org.apache.spark.util.{CausedBy, Utils}
 
 /**
@@ -38,6 +40,49 @@ import org.apache.spark.util.{CausedBy, Utils}
 private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
+  private val RESOURCE_NOT_FOUND = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
+  @volatile private var numResourceErrors: Int = 0
+
+  private[yarn] def getYarnResourcesAndAmounts(
+      sparkConf: SparkConf,
+      componentName: String): Map[String, String] = {
+    sparkConf.getAllWithPrefix(s"$componentName").map { case (key, value) =>
+      val splitIndex = key.lastIndexOf('.')
+      if (splitIndex == -1) {
+        val errorMessage = s"Missing suffix for ${componentName}${key}, you must specify" +
+          s" a suffix - $AMOUNT is currently the only supported suffix."
+        throw new IllegalArgumentException(errorMessage)
+      }
+      val resourceName = key.substring(0, splitIndex)
+      val resourceSuffix = key.substring(splitIndex + 1)
+      if (!AMOUNT.equals(resourceSuffix)) {
+        val errorMessage = s"Unsupported suffix: $resourceSuffix in: ${componentName}${key}, " +
+          s"only .$AMOUNT is supported."
+        throw new IllegalArgumentException(errorMessage)
+      }
+      (resourceName, value)
+    }.toMap
+  }
+
+  private[yarn] def getResourceNameMapping(sparkConf: SparkConf): Map[String, String] = {
+    Map(GPU -> sparkConf.get(YARN_GPU_DEVICE), FPGA -> sparkConf.get(YARN_FPGA_DEVICE))
+  }
+
+  /**
+   * Convert Spark resources into YARN resources.
+   * The only resources we know how to map from spark configs to yarn configs are
+   * gpus and fpgas, everything else the user has to specify them in both the
+   * spark.yarn.*.resource and the spark.*.resource configs.
+   */
+  private[yarn] def getYarnResourcesFromSparkResources(
+      confPrefix: String,
+      sparkConf: SparkConf
+  ): Map[String, String] = {
+    getResourceNameMapping(sparkConf).map {
+      case (rName, yarnName) =>
+        (yarnName -> sparkConf.get(new ResourceID(confPrefix, rName).amountConf, "0"))
+    }.filter { case (_, count) => count.toLong > 0 }
+  }
 
   /**
    * Validates sparkConf and throws a SparkException if any of standard resources (memory or cores)
@@ -66,12 +111,22 @@ private object ResourceRequestHelper extends Logging {
       (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "vcores"),
       (AM_CORES.key, YARN_AM_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
-      (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cpu-vcores"))
+      (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
+      (new ResourceID(SPARK_EXECUTOR_PREFIX, "fpga").amountConf,
+        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_FPGA_DEVICE)}"),
+      (new ResourceID(SPARK_DRIVER_PREFIX, "fpga").amountConf,
+        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_FPGA_DEVICE)}"),
+      (new ResourceID(SPARK_EXECUTOR_PREFIX, "gpu").amountConf,
+        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_GPU_DEVICE)}"),
+      (new ResourceID(SPARK_DRIVER_PREFIX, "gpu").amountConf,
+        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_GPU_DEVICE)}"))
+
     val errorMessage = new mutable.StringBuilder()
 
     resourceDefinitions.foreach { case (sparkName, resourceRequest) =>
-      if (sparkConf.contains(resourceRequest)) {
-        errorMessage.append(s"Error: Do not use $resourceRequest, " +
+      val resourceRequestAmount = s"${resourceRequest}.${AMOUNT}"
+      if (sparkConf.contains(resourceRequestAmount)) {
+        errorMessage.append(s"Error: Do not use $resourceRequestAmount, " +
             s"please use $sparkName instead!\n")
       }
     }
@@ -92,17 +147,28 @@ private object ResourceRequestHelper extends Logging {
     require(resource != null, "Resource parameter should not be null!")
 
     logDebug(s"Custom resources requested: $resources")
+    if (resources.isEmpty) {
+      // no point in going forward, as we don't have anything to set
+      return
+    }
+
     if (!isYarnResourceTypesAvailable()) {
-      if (resources.nonEmpty) {
-        logWarning("Ignoring custom resource requests because " +
-            "the version of YARN does not support it!")
-      }
+      logWarning("Ignoring custom resource requests because " +
+          "the version of YARN does not support it!")
       return
     }
 
     val resInfoClass = Utils.classForName(RESOURCE_INFO_CLASS)
     val setResourceInformationMethod =
-      resource.getClass.getMethod("setResourceInformation", classOf[String], resInfoClass)
+      try {
+        resource.getClass.getMethod("setResourceInformation", classOf[String], resInfoClass)
+      } catch {
+        case e: NoSuchMethodException =>
+          throw new SparkException(
+            s"Cannot find setResourceInformation in ${resource.getClass}. " +
+              "This is likely due to a JAR conflict between different YARN versions.", e)
+      }
+
     resources.foreach { case (name, rawAmount) =>
       try {
         val AMOUNT_AND_UNIT_REGEX(amountPart, unitPart) = rawAmount
@@ -123,7 +189,24 @@ private object ResourceRequestHelper extends Logging {
               s"does not match pattern $AMOUNT_AND_UNIT_REGEX.")
         case CausedBy(e: IllegalArgumentException) =>
           throw new IllegalArgumentException(s"Invalid request for $name: ${e.getMessage}")
-        case e: InvocationTargetException if e.getCause != null => throw e.getCause
+        case e: InvocationTargetException =>
+          if (e.getCause != null) {
+            if (Try(Utils.classForName(RESOURCE_NOT_FOUND)).isSuccess) {
+              if (e.getCause().getClass().getName().equals(RESOURCE_NOT_FOUND)) {
+                // warn a couple times and then stop so we don't spam the logs
+                if (numResourceErrors < 2) {
+                  logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
+                    s"has to handle properly discovering and isolating the resource! Error: " +
+                    s"${e.getCause().getMessage}")
+                  numResourceErrors += 1
+                }
+              } else {
+                throw e.getCause
+              }
+            } else {
+              throw e.getCause
+            }
+          }
       }
     }
   }
@@ -144,6 +227,17 @@ private object ResourceRequestHelper extends Logging {
         resInfoNewInstanceMethod.invoke(null, resourceName, amount.asInstanceOf[JLong])
       }
     resourceInformation
+  }
+
+  def isYarnCustomResourcesNonEmpty(resource: Resource): Boolean = {
+    try {
+      // Use reflection as this uses APIs only available in Hadoop 3
+      val getResourcesMethod = resource.getClass().getMethod("getResources")
+      val resources = getResourcesMethod.invoke(resource).asInstanceOf[Array[Any]]
+      if (resources.nonEmpty) true else false
+    } catch {
+      case  _: NoSuchMethodException => false
+    }
   }
 
   /**

@@ -28,14 +28,32 @@ import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlanInfo}
 
 @DeveloperApi
+case class SparkListenerSQLAdaptiveExecutionUpdate(
+  executionId: Long,
+  physicalPlanDescription: String,
+  sparkPlanInfo: SparkPlanInfo)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerSQLAdaptiveSQLMetricUpdates(
+    executionId: Long,
+    sqlPlanMetrics: Seq[SQLPlanMetric])
+  extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerSQLExecutionStart(
     executionId: Long,
     description: String,
     details: String,
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
-    time: Long)
-  extends SparkListenerEvent
+    time: Long,
+    modifiedConfigs: Map[String, String] = Map.empty)
+  extends SparkListenerEvent {
+
+  // The `QueryExecution` instance that represents the SQL execution
+  @JsonIgnore private[sql] var qe: QueryExecution = null
+}
 
 @DeveloperApi
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
@@ -53,7 +71,7 @@ case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   @JsonIgnore private[sql] var qe: QueryExecution = null
 
   // The exception object that caused this execution to fail. None if the execution doesn't fail.
-  @JsonIgnore private[sql] var executionFailure: Option[Exception] = None
+  @JsonIgnore private[sql] var executionFailure: Option[Throwable] = None
 }
 
 /**

@@ -18,6 +18,7 @@
 import sys
 import decimal
 import time
+import math
 import datetime
 import calendar
 import json
@@ -25,68 +26,104 @@ import re
 import base64
 from array import array
 import ctypes
-
-if sys.version >= "3":
-    long = int
-    basestring = unicode = str
+from collections.abc import Iterable
+from functools import reduce
+from typing import (
+    cast,
+    overload,
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Union,
+    Tuple,
+    Type,
+    TypeVar,
+    TYPE_CHECKING,
+)
 
 from py4j.protocol import register_input_converter
-from py4j.java_gateway import JavaClass
+from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
 
-from pyspark import SparkContext
 from pyspark.serializers import CloudPickleSerializer
 
+T = TypeVar("T")
+U = TypeVar("U")
+
 __all__ = [
-    "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
-    "TimestampType", "DecimalType", "DoubleType", "FloatType", "ByteType", "IntegerType",
-    "LongType", "ShortType", "ArrayType", "MapType", "StructField", "StructType"]
+    "DataType",
+    "NullType",
+    "StringType",
+    "BinaryType",
+    "BooleanType",
+    "DateType",
+    "TimestampType",
+    "DecimalType",
+    "DoubleType",
+    "FloatType",
+    "ByteType",
+    "IntegerType",
+    "LongType",
+    "DayTimeIntervalType",
+    "Row",
+    "ShortType",
+    "ArrayType",
+    "MapType",
+    "StructField",
+    "StructType",
+]
 
 
-class DataType(object):
+if TYPE_CHECKING:
+    import numpy as np
+
+
+class DataType:
     """Base class for data types."""
 
-    def __repr__(self):
-        return self.__class__.__name__
+    def __repr__(self) -> str:
+        return self.__class__.__name__ + "()"
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(str(self))
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
-    def __ne__(self, other):
+    def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
     @classmethod
-    def typeName(cls):
+    def typeName(cls) -> str:
         return cls.__name__[:-4].lower()
 
-    def simpleString(self):
+    def simpleString(self) -> str:
         return self.typeName()
 
-    def jsonValue(self):
+    def jsonValue(self) -> Union[str, Dict[str, Any]]:
         return self.typeName()
 
-    def json(self):
-        return json.dumps(self.jsonValue(),
-                          separators=(',', ':'),
-                          sort_keys=True)
+    def json(self) -> str:
+        return json.dumps(self.jsonValue(), separators=(",", ":"), sort_keys=True)
 
-    def needConversion(self):
+    def needConversion(self) -> bool:
         """
-        Does this type need to conversion between Python object and internal SQL object.
+        Does this type needs conversion between Python object and internal SQL object.
 
         This is used to avoid the unnecessary conversion for ArrayType/MapType/StructType.
         """
         return False
 
-    def toInternal(self, obj):
+    def toInternal(self, obj: Any) -> Any:
         """
         Converts a Python object into an internal SQL object.
         """
         return obj
 
-    def fromInternal(self, obj):
+    def fromInternal(self, obj: Any) -> Any:
         """
         Converts an internal SQL object into a native Python object.
         """
@@ -98,21 +135,25 @@ class DataType(object):
 class DataTypeSingleton(type):
     """Metaclass for DataType"""
 
-    _instances = {}
+    _instances: ClassVar[Dict[Type["DataTypeSingleton"], "DataTypeSingleton"]] = {}
 
-    def __call__(cls):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(DataTypeSingleton, cls).__call__()
-        return cls._instances[cls]
+    def __call__(cls: Type[T]) -> T:  # type: ignore[override]
+        if cls not in cls._instances:  # type: ignore[attr-defined]
+            cls._instances[cls] = super(  # type: ignore[misc, attr-defined]
+                DataTypeSingleton, cls
+            ).__call__()
+        return cls._instances[cls]  # type: ignore[attr-defined]
 
 
-class NullType(DataType):
+class NullType(DataType, metaclass=DataTypeSingleton):
     """Null type.
 
     The data type representing None, used for the types that cannot be inferred.
     """
 
-    __metaclass__ = DataTypeSingleton
+    @classmethod
+    def typeName(cls) -> str:
+        return "void"
 
 
 class AtomicType(DataType):
@@ -121,82 +162,94 @@ class AtomicType(DataType):
 
 
 class NumericType(AtomicType):
-    """Numeric data types.
-    """
+    """Numeric data types."""
 
 
-class IntegralType(NumericType):
-    """Integral data types.
-    """
+class IntegralType(NumericType, metaclass=DataTypeSingleton):
+    """Integral data types."""
 
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
 class FractionalType(NumericType):
-    """Fractional data types.
-    """
+    """Fractional data types."""
 
 
-class StringType(AtomicType):
-    """String data type.
-    """
+class StringType(AtomicType, metaclass=DataTypeSingleton):
+    """String data type."""
 
-    __metaclass__ = DataTypeSingleton
-
-
-class BinaryType(AtomicType):
-    """Binary (byte array) data type.
-    """
-
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
-class BooleanType(AtomicType):
-    """Boolean data type.
-    """
+class BinaryType(AtomicType, metaclass=DataTypeSingleton):
+    """Binary (byte array) data type."""
 
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
-class DateType(AtomicType):
-    """Date (datetime.date) data type.
-    """
+class BooleanType(AtomicType, metaclass=DataTypeSingleton):
+    """Boolean data type."""
 
-    __metaclass__ = DataTypeSingleton
+    pass
+
+
+class DateType(AtomicType, metaclass=DataTypeSingleton):
+    """Date (datetime.date) data type."""
 
     EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
 
-    def needConversion(self):
+    def needConversion(self) -> bool:
         return True
 
-    def toInternal(self, d):
+    def toInternal(self, d: datetime.date) -> int:
         if d is not None:
             return d.toordinal() - self.EPOCH_ORDINAL
 
-    def fromInternal(self, v):
+    def fromInternal(self, v: int) -> datetime.date:
         if v is not None:
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
-class TimestampType(AtomicType):
-    """Timestamp (datetime.datetime) data type.
-    """
+class TimestampType(AtomicType, metaclass=DataTypeSingleton):
+    """Timestamp (datetime.datetime) data type."""
 
-    __metaclass__ = DataTypeSingleton
-
-    def needConversion(self):
+    def needConversion(self) -> bool:
         return True
 
-    def toInternal(self, dt):
+    def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
-            seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
-                       else time.mktime(dt.timetuple()))
+            seconds = (
+                calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
+            )
             return int(seconds) * 1000000 + dt.microsecond
 
-    def fromInternal(self, ts):
+    def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
             return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+
+
+class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
+    """Timestamp (datetime.datetime) data type without timezone information."""
+
+    def needConversion(self) -> bool:
+        return True
+
+    @classmethod
+    def typeName(cls) -> str:
+        return "timestamp_ntz"
+
+    def toInternal(self, dt: datetime.datetime) -> int:
+        if dt is not None:
+            seconds = calendar.timegm(dt.timetuple())
+            return int(seconds) * 1000000 + dt.microsecond
+
+    def fromInternal(self, ts: int) -> datetime.datetime:
+        if ts is not None:
+            # using int to avoid precision loss in float
+            return datetime.datetime.utcfromtimestamp(ts // 1000000).replace(
+                microsecond=ts % 1000000
+            )
 
 
 class DecimalType(FractionalType):
@@ -208,54 +261,56 @@ class DecimalType(FractionalType):
 
     The precision can be up to 38, the scale must be less or equal to precision.
 
-    When create a DecimalType, the default precision and scale is (10, 0). When infer
+    When creating a DecimalType, the default precision and scale is (10, 0). When inferring
     schema from decimal.Decimal objects, it will be DecimalType(38, 18).
 
-    :param precision: the maximum total number of digits (default: 10)
-    :param scale: the number of digits on right side of dot. (default: 0)
+    Parameters
+    ----------
+    precision : int, optional
+        the maximum (i.e. total) number of digits (default: 10)
+    scale : int, optional
+        the number of digits on right side of dot. (default: 0)
     """
 
-    def __init__(self, precision=10, scale=0):
+    def __init__(self, precision: int = 10, scale: int = 0):
         self.precision = precision
         self.scale = scale
-        self.hasPrecisionInfo = True  # this is public API
+        self.hasPrecisionInfo = True  # this is a public API
 
-    def simpleString(self):
+    def simpleString(self) -> str:
         return "decimal(%d,%d)" % (self.precision, self.scale)
 
-    def jsonValue(self):
+    def jsonValue(self) -> str:
         return "decimal(%d,%d)" % (self.precision, self.scale)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "DecimalType(%d,%d)" % (self.precision, self.scale)
 
 
-class DoubleType(FractionalType):
-    """Double data type, representing double precision floats.
-    """
+class DoubleType(FractionalType, metaclass=DataTypeSingleton):
+    """Double data type, representing double precision floats."""
 
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
-class FloatType(FractionalType):
-    """Float data type, representing single precision floats.
-    """
+class FloatType(FractionalType, metaclass=DataTypeSingleton):
+    """Float data type, representing single precision floats."""
 
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
 class ByteType(IntegralType):
-    """Byte data type, i.e. a signed integer in a single byte.
-    """
-    def simpleString(self):
-        return 'tinyint'
+    """Byte data type, i.e. a signed integer in a single byte."""
+
+    def simpleString(self) -> str:
+        return "tinyint"
 
 
 class IntegerType(IntegralType):
-    """Int data type, i.e. a signed 32-bit integer.
-    """
-    def simpleString(self):
-        return 'int'
+    """Int data type, i.e. a signed 32-bit integer."""
+
+    def simpleString(self) -> str:
+        return "int"
 
 
 class LongType(IntegralType):
@@ -264,62 +319,129 @@ class LongType(IntegralType):
     If the values are beyond the range of [-9223372036854775808, 9223372036854775807],
     please use :class:`DecimalType`.
     """
-    def simpleString(self):
-        return 'bigint'
+
+    def simpleString(self) -> str:
+        return "bigint"
+
+
+class DayTimeIntervalType(AtomicType):
+    """DayTimeIntervalType (datetime.timedelta)."""
+
+    DAY = 0
+    HOUR = 1
+    MINUTE = 2
+    SECOND = 3
+
+    _fields = {
+        DAY: "day",
+        HOUR: "hour",
+        MINUTE: "minute",
+        SECOND: "second",
+    }
+
+    _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
+
+    def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
+        if startField is None and endField is None:
+            # Default matched to scala side.
+            startField = DayTimeIntervalType.DAY
+            endField = DayTimeIntervalType.SECOND
+        elif startField is not None and endField is None:
+            endField = startField
+
+        fields = DayTimeIntervalType._fields
+        if startField not in fields.keys() or endField not in fields.keys():
+            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
+        self.startField = cast(int, startField)
+        self.endField = cast(int, endField)
+
+    def _str_repr(self) -> str:
+        fields = DayTimeIntervalType._fields
+        start_field_name = fields[self.startField]
+        end_field_name = fields[self.endField]
+        if start_field_name == end_field_name:
+            return "interval %s" % start_field_name
+        else:
+            return "interval %s to %s" % (start_field_name, end_field_name)
+
+    simpleString = _str_repr
+
+    jsonValue = _str_repr
+
+    def __repr__(self) -> str:
+        return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, dt: datetime.timedelta) -> Optional[int]:
+        if dt is not None:
+            return (math.floor(dt.total_seconds()) * 1000000) + dt.microseconds
+
+    def fromInternal(self, micros: int) -> Optional[datetime.timedelta]:
+        if micros is not None:
+            return datetime.timedelta(microseconds=micros)
 
 
 class ShortType(IntegralType):
-    """Short data type, i.e. a signed 16-bit integer.
-    """
-    def simpleString(self):
-        return 'smallint'
+    """Short data type, i.e. a signed 16-bit integer."""
+
+    def simpleString(self) -> str:
+        return "smallint"
 
 
 class ArrayType(DataType):
     """Array data type.
 
-    :param elementType: :class:`DataType` of each element in the array.
-    :param containsNull: boolean, whether the array can contain null (None) values.
+    Parameters
+    ----------
+    elementType : :class:`DataType`
+        :class:`DataType` of each element in the array.
+    containsNull : bool, optional
+        whether the array can contain null (None) values.
+
+    Examples
+    --------
+    >>> ArrayType(StringType()) == ArrayType(StringType(), True)
+    True
+    >>> ArrayType(StringType(), False) == ArrayType(StringType())
+    False
     """
 
-    def __init__(self, elementType, containsNull=True):
-        """
-        >>> ArrayType(StringType()) == ArrayType(StringType(), True)
-        True
-        >>> ArrayType(StringType(), False) == ArrayType(StringType())
-        False
-        """
-        assert isinstance(elementType, DataType),\
-            "elementType %s should be an instance of %s" % (elementType, DataType)
+    def __init__(self, elementType: DataType, containsNull: bool = True):
+        assert isinstance(elementType, DataType), "elementType %s should be an instance of %s" % (
+            elementType,
+            DataType,
+        )
         self.elementType = elementType
         self.containsNull = containsNull
 
-    def simpleString(self):
-        return 'array<%s>' % self.elementType.simpleString()
+    def simpleString(self) -> str:
+        return "array<%s>" % self.elementType.simpleString()
 
-    def __repr__(self):
-        return "ArrayType(%s,%s)" % (self.elementType,
-                                     str(self.containsNull).lower())
+    def __repr__(self) -> str:
+        return "ArrayType(%s, %s)" % (self.elementType, str(self.containsNull))
 
-    def jsonValue(self):
-        return {"type": self.typeName(),
-                "elementType": self.elementType.jsonValue(),
-                "containsNull": self.containsNull}
+    def jsonValue(self) -> Dict[str, Any]:
+        return {
+            "type": self.typeName(),
+            "elementType": self.elementType.jsonValue(),
+            "containsNull": self.containsNull,
+        }
 
     @classmethod
-    def fromJson(cls, json):
-        return ArrayType(_parse_datatype_json_value(json["elementType"]),
-                         json["containsNull"])
+    def fromJson(cls, json: Dict[str, Any]) -> "ArrayType":
+        return ArrayType(_parse_datatype_json_value(json["elementType"]), json["containsNull"])
 
-    def needConversion(self):
+    def needConversion(self) -> bool:
         return self.elementType.needConversion()
 
-    def toInternal(self, obj):
+    def toInternal(self, obj: List[Optional[T]]) -> List[Optional[T]]:
         if not self.needConversion():
             return obj
         return obj and [self.elementType.toInternal(v) for v in obj]
 
-    def fromInternal(self, obj):
+    def fromInternal(self, obj: List[Optional[T]]) -> List[Optional[T]]:
         if not self.needConversion():
             return obj
         return obj and [self.elementType.fromInternal(v) for v in obj]
@@ -328,126 +450,159 @@ class ArrayType(DataType):
 class MapType(DataType):
     """Map data type.
 
-    :param keyType: :class:`DataType` of the keys in the map.
-    :param valueType: :class:`DataType` of the values in the map.
-    :param valueContainsNull: indicates whether values can contain null (None) values.
+    Parameters
+    ----------
+    keyType : :class:`DataType`
+        :class:`DataType` of the keys in the map.
+    valueType : :class:`DataType`
+        :class:`DataType` of the values in the map.
+    valueContainsNull : bool, optional
+        indicates whether values can contain null (None) values.
 
+    Notes
+    -----
     Keys in a map data type are not allowed to be null (None).
+
+    Examples
+    --------
+    >>> (MapType(StringType(), IntegerType())
+    ...        == MapType(StringType(), IntegerType(), True))
+    True
+    >>> (MapType(StringType(), IntegerType(), False)
+    ...        == MapType(StringType(), FloatType()))
+    False
     """
 
-    def __init__(self, keyType, valueType, valueContainsNull=True):
-        """
-        >>> (MapType(StringType(), IntegerType())
-        ...        == MapType(StringType(), IntegerType(), True))
-        True
-        >>> (MapType(StringType(), IntegerType(), False)
-        ...        == MapType(StringType(), FloatType()))
-        False
-        """
-        assert isinstance(keyType, DataType),\
-            "keyType %s should be an instance of %s" % (keyType, DataType)
-        assert isinstance(valueType, DataType),\
-            "valueType %s should be an instance of %s" % (valueType, DataType)
+    def __init__(self, keyType: DataType, valueType: DataType, valueContainsNull: bool = True):
+        assert isinstance(keyType, DataType), "keyType %s should be an instance of %s" % (
+            keyType,
+            DataType,
+        )
+        assert isinstance(valueType, DataType), "valueType %s should be an instance of %s" % (
+            valueType,
+            DataType,
+        )
         self.keyType = keyType
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
 
-    def simpleString(self):
-        return 'map<%s,%s>' % (self.keyType.simpleString(), self.valueType.simpleString())
+    def simpleString(self) -> str:
+        return "map<%s,%s>" % (self.keyType.simpleString(), self.valueType.simpleString())
 
-    def __repr__(self):
-        return "MapType(%s,%s,%s)" % (self.keyType, self.valueType,
-                                      str(self.valueContainsNull).lower())
+    def __repr__(self) -> str:
+        return "MapType(%s, %s, %s)" % (self.keyType, self.valueType, str(self.valueContainsNull))
 
-    def jsonValue(self):
-        return {"type": self.typeName(),
-                "keyType": self.keyType.jsonValue(),
-                "valueType": self.valueType.jsonValue(),
-                "valueContainsNull": self.valueContainsNull}
+    def jsonValue(self) -> Dict[str, Any]:
+        return {
+            "type": self.typeName(),
+            "keyType": self.keyType.jsonValue(),
+            "valueType": self.valueType.jsonValue(),
+            "valueContainsNull": self.valueContainsNull,
+        }
 
     @classmethod
-    def fromJson(cls, json):
-        return MapType(_parse_datatype_json_value(json["keyType"]),
-                       _parse_datatype_json_value(json["valueType"]),
-                       json["valueContainsNull"])
+    def fromJson(cls, json: Dict[str, Any]) -> "MapType":
+        return MapType(
+            _parse_datatype_json_value(json["keyType"]),
+            _parse_datatype_json_value(json["valueType"]),
+            json["valueContainsNull"],
+        )
 
-    def needConversion(self):
+    def needConversion(self) -> bool:
         return self.keyType.needConversion() or self.valueType.needConversion()
 
-    def toInternal(self, obj):
+    def toInternal(self, obj: Dict[T, Optional[U]]) -> Dict[T, Optional[U]]:
         if not self.needConversion():
             return obj
-        return obj and dict((self.keyType.toInternal(k), self.valueType.toInternal(v))
-                            for k, v in obj.items())
+        return obj and dict(
+            (self.keyType.toInternal(k), self.valueType.toInternal(v)) for k, v in obj.items()
+        )
 
-    def fromInternal(self, obj):
+    def fromInternal(self, obj: Dict[T, Optional[U]]) -> Dict[T, Optional[U]]:
         if not self.needConversion():
             return obj
-        return obj and dict((self.keyType.fromInternal(k), self.valueType.fromInternal(v))
-                            for k, v in obj.items())
+        return obj and dict(
+            (self.keyType.fromInternal(k), self.valueType.fromInternal(v)) for k, v in obj.items()
+        )
 
 
 class StructField(DataType):
     """A field in :class:`StructType`.
 
-    :param name: string, name of the field.
-    :param dataType: :class:`DataType` of the field.
-    :param nullable: boolean, whether the field can be null (None) or not.
-    :param metadata: a dict from string to simple type that can be toInternald to JSON automatically
+    Parameters
+    ----------
+    name : str
+        name of the field.
+    dataType : :class:`DataType`
+        :class:`DataType` of the field.
+    nullable : bool, optional
+        whether the field can be null (None) or not.
+    metadata : dict, optional
+        a dict from string to simple type that can be toInternald to JSON automatically
+
+    Examples
+    --------
+    >>> (StructField("f1", StringType(), True)
+    ...      == StructField("f1", StringType(), True))
+    True
+    >>> (StructField("f1", StringType(), True)
+    ...      == StructField("f2", StringType(), True))
+    False
     """
 
-    def __init__(self, name, dataType, nullable=True, metadata=None):
-        """
-        >>> (StructField("f1", StringType(), True)
-        ...      == StructField("f1", StringType(), True))
-        True
-        >>> (StructField("f1", StringType(), True)
-        ...      == StructField("f2", StringType(), True))
-        False
-        """
-        assert isinstance(dataType, DataType),\
-            "dataType %s should be an instance of %s" % (dataType, DataType)
-        assert isinstance(name, basestring), "field name %s should be string" % (name)
-        if not isinstance(name, str):
-            name = name.encode('utf-8')
+    def __init__(
+        self,
+        name: str,
+        dataType: DataType,
+        nullable: bool = True,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        assert isinstance(dataType, DataType), "dataType %s should be an instance of %s" % (
+            dataType,
+            DataType,
+        )
+        assert isinstance(name, str), "field name %s should be a string" % (name)
         self.name = name
         self.dataType = dataType
         self.nullable = nullable
         self.metadata = metadata or {}
 
-    def simpleString(self):
-        return '%s:%s' % (self.name, self.dataType.simpleString())
+    def simpleString(self) -> str:
+        return "%s:%s" % (self.name, self.dataType.simpleString())
 
-    def __repr__(self):
-        return "StructField(%s,%s,%s)" % (self.name, self.dataType,
-                                          str(self.nullable).lower())
+    def __repr__(self) -> str:
+        return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
-    def jsonValue(self):
-        return {"name": self.name,
-                "type": self.dataType.jsonValue(),
-                "nullable": self.nullable,
-                "metadata": self.metadata}
+    def jsonValue(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "type": self.dataType.jsonValue(),
+            "nullable": self.nullable,
+            "metadata": self.metadata,
+        }
 
     @classmethod
-    def fromJson(cls, json):
-        return StructField(json["name"],
-                           _parse_datatype_json_value(json["type"]),
-                           json["nullable"],
-                           json["metadata"])
+    def fromJson(cls, json: Dict[str, Any]) -> "StructField":
+        return StructField(
+            json["name"],
+            _parse_datatype_json_value(json["type"]),
+            json["nullable"],
+            json["metadata"],
+        )
 
-    def needConversion(self):
+    def needConversion(self) -> bool:
         return self.dataType.needConversion()
 
-    def toInternal(self, obj):
+    def toInternal(self, obj: T) -> T:
         return self.dataType.toInternal(obj)
 
-    def fromInternal(self, obj):
+    def fromInternal(self, obj: T) -> T:
         return self.dataType.fromInternal(obj)
 
-    def typeName(self):
+    def typeName(self) -> str:  # type: ignore[override]
         raise TypeError(
-            "StructField does not have typeName. "
-            "Use typeName on its type explicitly instead.")
+            "StructField does not have typeName. " "Use typeName on its type explicitly instead."
+        )
 
 
 class StructType(DataType):
@@ -455,49 +610,89 @@ class StructType(DataType):
 
     This is the data type representing a :class:`Row`.
 
-    Iterating a :class:`StructType` will iterate its :class:`StructField`\\s.
-    A contained :class:`StructField` can be accessed by name or position.
+    Iterating a :class:`StructType` will iterate over its :class:`StructField`\\s.
+    A contained :class:`StructField` can be accessed by its name or position.
 
+    Examples
+    --------
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
-    StructField(f1,StringType,true)
+    StructField('f1', StringType(), True)
     >>> struct1[0]
-    StructField(f1,StringType,true)
+    StructField('f1', StringType(), True)
+
+    >>> struct1 = StructType([StructField("f1", StringType(), True)])
+    >>> struct2 = StructType([StructField("f1", StringType(), True)])
+    >>> struct1 == struct2
+    True
+    >>> struct1 = StructType([StructField("f1", StringType(), True)])
+    >>> struct2 = StructType([StructField("f1", StringType(), True),
+    ...     StructField("f2", IntegerType(), False)])
+    >>> struct1 == struct2
+    False
     """
-    def __init__(self, fields=None):
-        """
-        >>> struct1 = StructType([StructField("f1", StringType(), True)])
-        >>> struct2 = StructType([StructField("f1", StringType(), True)])
-        >>> struct1 == struct2
-        True
-        >>> struct1 = StructType([StructField("f1", StringType(), True)])
-        >>> struct2 = StructType([StructField("f1", StringType(), True),
-        ...     StructField("f2", IntegerType(), False)])
-        >>> struct1 == struct2
-        False
-        """
+
+    def __init__(self, fields: Optional[List[StructField]] = None):
         if not fields:
             self.fields = []
             self.names = []
         else:
             self.fields = fields
             self.names = [f.name for f in fields]
-            assert all(isinstance(f, StructField) for f in fields),\
-                "fields should be a list of StructField"
+            assert all(
+                isinstance(f, StructField) for f in fields
+            ), "fields should be a list of StructField"
         # Precalculated list of fields that need conversion with fromInternal/toInternal functions
         self._needConversion = [f.needConversion() for f in self]
         self._needSerializeAnyField = any(self._needConversion)
 
-    def add(self, field, data_type=None, nullable=True, metadata=None):
-        """
-        Construct a StructType by adding new elements to it to define the schema. The method accepts
-        either:
+    @overload
+    def add(
+        self,
+        field: str,
+        data_type: Union[str, DataType],
+        nullable: bool = True,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> "StructType":
+        ...
 
-            a) A single parameter which is a StructField object.
+    @overload
+    def add(self, field: StructField) -> "StructType":
+        ...
+
+    def add(
+        self,
+        field: Union[str, StructField],
+        data_type: Optional[Union[str, DataType]] = None,
+        nullable: bool = True,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> "StructType":
+        """
+        Construct a :class:`StructType` by adding new elements to it, to define the schema.
+        The method accepts either:
+
+            a) A single parameter which is a :class:`StructField` object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
                metadata(optional). The data_type parameter may be either a String or a
-               DataType object.
+               :class:`DataType` object.
 
+        Parameters
+        ----------
+        field : str or :class:`StructField`
+            Either the name of the field or a :class:`StructField` object
+        data_type : :class:`DataType`, optional
+            If present, the DataType of the :class:`StructField` to create
+        nullable : bool, optional
+            Whether the field to add should be nullable (default True)
+        metadata : dict, optional
+            Any additional metadata (default None)
+
+        Returns
+        -------
+        :class:`StructType`
+
+        Examples
+        --------
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         >>> struct2 = StructType([StructField("f1", StringType(), True), \\
         ...     StructField("f2", StringType(), True, None)])
@@ -511,12 +706,6 @@ class StructType(DataType):
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
         True
-
-        :param field: Either the name of the field or a StructField object
-        :param data_type: If present, the DataType of the StructField to create
-        :param nullable: Whether the field to add should be nullable (default True)
-        :param metadata: Any additional metadata (default None)
-        :return: a new updated StructType
         """
         if isinstance(field, StructField):
             self.fields.append(field)
@@ -536,83 +725,87 @@ class StructType(DataType):
         self._needSerializeAnyField = any(self._needConversion)
         return self
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[StructField]:
         """Iterate the fields"""
         return iter(self.fields)
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Return the number of fields."""
         return len(self.fields)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: Union[str, int]) -> StructField:
         """Access fields by name or slice."""
         if isinstance(key, str):
             for field in self:
                 if field.name == key:
                     return field
-            raise KeyError('No StructField named {0}'.format(key))
+            raise KeyError("No StructField named {0}".format(key))
         elif isinstance(key, int):
             try:
                 return self.fields[key]
             except IndexError:
-                raise IndexError('StructType index out of range')
+                raise IndexError("StructType index out of range")
         elif isinstance(key, slice):
             return StructType(self.fields[key])
         else:
-            raise TypeError('StructType keys should be strings, integers or slices')
+            raise TypeError("StructType keys should be strings, integers or slices")
 
-    def simpleString(self):
-        return 'struct<%s>' % (','.join(f.simpleString() for f in self))
+    def simpleString(self) -> str:
+        return "struct<%s>" % (",".join(f.simpleString() for f in self))
 
-    def __repr__(self):
-        return ("StructType(List(%s))" %
-                ",".join(str(field) for field in self))
+    def __repr__(self) -> str:
+        return "StructType([%s])" % ", ".join(str(field) for field in self)
 
-    def jsonValue(self):
-        return {"type": self.typeName(),
-                "fields": [f.jsonValue() for f in self]}
+    def jsonValue(self) -> Dict[str, Any]:
+        return {"type": self.typeName(), "fields": [f.jsonValue() for f in self]}
 
     @classmethod
-    def fromJson(cls, json):
+    def fromJson(cls, json: Dict[str, Any]) -> "StructType":
         return StructType([StructField.fromJson(f) for f in json["fields"]])
 
-    def fieldNames(self):
+    def fieldNames(self) -> List[str]:
         """
         Returns all field names in a list.
 
+        Examples
+        --------
         >>> struct = StructType([StructField("f1", StringType(), True)])
         >>> struct.fieldNames()
         ['f1']
         """
         return list(self.names)
 
-    def needConversion(self):
+    def needConversion(self) -> bool:
         # We need convert Row()/namedtuple into tuple()
         return True
 
-    def toInternal(self, obj):
+    def toInternal(self, obj: Tuple) -> Tuple:
         if obj is None:
             return
 
         if self._needSerializeAnyField:
             # Only calling toInternal function for fields that need conversion
             if isinstance(obj, dict):
-                return tuple(f.toInternal(obj.get(n)) if c else obj.get(n)
-                             for n, f, c in zip(self.names, self.fields, self._needConversion))
+                return tuple(
+                    f.toInternal(obj.get(n)) if c else obj.get(n)
+                    for n, f, c in zip(self.names, self.fields, self._needConversion)
+                )
             elif isinstance(obj, (tuple, list)):
-                return tuple(f.toInternal(v) if c else v
-                             for f, v, c in zip(self.fields, obj, self._needConversion))
+                return tuple(
+                    f.toInternal(v) if c else v
+                    for f, v, c in zip(self.fields, obj, self._needConversion)
+                )
             elif hasattr(obj, "__dict__"):
                 d = obj.__dict__
-                return tuple(f.toInternal(d.get(n)) if c else d.get(n)
-                             for n, f, c in zip(self.names, self.fields, self._needConversion))
+                return tuple(
+                    f.toInternal(d.get(n)) if c else d.get(n)
+                    for n, f, c in zip(self.names, self.fields, self._needConversion)
+                )
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
             if isinstance(obj, dict):
                 return tuple(obj.get(n) for n in self.names)
-            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
-                return tuple(obj[n] for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
             elif hasattr(obj, "__dict__"):
@@ -621,16 +814,20 @@ class StructType(DataType):
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
 
-    def fromInternal(self, obj):
+    def fromInternal(self, obj: Tuple) -> "Row":
         if obj is None:
             return
         if isinstance(obj, Row):
             # it's already converted by pickler
             return obj
+
+        values: Union[Tuple, List]
         if self._needSerializeAnyField:
             # Only calling fromInternal function for fields that need conversion
-            values = [f.fromInternal(v) if c else v
-                      for f, v, c in zip(self.fields, obj, self._needConversion)]
+            values = [
+                f.fromInternal(v) if c else v
+                for f, v, c in zip(self.fields, obj, self._needConversion)
+            ]
         else:
             values = obj
         return _create_row(self.names, values)
@@ -643,78 +840,78 @@ class UserDefinedType(DataType):
     """
 
     @classmethod
-    def typeName(cls):
+    def typeName(cls) -> str:
         return cls.__name__.lower()
 
     @classmethod
-    def sqlType(cls):
+    def sqlType(cls) -> DataType:
         """
         Underlying SQL storage type for this UDT.
         """
         raise NotImplementedError("UDT must implement sqlType().")
 
     @classmethod
-    def module(cls):
+    def module(cls) -> str:
         """
         The Python module of the UDT.
         """
         raise NotImplementedError("UDT must implement module().")
 
     @classmethod
-    def scalaUDT(cls):
+    def scalaUDT(cls) -> str:
         """
         The class name of the paired Scala UDT (could be '', if there
         is no corresponding one).
         """
-        return ''
+        return ""
 
-    def needConversion(self):
+    def needConversion(self) -> bool:
         return True
 
     @classmethod
-    def _cachedSqlType(cls):
+    def _cachedSqlType(cls) -> DataType:
         """
-        Cache the sqlType() into class, because it's heavy used in `toInternal`.
+        Cache the sqlType() into class, because it's heavily used in `toInternal`.
         """
         if not hasattr(cls, "_cached_sql_type"):
-            cls._cached_sql_type = cls.sqlType()
-        return cls._cached_sql_type
+            cls._cached_sql_type = cls.sqlType()  # type: ignore[attr-defined]
+        return cls._cached_sql_type  # type: ignore[attr-defined]
 
-    def toInternal(self, obj):
+    def toInternal(self, obj: Any) -> Any:
         if obj is not None:
             return self._cachedSqlType().toInternal(self.serialize(obj))
 
-    def fromInternal(self, obj):
+    def fromInternal(self, obj: Any) -> Any:
         v = self._cachedSqlType().fromInternal(obj)
         if v is not None:
             return self.deserialize(v)
 
-    def serialize(self, obj):
+    def serialize(self, obj: Any) -> Any:
         """
-        Converts the a user-type object into a SQL datum.
+        Converts a user-type object into a SQL datum.
         """
         raise NotImplementedError("UDT must implement toInternal().")
 
-    def deserialize(self, datum):
+    def deserialize(self, datum: Any) -> Any:
         """
         Converts a SQL datum into a user-type object.
         """
         raise NotImplementedError("UDT must implement fromInternal().")
 
-    def simpleString(self):
-        return 'udt'
+    def simpleString(self) -> str:
+        return "udt"
 
-    def json(self):
-        return json.dumps(self.jsonValue(), separators=(',', ':'), sort_keys=True)
+    def json(self) -> str:
+        return json.dumps(self.jsonValue(), separators=(",", ":"), sort_keys=True)
 
-    def jsonValue(self):
+    def jsonValue(self) -> Dict[str, Any]:
         if self.scalaUDT():
-            assert self.module() != '__main__', 'UDT in __main__ cannot work with ScalaUDT'
+            assert self.module() != "__main__", "UDT in __main__ cannot work with ScalaUDT"
             schema = {
                 "type": "udt",
                 "class": self.scalaUDT(),
                 "pyClass": "%s.%s" % (self.module(), type(self).__name__),
-                "sqlType": self.sqlType().jsonValue()
+                "sqlType": self.sqlType().jsonValue(),
             }
         else:
             ser = CloudPickleSerializer()
@@ -722,60 +919,78 @@ class UserDefinedType(DataType):
             schema = {
                 "type": "udt",
                 "pyClass": "%s.%s" % (self.module(), type(self).__name__),
-                "serializedClass": base64.b64encode(b).decode('utf8'),
-                "sqlType": self.sqlType().jsonValue()
+                "serializedClass": base64.b64encode(b).decode("utf8"),
+                "sqlType": self.sqlType().jsonValue(),
             }
         return schema
 
     @classmethod
-    def fromJson(cls, json):
+    def fromJson(cls, json: Dict[str, Any]) -> "UserDefinedType":
         pyUDT = str(json["pyClass"])  # convert unicode to str
         split = pyUDT.rfind(".")
         pyModule = pyUDT[:split]
-        pyClass = pyUDT[split+1:]
+        pyClass = pyUDT[split + 1 :]
         m = __import__(pyModule, globals(), locals(), [pyClass])
         if not hasattr(m, pyClass):
-            s = base64.b64decode(json['serializedClass'].encode('utf-8'))
+            s = base64.b64decode(json["serializedClass"].encode("utf-8"))
             UDT = CloudPickleSerializer().loads(s)
         else:
             UDT = getattr(m, pyClass)
         return UDT()
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return type(self) == type(other)
 
 
-_atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
-                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType, NullType]
-_all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
-_all_complex_types = dict((v.typeName(), v)
-                          for v in [ArrayType, MapType, StructType])
+_atomic_types: List[Type[DataType]] = [
+    StringType,
+    BinaryType,
+    BooleanType,
+    DecimalType,
+    FloatType,
+    DoubleType,
+    ByteType,
+    ShortType,
+    IntegerType,
+    LongType,
+    DateType,
+    TimestampType,
+    TimestampNTZType,
+    NullType,
+]
+_all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
+
+_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [ArrayType, MapType, StructType]
+_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dict(
+    (v.typeName(), v) for v in _complex_types
+)
 
 
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
+_INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 
 
-def _parse_datatype_string(s):
+def _parse_datatype_string(s: str) -> DataType:
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
-    to :class:`DataType.simpleString`, except that top level struct type can omit
-    the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use ``byte`` instead
-    of ``tinyint`` for :class:`ByteType`. We can also use ``int`` as a short name
-    for :class:`IntegerType`. Since Spark 2.3, this also supports a schema in a DDL-formatted
+    :class:`DataType.simpleString`, except that the top level struct type can omit
+    the ``struct<>``. Since Spark 2.3, this also supports a schema in a DDL-formatted
     string and case-insensitive strings.
 
+    Examples
+    --------
     >>> _parse_datatype_string("int ")
-    IntegerType
+    IntegerType()
     >>> _parse_datatype_string("INT ")
-    IntegerType
+    IntegerType()
     >>> _parse_datatype_string("a: byte, b: decimal(  16 , 8   ) ")
-    StructType(List(StructField(a,ByteType,true),StructField(b,DecimalType(16,8),true)))
+    StructType([StructField('a', ByteType(), True), StructField('b', DecimalType(16,8), True)])
     >>> _parse_datatype_string("a DOUBLE, b STRING")
-    StructType(List(StructField(a,DoubleType,true),StructField(b,StringType,true)))
+    StructType([StructField('a', DoubleType(), True), StructField('b', StringType(), True)])
     >>> _parse_datatype_string("a: array< short>")
-    StructType(List(StructField(a,ArrayType(ShortType,true),true)))
+    StructType([StructField('a', ArrayType(ShortType(), True), True)])
     >>> _parse_datatype_string(" map<string , string > ")
-    MapType(StringType,StringType,true)
+    MapType(StringType(), StringType(), True)
 
     >>> # Error cases
     >>> _parse_datatype_string("blabla") # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -795,15 +1010,22 @@ def _parse_datatype_string(s):
         ...
     ParseException:...
     """
+    from pyspark import SparkContext
+
     sc = SparkContext._active_spark_context
+    assert sc is not None
 
-    def from_ddl_schema(type_str):
+    def from_ddl_schema(type_str: str) -> DataType:
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
-            sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json())
+            sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
+        )
 
-    def from_ddl_datatype(type_str):
+    def from_ddl_datatype(type_str: str) -> DataType:
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
-            sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json())
+            sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json()
+        )
 
     try:
         # DDL format, "fieldname datatype, fieldname datatype".
@@ -812,16 +1034,19 @@ def _parse_datatype_string(s):
         try:
             # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
             return from_ddl_datatype(s)
-        except:
+        except BaseException:
             try:
                 # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
                 return from_ddl_datatype("struct<%s>" % s.strip())
-            except:
+            except BaseException:
                 raise e
 
 
-def _parse_datatype_json_string(json_string):
+def _parse_datatype_json_string(json_string: str) -> DataType:
     """Parses the given data type JSON string.
+
+    Examples
+    --------
     >>> import pickle
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
@@ -865,28 +1090,34 @@ def _parse_datatype_json_string(json_string):
     >>> complex_maptype = MapType(complex_structtype,
     ...                           complex_arraytype, False)
     >>> check_datatype(complex_maptype)
-    >>> # Decimal with negative scale.
-    >>> check_datatype(DecimalType(1,-1))
     """
     return _parse_datatype_json_value(json.loads(json_string))
 
 
-def _parse_datatype_json_value(json_value):
+def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
             return _all_atomic_types[json_value]()
-        elif json_value == 'decimal':
+        elif json_value == "decimal":
             return DecimalType()
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
-            return DecimalType(int(m.group(1)), int(m.group(2)))
+            return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
+        elif _INTERVAL_DAYTIME.match(json_value):
+            m = _INTERVAL_DAYTIME.match(json_value)
+            inverted_fields = DayTimeIntervalType._inverted_fields
+            first_field = inverted_fields.get(m.group(1))  # type: ignore[union-attr]
+            second_field = inverted_fields.get(m.group(3))  # type: ignore[union-attr]
+            if first_field is not None and second_field is None:
+                return DayTimeIntervalType(first_field)
+            return DayTimeIntervalType(first_field, second_field)
         else:
             raise ValueError("Could not parse datatype: %s" % json_value)
     else:
         tpe = json_value["type"]
         if tpe in _all_complex_types:
             return _all_complex_types[tpe].fromJson(json_value)
-        elif tpe == 'udt':
+        elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
         else:
             raise ValueError("not supported type: %s" % tpe)
@@ -902,21 +1133,17 @@ _type_mappings = {
     bytearray: BinaryType,
     decimal.Decimal: DecimalType,
     datetime.date: DateType,
-    datetime.datetime: TimestampType,
-    datetime.time: TimestampType,
+    datetime.datetime: TimestampType,  # can be TimestampNTZType
+    datetime.time: TimestampType,  # can be TimestampNTZType
+    datetime.timedelta: DayTimeIntervalType,
+    bytes: BinaryType,
 }
-
-if sys.version < "3":
-    _type_mappings.update({
-        unicode: StringType,
-        long: LongType,
-    })
 
 # Mapping Python array types to Spark SQL DataType
 # We should be careful here. The size of these types in python depends on C
 # implementation. We need to make sure that this conversion does not lose any
 # precision. Also, JVM only support signed types, when converting unsigned types,
-# keep in mind that it required 1 more bit when stored as singed types.
+# keep in mind that it require 1 more bit when stored as signed types.
 #
 # Reference for C integer size, see:
 # ISO/IEC 9899:201x specification, chapter 5.2.4.2.1 Sizes of integer types <limits.h>.
@@ -927,41 +1154,46 @@ if sys.version < "3":
 # http://docs.oracle.com/javase/specs/jvms/se8/html/jvms-2.html#jvms-2.3.1
 
 _array_signed_int_typecode_ctype_mappings = {
-    'b': ctypes.c_byte,
-    'h': ctypes.c_short,
-    'i': ctypes.c_int,
-    'l': ctypes.c_long,
+    "b": ctypes.c_byte,
+    "h": ctypes.c_short,
+    "i": ctypes.c_int,
+    "l": ctypes.c_long,
 }
 
 _array_unsigned_int_typecode_ctype_mappings = {
-    'B': ctypes.c_ubyte,
-    'H': ctypes.c_ushort,
-    'I': ctypes.c_uint,
-    'L': ctypes.c_ulong
+    "B": ctypes.c_ubyte,
+    "H": ctypes.c_ushort,
+    "I": ctypes.c_uint,
+    "L": ctypes.c_ulong,
 }
 
 
-def _int_size_to_type(size):
+def _int_size_to_type(
+    size: int,
+) -> Optional[Union[Type[ByteType], Type[ShortType], Type[IntegerType], Type[LongType]]]:
     """
     Return the Catalyst datatype from the size of integers.
     """
     if size <= 8:
         return ByteType
-    if size <= 16:
+    elif size <= 16:
         return ShortType
-    if size <= 32:
+    elif size <= 32:
         return IntegerType
-    if size <= 64:
+    elif size <= 64:
         return LongType
+    else:
+        return None
 
-# The list of all supported array typecodes is stored here
-_array_type_mappings = {
+
+# The list of all supported array typecodes, is stored here
+_array_type_mappings: Dict[str, Type[DataType]] = {
     # Warning: Actual properties for float and double in C is not specified in C.
     # On almost every system supported by both python and JVM, they are IEEE 754
     # single-precision binary floating-point format and IEEE 754 double-precision
     # binary floating-point format. And we do assume the same thing here for now.
-    'f': FloatType,
-    'd': DoubleType
+    "f": FloatType,
+    "d": DoubleType,
 }
 
 # compute array typecode mappings for signed integer types
@@ -983,48 +1215,102 @@ for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
 # Type code 'u' in Python's array is deprecated since version 3.3, and will be
 # removed in version 4.0. See: https://docs.python.org/3/library/array.html
 if sys.version_info[0] < 4:
-    _array_type_mappings['u'] = StringType
-
-# Type code 'c' are only available at python 2
-if sys.version_info[0] < 3:
-    _array_type_mappings['c'] = StringType
-
-# SPARK-21465:
-# In python2, array of 'L' happened to be mistakenly partially supported. To
-# avoid breaking user's code, we should keep this partial support. Below is a
-# dirty hacking to keep this partial support and make the unit test passes
-import platform
-if sys.version_info[0] < 3 and platform.python_implementation() != 'PyPy':
-    if 'L' not in _array_type_mappings.keys():
-        _array_type_mappings['L'] = LongType
-        _array_unsigned_int_typecode_ctype_mappings['L'] = ctypes.c_uint
+    _array_type_mappings["u"] = StringType
 
 
-def _infer_type(obj):
-    """Infer the DataType from obj
-    """
+def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
+    """Convert NumPy type to Spark data type."""
+    import numpy as np
+
+    if nt == np.dtype("int8"):
+        return ByteType()
+    elif nt == np.dtype("int16"):
+        return ShortType()
+    elif nt == np.dtype("int32"):
+        return IntegerType()
+    elif nt == np.dtype("int64"):
+        return LongType()
+    elif nt == np.dtype("float32"):
+        return FloatType()
+    elif nt == np.dtype("float64"):
+        return DoubleType()
+
+    return None
+
+
+def _infer_type(
+    obj: Any,
+    infer_dict_as_struct: bool = False,
+    infer_array_from_first_element: bool = False,
+    prefer_timestamp_ntz: bool = False,
+) -> DataType:
+    """Infer the DataType from obj"""
     if obj is None:
         return NullType()
 
-    if hasattr(obj, '__UDT__'):
+    if hasattr(obj, "__UDT__"):
         return obj.__UDT__
 
     dataType = _type_mappings.get(type(obj))
     if dataType is DecimalType:
         # the precision and scale of `obj` may be different from row to row.
         return DecimalType(38, 18)
+    if dataType is TimestampType and prefer_timestamp_ntz and obj.tzinfo is None:
+        return TimestampNTZType()
+    if dataType is DayTimeIntervalType:
+        return DayTimeIntervalType()
     elif dataType is not None:
         return dataType()
 
     if isinstance(obj, dict):
-        for key, value in obj.items():
-            if key is not None and value is not None:
-                return MapType(_infer_type(key), _infer_type(value), True)
-        return MapType(NullType(), NullType(), True)
+        if infer_dict_as_struct:
+            struct = StructType()
+            for key, value in obj.items():
+                if key is not None and value is not None:
+                    struct.add(
+                        key,
+                        _infer_type(
+                            value,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            prefer_timestamp_ntz,
+                        ),
+                        True,
+                    )
+            return struct
+        else:
+            for key, value in obj.items():
+                if key is not None and value is not None:
+                    return MapType(
+                        _infer_type(
+                            key,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            prefer_timestamp_ntz,
+                        ),
+                        _infer_type(
+                            value,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            prefer_timestamp_ntz,
+                        ),
+                        True,
+                    )
+            return MapType(NullType(), NullType(), True)
     elif isinstance(obj, list):
-        for v in obj:
-            if v is not None:
-                return ArrayType(_infer_type(obj[0]), True)
+        if len(obj) > 0:
+            if infer_array_from_first_element:
+                return ArrayType(
+                    _infer_type(obj[0], infer_dict_as_struct, prefer_timestamp_ntz), True
+                )
+            else:
+                return ArrayType(
+                    reduce(
+                        _merge_type,
+                        (_infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz) for v in obj),
+                    ),
+                    True,
+                )
         return ArrayType(NullType(), True)
     elif isinstance(obj, array):
         if obj.typecode in _array_type_mappings:
@@ -1033,26 +1319,37 @@ def _infer_type(obj):
             raise TypeError("not supported type: array(%s)" % obj.typecode)
     else:
         try:
-            return _infer_schema(obj)
+            return _infer_schema(
+                obj,
+                infer_dict_as_struct=infer_dict_as_struct,
+                infer_array_from_first_element=infer_array_from_first_element,
+            )
         except TypeError:
             raise TypeError("not supported type: %s" % type(obj))
 
 
-def _infer_schema(row, names=None):
+def _infer_schema(
+    row: Any,
+    names: Optional[List[str]] = None,
+    infer_dict_as_struct: bool = False,
+    infer_array_from_first_element: bool = False,
+    prefer_timestamp_ntz: bool = False,
+) -> StructType:
     """Infer the schema from dict/namedtuple/object"""
+    items: Iterable[Tuple[str, Any]]
     if isinstance(row, dict):
         items = sorted(row.items())
 
     elif isinstance(row, (tuple, list)):
         if hasattr(row, "__fields__"):  # Row
-            items = zip(row.__fields__, tuple(row))
+            items = zip(row.__fields__, tuple(row))  # type: ignore[union-attr]
         elif hasattr(row, "_fields"):  # namedtuple
-            items = zip(row._fields, tuple(row))
+            items = zip(row._fields, tuple(row))  # type: ignore[union-attr]
         else:
             if names is None:
-                names = ['_%d' % i for i in range(1, len(row) + 1)]
+                names = ["_%d" % i for i in range(1, len(row) + 1)]
             elif len(names) < len(row):
-                names.extend('_%d' % i for i in range(len(names) + 1, len(row) + 1))
+                names.extend("_%d" % i for i in range(len(names) + 1, len(row) + 1))
             items = zip(names, row)
 
     elif hasattr(row, "__dict__"):  # object
@@ -1061,12 +1358,28 @@ def _infer_schema(row, names=None):
     else:
         raise TypeError("Can not infer schema for type: %s" % type(row))
 
-    fields = [StructField(k, _infer_type(v), True) for k, v in items]
+    fields = []
+    for k, v in items:
+        try:
+            fields.append(
+                StructField(
+                    k,
+                    _infer_type(
+                        v,
+                        infer_dict_as_struct,
+                        infer_array_from_first_element,
+                        prefer_timestamp_ntz,
+                    ),
+                    True,
+                )
+            )
+        except TypeError as e:
+            raise TypeError("Unable to infer the type of the field {}.".format(k)) from e
     return StructType(fields)
 
 
-def _has_nulltype(dt):
-    """ Return whether there is NullType in `dt` or not """
+def _has_nulltype(dt: DataType) -> bool:
+    """Return whether there is a NullType in `dt` or not"""
     if isinstance(dt, StructType):
         return any(_has_nulltype(f.dataType) for f in dt.fields)
     elif isinstance(dt, ArrayType):
@@ -1077,28 +1390,68 @@ def _has_nulltype(dt):
         return isinstance(dt, NullType)
 
 
-def _merge_type(a, b, name=None):
+@overload
+def _merge_type(a: StructType, b: StructType, name: Optional[str] = None) -> StructType:
+    ...
+
+
+@overload
+def _merge_type(a: ArrayType, b: ArrayType, name: Optional[str] = None) -> ArrayType:
+    ...
+
+
+@overload
+def _merge_type(a: MapType, b: MapType, name: Optional[str] = None) -> MapType:
+    ...
+
+
+@overload
+def _merge_type(a: DataType, b: DataType, name: Optional[str] = None) -> DataType:
+    ...
+
+
+def _merge_type(
+    a: Union[StructType, ArrayType, MapType, DataType],
+    b: Union[StructType, ArrayType, MapType, DataType],
+    name: Optional[str] = None,
+) -> Union[StructType, ArrayType, MapType, DataType]:
     if name is None:
-        new_msg = lambda msg: msg
-        new_name = lambda n: "field %s" % n
+
+        def new_msg(msg: str) -> str:
+            return msg
+
+        def new_name(n: str) -> str:
+            return "field %s" % n
+
     else:
-        new_msg = lambda msg: "%s: %s" % (name, msg)
-        new_name = lambda n: "field %s in %s" % (n, name)
+
+        def new_msg(msg: str) -> str:
+            return "%s: %s" % (name, msg)
+
+        def new_name(n: str) -> str:
+            return "field %s in %s" % (n, name)
 
     if isinstance(a, NullType):
         return b
     elif isinstance(b, NullType):
         return a
+    elif isinstance(a, TimestampType) and isinstance(b, TimestampNTZType):
+        return a
+    elif isinstance(a, TimestampNTZType) and isinstance(b, TimestampType):
+        return b
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
         raise TypeError(new_msg("Can not merge type %s and %s" % (type(a), type(b))))
 
     # same type
     if isinstance(a, StructType):
-        nfs = dict((f.name, f.dataType) for f in b.fields)
-        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType()),
-                                                  name=new_name(f.name)))
-                  for f in a.fields]
+        nfs = dict((f.name, f.dataType) for f in cast(StructType, b).fields)
+        fields = [
+            StructField(
+                f.name, _merge_type(f.dataType, nfs.get(f.name, NullType()), name=new_name(f.name))
+            )
+            for f in a.fields
+        ]
         names = set([f.name for f in fields])
         for n in nfs:
             if n not in names:
@@ -1106,18 +1459,24 @@ def _merge_type(a, b, name=None):
         return StructType(fields)
 
     elif isinstance(a, ArrayType):
-        return ArrayType(_merge_type(a.elementType, b.elementType,
-                                     name='element in array %s' % name), True)
+        return ArrayType(
+            _merge_type(
+                a.elementType, cast(ArrayType, b).elementType, name="element in array %s" % name
+            ),
+            True,
+        )
 
     elif isinstance(a, MapType):
-        return MapType(_merge_type(a.keyType, b.keyType, name='key of map %s' % name),
-                       _merge_type(a.valueType, b.valueType, name='value of map %s' % name),
-                       True)
+        return MapType(
+            _merge_type(a.keyType, cast(MapType, b).keyType, name="key of map %s" % name),
+            _merge_type(a.valueType, cast(MapType, b).valueType, name="value of map %s" % name),
+            True,
+        )
     else:
         return a
 
 
-def _need_converter(dataType):
+def _need_converter(dataType: DataType) -> bool:
     if isinstance(dataType, StructType):
         return True
     elif isinstance(dataType, ArrayType):
@@ -1130,8 +1489,8 @@ def _need_converter(dataType):
         return False
 
 
-def _create_converter(dataType):
-    """Create a converter to drop the names of fields in obj """
+def _create_converter(dataType: DataType) -> Callable:
+    """Create a converter to drop the names of fields in obj"""
     if not _need_converter(dataType):
         return lambda x: x
 
@@ -1155,9 +1514,9 @@ def _create_converter(dataType):
     converters = [_create_converter(f.dataType) for f in dataType.fields]
     convert_fields = any(_need_converter(f.dataType) for f in dataType.fields)
 
-    def convert_struct(obj):
+    def convert_struct(obj: Any) -> Optional[Tuple]:
         if obj is None:
-            return
+            return None
 
         if isinstance(obj, (tuple, list)):
             if convert_fields:
@@ -1182,35 +1541,47 @@ def _create_converter(dataType):
 
 _acceptable_types = {
     BooleanType: (bool,),
-    ByteType: (int, long),
-    ShortType: (int, long),
-    IntegerType: (int, long),
-    LongType: (int, long),
+    ByteType: (int,),
+    ShortType: (int,),
+    IntegerType: (int,),
+    LongType: (int,),
     FloatType: (float,),
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
-    StringType: (str, unicode),
-    BinaryType: (bytearray,),
+    StringType: (str,),
+    BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
+    TimestampNTZType: (datetime.datetime,),
+    DayTimeIntervalType: (datetime.timedelta,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),
 }
 
 
-def _make_type_verifier(dataType, nullable=True, name=None):
+def _make_type_verifier(
+    dataType: DataType,
+    nullable: bool = True,
+    name: Optional[str] = None,
+) -> Callable:
     """
     Make a verifier that checks the type of obj against dataType and raises a TypeError if they do
     not match.
 
     This verifier also checks the value of obj against datatype and raises a ValueError if it's not
     within the allowed range, e.g. using 128 as ByteType will overflow. Note that, Python float is
-    not checked, so it will become infinity when cast to Java float if it overflows.
+    not checked, so it will become infinity when cast to Java float, if it overflows.
 
+    Examples
+    --------
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
     >>> _make_type_verifier(LongType())(0)
+    >>> _make_type_verifier(LongType())(1 << 64) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     >>> _make_type_verifier(ArrayType(ShortType()))(list(range(3)))
     >>> _make_type_verifier(ArrayType(StringType()))(set()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
@@ -1250,13 +1621,22 @@ def _make_type_verifier(dataType, nullable=True, name=None):
     """
 
     if name is None:
-        new_msg = lambda msg: msg
-        new_name = lambda n: "field %s" % n
-    else:
-        new_msg = lambda msg: "%s: %s" % (name, msg)
-        new_name = lambda n: "field %s in %s" % (n, name)
 
-    def verify_nullability(obj):
+        def new_msg(msg: str) -> str:
+            return msg
+
+        def new_name(n: str) -> str:
+            return "field %s" % n
+
+    else:
+
+        def new_msg(msg: str) -> str:
+            return "%s: %s" % (name, msg)
+
+        def new_name(n: str) -> str:
+            return "field %s in %s" % (n, name)
+
+    def verify_nullability(obj: Any) -> bool:
         if obj is None:
             if nullable:
                 return True
@@ -1267,32 +1647,36 @@ def _make_type_verifier(dataType, nullable=True, name=None):
 
     _type = type(dataType)
 
-    def assert_acceptable_types(obj):
-        assert _type in _acceptable_types, \
-            new_msg("unknown datatype: %s for object %r" % (dataType, obj))
+    def assert_acceptable_types(obj: Any) -> None:
+        assert _type in _acceptable_types, new_msg(
+            "unknown datatype: %s for object %r" % (dataType, obj)
+        )
 
-    def verify_acceptable_types(obj):
+    def verify_acceptable_types(obj: Any) -> None:
         # subclass of them can not be fromInternal in JVM
         if type(obj) not in _acceptable_types[_type]:
-            raise TypeError(new_msg("%s can not accept object %r in type %s"
-                                    % (dataType, obj, type(obj))))
+            raise TypeError(
+                new_msg("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
+            )
 
     if isinstance(dataType, StringType):
         # StringType can work with any types
-        verify_value = lambda _: _
+        def verify_value(obj: Any) -> None:
+            pass
 
     elif isinstance(dataType, UserDefinedType):
         verifier = _make_type_verifier(dataType.sqlType(), name=name)
 
-        def verify_udf(obj):
-            if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
+        def verify_udf(obj: Any) -> None:
+            if not (hasattr(obj, "__UDT__") and obj.__UDT__ == dataType):
                 raise ValueError(new_msg("%r is not an instance of type %r" % (obj, dataType)))
             verifier(dataType.toInternal(obj))
 
         verify_value = verify_udf
 
     elif isinstance(dataType, ByteType):
-        def verify_byte(obj):
+
+        def verify_byte(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -128 or obj > 127:
@@ -1301,7 +1685,8 @@ def _make_type_verifier(dataType, nullable=True, name=None):
         verify_value = verify_byte
 
     elif isinstance(dataType, ShortType):
-        def verify_short(obj):
+
+        def verify_short(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -32768 or obj > 32767:
@@ -1310,20 +1695,31 @@ def _make_type_verifier(dataType, nullable=True, name=None):
         verify_value = verify_short
 
     elif isinstance(dataType, IntegerType):
-        def verify_integer(obj):
+
+        def verify_integer(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -2147483648 or obj > 2147483647:
-                raise ValueError(
-                    new_msg("object of IntegerType out of range, got: %s" % obj))
+                raise ValueError(new_msg("object of IntegerType out of range, got: %s" % obj))
 
         verify_value = verify_integer
 
+    elif isinstance(dataType, LongType):
+
+        def verify_long(obj: Any) -> None:
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -9223372036854775808 or obj > 9223372036854775807:
+                raise ValueError(new_msg("object of LongType out of range, got: %s" % obj))
+
+        verify_value = verify_long
+
     elif isinstance(dataType, ArrayType):
         element_verifier = _make_type_verifier(
-            dataType.elementType, dataType.containsNull, name="element in array %s" % name)
+            dataType.elementType, dataType.containsNull, name="element in array %s" % name
+        )
 
-        def verify_array(obj):
+        def verify_array(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             for i in obj:
@@ -1334,9 +1730,10 @@ def _make_type_verifier(dataType, nullable=True, name=None):
     elif isinstance(dataType, MapType):
         key_verifier = _make_type_verifier(dataType.keyType, False, name="key of map %s" % name)
         value_verifier = _make_type_verifier(
-            dataType.valueType, dataType.valueContainsNull, name="value of map %s" % name)
+            dataType.valueType, dataType.valueContainsNull, name="value of map %s" % name
+        )
 
-        def verify_map(obj):
+        def verify_map(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             for k, v in obj.items():
@@ -1351,21 +1748,20 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             verifier = _make_type_verifier(f.dataType, f.nullable, name=new_name(f.name))
             verifiers.append((f.name, verifier))
 
-        def verify_struct(obj):
+        def verify_struct(obj: Any) -> None:
             assert_acceptable_types(obj)
 
             if isinstance(obj, dict):
                 for f, verifier in verifiers:
                     verifier(obj.get(f))
-            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
-                # the order in obj could be different than dataType.fields
-                for f, verifier in verifiers:
-                    verifier(obj[f])
             elif isinstance(obj, (tuple, list)):
                 if len(obj) != len(verifiers):
                     raise ValueError(
-                        new_msg("Length of object (%d) does not match with "
-                                "length of fields (%d)" % (len(obj), len(verifiers))))
+                        new_msg(
+                            "Length of object (%d) does not match with "
+                            "length of fields (%d)" % (len(obj), len(verifiers))
+                        )
+                    )
                 for v, (_, verifier) in zip(obj, verifiers):
                     verifier(v)
             elif hasattr(obj, "__dict__"):
@@ -1373,18 +1769,21 @@ def _make_type_verifier(dataType, nullable=True, name=None):
                 for f, verifier in verifiers:
                     verifier(d.get(f))
             else:
-                raise TypeError(new_msg("StructType can not accept object %r in type %s"
-                                        % (obj, type(obj))))
+                raise TypeError(
+                    new_msg("StructType can not accept object %r in type %s" % (obj, type(obj)))
+                )
+
         verify_value = verify_struct
 
     else:
-        def verify_default(obj):
+
+        def verify_default(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
 
         verify_value = verify_default
 
-    def verify(obj):
+    def verify(obj: Any) -> None:
         if not verify_nullability(obj):
             verify_value(obj)
 
@@ -1392,11 +1791,13 @@ def _make_type_verifier(dataType, nullable=True, name=None):
 
 
 # This is used to unpickle a Row from JVM
-def _create_row_inbound_converter(dataType):
+def _create_row_inbound_converter(dataType: DataType) -> Callable:
     return lambda *a: dataType.fromInternal(a)
 
 
-def _create_row(fields, values):
+def _create_row(
+    fields: Union["Row", List[str]], values: Union[Tuple[Any, ...], List[Any]]
+) -> "Row":
     row = Row(*values)
     row.__fields__ = fields
     return row
@@ -1405,7 +1806,7 @@ def _create_row(fields, values):
 class Row(tuple):
 
     """
-    A row in L{DataFrame}.
+    A row in :class:`DataFrame`.
     The fields in it can be accessed:
 
     * like attributes (``row.key``)
@@ -1413,14 +1814,20 @@ class Row(tuple):
 
     ``key in row`` will search through row keys.
 
-    Row can be used to create a row object by using named arguments,
-    the fields will be sorted by names. It is not allowed to omit
-    a named argument to represent the value is None or missing. This should be
-    explicitly set to None in this case.
+    Row can be used to create a row object by using named arguments.
+    It is not allowed to omit a named argument to represent that the value is
+    None or missing. This should be explicitly set to None in this case.
 
+    .. versionchanged:: 3.0.0
+        Rows created from named arguments no longer have
+        field names sorted alphabetically and will be ordered in the position as
+        entered.
+
+    Examples
+    --------
     >>> row = Row(name="Alice", age=11)
     >>> row
-    Row(age=11, name='Alice')
+    Row(name='Alice', age=11)
     >>> row['name'], row['age']
     ('Alice', 11)
     >>> row.name, row.age
@@ -1435,41 +1842,66 @@ class Row(tuple):
 
     >>> Person = Row("name", "age")
     >>> Person
-    <Row(name, age)>
+    <Row('name', 'age')>
     >>> 'name' in Person
     True
     >>> 'wrong_key' in Person
     False
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
+
+    This form can also be used to create rows as tuple values, i.e. with unnamed
+    fields.
+
+    >>> row1 = Row("Alice", 11)
+    >>> row2 = Row(name="Alice", age=11)
+    >>> row1 == row2
+    True
     """
 
-    def __new__(self, *args, **kwargs):
+    @overload
+    def __new__(cls, *args: str) -> "Row":
+        ...
+
+    @overload
+    def __new__(cls, **kwargs: Any) -> "Row":
+        ...
+
+    def __new__(cls, *args: Optional[str], **kwargs: Optional[Any]) -> "Row":
         if args and kwargs:
-            raise ValueError("Can not use both args "
-                             "and kwargs to create Row")
+            raise ValueError("Can not use both args " "and kwargs to create Row")
         if kwargs:
             # create row objects
-            names = sorted(kwargs.keys())
-            row = tuple.__new__(self, [kwargs[n] for n in names])
-            row.__fields__ = names
-            row.__from_dict__ = True
+            row = tuple.__new__(cls, list(kwargs.values()))
+            row.__fields__ = list(kwargs.keys())
             return row
-
         else:
             # create row class or objects
-            return tuple.__new__(self, args)
+            return tuple.__new__(cls, args)
 
-    def asDict(self, recursive=False):
+    def asDict(self, recursive: bool = False) -> Dict[str, Any]:
         """
-        Return as an dict
+        Return as a dict
 
-        :param recursive: turns the nested Row as dict (default: False).
+        Parameters
+        ----------
+        recursive : bool, optional
+            turns the nested Rows to dict (default: False).
 
+        Notes
+        -----
+        If a row contains duplicate field names, e.g., the rows of a join
+        between two :class:`DataFrame` that both have the fields of same names,
+        one of the duplicate fields will be selected by ``asDict``. ``__getitem__``
+        will also return one of the duplicate fields, however returned value might
+        be different to ``asDict``.
+
+        Examples
+        --------
         >>> Row(name="Alice", age=11).asDict() == {'name': 'Alice', 'age': 11}
         True
         >>> row = Row(key=1, value=Row(name='a', age=2))
-        >>> row.asDict() == {'key': 1, 'value': Row(age=2, name='a')}
+        >>> row.asDict() == {'key': 1, 'value': Row(name='a', age=2)}
         True
         >>> row.asDict(True) == {'key': 1, 'value': {'name': 'a', 'age': 2}}
         True
@@ -1478,7 +1910,8 @@ class Row(tuple):
             raise TypeError("Cannot convert a Row class into dict")
 
         if recursive:
-            def conv(obj):
+
+            def conv(obj: Any) -> Any:
                 if isinstance(obj, Row):
                     return obj.asDict(True)
                 elif isinstance(obj, list):
@@ -1487,25 +1920,28 @@ class Row(tuple):
                     return dict((k, conv(v)) for k, v in obj.items())
                 else:
                     return obj
+
             return dict(zip(self.__fields__, (conv(o) for o in self)))
         else:
             return dict(zip(self.__fields__, self))
 
-    def __contains__(self, item):
+    def __contains__(self, item: Any) -> bool:
         if hasattr(self, "__fields__"):
             return item in self.__fields__
         else:
             return super(Row, self).__contains__(item)
 
     # let object acts like class
-    def __call__(self, *args):
+    def __call__(self, *args: Any) -> "Row":
         """create new Row object"""
         if len(args) > len(self):
-            raise ValueError("Can not create Row with fields %s, expected %d values "
-                             "but got %s" % (self, len(self), args))
+            raise ValueError(
+                "Can not create Row with fields %s, expected %d values "
+                "but got %s" % (self, len(self), args)
+            )
         return _create_row(self, args)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Any) -> Any:
         if isinstance(item, (int, slice)):
             return super(Row, self).__getitem__(item)
         try:
@@ -1518,7 +1954,7 @@ class Row(tuple):
         except ValueError:
             raise ValueError(item)
 
-    def __getattr__(self, item):
+    def __getattr__(self, item: str) -> Any:
         if item.startswith("__"):
             raise AttributeError(item)
         try:
@@ -1531,387 +1967,104 @@ class Row(tuple):
         except ValueError:
             raise AttributeError(item)
 
-    def __setattr__(self, key, value):
-        if key != '__fields__' and key != "__from_dict__":
-            raise Exception("Row is read-only")
+    def __setattr__(self, key: Any, value: Any) -> None:
+        if key != "__fields__":
+            raise RuntimeError("Row is read-only")
         self.__dict__[key] = value
 
-    def __reduce__(self):
+    def __reduce__(
+        self,
+    ) -> Union[str, Tuple[Any, ...]]:
         """Returns a tuple so Python knows how to pickle Row."""
         if hasattr(self, "__fields__"):
             return (_create_row, (self.__fields__, tuple(self)))
         else:
             return tuple.__reduce__(self)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Printable representation of Row used in Python REPL."""
         if hasattr(self, "__fields__"):
-            return "Row(%s)" % ", ".join("%s=%r" % (k, v)
-                                         for k, v in zip(self.__fields__, tuple(self)))
+            return "Row(%s)" % ", ".join(
+                "%s=%r" % (k, v) for k, v in zip(self.__fields__, tuple(self))
+            )
         else:
-            return "<Row(%s)>" % ", ".join(self)
+            return "<Row(%s)>" % ", ".join("%r" % field for field in self)
 
 
-class DateConverter(object):
-    def can_convert(self, obj):
+class DateConverter:
+    def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.date)
 
-    def convert(self, obj, gateway_client):
+    def convert(self, obj: datetime.date, gateway_client: GatewayClient) -> JavaObject:
         Date = JavaClass("java.sql.Date", gateway_client)
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
 
 
-class DatetimeConverter(object):
-    def can_convert(self, obj):
+class DatetimeConverter:
+    def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.datetime)
 
-    def convert(self, obj, gateway_client):
+    def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
-        seconds = (calendar.timegm(obj.utctimetuple()) if obj.tzinfo
-                   else time.mktime(obj.timetuple()))
+        seconds = (
+            calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
+        )
         t = Timestamp(int(seconds) * 1000)
         t.setNanos(obj.microsecond * 1000)
         return t
 
+
+class DatetimeNTZConverter:
+    def can_convert(self, obj: Any) -> bool:
+        from pyspark.sql.utils import is_timestamp_ntz_preferred
+
+        return (
+            isinstance(obj, datetime.datetime)
+            and obj.tzinfo is None
+            and is_timestamp_ntz_preferred()
+        )
+
+    def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
+        seconds = calendar.timegm(obj.utctimetuple())
+        DateTimeUtils = JavaClass(
+            "org.apache.spark.sql.catalyst.util.DateTimeUtils",
+            gateway_client,
+        )
+        return DateTimeUtils.microsToLocalDateTime(int(seconds) * 1000000 + obj.microsecond)
+
+
+class DayTimeIntervalTypeConverter:
+    def can_convert(self, obj: Any) -> bool:
+        return isinstance(obj, datetime.timedelta)
+
+    def convert(self, obj: datetime.timedelta, gateway_client: GatewayClient) -> JavaObject:
+        IntervalUtils = JavaClass(
+            "org.apache.spark.sql.catalyst.util.IntervalUtils",
+            gateway_client,
+        )
+        return IntervalUtils.microsToDuration(
+            (math.floor(obj.total_seconds()) * 1000000) + obj.microseconds
+        )
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
+register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
+register_input_converter(DayTimeIntervalTypeConverter())
 
 
-def to_arrow_type(dt):
-    """ Convert Spark data type to pyarrow type
-    """
-    from distutils.version import LooseVersion
-    import pyarrow as pa
-    if type(dt) == BooleanType:
-        arrow_type = pa.bool_()
-    elif type(dt) == ByteType:
-        arrow_type = pa.int8()
-    elif type(dt) == ShortType:
-        arrow_type = pa.int16()
-    elif type(dt) == IntegerType:
-        arrow_type = pa.int32()
-    elif type(dt) == LongType:
-        arrow_type = pa.int64()
-    elif type(dt) == FloatType:
-        arrow_type = pa.float32()
-    elif type(dt) == DoubleType:
-        arrow_type = pa.float64()
-    elif type(dt) == DecimalType:
-        arrow_type = pa.decimal128(dt.precision, dt.scale)
-    elif type(dt) == StringType:
-        arrow_type = pa.string()
-    elif type(dt) == BinaryType:
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt) +
-                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
-        arrow_type = pa.binary()
-    elif type(dt) == DateType:
-        arrow_type = pa.date32()
-    elif type(dt) == TimestampType:
-        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
-        arrow_type = pa.timestamp('us', tz='UTC')
-    elif type(dt) == ArrayType:
-        if type(dt.elementType) in [StructType, TimestampType]:
-            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
-        arrow_type = pa.list_(to_arrow_type(dt.elementType))
-    elif type(dt) == StructType:
-        if any(type(field.dataType) == StructType for field in dt):
-            raise TypeError("Nested StructType not supported in conversion to Arrow")
-        fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
-                  for field in dt]
-        arrow_type = pa.struct(fields)
-    else:
-        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
-    return arrow_type
-
-
-def to_arrow_schema(schema):
-    """ Convert a schema from Spark to Arrow
-    """
-    import pyarrow as pa
-    fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
-              for field in schema]
-    return pa.schema(fields)
-
-
-def from_arrow_type(at):
-    """ Convert pyarrow type to Spark data type.
-    """
-    from distutils.version import LooseVersion
-    import pyarrow as pa
-    import pyarrow.types as types
-    if types.is_boolean(at):
-        spark_type = BooleanType()
-    elif types.is_int8(at):
-        spark_type = ByteType()
-    elif types.is_int16(at):
-        spark_type = ShortType()
-    elif types.is_int32(at):
-        spark_type = IntegerType()
-    elif types.is_int64(at):
-        spark_type = LongType()
-    elif types.is_float32(at):
-        spark_type = FloatType()
-    elif types.is_float64(at):
-        spark_type = DoubleType()
-    elif types.is_decimal(at):
-        spark_type = DecimalType(precision=at.precision, scale=at.scale)
-    elif types.is_string(at):
-        spark_type = StringType()
-    elif types.is_binary(at):
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at) +
-                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
-        spark_type = BinaryType()
-    elif types.is_date32(at):
-        spark_type = DateType()
-    elif types.is_timestamp(at):
-        spark_type = TimestampType()
-    elif types.is_list(at):
-        if types.is_timestamp(at.value_type):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
-        spark_type = ArrayType(from_arrow_type(at.value_type))
-    elif types.is_struct(at):
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at) +
-                            "\nPlease install pyarrow >= 0.10.0 for StructType support.")
-        if any(types.is_struct(field.type) for field in at):
-            raise TypeError("Nested StructType not supported in conversion from Arrow: " + str(at))
-        return StructType(
-            [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
-             for field in at])
-    else:
-        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
-    return spark_type
-
-
-def from_arrow_schema(arrow_schema):
-    """ Convert schema from Arrow to Spark.
-    """
-    return StructType(
-        [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
-         for field in arrow_schema])
-
-
-def _arrow_column_to_pandas(column, data_type):
-    """ Convert Arrow Column to pandas Series.
-
-    :param series: pyarrow.lib.Column
-    :param data_type: a Spark data type for the column
-    """
-    import pandas as pd
-    import pyarrow as pa
-    from distutils.version import LooseVersion
-    # If the given column is a date type column, creates a series of datetime.date directly instead
-    # of creating datetime64[ns] as intermediate data to avoid overflow caused by datetime64[ns]
-    # type handling.
-    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
-        if type(data_type) == DateType:
-            return pd.Series(column.to_pylist(), name=column.name)
-        else:
-            return column.to_pandas()
-    else:
-        # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of
-        # np.datetime64.
-        return column.to_pandas(date_as_object=True)
-
-
-def _arrow_table_to_pandas(table, schema):
-    """ Convert Arrow Table to pandas DataFrame.
-
-    Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should
-    use datetime.date to match the behavior with when Arrow optimization is disabled.
-
-    :param table: pyarrow.lib.Table
-    :param schema: a Spark schema of the pyarrow.lib.Table
-    """
-    import pandas as pd
-    import pyarrow as pa
-    from distutils.version import LooseVersion
-    # If the given table contains a date type column, use `_arrow_column_to_pandas` for pyarrow<0.11
-    # or use `date_as_object` option for pyarrow>=0.11 to avoid creating datetime64[ns] as
-    # intermediate data.
-    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
-        if any(type(field.dataType) == DateType for field in schema):
-            return pd.concat([_arrow_column_to_pandas(column, field.dataType)
-                              for column, field in zip(table.itercolumns(), schema)], axis=1)
-        else:
-            return table.to_pandas()
-    else:
-        return table.to_pandas(date_as_object=True)
-
-
-def _get_local_timezone():
-    """ Get local timezone using pytz with environment variable, or dateutil.
-
-    If there is a 'TZ' environment variable, pass it to pandas to use pytz and use it as timezone
-    string, otherwise use the special word 'dateutil/:' which means that pandas uses dateutil and
-    it reads system configuration to know the system local timezone.
-
-    See also:
-    - https://github.com/pandas-dev/pandas/blob/0.19.x/pandas/tslib.pyx#L1753
-    - https://github.com/dateutil/dateutil/blob/2.6.1/dateutil/tz/tz.py#L1338
-    """
-    import os
-    return os.environ.get('TZ', 'dateutil/:')
-
-
-def _check_series_localize_timestamps(s, timezone):
-    """
-    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone.
-
-    If the input series is not a timestamp series, then the same series is returned. If the input
-    series is a timestamp series, then a converted series is returned.
-
-    :param s: pandas.Series
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.Series that have been converted to tz-naive
-    """
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-
-    from pandas.api.types import is_datetime64tz_dtype
-    tz = timezone or _get_local_timezone()
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64tz_dtype(s.dtype):
-        return s.dt.tz_convert(tz).dt.tz_localize(None)
-    else:
-        return s
-
-
-def _check_dataframe_localize_timestamps(pdf, timezone):
-    """
-    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
-
-    :param pdf: pandas.DataFrame
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.DataFrame where any timezone aware columns have been converted to tz-naive
-    """
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-
-    for column, series in pdf.iteritems():
-        pdf[column] = _check_series_localize_timestamps(series, timezone)
-    return pdf
-
-
-def _check_series_convert_timestamps_internal(s, timezone):
-    """
-    Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
-    Spark internal storage
-
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
-    """
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-
-    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64_dtype(s.dtype):
-        # When tz_localize a tz-naive timestamp, the result is ambiguous if the tz-naive
-        # timestamp is during the hour when the clock is adjusted backward during due to
-        # daylight saving time (dst).
-        # E.g., for America/New_York, the clock is adjusted backward on 2015-11-01 2:00 to
-        # 2015-11-01 1:00 from dst-time to standard time, and therefore, when tz_localize
-        # a tz-naive timestamp 2015-11-01 1:30 with America/New_York timezone, it can be either
-        # dst time (2015-01-01 1:30-0400) or standard time (2015-11-01 1:30-0500).
-        #
-        # Here we explicit choose to use standard time. This matches the default behavior of
-        # pytz.
-        #
-        # Here are some code to help understand this behavior:
-        # >>> import datetime
-        # >>> import pandas as pd
-        # >>> import pytz
-        # >>>
-        # >>> t = datetime.datetime(2015, 11, 1, 1, 30)
-        # >>> ts = pd.Series([t])
-        # >>> tz = pytz.timezone('America/New_York')
-        # >>>
-        # >>> ts.dt.tz_localize(tz, ambiguous=True)
-        # 0   2015-11-01 01:30:00-04:00
-        # dtype: datetime64[ns, America/New_York]
-        # >>>
-        # >>> ts.dt.tz_localize(tz, ambiguous=False)
-        # 0   2015-11-01 01:30:00-05:00
-        # dtype: datetime64[ns, America/New_York]
-        # >>>
-        # >>> str(tz.localize(t))
-        # '2015-11-01 01:30:00-05:00'
-        tz = timezone or _get_local_timezone()
-        return s.dt.tz_localize(tz, ambiguous=False).dt.tz_convert('UTC')
-    elif is_datetime64tz_dtype(s.dtype):
-        return s.dt.tz_convert('UTC')
-    else:
-        return s
-
-
-def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
-    """
-    Convert timestamp to timezone-naive in the specified timezone or local timezone
-
-    :param s: a pandas.Series
-    :param from_timezone: the timezone to convert from. if None then use local timezone
-    :param to_timezone: the timezone to convert to. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
-    """
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-
-    import pandas as pd
-    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
-    from_tz = from_timezone or _get_local_timezone()
-    to_tz = to_timezone or _get_local_timezone()
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64tz_dtype(s.dtype):
-        return s.dt.tz_convert(to_tz).dt.tz_localize(None)
-    elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
-        # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-        return s.apply(
-            lambda ts: ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)
-            if ts is not pd.NaT else pd.NaT)
-    else:
-        return s
-
-
-def _check_series_convert_timestamps_local_tz(s, timezone):
-    """
-    Convert timestamp to timezone-naive in the specified timezone or local timezone
-
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert to. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
-    """
-    return _check_series_convert_timestamps_localize(s, None, timezone)
-
-
-def _check_series_convert_timestamps_tz_local(s, timezone):
-    """
-    Convert timestamp to timezone-naive in the specified timezone or local timezone
-
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert from. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
-    """
-    return _check_series_convert_timestamps_localize(s, timezone, None)
-
-
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.context import SparkContext
     from pyspark.sql import SparkSession
+
     globs = globals()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['sc'] = sc
-    globs['spark'] = SparkSession.builder.getOrCreate()
+    sc = SparkContext("local[4]", "PythonTest")
+    globs["sc"] = sc
+    globs["spark"] = SparkSession.builder.getOrCreate()
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    globs["sc"].stop()
     if failure_count:
         sys.exit(-1)
 

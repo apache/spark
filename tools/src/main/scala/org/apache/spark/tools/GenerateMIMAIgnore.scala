@@ -24,6 +24,7 @@ import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Try
 
 import org.clapper.classutil.ClassFinder
+import org.objectweb.asm.Opcodes
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -68,7 +69,7 @@ object GenerateMIMAIgnore {
         /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
         lazy val indirectlyPrivateSpark = {
-          val maybeOuter = className.toString.takeWhile(_ != '$')
+          val maybeOuter = className.takeWhile(_ != '$')
           if (maybeOuter != className) {
             isPackagePrivate(mirror.classSymbol(Class.forName(maybeOuter, false, classLoader))) ||
               isPackagePrivateModule(mirror.staticModule(maybeOuter))
@@ -115,7 +116,7 @@ object GenerateMIMAIgnore {
     ).filter(x => isPackagePrivate(x)).map(_.fullName) ++ getInnerFunctions(classSymbol)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     import scala.tools.nsc.io.File
     val (privateClasses, privateMembers) = privateWithin("org.apache.spark")
     val previousContents = Try(File(".generated-mima-class-excludes").lines()).
@@ -146,7 +147,7 @@ object GenerateMIMAIgnore {
    * and subpackages both from directories and jars present on the classpath.
    */
   private def getClasses(packageName: String): Set[String] = {
-    val finder = ClassFinder()
+    val finder = ClassFinder(maybeOverrideAsmVersion = Some(Opcodes.ASM7))
     finder
       .getClasses
       .map(_.name)

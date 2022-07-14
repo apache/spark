@@ -22,14 +22,14 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.4.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>spark-catalyst_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Catalyst</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>catalyst</sbt.project.name>
   </properties>
@@ -71,6 +71,11 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -82,6 +87,12 @@
       <artifactId>spark-sketch_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <!-- #if scala-2.13 --><!--
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+    </dependency>
+    --><!-- #endif scala-2.13 -->
     <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
@@ -106,8 +117,15 @@
     <dependency>
       <groupId>com.univocity</groupId>
       <artifactId>univocity-parsers</artifactId>
-      <version>2.7.3</version>
       <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-vector</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-memory-netty</artifactId>
     </dependency>
   </dependencies>
   <build>
@@ -140,7 +158,7 @@
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
-          <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
       <plugin>
@@ -158,6 +176,24 @@
           <sourceDirectory>../catalyst/src/main/antlr4</sourceDirectory>
           <treatWarningsAsErrors>true</treatWarningsAsErrors>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>add-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>src/main/scala-${scala.binary.version}</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

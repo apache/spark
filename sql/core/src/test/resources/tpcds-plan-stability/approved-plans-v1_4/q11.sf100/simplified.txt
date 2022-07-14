@@ -1,0 +1,163 @@
+TakeOrderedAndProject [customer_preferred_cust_flag]
+  WholeStageCodegen (35)
+    Project [customer_preferred_cust_flag]
+      SortMergeJoin [customer_id,customer_id,year_total,year_total,year_total,year_total]
+        InputAdapter
+          WholeStageCodegen (26)
+            Project [customer_id,year_total,customer_preferred_cust_flag,year_total,year_total]
+              SortMergeJoin [customer_id,customer_id]
+                InputAdapter
+                  WholeStageCodegen (17)
+                    Project [customer_id,year_total,customer_preferred_cust_flag,year_total]
+                      SortMergeJoin [customer_id,customer_id]
+                        InputAdapter
+                          WholeStageCodegen (8)
+                            Sort [customer_id]
+                              InputAdapter
+                                Exchange [customer_id] #1
+                                  WholeStageCodegen (7)
+                                    Filter [year_total]
+                                      HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,sum] [sum(UnscaledValue((ss_ext_list_price - ss_ext_discount_amt))),customer_id,year_total,sum]
+                                        InputAdapter
+                                          Exchange [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address] #2
+                                            WholeStageCodegen (6)
+                                              HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ss_ext_list_price,ss_ext_discount_amt] [sum,sum]
+                                                Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ss_ext_discount_amt,ss_ext_list_price,d_year]
+                                                  SortMergeJoin [ss_customer_sk,c_customer_sk]
+                                                    InputAdapter
+                                                      WholeStageCodegen (3)
+                                                        Sort [ss_customer_sk]
+                                                          InputAdapter
+                                                            Exchange [ss_customer_sk] #3
+                                                              WholeStageCodegen (2)
+                                                                Project [ss_customer_sk,ss_ext_discount_amt,ss_ext_list_price,d_year]
+                                                                  BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                    Filter [ss_customer_sk]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet spark_catalog.default.store_sales [ss_customer_sk,ss_ext_discount_amt,ss_ext_list_price,ss_sold_date_sk]
+                                                                            SubqueryBroadcast [d_date_sk] #1
+                                                                              BroadcastExchange #4
+                                                                                WholeStageCodegen (1)
+                                                                                  Filter [d_year,d_date_sk]
+                                                                                    ColumnarToRow
+                                                                                      InputAdapter
+                                                                                        Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
+                                                                    InputAdapter
+                                                                      ReusedExchange [d_date_sk,d_year] #4
+                                                    InputAdapter
+                                                      WholeStageCodegen (5)
+                                                        Sort [c_customer_sk]
+                                                          InputAdapter
+                                                            Exchange [c_customer_sk] #5
+                                                              WholeStageCodegen (4)
+                                                                Filter [c_customer_sk,c_customer_id]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet spark_catalog.default.customer [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address]
+                        InputAdapter
+                          WholeStageCodegen (16)
+                            Sort [customer_id]
+                              InputAdapter
+                                Exchange [customer_id] #6
+                                  WholeStageCodegen (15)
+                                    HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,sum] [sum(UnscaledValue((ss_ext_list_price - ss_ext_discount_amt))),customer_id,customer_preferred_cust_flag,year_total,sum]
+                                      InputAdapter
+                                        Exchange [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address] #7
+                                          WholeStageCodegen (14)
+                                            HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ss_ext_list_price,ss_ext_discount_amt] [sum,sum]
+                                              Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ss_ext_discount_amt,ss_ext_list_price,d_year]
+                                                SortMergeJoin [ss_customer_sk,c_customer_sk]
+                                                  InputAdapter
+                                                    WholeStageCodegen (11)
+                                                      Sort [ss_customer_sk]
+                                                        InputAdapter
+                                                          Exchange [ss_customer_sk] #8
+                                                            WholeStageCodegen (10)
+                                                              Project [ss_customer_sk,ss_ext_discount_amt,ss_ext_list_price,d_year]
+                                                                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                  Filter [ss_customer_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet spark_catalog.default.store_sales [ss_customer_sk,ss_ext_discount_amt,ss_ext_list_price,ss_sold_date_sk]
+                                                                          SubqueryBroadcast [d_date_sk] #2
+                                                                            BroadcastExchange #9
+                                                                              WholeStageCodegen (1)
+                                                                                Filter [d_year,d_date_sk]
+                                                                                  ColumnarToRow
+                                                                                    InputAdapter
+                                                                                      Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
+                                                                  InputAdapter
+                                                                    ReusedExchange [d_date_sk,d_year] #9
+                                                  InputAdapter
+                                                    WholeStageCodegen (13)
+                                                      Sort [c_customer_sk]
+                                                        InputAdapter
+                                                          ReusedExchange [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address] #5
+                InputAdapter
+                  WholeStageCodegen (25)
+                    Sort [customer_id]
+                      InputAdapter
+                        Exchange [customer_id] #10
+                          WholeStageCodegen (24)
+                            Filter [year_total]
+                              HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum] [sum(UnscaledValue((ws_ext_list_price - ws_ext_discount_amt))),customer_id,year_total,sum]
+                                InputAdapter
+                                  Exchange [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year] #11
+                                    WholeStageCodegen (23)
+                                      HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,ws_ext_list_price,ws_ext_discount_amt] [sum,sum]
+                                        Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ws_ext_discount_amt,ws_ext_list_price,d_year]
+                                          SortMergeJoin [ws_bill_customer_sk,c_customer_sk]
+                                            InputAdapter
+                                              WholeStageCodegen (20)
+                                                Sort [ws_bill_customer_sk]
+                                                  InputAdapter
+                                                    Exchange [ws_bill_customer_sk] #12
+                                                      WholeStageCodegen (19)
+                                                        Project [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_list_price,d_year]
+                                                          BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                                            Filter [ws_bill_customer_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet spark_catalog.default.web_sales [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_list_price,ws_sold_date_sk]
+                                                                    ReusedSubquery [d_date_sk] #1
+                                                            InputAdapter
+                                                              ReusedExchange [d_date_sk,d_year] #4
+                                            InputAdapter
+                                              WholeStageCodegen (22)
+                                                Sort [c_customer_sk]
+                                                  InputAdapter
+                                                    ReusedExchange [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address] #5
+        InputAdapter
+          WholeStageCodegen (34)
+            Sort [customer_id]
+              InputAdapter
+                Exchange [customer_id] #13
+                  WholeStageCodegen (33)
+                    HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum] [sum(UnscaledValue((ws_ext_list_price - ws_ext_discount_amt))),customer_id,year_total,sum]
+                      InputAdapter
+                        Exchange [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year] #14
+                          WholeStageCodegen (32)
+                            HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,ws_ext_list_price,ws_ext_discount_amt] [sum,sum]
+                              Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ws_ext_discount_amt,ws_ext_list_price,d_year]
+                                SortMergeJoin [ws_bill_customer_sk,c_customer_sk]
+                                  InputAdapter
+                                    WholeStageCodegen (29)
+                                      Sort [ws_bill_customer_sk]
+                                        InputAdapter
+                                          Exchange [ws_bill_customer_sk] #15
+                                            WholeStageCodegen (28)
+                                              Project [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_list_price,d_year]
+                                                BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                                  Filter [ws_bill_customer_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet spark_catalog.default.web_sales [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_list_price,ws_sold_date_sk]
+                                                          ReusedSubquery [d_date_sk] #2
+                                                  InputAdapter
+                                                    ReusedExchange [d_date_sk,d_year] #9
+                                  InputAdapter
+                                    WholeStageCodegen (31)
+                                      Sort [c_customer_sk]
+                                        InputAdapter
+                                          ReusedExchange [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address] #5

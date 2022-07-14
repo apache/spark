@@ -17,20 +17,13 @@
 
 package org.apache.spark.ml.attribute
 
-import org.apache.spark.annotation.DeveloperApi
 
 /**
- * :: DeveloperApi ::
  * An enum-like type for attribute types: [[AttributeType$#Numeric]], [[AttributeType$#Nominal]],
  * and [[AttributeType$#Binary]].
  */
-@DeveloperApi
 sealed abstract class AttributeType(val name: String)
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
 object AttributeType {
 
   /** Numeric type. */

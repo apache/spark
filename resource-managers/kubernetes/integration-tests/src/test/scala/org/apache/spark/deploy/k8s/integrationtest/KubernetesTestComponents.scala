@@ -21,11 +21,12 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
+import io.fabric8.kubernetes.api.model.NamespaceBuilder
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import org.scalatest.concurrent.Eventually
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.JARS
@@ -36,7 +37,8 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
 
   val namespaceOption = Option(System.getProperty(CONFIG_KEY_KUBE_NAMESPACE))
   val hasUserSpecifiedNamespace = namespaceOption.isDefined
-  val namespace = namespaceOption.getOrElse(UUID.randomUUID().toString.replaceAll("-", ""))
+  val namespace = namespaceOption.getOrElse("spark-" +
+    UUID.randomUUID().toString.replaceAll("-", ""))
   val serviceAccountName =
     Option(System.getProperty(CONFIG_KEY_KUBE_SVC_ACCOUNT))
       .getOrElse("default")
@@ -44,11 +46,11 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
   val clientConfig = kubernetesClient.getConfiguration
 
   def createNamespace(): Unit = {
-    defaultClient.namespaces.createNew()
+    defaultClient.namespaces.create(new NamespaceBuilder()
       .withNewMetadata()
       .withName(namespace)
       .endMetadata()
-      .done()
+      .build())
   }
 
   def deleteNamespace(): Unit = {
@@ -68,7 +70,7 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
       .set("spark.master", s"k8s://${kubernetesClient.getMasterUrl}")
       .set("spark.kubernetes.namespace", namespace)
       .set("spark.executor.cores", "1")
-      .set("spark.executors.instances", "1")
+      .set("spark.executor.instances", "1")
       .set("spark.app.name", "spark-test-app")
       .set(IS_TESTING.key, "false")
       .set(UI_ENABLED.key, "true")
@@ -93,6 +95,8 @@ private[spark] class SparkAppConf {
   override def toString: String = map.toString
 
   def toStringArray: Iterable[String] = map.toList.flatMap(t => List("--conf", s"${t._1}=${t._2}"))
+
+  def toSparkConf: SparkConf = new SparkConf().setAll(map)
 }
 
 private[spark] case class SparkAppArguments(
@@ -107,7 +111,8 @@ private[spark] object SparkAppLauncher extends Logging {
       timeoutSecs: Int,
       sparkHomeDir: Path,
       isJVM: Boolean,
-      pyFiles: Option[String] = None): Unit = {
+      pyFiles: Option[String] = None,
+      env: Map[String, String] = Map.empty[String, String]): Unit = {
     val sparkSubmitExecutable = sparkHomeDir.resolve(Paths.get("bin", "spark-submit"))
     logInfo(s"Launching a spark app with arguments $appArguments and conf $appConf")
     val preCommandLine = if (isJVM) {
@@ -125,9 +130,9 @@ private[spark] object SparkAppLauncher extends Logging {
         appConf.toStringArray :+ appArguments.mainAppResource
 
     if (appArguments.appArgs.nonEmpty) {
-      commandLine ++= appArguments.appArgs.to[ArrayBuffer]
+      commandLine ++= appArguments.appArgs
     }
     logInfo(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
-    ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs)
+    ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs, env = env)
   }
 }

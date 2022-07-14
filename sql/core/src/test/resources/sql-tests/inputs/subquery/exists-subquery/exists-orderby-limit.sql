@@ -1,5 +1,10 @@
 -- Tests EXISTS subquery support with ORDER BY and LIMIT clauses.
 
+-- Test sort operator with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
@@ -116,3 +121,81 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id)
                    WHERE  dept.dept_id > 100 
                    GROUP  BY state 
                    LIMIT  1); 
+
+-- limit and offset in the exists subquery block.
+-- TC.03.01
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  dept.dept_id > 10
+               LIMIT  1
+               OFFSET 2);
+
+-- limit and offset in the exists subquery block with aggregate.
+-- TC.03.02
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT max(dept.dept_id)
+               FROM   dept
+               GROUP  BY state
+               LIMIT  1
+               OFFSET 2);
+
+-- limit and offset in the not exists subquery block.
+-- TC.03.03
+SELECT *
+FROM   emp
+WHERE  NOT EXISTS (SELECT dept.dept_name
+                   FROM   dept
+                   WHERE  dept.dept_id > 100
+                   LIMIT  1
+                   OFFSET 2);
+
+-- limit and offset in the not exists subquery block with aggregates.
+-- TC.03.04
+SELECT *
+FROM   emp
+WHERE  NOT EXISTS (SELECT max(dept.dept_id)
+                   FROM   dept
+                   WHERE  dept.dept_id > 100
+                   GROUP  BY state
+                   LIMIT  1
+                   OFFSET 2);
+
+-- offset in the exists subquery block.
+-- TC.04.01
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  dept.dept_id > 10
+               OFFSET 2);
+
+-- offset in the exists subquery block with aggregate.
+-- TC.04.02
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT max(dept.dept_id)
+               FROM   dept
+               GROUP  BY state
+               OFFSET 2);
+
+-- limit in the not exists subquery block.
+-- TC.04.03
+SELECT *
+FROM   emp
+WHERE  NOT EXISTS (SELECT dept.dept_name
+                   FROM   dept
+                   WHERE  dept.dept_id > 100
+                   OFFSET 2);
+
+-- limit in the not exists subquery block with aggregates.
+-- TC.04.04
+SELECT *
+FROM   emp
+WHERE  NOT EXISTS (SELECT max(dept.dept_id)
+                   FROM   dept
+                   WHERE  dept.dept_id > 100
+                   GROUP  BY state
+                   OFFSET 2);

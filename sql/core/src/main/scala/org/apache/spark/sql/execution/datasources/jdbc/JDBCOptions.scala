@@ -20,15 +20,19 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
+import org.apache.commons.io.FilenameUtils
+
+import org.apache.spark.SparkFiles
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient val parameters: CaseInsensitiveMap[String])
-  extends Serializable {
+    val parameters: CaseInsensitiveMap[String])
+  extends Serializable with Logging {
 
   import JDBCOptions._
 
@@ -70,24 +74,22 @@ class JDBCOptions(
   // table name or a table subquery.
   val tableOrQuery = (parameters.get(JDBC_TABLE_NAME), parameters.get(JDBC_QUERY_STRING)) match {
     case (Some(name), Some(subquery)) =>
-      throw new IllegalArgumentException(
-        s"Both '$JDBC_TABLE_NAME' and '$JDBC_QUERY_STRING' can not be specified at the same time."
-      )
+      throw QueryExecutionErrors.cannotSpecifyBothJdbcTableNameAndQueryError(
+        JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (None, None) =>
-      throw new IllegalArgumentException(
-        s"Option '$JDBC_TABLE_NAME' or '$JDBC_QUERY_STRING' is required."
-      )
+      throw QueryExecutionErrors.missingJdbcTableNameAndQueryError(
+        JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (Some(name), None) =>
       if (name.isEmpty) {
-        throw new IllegalArgumentException(s"Option '$JDBC_TABLE_NAME' can not be empty.")
+        throw QueryExecutionErrors.emptyOptionError(JDBC_TABLE_NAME)
       } else {
         name.trim
       }
     case (None, Some(subquery)) =>
       if (subquery.isEmpty) {
-        throw new IllegalArgumentException(s"Option `$JDBC_QUERY_STRING` can not be empty.")
+        throw QueryExecutionErrors.emptyOptionError(JDBC_QUERY_STRING)
       } else {
-        s"(${subquery}) __SPARK_GEN_JDBC_SUBQUERY_NAME_${curId.getAndIncrement()}"
+        s"(${subquery}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
       }
   }
 
@@ -147,14 +149,7 @@ class JDBCOptions(
      """.stripMargin
   )
 
-  val fetchSize = {
-    val size = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
-    require(size >= 0,
-      s"Invalid value `${size.toString}` for parameter " +
-        s"`$JDBC_BATCH_FETCH_SIZE`. The minimum value is 0. When the value is 0, " +
-        "the JDBC driver ignores the value and does the estimates.")
-    size
-  }
+  val fetchSize = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
 
   // ------------------------------------------------------------
   // Optional parameters only for writing
@@ -184,16 +179,64 @@ class JDBCOptions(
       case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
+      case other => throw QueryExecutionErrors.invalidJdbcTxnIsolationLevelError(
+        JDBC_TXN_ISOLATION_LEVEL, other)
     }
   // An option to execute custom SQL before fetching data from the remote DB
   val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
 
   // An option to allow/disallow pushing down predicate into JDBC data source
   val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
+
+  // An option to allow/disallow pushing down aggregate into JDBC data source
+  // This only applies to Data Source V2 JDBC
+  val pushDownAggregate = parameters.getOrElse(JDBC_PUSHDOWN_AGGREGATE, "false").toBoolean
+
+  // An option to allow/disallow pushing down LIMIT into V2 JDBC data source
+  // This only applies to Data Source V2 JDBC
+  val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "false").toBoolean
+
+  // An option to allow/disallow pushing down OFFSET into V2 JDBC data source
+  // This only applies to Data Source V2 JDBC
+  val pushDownOffset = parameters.getOrElse(JDBC_PUSHDOWN_OFFSET, "false").toBoolean
+
+  // An option to allow/disallow pushing down TABLESAMPLE into JDBC data source
+  // This only applies to Data Source V2 JDBC
+  val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "false").toBoolean
+
+  // The local path of user's keytab file, which is assumed to be pre-uploaded to all nodes either
+  // by --files option of spark-submit or manually
+  val keytab = {
+    val keytabParam = parameters.getOrElse(JDBC_KEYTAB, null)
+    if (keytabParam != null && FilenameUtils.getPath(keytabParam).isEmpty) {
+      val result = SparkFiles.get(keytabParam)
+      logDebug(s"Keytab path not found, assuming --files, file name used on executor: $result")
+      result
+    } else {
+      logDebug("Keytab path found, assuming manual upload")
+      keytabParam
+    }
+  }
+  // The principal name of user's keytab file
+  val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
+
+  val tableComment = parameters.getOrElse(JDBC_TABLE_COMMENT, "")
+
+  val refreshKrb5Config = parameters.getOrElse(JDBC_REFRESH_KRB5_CONFIG, "false").toBoolean
+
+  // User specified JDBC connection provider name
+  val connectionProviderName = parameters.get(JDBC_CONNECTION_PROVIDER)
+
+  // The prefix that is added to the query sent to the JDBC database.
+  // This is required to support some complex queries with some JDBC databases.
+  val prepareQuery = parameters.get(JDBC_PREPARE_QUERY).map(_ + " ").getOrElse("")
+
+  // Infers timestamp values as TimestampNTZ type when reading data.
+  val inferTimestampNTZType = parameters.getOrElse(JDBC_INFER_TIMESTAMP_NTZ, "false").toBoolean
 }
 
 class JdbcOptionsInWrite(
-    @transient override val parameters: CaseInsensitiveMap[String])
+    override val parameters: CaseInsensitiveMap[String])
   extends JDBCOptions(parameters) {
 
   import JDBCOptions._
@@ -242,4 +285,15 @@ object JDBCOptions {
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
+  val JDBC_PUSHDOWN_AGGREGATE = newOption("pushDownAggregate")
+  val JDBC_PUSHDOWN_LIMIT = newOption("pushDownLimit")
+  val JDBC_PUSHDOWN_OFFSET = newOption("pushDownOffset")
+  val JDBC_PUSHDOWN_TABLESAMPLE = newOption("pushDownTableSample")
+  val JDBC_KEYTAB = newOption("keytab")
+  val JDBC_PRINCIPAL = newOption("principal")
+  val JDBC_TABLE_COMMENT = newOption("tableComment")
+  val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
+  val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
+  val JDBC_PREPARE_QUERY = newOption("prepareQuery")
+  val JDBC_INFER_TIMESTAMP_NTZ = newOption("inferTimestampNTZType")
 }

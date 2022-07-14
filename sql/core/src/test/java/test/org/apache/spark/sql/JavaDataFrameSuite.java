@@ -33,6 +33,7 @@ import org.junit.*;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -105,7 +106,7 @@ public class JavaDataFrameSuite {
 
     // Varargs in column expressions
     df.groupBy().agg(countDistinct("key", "value"));
-    df.groupBy().agg(countDistinct(col("key"), col("value")));
+    df.groupBy().agg(count_distinct(col("key"), col("value")));
     df.select(coalesce(col("key")));
 
     // Varargs with mathfunctions
@@ -319,6 +320,21 @@ public class JavaDataFrameSuite {
   }
 
   @Test
+  public void testwithColumns() {
+    Dataset<Row> df = spark.table("testData2");
+    Map<String, Column> colMaps = new HashMap<>();
+    colMaps.put("a1", col("a"));
+    colMaps.put("b1", col("b"));
+
+    StructType expected = df.withColumn("a1", col("a")).withColumn("b1", col("b")).schema();
+    StructType actual = df.withColumns(colMaps).schema();
+    // Validate geting same result with withColumn loop call
+    Assert.assertEquals(expected, actual);
+    // Validate the col names
+    Assert.assertArrayEquals(actual.fieldNames(), new String[] {"a", "b", "a1", "b1"});
+  }
+
+  @Test
   public void testSampleByColumn() {
     Dataset<Row> df = spark.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     Dataset<Row> sampled = df.stat().sampleBy(col("key"), ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
@@ -467,10 +483,11 @@ public class JavaDataFrameSuite {
     BeanWithoutGetter bean = new BeanWithoutGetter();
     List<BeanWithoutGetter> data = Arrays.asList(bean);
     Dataset<Row> df = spark.createDataFrame(data, BeanWithoutGetter.class);
-    Assert.assertEquals(df.schema().length(), 0);
-    Assert.assertEquals(df.collectAsList().size(), 1);
+    Assert.assertEquals(0, df.schema().length());
+    Assert.assertEquals(1, df.collectAsList().size());
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void testJsonRDDToDataFrame() {
     // This is a test for the deprecated API in SPARK-15615.
@@ -506,10 +523,11 @@ public class JavaDataFrameSuite {
 
   // Checks a simple case for DataFrame here and put exhaustive tests for the issue
   // of circular references in `JavaDatasetSuite`.
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testCircularReferenceBean() {
     CircularReference1Bean bean = new CircularReference1Bean();
-    spark.createDataFrame(Arrays.asList(bean), CircularReference1Bean.class);
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> spark.createDataFrame(Arrays.asList(bean), CircularReference1Bean.class));
   }
 
   @Test

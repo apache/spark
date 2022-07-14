@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * An abstract class for row used internally in Spark SQL, which only contains the columns as
@@ -56,7 +56,9 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
    * Note: In order to support update decimal with precision > 18 in UnsafeRow,
    * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
    */
-  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
+  def setDecimal(i: Int, value: Decimal, precision: Int): Unit = update(i, value)
+
+  def setInterval(i: Int, value: CalendarInterval): Unit = update(i, value)
 
   /**
    * Make a copy of the current [[InternalRow]] object.
@@ -130,8 +132,10 @@ object InternalRow {
       case BooleanType => (input, ordinal) => input.getBoolean(ordinal)
       case ByteType => (input, ordinal) => input.getByte(ordinal)
       case ShortType => (input, ordinal) => input.getShort(ordinal)
-      case IntegerType | DateType => (input, ordinal) => input.getInt(ordinal)
-      case LongType | TimestampType => (input, ordinal) => input.getLong(ordinal)
+      case IntegerType | DateType | _: YearMonthIntervalType =>
+        (input, ordinal) => input.getInt(ordinal)
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        (input, ordinal) => input.getLong(ordinal)
       case FloatType => (input, ordinal) => input.getFloat(ordinal)
       case DoubleType => (input, ordinal) => input.getDouble(ordinal)
       case StringType => (input, ordinal) => input.getUTF8String(ordinal)
@@ -161,14 +165,19 @@ object InternalRow {
   /**
    * Returns a writer for an `InternalRow` with given data type.
    */
+  @scala.annotation.tailrec
   def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit = dt match {
     case BooleanType => (input, v) => input.setBoolean(ordinal, v.asInstanceOf[Boolean])
     case ByteType => (input, v) => input.setByte(ordinal, v.asInstanceOf[Byte])
     case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])
-    case IntegerType | DateType => (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
-    case LongType | TimestampType => (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
+    case IntegerType | DateType | _: YearMonthIntervalType =>
+      (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+      (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
     case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
     case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
+    case CalendarIntervalType =>
+      (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)

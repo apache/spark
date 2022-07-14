@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
@@ -54,25 +55,51 @@ class QuantileSummariesSuite extends SparkFunSuite {
     summary
   }
 
-  private def checkQuantile(quant: Double, data: Seq[Double], summary: QuantileSummaries): Unit = {
+  private def validateQuantileApproximation(
+      approx: Double,
+      percentile: Double,
+      data: Seq[Double],
+      summary: QuantileSummaries): Unit = {
+    assert(data.nonEmpty)
+
+    val rankOfValue = data.count(_ <= approx)
+    val rankOfPreValue = data.count(_ < approx)
+    // `rankOfValue` is the last position of the quantile value. If the input repeats the value
+    // chosen as the quantile, e.g. in (1,2,2,2,2,2,3), the 50% quantile is 2, then it's
+    // improper to choose the last position as its rank. Instead, we get the rank by averaging
+    // `rankOfValue` and `rankOfPreValue`.
+    val rank = math.ceil((rankOfValue + rankOfPreValue) / 2.0)
+    val lower = math.floor((percentile - summary.relativeError) * data.size)
+    val upper = math.ceil((percentile + summary.relativeError) * data.size)
+    val msg =
+      s"$rank not in [$lower $upper], requested percentile: $percentile, approx returned: $approx"
+    assert(rank >= lower, msg)
+    assert(rank <= upper, msg)
+  }
+
+  private def checkQuantile(
+      percentile: Double,
+      data: Seq[Double],
+      summary: QuantileSummaries): Unit = {
     if (data.nonEmpty) {
-      val approx = summary.query(quant).get
-      // Get the rank of the approximation.
-      val rankOfValue = data.count(_ <= approx)
-      val rankOfPreValue = data.count(_ < approx)
-      // `rankOfValue` is the last position of the quantile value. If the input repeats the value
-      // chosen as the quantile, e.g. in (1,2,2,2,2,2,3), the 50% quantile is 2, then it's
-      // improper to choose the last position as its rank. Instead, we get the rank by averaging
-      // `rankOfValue` and `rankOfPreValue`.
-      val rank = math.ceil((rankOfValue + rankOfPreValue) / 2.0)
-      val lower = math.floor((quant - summary.relativeError) * data.size)
-      val upper = math.ceil((quant + summary.relativeError) * data.size)
-      val msg =
-        s"$rank not in [$lower $upper], requested quantile: $quant, approx returned: $approx"
-      assert(rank >= lower, msg)
-      assert(rank <= upper, msg)
+      val approx = summary.query(percentile).get
+      validateQuantileApproximation(approx, percentile, data, summary)
     } else {
-      assert(summary.query(quant).isEmpty)
+      assert(summary.query(percentile).isEmpty)
+    }
+  }
+
+  private def checkQuantiles(
+      percentiles: Seq[Double],
+      data: Seq[Double],
+      summary: QuantileSummaries): Unit = {
+    if (data.nonEmpty) {
+      val approx = summary.query(percentiles).get
+      for ((q, a) <- percentiles zip approx) {
+        validateQuantileApproximation(a, q, data, summary)
+      }
+    } else {
+      assert(summary.query(percentiles).isEmpty)
     }
   }
 
@@ -98,6 +125,8 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.5, data, s)
       checkQuantile(0.1, data, s)
       checkQuantile(0.001, data, s)
+      checkQuantiles(Seq(0.001, 0.1, 0.5, 0.9, 0.9999), data, s)
+      checkQuantiles(Seq(0.9999, 0.9, 0.5, 0.1, 0.001), data, s)
     }
 
     test(s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression " +
@@ -109,6 +138,8 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.5, data, s)
       checkQuantile(0.1, data, s)
       checkQuantile(0.001, data, s)
+      checkQuantiles(Seq(0.001, 0.1, 0.5, 0.9, 0.9999), data, s)
+      checkQuantiles(Seq(0.9999, 0.9, 0.5, 0.1, 0.001), data, s)
     }
 
     test(s"Tests on empty data with epsi=$epsi and seq=$seq_name, compression=$compression") {
@@ -121,6 +152,8 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.5, emptyData, s)
       checkQuantile(0.1, emptyData, s)
       checkQuantile(0.001, emptyData, s)
+      checkQuantiles(Seq(0.001, 0.1, 0.5, 0.9, 0.9999), emptyData, s)
+      checkQuantiles(Seq(0.9999, 0.9, 0.5, 0.1, 0.001), emptyData, s)
     }
   }
 
@@ -149,6 +182,8 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.5, data, s)
       checkQuantile(0.1, data, s)
       checkQuantile(0.001, data, s)
+      checkQuantiles(Seq(0.001, 0.1, 0.5, 0.9, 0.9999), data, s)
+      checkQuantiles(Seq(0.9999, 0.9, 0.5, 0.1, 0.001), data, s)
     }
 
     val (data11, data12) = {
@@ -168,6 +203,29 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.5, data, s)
       checkQuantile(0.1, data, s)
       checkQuantile(0.001, data, s)
+      checkQuantiles(Seq(0.001, 0.1, 0.5, 0.9, 0.9999), data, s)
+      checkQuantiles(Seq(0.9999, 0.9, 0.5, 0.1, 0.001), data, s)
+    }
+
+    // length of data21 is 4 * length of data22
+    val data21 = data.zipWithIndex.filter(_._2 % 5 != 0).map(_._1).toSeq
+    val data22 = data.zipWithIndex.filter(_._2 % 5 == 0).map(_._1).toSeq
+
+    test(
+      s"Merging unbalanced interleaved lists with epsi=$epsi and seq=$seq_name, " +
+        s"compression=$compression") {
+      val s1 = buildSummary(data21, epsi, compression)
+      val s2 = buildSummary(data22, epsi, compression)
+      val s = s1.merge(s2)
+      // Check all quantiles
+      val percentiles = ArrayBuffer[Double]()
+      for (queryRank <- 1 to n) {
+        val percentile = queryRank.toDouble / n.toDouble
+        checkQuantile(percentile, data, s)
+        percentiles += percentile
+      }
+      checkQuantiles(percentiles.toSeq, data, s)
+      checkQuantiles(percentiles.reverse.toSeq, data, s)
     }
   }
 }

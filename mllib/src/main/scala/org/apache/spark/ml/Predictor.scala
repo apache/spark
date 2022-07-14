@@ -17,14 +17,12 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -65,7 +63,6 @@ private[ml] trait PredictorParams extends Params
 }
 
 /**
- * :: DeveloperApi ::
  * Abstraction for prediction problems (regression and classification). It accepts all NumericType
  * labels and will automatically cast it to DoubleType in `fit()`. If this predictor supports
  * weights, it accepts all NumericType weights, which will be automatically casted to DoubleType
@@ -78,7 +75,6 @@ private[ml] trait PredictorParams extends Params
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
  */
-@DeveloperApi
 abstract class Predictor[
     FeaturesType,
     Learner <: Predictor[FeaturesType, Learner, M],
@@ -143,20 +139,9 @@ abstract class Predictor[
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
   }
-
-  /**
-   * Extract [[labelCol]] and [[featuresCol]] from the given dataset,
-   * and put it in an RDD with strong types.
-   */
-  protected def extractLabeledPoints(dataset: Dataset[_]): RDD[LabeledPoint] = {
-    dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-      case Row(label: Double, features: Vector) => LabeledPoint(label, features)
-    }
-  }
 }
 
 /**
- * :: DeveloperApi ::
  * Abstraction for a model for prediction tasks (regression and classification).
  *
  * @tparam FeaturesType  Type of features.
@@ -164,7 +149,6 @@ abstract class Predictor[
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
  */
-@DeveloperApi
 abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
   extends Model[M] with PredictorParams {
 
@@ -189,7 +173,11 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   protected def featuresDataType: DataType = new VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false, featuresDataType)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false, featuresDataType)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+    }
+    outputSchema
   }
 
   /**
@@ -204,17 +192,19 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
     if ($(predictionCol).nonEmpty) {
       transformImpl(dataset)
     } else {
-      this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: Predictor.transform() does nothing" +
+        " because no output columns were set.")
       dataset.toDF
     }
   }
 
   protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val predictUDF = udf { (features: Any) =>
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+    val predictUDF = udf { features: Any =>
       predict(features.asInstanceOf[FeaturesType])
     }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))),
+      outputSchema($(predictionCol)).metadata)
   }
 
   /**

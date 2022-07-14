@@ -17,16 +17,13 @@
 
 package org.apache.spark.mllib.optimization
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
 import org.apache.spark.mllib.util.MLUtils
 
 /**
- * :: DeveloperApi ::
  * Class used to compute the gradient for a loss function, given a single data point.
  */
-@DeveloperApi
 abstract class Gradient extends Serializable {
   /**
    * Compute the gradient and loss given the features of a single data point.
@@ -58,7 +55,6 @@ abstract class Gradient extends Serializable {
 }
 
 /**
- * :: DeveloperApi ::
  * Compute gradient and loss for a multinomial logistic loss function, as used
  * in multi-class classification (it is also used in binary logistic regression).
  *
@@ -162,7 +158,6 @@ abstract class Gradient extends Serializable {
  *                   Multinomial Logistic Regression. By default, it is binary logistic regression
  *                   so numClasses will be set to 2.
  */
-@DeveloperApi
 class LogisticGradient(numClasses: Int) extends Gradient {
 
   def this() = this(2)
@@ -218,8 +213,8 @@ class LogisticGradient(numClasses: Int) extends Gradient {
 
         val margins = Array.tabulate(numClasses - 1) { i =>
           var margin = 0.0
-          data.foreachActive { (index, value) =>
-            if (value != 0.0) margin += value * weightsArray((i * dataSize) + index)
+          data.foreachNonZero { (index, value) =>
+            margin += value * weightsArray((i * dataSize) + index)
           }
           if (i == label.toInt - 1) marginY = margin
           if (margin > maxMargin) {
@@ -258,8 +253,8 @@ class LogisticGradient(numClasses: Int) extends Gradient {
           val multiplier = math.exp(margins(i)) / (sum + 1.0) - {
             if (label != 0.0 && label == i + 1) 1.0 else 0.0
           }
-          data.foreachActive { (index, value) =>
-            if (value != 0.0) cumGradientArray(i * dataSize + index) += multiplier * value
+          data.foreachNonZero { (index, value) =>
+            cumGradientArray(i * dataSize + index) += multiplier * value
           }
         }
 
@@ -275,13 +270,11 @@ class LogisticGradient(numClasses: Int) extends Gradient {
 }
 
 /**
- * :: DeveloperApi ::
  * Compute gradient and loss for a Least-squared loss function, as used in linear regression.
  * This is correct for the averaged least squares loss function (mean squared error)
  *              L = 1/2n ||A weights-y||^2
  * See also the documentation for the precise formulation.
  */
-@DeveloperApi
 class LeastSquaresGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val diff = dot(data, weights) - label
@@ -303,13 +296,11 @@ class LeastSquaresGradient extends Gradient {
 }
 
 /**
- * :: DeveloperApi ::
  * Compute gradient and loss for a Hinge loss function, as used in SVM binary classification.
  * See also the documentation for the precise formulation.
  *
  * @note This assumes that the labels are {0,1}
  */
-@DeveloperApi
 class HingeGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val dotProduct = dot(data, weights)

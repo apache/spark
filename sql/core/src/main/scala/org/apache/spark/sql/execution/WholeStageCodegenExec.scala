@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.Writer
 import java.util.Locale
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -31,11 +31,13 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 /**
@@ -45,11 +47,16 @@ trait CodegenSupport extends SparkPlan {
 
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
-    case _: HashAggregateExec => "agg"
+    case _: HashAggregateExec => "hashAgg"
+    case _: SortAggregateExec => "sortAgg"
     case _: BroadcastHashJoinExec => "bhj"
+    case _: ShuffledHashJoinExec => "shj"
     case _: SortMergeJoinExec => "smj"
+    case _: BroadcastNestedLoopJoinExec => "bnlj"
     case _: RDDScanExec => "rdd"
     case _: DataSourceScanExec => "scan"
+    case _: InMemoryTableScanExec => "memoryScan"
+    case _: WholeStageCodegenExec => "wholestagecodegen"
     case _ => nodeName.toLowerCase(Locale.ROOT)
   }
 
@@ -86,7 +93,7 @@ trait CodegenSupport extends SparkPlan {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
     s"""
-       |${ctx.registerComment(s"PRODUCE: ${this.simpleString(SQLConf.get.maxToStringFields)}")}
+       |${ctx.registerComment(s"PRODUCE: ${this.simpleString(conf.maxToStringFields)}")}
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -179,7 +186,7 @@ trait CodegenSupport extends SparkPlan {
     //    all variables in output (see `requireAllOutput`).
     // 3. The number of output variables must less than maximum number of parameters in Java method
     //    declaration.
-    val confEnabled = SQLConf.get.wholeStageSplitConsumeFuncByOperator
+    val confEnabled = conf.wholeStageSplitConsumeFuncByOperator
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
     val paramLength = CodeGenerator.calculateParamLength(output) + (if (row != null) 1 else 0)
     val consumeFunc = if (confEnabled && requireAllOutput
@@ -189,7 +196,7 @@ trait CodegenSupport extends SparkPlan {
       parent.doConsume(ctx, inputVars, rowVar)
     }
     s"""
-       |${ctx.registerComment(s"CONSUME: ${parent.simpleString(SQLConf.get.maxToStringFields)}")}
+       |${ctx.registerComment(s"CONSUME: ${parent.simpleString(conf.maxToStringFields)}")}
        |$evaluated
        |$consumeFunc
      """.stripMargin
@@ -258,7 +265,7 @@ trait CodegenSupport extends SparkPlan {
 
       paramVars += ExprCode(paramIsNull, JavaCode.variable(paramName, attributes(i).dataType))
     }
-    (arguments, parameters, paramVars)
+    (arguments.toSeq, parameters.toSeq, paramVars.toSeq)
   }
 
   /**
@@ -382,13 +389,16 @@ trait CodegenSupport extends SparkPlan {
   def limitNotReachedChecks: Seq[String] = parent.limitNotReachedChecks
 
   /**
+   * Check if the node is supposed to produce limit not reached checks.
+   */
+  protected def canCheckLimitNotReached: Boolean = children.isEmpty
+
+  /**
    * A helper method to generate the data producing loop condition according to the
    * limit-not-reached checks.
    */
   final def limitNotReachedCond: String = {
-    // InputAdapter is also a leaf node.
-    val isLeafNode = children.isEmpty || this.isInstanceOf[InputAdapter]
-    if (!isLeafNode && !this.isInstanceOf[BlockingOperatorWithCodegen]) {
+    if (!canCheckLimitNotReached) {
       val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
         "in its data producing loop."
       if (Utils.isTesting) {
@@ -426,6 +436,9 @@ trait BlockingOperatorWithCodegen extends CodegenSupport {
   // that upstream operators will not generate useless conditions (which are always evaluated to
   // false) for the Limit operators after this blocking operator.
   override def limitNotReachedChecks: Seq[String] = Nil
+
+  // This is a blocking node so the node can produce these checks
+  override protected def canCheckLimitNotReached: Boolean = true
 }
 
 /**
@@ -490,6 +503,12 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
+  override def vectorTypes: Option[Seq[String]] = child.vectorTypes
+
+  // This is not strictly needed because the codegen transformation happens after the columnar
+  // transformation but just for consistency
+  override def supportsColumnar: Boolean = child.supportsColumnar
+
   override def doExecute(): RDD[InternalRow] = {
     child.execute()
   }
@@ -498,7 +517,17 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
     child.doExecuteBroadcast()
   }
 
+  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    child.executeColumnar()
+  }
+
+  // `InputAdapter` can only generate code to process the rows from its child. If the child produces
+  // columnar batches, there must be a `ColumnarToRowExec` above `InputAdapter` to handle it by
+  // overriding `inputRDDs` and calling `InputAdapter#executeColumnar` directly.
   override def inputRDD: RDD[InternalRow] = child.execute()
+
+  // This is a leaf node so the node can produce limit not reached checks.
+  override protected def canCheckLimitNotReached: Boolean = true
 
   // InputAdapter does not need UnsafeProjection.
   protected val createUnsafeProjection: Boolean = false
@@ -510,7 +539,9 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Unit = {
+      maxFields: Int,
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
@@ -518,10 +549,15 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       verbose,
       prefix = "",
       addSuffix = false,
-      maxFields)
+      maxFields,
+      printNodeId,
+      indent)
   }
 
   override def needCopyResult: Boolean = false
+
+  override protected def withNewChildInternal(newChild: SparkPlan): InputAdapter =
+    copy(child = newChild)
 }
 
 object WholeStageCodegenExec {
@@ -538,56 +574,26 @@ object WholeStageCodegenExec {
   def isTooManyFields(conf: SQLConf, dataType: DataType): Boolean = {
     numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
   }
-}
 
-object WholeStageCodegenId {
-  // codegenStageId: ID for codegen stages within a query plan.
-  // It does not affect equality, nor does it participate in destructuring pattern matching
-  // of WholeStageCodegenExec.
-  //
-  // This ID is used to help differentiate between codegen stages. It is included as a part
-  // of the explain output for physical plans, e.g.
-  //
-  // == Physical Plan ==
-  // *(5) SortMergeJoin [x#3L], [y#9L], Inner
-  // :- *(2) Sort [x#3L ASC NULLS FIRST], false, 0
-  // :  +- Exchange hashpartitioning(x#3L, 200)
-  // :     +- *(1) Project [(id#0L % 2) AS x#3L]
-  // :        +- *(1) Filter isnotnull((id#0L % 2))
-  // :           +- *(1) Range (0, 5, step=1, splits=8)
-  // +- *(4) Sort [y#9L ASC NULLS FIRST], false, 0
-  //    +- Exchange hashpartitioning(y#9L, 200)
-  //       +- *(3) Project [(id#6L % 2) AS y#9L]
-  //          +- *(3) Filter isnotnull((id#6L % 2))
-  //             +- *(3) Range (0, 5, step=1, splits=8)
-  //
-  // where the ID makes it obvious that not all adjacent codegen'd plan operators are of the
-  // same codegen stage.
-  //
-  // The codegen stage ID is also optionally included in the name of the generated classes as
-  // a suffix, so that it's easier to associate a generated class back to the physical operator.
-  // This is controlled by SQLConf: spark.sql.codegen.useIdInClassName
-  //
-  // The ID is also included in various log messages.
-  //
-  // Within a query, a codegen stage in a plan starts counting from 1, in "insertion order".
-  // WholeStageCodegenExec operators are inserted into a plan in depth-first post-order.
-  // See CollapseCodegenStages.insertWholeStageCodegen for the definition of insertion order.
-  //
-  // 0 is reserved as a special ID value to indicate a temporary WholeStageCodegenExec object
-  // is created, e.g. for special fallback handling when an existing WholeStageCodegenExec
-  // failed to generate/compile code.
+  // The whole-stage codegen generates Java code on the driver side and sends it to the Executors
+  // for compilation and execution. The whole-stage codegen can bring significant performance
+  // improvements with large dataset in distributed environments. However, in the test environment,
+  // due to the small amount of data, the time to generate Java code takes up a major part of the
+  // entire runtime. So we summarize the total code generation time and output it to the execution
+  // log for easy analysis and view.
+  private val _codeGenTime = new AtomicLong
 
-  private val codegenStageCounter: ThreadLocal[Integer] = ThreadLocal.withInitial(() => 1)
+  // Increase the total generation time of Java source code in nanoseconds.
+  // Visible for testing
+  def increaseCodeGenTime(time: Long): Unit = _codeGenTime.addAndGet(time)
 
-  def resetPerQuery(): Unit = codegenStageCounter.set(1)
+  // Returns the total generation time of Java source code in nanoseconds.
+  // Visible for testing
+  def codeGenTime: Long = _codeGenTime.get
 
-  def getNextStageId(): Int = {
-    val counter = codegenStageCounter
-    val id = counter.get()
-    counter.set(id + 1)
-    id
-  }
+  // Reset generation time of Java source code.
+  // Visible for testing
+  def resetCodeGenTime(): Unit = _codeGenTime.set(0L)
 }
 
 /**
@@ -627,9 +633,15 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
+  // This is not strictly needed because the codegen transformation happens after the columnar
+  // transformation but just for consistency
+  override def supportsColumnar: Boolean = child.supportsColumnar
+
   override lazy val metrics = Map(
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
       WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
+
+  override def nodeName: String = s"WholeStageCodegen (${codegenStageId})"
 
   def generatedClassName(): String = if (conf.wholeStageUseIdInClassName) {
     s"GeneratedIteratorForCodegenStage$codegenStageId"
@@ -643,6 +655,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * @return the tuple of the codegen context and the actual generated source.
    */
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
+    val startTime = System.nanoTime()
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
 
@@ -662,7 +675,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       }
 
       ${ctx.registerComment(
-        s"""Codegend pipeline for stage (id=$codegenStageId)
+        s"""Codegened pipeline for stage (id=$codegenStageId)
            |${this.treeString.trim}""".stripMargin,
          "wsc_codegenPipeline")}
       ${ctx.registerComment(s"codegenStageId=$codegenStageId", "wsc_codegenStageId", true)}
@@ -693,40 +706,48 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     val cleanedSource = CodeFormatter.stripOverlappingComments(
       new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments()))
 
+    val duration = System.nanoTime() - startTime
+    WholeStageCodegenExec.increaseCodeGenTime(duration)
+
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     (ctx, cleanedSource)
+  }
+
+  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    // Code generation is not currently supported for columnar output, so just fall back to
+    // the interpreted path
+    child.executeColumnar()
   }
 
   override def doExecute(): RDD[InternalRow] = {
     val (ctx, cleanedSource) = doCodeGen()
     // try to compile and fallback if it failed
-    val (_, maxCodeSize) = try {
+    val (_, compiledCodeStats) = try {
       CodeGenerator.compile(cleanedSource)
     } catch {
-      case NonFatal(_) if !Utils.isTesting && sqlContext.conf.codegenFallback =>
+      case NonFatal(_) if !Utils.isTesting && conf.codegenFallback =>
         // We should already saw the error message
         logWarning(s"Whole-stage codegen disabled for plan (id=$codegenStageId):\n $treeString")
         return child.execute()
     }
 
     // Check if compiled code has a too large function
-    if (maxCodeSize > sqlContext.conf.hugeMethodLimit) {
+    if (compiledCodeStats.maxMethodCodeSize > conf.hugeMethodLimit) {
       logInfo(s"Found too long generated codes and JIT optimization might not work: " +
-        s"the bytecode size ($maxCodeSize) is above the limit " +
-        s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
+        s"the bytecode size (${compiledCodeStats.maxMethodCodeSize}) is above the limit " +
+        s"${conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
         s"for this plan (id=$codegenStageId). To avoid this, you can raise the limit " +
         s"`${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}`:\n$treeString")
-      child match {
-        // The fallback solution of batch file source scan still uses WholeStageCodegenExec
-        case f: FileSourceScanExec if f.supportsBatch => // do nothing
-        case _ => return child.execute()
-      }
+      return child.execute()
     }
 
     val references = ctx.references.toArray
 
     val durationMs = longMetric("pipelineTime")
 
+    // Even though rdds is an RDD[InternalRow] it may actually be an RDD[ColumnarBatch] with
+    // type erasure hiding that. This allows for the input to a code gen stage to be columnar,
+    // but the output must be rows.
     val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
     if (rdds.length == 1) {
@@ -792,15 +813,19 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Unit = {
+      maxFields: Int,
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
       append,
       verbose,
-      s"*($codegenStageId) ",
+      if (printNodeId) "* " else s"*($codegenStageId) ",
       false,
-      maxFields)
+      maxFields,
+      printNodeId,
+      indent)
   }
 
   override def needStopCheck: Boolean = true
@@ -808,13 +833,55 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   override def limitNotReachedChecks: Seq[String] = Nil
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(codegenStageId.asInstanceOf[Integer])
+
+  override protected def withNewChildInternal(newChild: SparkPlan): WholeStageCodegenExec =
+    copy(child = newChild)(codegenStageId)
 }
 
 
 /**
  * Find the chained plans that support codegen, collapse them together as WholeStageCodegen.
+ *
+ * The `codegenStageCounter` generates ID for codegen stages within a query plan.
+ * It does not affect equality, nor does it participate in destructuring pattern matching
+ * of WholeStageCodegenExec.
+ *
+ * This ID is used to help differentiate between codegen stages. It is included as a part
+ * of the explain output for physical plans, e.g.
+ *
+ * == Physical Plan ==
+ * *(5) SortMergeJoin [x#3L], [y#9L], Inner
+ * :- *(2) Sort [x#3L ASC NULLS FIRST], false, 0
+ * :  +- Exchange hashpartitioning(x#3L, 200)
+ * :     +- *(1) Project [(id#0L % 2) AS x#3L]
+ * :        +- *(1) Filter isnotnull((id#0L % 2))
+ * :           +- *(1) Range (0, 5, step=1, splits=8)
+ * +- *(4) Sort [y#9L ASC NULLS FIRST], false, 0
+ *    +- Exchange hashpartitioning(y#9L, 200)
+ *       +- *(3) Project [(id#6L % 2) AS y#9L]
+ *          +- *(3) Filter isnotnull((id#6L % 2))
+ *             +- *(3) Range (0, 5, step=1, splits=8)
+ *
+ * where the ID makes it obvious that not all adjacent codegen'd plan operators are of the
+ * same codegen stage.
+ *
+ * The codegen stage ID is also optionally included in the name of the generated classes as
+ * a suffix, so that it's easier to associate a generated class back to the physical operator.
+ * This is controlled by SQLConf: spark.sql.codegen.useIdInClassName
+ *
+ * The ID is also included in various log messages.
+ *
+ * Within a query, a codegen stage in a plan starts counting from 1, in "insertion order".
+ * WholeStageCodegenExec operators are inserted into a plan in depth-first post-order.
+ * See CollapseCodegenStages.insertWholeStageCodegen for the definition of insertion order.
+ *
+ * 0 is reserved as a special ID value to indicate a temporary WholeStageCodegenExec object
+ * is created, e.g. for special fallback handling when an existing WholeStageCodegenExec
+ * failed to generate/compile code.
  */
-case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
+case class CollapseCodegenStages(
+    codegenStageCounter: AtomicInteger = new AtomicInteger(0))
+  extends Rule[SparkPlan] {
 
   private def supportCodegen(e: Expression): Boolean = e match {
     case e: LeafExpression => true
@@ -825,7 +892,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
-      val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
+      val willFallback = plan.expressions.exists(_.exists(e => !supportCodegen(e)))
       // the generated code will be huge if there are too many columns
       val hasTooManyOutputFields =
         WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
@@ -838,34 +905,52 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
   /**
    * Inserts an InputAdapter on top of those that do not support codegen.
    */
-  private def insertInputAdapter(plan: SparkPlan): SparkPlan = plan match {
-    case p if !supportCodegen(p) =>
-      // collapse them recursively
-      InputAdapter(insertWholeStageCodegen(p))
-    case j: SortMergeJoinExec =>
-      // The children of SortMergeJoin should do codegen separately.
-      j.withNewChildren(j.children.map(child => InputAdapter(insertWholeStageCodegen(child))))
-    case p =>
-      p.withNewChildren(p.children.map(insertInputAdapter))
+  private def insertInputAdapter(plan: SparkPlan): SparkPlan = {
+    plan match {
+      case p if !supportCodegen(p) =>
+        // collapse them recursively
+        InputAdapter(insertWholeStageCodegen(p))
+      case j: SortMergeJoinExec =>
+        // The children of SortMergeJoin should do codegen separately.
+        j.withNewChildren(j.children.map(
+          child => InputAdapter(insertWholeStageCodegen(child))))
+      case j: ShuffledHashJoinExec =>
+        // The children of ShuffledHashJoin should do codegen separately.
+        j.withNewChildren(j.children.map(
+          child => InputAdapter(insertWholeStageCodegen(child))))
+      case p => p.withNewChildren(p.children.map(insertInputAdapter))
+    }
   }
 
   /**
    * Inserts a WholeStageCodegen on top of those that support codegen.
    */
-  private def insertWholeStageCodegen(plan: SparkPlan): SparkPlan = plan match {
-    // For operators that will output domain object, do not insert WholeStageCodegen for it as
-    // domain object can not be written into unsafe row.
-    case plan if plan.output.length == 1 && plan.output.head.dataType.isInstanceOf[ObjectType] =>
-      plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
-    case plan: CodegenSupport if supportCodegen(plan) =>
-      WholeStageCodegenExec(insertInputAdapter(plan))(WholeStageCodegenId.getNextStageId())
-    case other =>
-      other.withNewChildren(other.children.map(insertWholeStageCodegen))
+  private def insertWholeStageCodegen(plan: SparkPlan): SparkPlan = {
+    plan match {
+      // For operators that will output domain object, do not insert WholeStageCodegen for it as
+      // domain object can not be written into unsafe row.
+      case plan if plan.output.length == 1 && plan.output.head.dataType.isInstanceOf[ObjectType] =>
+        plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
+      case plan: LocalTableScanExec =>
+        // Do not make LogicalTableScanExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
+      case plan: CommandResultExec =>
+        // Do not make CommandResultExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
+      case plan: CodegenSupport if supportCodegen(plan) =>
+        // The whole-stage-codegen framework is row-based. If a plan supports columnar execution,
+        // it can't support whole-stage-codegen at the same time.
+        assert(!plan.supportsColumnar)
+        WholeStageCodegenExec(insertInputAdapter(plan))(codegenStageCounter.incrementAndGet())
+      case other =>
+        other.withNewChildren(other.children.map(insertWholeStageCodegen))
+    }
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
     if (conf.wholeStageEnabled) {
-      WholeStageCodegenId.resetPerQuery()
       insertWholeStageCodegen(plan)
     } else {
       plan

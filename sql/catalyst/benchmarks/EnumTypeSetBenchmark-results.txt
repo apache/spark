@@ -1,0 +1,105 @@
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test contains use empty Set:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                           0              1           1       2318.0           0.4       1.0X
+Use EnumSet                                           6              7           1        171.3           5.8       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test contains use 1 item Set:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          10             12           1         95.9          10.4       1.0X
+Use EnumSet                                           6              7           1        170.0           5.9       1.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test contains use 3 items Set:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          18             20           2         54.9          18.2       1.0X
+Use EnumSet                                           6              7           1        167.5           6.0       3.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test contains use 5 items Set:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          14             16           1         70.0          14.3       1.0X
+Use EnumSet                                           6              7           1        165.6           6.0       2.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test contains use 10 items Set:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          16             18           1         61.8          16.2       1.0X
+Use EnumSet                                           6              7           1        162.6           6.2       2.6X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create empty Set:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                           1              1           0        135.9           7.4       1.0X
+Use EnumSet                                           1              2           0         77.6          12.9       0.6X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create 1 item Set:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          11             12           1          9.2         108.3       1.0X
+Use EnumSet                                           1              2           0         69.0          14.5       7.5X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create 3 items Set:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          36             38           2          2.8         358.0       1.0X
+Use EnumSet                                           1              1           0         77.8          12.9      27.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create 5 items Set:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          86             92           4          1.2         861.2       1.0X
+Use EnumSet                                           1              2           0         69.3          14.4      59.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create 10 items Set:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                         125            132           4          0.8        1247.4       1.0X
+Use EnumSet                                           1              1           0         90.8          11.0     113.3X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create and contains use empty Set:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                           1              1           0        942.7           1.1       1.0X
+Use EnumSet                                           2              2           0        553.5           1.8       0.6X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create and contains use 1 item Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          24             26           2         42.4          23.6       1.0X
+Use EnumSet                                           2              3           0        445.8           2.2      10.5X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create and contains use 3 items Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          57             60           2         17.5          57.2       1.0X
+Use EnumSet                                           2              3           0        457.8           2.2      26.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create and contains use 5 items Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                         101            107           3          9.9         100.9       1.0X
+Use EnumSet                                           6              7           1        158.1           6.3      15.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Test create and contains use 10 items Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          140            145           5          7.1         140.2       1.0X
+Use EnumSet                                            6              8           1        160.0           6.3      22.4X
+

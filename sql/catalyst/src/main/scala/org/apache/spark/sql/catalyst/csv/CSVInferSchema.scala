@@ -17,22 +17,39 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import java.util.Locale
+
 import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.TimestampFormatter
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private val timestampParser = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInRead,
     options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
-  private val decimalParser = {
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+
+  private val decimalParser = if (options.locale == Locale.US) {
+    // Special handling the default locale for backward compatibility
+    s: String => new java.math.BigDecimal(s)
+  } else {
     ExprUtils.getDecimalParser(options.locale)
   }
 
@@ -94,20 +111,20 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
-      typeSoFar match {
+      val typeElemInfer = typeSoFar match {
         case NullType => tryParseInteger(field)
         case IntegerType => tryParseInteger(field)
         case LongType => tryParseLong(field)
-        case _: DecimalType =>
-          // DecimalTypes have different precisions and scales, so we try to find the common type.
-          compatibleType(typeSoFar, tryParseDecimal(field)).getOrElse(StringType)
+        case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
+        case TimestampNTZType => tryParseTimestampNTZ(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
-          throw new UnsupportedOperationException(s"Unexpected data type $other")
+          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }
+      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }
   }
 
@@ -136,7 +153,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
       // The conversion can fail when the `field` is not a form of number.
       val bigDecimal = decimalParser(field)
       // Because many other formats do not support decimal, it reduces the cases for
-      // decimals by disallowing values having scale (eg. `1.1`).
+      // decimals by disallowing values having scale (e.g. `1.1`).
       if (bigDecimal.scale <= 0) {
         // `DecimalType` conversion can fail when
         //   1. The precision is bigger than 38.
@@ -153,13 +170,24 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
     } else {
+      tryParseTimestampNTZ(field)
+    }
+  }
+
+  private def tryParseTimestampNTZ(field: String): DataType = {
+    // We can only parse the value as TimestampNTZType if it does not have zone-offset or
+    // time-zone component and can be parsed with the timestamp formatter.
+    // Otherwise, it is likely to be a timestamp with timezone.
+    if (timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+      SQLConf.get.timestampType
+    } else {
       tryParseTimestamp(field)
     }
   }
 
   private def tryParseTimestamp(field: String): DataType = {
     // This case infers a custom `dataFormat` is set.
-    if ((allCatch opt timestampParser.parse(field)).isDefined) {
+    if (timestampParser.parseOptional(field).isDefined) {
       TimestampType
     } else {
       tryParseBoolean(field)
@@ -217,6 +245,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
       } else {
         Some(DecimalType(range + scale, scale))
       }
+
+    case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+      Some(TimestampType)
+
     case _ => None
   }
 }

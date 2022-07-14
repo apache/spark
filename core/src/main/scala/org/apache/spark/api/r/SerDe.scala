@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Time, Timestamp}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.WrappedArray
+import scala.collection.mutable
 
 /**
  * Utility functions to serialize, deserialize objects to / from R
@@ -102,7 +102,7 @@ private[spark] object SerDe {
   def readBytes(in: DataInputStream): Array[Byte] = {
     val len = readInt(in)
     val out = new Array[Byte](len)
-    val bytesRead = in.readFully(out)
+    in.readFully(out)
     out
   }
 
@@ -303,12 +303,10 @@ private[spark] object SerDe {
       // Convert ArrayType collected from DataFrame to Java array
       // Collected data of ArrayType from a DataFrame is observed to be of
       // type "scala.collection.mutable.WrappedArray"
-      val value =
-        if (obj.isInstanceOf[WrappedArray[_]]) {
-          obj.asInstanceOf[WrappedArray[_]].toArray
-        } else {
-          obj
-        }
+      val value = obj match {
+        case wa: mutable.WrappedArray[_] => wa.array
+        case other => other
+      }
 
       value match {
         case v: java.lang.Character =>

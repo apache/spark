@@ -21,7 +21,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.util.CallSite
 
 /**
@@ -59,7 +59,8 @@ private[scheduler] abstract class Stage(
     val numTasks: Int,
     val parents: List[Stage],
     val firstJobId: Int,
-    val callSite: CallSite)
+    val callSite: CallSite,
+    val resourceProfileId: Int)
   extends Logging {
 
   val numPartitions = rdd.partitions.length
@@ -79,7 +80,8 @@ private[scheduler] abstract class Stage(
    * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
    * have been created).
    */
-  private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
+  private var _latestInfo: StageInfo =
+    StageInfo.fromStage(this, nextAttemptId, resourceProfileId = resourceProfileId)
 
   /**
    * Set of stage attempt IDs that have failed. We keep track of these failures in order to avoid
@@ -100,8 +102,16 @@ private[scheduler] abstract class Stage(
     val metrics = new TaskMetrics
     metrics.register(rdd.sparkContext)
     _latestInfo = StageInfo.fromStage(
-      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences)
+      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
+      resourceProfileId = resourceProfileId)
     nextAttemptId += 1
+  }
+
+  /** Forward the nextAttemptId if skipped and get visited for the first time. */
+  def increaseAttemptIdOnFirstSkip(): Unit = {
+    if (nextAttemptId == 0) {
+      nextAttemptId = 1
+    }
   }
 
   /** Returns the StageInfo for the most recent attempt for this stage. */
@@ -116,4 +126,8 @@ private[scheduler] abstract class Stage(
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int]
+
+  def isIndeterminate: Boolean = {
+    rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+  }
 }

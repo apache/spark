@@ -109,7 +109,8 @@ setMethod("corr",
 #'
 #' Finding frequent items for columns, possibly with false positives.
 #' Using the frequent element count algorithm described in
-#' \url{https://doi.org/10.1145/762471.762473}, proposed by Karp, Schenker, and Papadimitriou.
+#' \url{https://dl.acm.org/doi/10.1145/762471.762473}, proposed by Karp, Schenker,
+#' and Papadimitriou.
 #'
 #' @param x A SparkDataFrame.
 #' @param cols A vector column names to search frequent items in.

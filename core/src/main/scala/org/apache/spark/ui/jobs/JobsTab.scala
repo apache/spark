@@ -19,8 +19,6 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler.SchedulingMode
@@ -32,9 +30,12 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
   extends SparkUITab(parent, "jobs") {
 
   val sc = parent.sc
+  val conf = parent.conf
   val killEnabled = parent.killEnabled
 
+  // Show pool information for only live UI.
   def isFairScheduler: Boolean = {
+    sc.isDefined &&
     store
       .environmentInfo()
       .sparkProperties

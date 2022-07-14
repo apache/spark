@@ -20,14 +20,17 @@ package org.apache.spark.sql.execution.python
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
+import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{BooleanType, DoubleType}
 
-class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
+class BatchEvalPythonExecSuite extends SparkPlanTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
 
@@ -95,15 +98,30 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     val df = Seq(("Hello", 4)).toDF("a", "b")
     val df2 = Seq(("Hello", 4)).toDF("c", "d")
     val joinDF = df.crossJoin(df2).where("dummyPythonUDF(a, c) == dummyPythonUDF(d, c)")
-    val qualifiedPlanNodes = joinDF.queryExecution.executedPlan.collect {
+    val qualifiedPlanNodes = collect(joinDF.queryExecution.executedPlan) {
       case b: BatchEvalPythonExec => b
     }
     assert(qualifiedPlanNodes.size == 1)
   }
+
+  test("SPARK-28422: GROUPED_AGG pandas_udf should work without group by clause") {
+    val aggPandasUdf = new MyDummyGroupedAggPandasUDF
+    spark.udf.registerPython("dummyGroupedAggPandasUDF", aggPandasUdf)
+
+    withTempView("table") {
+      val df = spark.range(0, 100)
+      df.createTempView("table")
+
+      val agg1 = df.agg(aggPandasUdf(df("id")))
+      val agg2 = sql("select dummyGroupedAggPandasUDF(id) from table")
+
+      comparePlans(agg1.queryExecution.optimizedPlan, agg2.queryExecution.optimizedPlan)
+    }
+  }
 }
 
 // This Python UDF is dummy and just for testing. Unable to execute.
-class DummyUDF extends PythonFunction(
+class DummyUDF extends SimplePythonFunction(
   command = Array[Byte](),
   envVars = Map("" -> "").asJava,
   pythonIncludes = ArrayBuffer("").asJava,
@@ -117,6 +135,20 @@ class MyDummyPythonUDF extends UserDefinedPythonFunction(
   func = new DummyUDF,
   dataType = BooleanType,
   pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+  udfDeterministic = true)
+
+class MyDummyNondeterministicPythonUDF extends UserDefinedPythonFunction(
+  name = "dummyNondeterministicUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+  udfDeterministic = false)
+
+class MyDummyGroupedAggPandasUDF extends UserDefinedPythonFunction(
+  name = "dummyGroupedAggPandasUDF",
+  func = new DummyUDF,
+  dataType = DoubleType,
+  pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
   udfDeterministic = true)
 
 class MyDummyScalarPandasUDF extends UserDefinedPythonFunction(

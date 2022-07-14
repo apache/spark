@@ -46,7 +46,8 @@ private[spark] abstract class WebUI(
     port: Int,
     conf: SparkConf,
     basePath: String = "",
-    name: String = "")
+    name: String = "",
+    poolSize: Int = 200)
   extends Logging {
 
   protected val tabs = ArrayBuffer[WebUITab]()
@@ -55,14 +56,14 @@ private[spark] abstract class WebUI(
   protected var serverInfo: Option[ServerInfo] = None
   protected val publicHostName = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
     conf.get(DRIVER_HOST_ADDRESS))
-  private val className = Utils.getFormattedClassName(this)
+  protected val className = Utils.getFormattedClassName(this)
 
   def getBasePath: String = basePath
-  def getTabs: Seq[WebUITab] = tabs
-  def getHandlers: Seq[ServletContextHandler] = handlers
+  def getTabs: Seq[WebUITab] = tabs.toSeq
+  def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
 
   def getDelegatingHandlers: Seq[DelegatingServletContextHandler] = {
-    handlers.map(new DelegatingServletContextHandler(_))
+    handlers.map(new DelegatingServletContextHandler(_)).toSeq
   }
 
   /** Attaches a tab to this UI, along with all of its attached pages. */
@@ -93,6 +94,7 @@ private[spark] abstract class WebUI(
     attachHandler(renderJsonHandler)
     val handlers = pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
     handlers += renderHandler
+    handlers += renderJsonHandler
   }
 
   /** Attaches a handler to this UI. */
@@ -137,15 +139,20 @@ private[spark] abstract class WebUI(
   /** A hook to initialize components of the UI */
   def initialize(): Unit
 
+  def initServer(): ServerInfo = {
+    val hostName = Utils.localHostNameForURI()
+    val server = startJettyServer(hostName, port, sslOptions, conf, name, poolSize)
+    server
+  }
+
   /** Binds to the HTTP server behind this web interface. */
   def bind(): Unit = {
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
-      val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
-      val server = startJettyServer(host, port, sslOptions, conf, name)
+      val server = initServer()
       handlers.foreach(server.addHandler(_, securityManager))
       serverInfo = Some(server)
-      logInfo(s"Bound $className to $host, and started at $webUrl")
+      logInfo(s"Bound $className to ${Utils.localHostNameForURI()}, and started at $webUrl")
     } catch {
       case e: Exception =>
         logError(s"Failed to bind $className", e)
@@ -183,7 +190,7 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
   val name = prefix.capitalize
 
   /** Attach a page to this tab. This prepends the page's prefix with the tab's own prefix. */
-  def attachPage(page: WebUIPage) {
+  def attachPage(page: WebUIPage): Unit = {
     page.prefix = (prefix + "/" + page.prefix).stripSuffix("/")
     pages += page
   }
@@ -234,5 +241,9 @@ private[spark] class DelegatingServletContextHandler(handler: ServletContextHand
 
   def filterCount(): Int = {
     handler.getServletHandler.getFilters.length
+  }
+
+  def getContextPath(): String = {
+    handler.getContextPath
   }
 }

@@ -22,7 +22,7 @@ import scala.collection.immutable.NumericRange
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen
 import org.scalacheck.Prop._
-import org.scalatest.prop.Checkers
+import org.scalatestplus.scalacheck.Checkers
 
 import org.apache.spark.SparkFunSuite
 
@@ -117,7 +117,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
     val r = ParallelCollectionRDD.slice(1 to 7, 4)
     val nr = ParallelCollectionRDD.slice(1L to 7L, 4)
     assert(r.size === 4)
-    for (i <- 0 until r.size) {
+    for (i <- r.indices) {
       assert(r(i).size === nr(i).size)
     }
   }
@@ -126,7 +126,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
     val r = ParallelCollectionRDD.slice(List(1, 2), 4)
     val nr = ParallelCollectionRDD.slice(1L to 2L, 4)
     assert(r.size === 4)
-    for (i <- 0 until r.size) {
+    for (i <- r.indices) {
       assert(r(i).size === nr(i).size)
     }
   }
@@ -140,7 +140,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
       assert(slices(i).isInstanceOf[Range])
       val range = slices(i).asInstanceOf[Range]
       assert(range.start === i * (N / 40), "slice " + i + " start")
-      assert(range.end   === (i + 1) * (N / 40), "slice " + i + " end")
+      assert(range.last  === (i + 1) * (N / 40) - 1, "slice " + i + " end")
       assert(range.step  === 1, "slice " + i + " step")
     }
   }

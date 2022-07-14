@@ -26,22 +26,22 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
 
-import org.apache.spark.SparkException
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
- * A class to test Pyrolite serialization on the Scala side, that will be deserialized
+ * A class to test Pickle serialization on the Scala side, that will be deserialized
  * in Python
  */
 case class TestWritable(var str: String, var int: Int, var double: Double) extends Writable {
   def this() = this("", 0, 0.0)
 
   def getStr: String = str
-  def setStr(str: String) { this.str = str }
+  def setStr(str: String): Unit = { this.str = str }
   def getInt: Int = int
-  def setInt(int: Int) { this.int = int }
+  def setInt(int: Int): Unit = { this.int = int }
   def getDouble: Double = double
-  def setDouble(double: Double) { this.double = double }
+  def setDouble(double: Double): Unit = { this.double = double }
 
   def write(out: DataOutput): Unit = {
     out.writeUTF(str)
@@ -89,14 +89,14 @@ private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writ
       val daw = new DoubleArrayWritable
       daw.set(arr.asInstanceOf[Array[Double]].map(new DoubleWritable(_)))
       daw
-    case other => throw new SparkException(s"Data of type $other is not supported")
+    case other => throw SparkCoreErrors.unsupportedDataTypeError(other)
   }
 }
 
 private[python] class WritableToDoubleArrayConverter extends Converter[Any, Array[Double]] {
   override def convert(obj: Any): Array[Double] = obj match {
     case daw : DoubleArrayWritable => daw.get().map(_.asInstanceOf[DoubleWritable].get())
-    case other => throw new SparkException(s"Data of type $other is not supported")
+    case other => throw SparkCoreErrors.unsupportedDataTypeError(other)
   }
 }
 
@@ -106,13 +106,13 @@ private[python] class WritableToDoubleArrayConverter extends Converter[Any, Arra
  */
 object WriteInputFormatTestDataGenerator {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val path = args(0)
     val sc = new JavaSparkContext("local[4]", "test-writables")
     generateData(path, sc)
   }
 
-  def generateData(path: String, jsc: JavaSparkContext) {
+  def generateData(path: String, jsc: JavaSparkContext): Unit = {
     val sc = jsc.sc
 
     val basePath = s"$path/sftestdata/"

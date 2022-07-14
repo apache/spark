@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, Timestamp, Types}
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -30,7 +30,18 @@ private case object OracleDialect extends JdbcDialect {
   private[jdbc] val BINARY_DOUBLE = 101
   private[jdbc] val TIMESTAMPTZ = -101
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
+
+  // scalastyle:off line.size.limit
+  // https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Aggregate-Functions.html#GUID-62BE676B-AF18-4E63-BD14-25206FEA0848
+  // scalastyle:on line.size.limit
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR")
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
 
   private def supportTimeZoneTypes: Boolean = {
     val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
@@ -110,5 +121,27 @@ private case object OracleDialect extends JdbcDialect {
       case Some(true) => s"TRUNCATE TABLE $table CASCADE"
       case _ => s"TRUNCATE TABLE $table"
     }
+  }
+
+  // see https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_3001.htm#SQLRF01001
+  override def getAddColumnQuery(
+      tableName: String,
+      columnName: String,
+      dataType: String): String =
+    s"ALTER TABLE $tableName ADD ${quoteIdentifier(columnName)} $dataType"
+
+  // see https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_3001.htm#SQLRF01001
+  override def getUpdateColumnTypeQuery(
+    tableName: String,
+    columnName: String,
+    newDataType: String): String =
+    s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $newDataType"
+
+  override def getUpdateColumnNullabilityQuery(
+    tableName: String,
+    columnName: String,
+    isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $nullable"
   }
 }

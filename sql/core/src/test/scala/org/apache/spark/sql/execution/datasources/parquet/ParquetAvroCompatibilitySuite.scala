@@ -31,9 +31,9 @@ import org.apache.parquet.hadoop.ParquetWriter
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.parquet.test.avro._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
+class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
   private def withWriter[T <: IndexedRecord]
       (path: String, schema: Schema)
       (f: ParquetWriter[T] => Unit): Unit = {
@@ -268,7 +268,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
         }
       }
 
-      checkAnswer(spark.read.parquet(path).filter('suit === "SPADES"), Row("SPADES"))
+      checkAnswer(spark.read.parquet(path).filter($"suit" === "SPADES"), Row("SPADES"))
     }
   }
 }

@@ -140,8 +140,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     val collectSubModelsParam = $(collectSubModels)
 
-    var subModels: Option[Array[Model[_]]] = if (collectSubModelsParam) {
-      Some(Array.fill[Model[_]](epm.length)(null))
+    val subModels: Option[Array[Model[_]]] = if (collectSubModelsParam) {
+      Some(Array.ofDim[Model[_]](epm.length))
     } else None
 
     // Fit models in a Future for training in parallel
@@ -314,6 +314,11 @@ class TrainValidationSplitModel private[ml] (
   override def write: TrainValidationSplitModel.TrainValidationSplitModelWriter = {
     new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
   }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"TrainValidationSplitModel: uid=$uid, bestModel=$bestModel, trainRatio=${$(trainRatio)}"
+  }
 }
 
 @Since("2.0.0")
@@ -367,7 +372,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
           "persistSubModels to true if the tuning was done with collectSubModels set to true. " +
           "To save the sub-models, try rerunning fitting with collectSubModels set to true.")
         val subModelsPath = new Path(path, "subModels")
-        for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
+        for (paramIndex <- instance.getEstimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           instance.subModels(paramIndex).asInstanceOf[MLWritable].save(modelPath)
         }
@@ -393,8 +398,8 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
       val subModels: Option[Array[Model[_]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
-        val _subModels = Array.fill[Model[_]](estimatorParamMaps.length)(null)
-        for (paramIndex <- 0 until estimatorParamMaps.length) {
+        val _subModels = Array.ofDim[Model[_]](estimatorParamMaps.length)
+        for (paramIndex <- estimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           _subModels(paramIndex) =
             DefaultParamsReader.loadParamsInstance(modelPath, sc)

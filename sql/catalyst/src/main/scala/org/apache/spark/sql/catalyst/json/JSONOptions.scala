@@ -21,21 +21,25 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.time.ZoneId
 import java.util.Locale
 
-import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
+import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder}
+import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
  *
- * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
+ * Most of these map directly to Jackson's internal options, specified in [[JsonReadFeature]].
  */
 private[sql] class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
-  extends Logging with Serializable  {
+  extends FileSourceOptions(parameters) with Logging  {
 
   def this(
     parameters: Map[String, String],
@@ -76,16 +80,36 @@ private[sql] class JSONOptions(
   // Whether to ignore column of all null values or empty array/struct during schema inference
   val dropFieldIfAllNull = parameters.get("dropFieldIfAllNull").map(_.toBoolean).getOrElse(false)
 
+  // Whether to ignore null fields during json generating
+  val ignoreNullFields = parameters.get("ignoreNullFields").map(_.toBoolean)
+    .getOrElse(SQLConf.get.jsonGeneratorIgnoreNullFields)
+
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
   val zoneId: ZoneId = DateTimeUtils.getZoneId(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
-  val dateFormat: String = parameters.getOrElse("dateFormat", "yyyy-MM-dd")
+  val dateFormatInRead: Option[String] = parameters.get("dateFormat")
+  val dateFormatInWrite: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
-  val timestampFormat: String =
-    parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+  val timestampFormatInRead: Option[String] =
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      Some(parameters.getOrElse("timestampFormat",
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
+    } else {
+      parameters.get("timestampFormat")
+    }
+  val timestampFormatInWrite: String = parameters.getOrElse("timestampFormat",
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
+    } else {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
+    })
+
+  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
+  val timestampNTZFormatInWrite: String =
+    parameters.getOrElse("timestampNTZFormat", s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -109,7 +133,7 @@ private[sql] class JSONOptions(
     .orElse(parameters.get("charset")).map(checkedEncoding)
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes(encoding.getOrElse("UTF-8"))
+    lineSep.getBytes(encoding.getOrElse(StandardCharsets.UTF_8.name()))
   }
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 
@@ -119,21 +143,31 @@ private[sql] class JSONOptions(
   val pretty: Boolean = parameters.get("pretty").map(_.toBoolean).getOrElse(false)
 
   /**
-   * Enables inferring of TimestampType from strings matched to the timestamp pattern
-   * defined by the timestampFormat option.
+   * Enables inferring of TimestampType and TimestampNTZType from strings matched to the
+   * corresponding timestamp pattern defined by the timestampFormat and timestampNTZFormat options
+   * respectively.
    */
-  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(true)
+  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(false)
 
-  /** Sets config options on a Jackson [[JsonFactory]]. */
-  def setJacksonOptions(factory: JsonFactory): Unit = {
-    factory.configure(JsonParser.Feature.ALLOW_COMMENTS, allowComments)
-    factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, allowUnquotedFieldNames)
-    factory.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, allowSingleQuotes)
-    factory.configure(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS, allowNumericLeadingZeros)
-    factory.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, allowNonNumericNumbers)
-    factory.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
-      allowBackslashEscapingAnyCharacter)
-    factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
+  /**
+   * Generating \u0000 style codepoints for non-ASCII characters if the parameter is enabled.
+   */
+  val writeNonAsciiCharacterAsCodePoint: Boolean =
+    parameters.get("writeNonAsciiCharacterAsCodePoint").map(_.toBoolean).getOrElse(false)
+
+  /** Build a Jackson [[JsonFactory]] using JSON options. */
+  def buildJsonFactory(): JsonFactory = {
+    new JsonFactoryBuilder()
+      .configure(JsonReadFeature.ALLOW_JAVA_COMMENTS, allowComments)
+      .configure(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES, allowUnquotedFieldNames)
+      .configure(JsonReadFeature.ALLOW_SINGLE_QUOTES, allowSingleQuotes)
+      .configure(JsonReadFeature.ALLOW_LEADING_ZEROS_FOR_NUMBERS, allowNumericLeadingZeros)
+      .configure(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS, allowNonNumericNumbers)
+      .configure(
+        JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
+        allowBackslashEscapingAnyCharacter)
+      .configure(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS, allowUnquotedControlChars)
+      .build()
   }
 }
 
@@ -154,10 +188,10 @@ private[sql] class JSONOptionsInRead(
   }
 
   protected override def checkedEncoding(enc: String): String = {
-    val isBlacklisted = JSONOptionsInRead.blacklist.contains(Charset.forName(enc))
-    require(multiLine || !isBlacklisted,
-      s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
-         |Blacklist: ${JSONOptionsInRead.blacklist.mkString(", ")}""".stripMargin)
+    val isDenied = JSONOptionsInRead.denyList.contains(Charset.forName(enc))
+    require(multiLine || !isDenied,
+      s"""The $enc encoding must not be included in the denyList when multiLine is disabled:
+         |denylist: ${JSONOptionsInRead.denyList.mkString(", ")}""".stripMargin)
 
     val isLineSepRequired =
         multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
@@ -174,7 +208,7 @@ private[sql] object JSONOptionsInRead {
   // only the first lines will have the BOM which leads to impossibility for reading
   // the rest lines. Besides of that, the lineSep option must have the BOM in such
   // encodings which can never present between lines.
-  val blacklist = Seq(
+  val denyList = Seq(
     Charset.forName("UTF-16"),
     Charset.forName("UTF-32")
   )

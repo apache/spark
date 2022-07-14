@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.orc.OrcConf.COMPRESS
 
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
@@ -30,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 class OrcOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
-  extends Serializable {
+  extends FileSourceOptions(parameters) {
 
   import OrcOptions._
 
@@ -57,16 +58,29 @@ class OrcOptions(
     }
     shortOrcCompressionCodecNames(codecName)
   }
+
+  /**
+   * Whether it merges schemas or not. When the given Orc files have different schemas,
+   * the schemas can be merged. By default use the value specified in SQLConf.
+   */
+  val mergeSchema: Boolean = parameters
+    .get(MERGE_SCHEMA)
+    .map(_.toBoolean)
+    .getOrElse(sqlConf.isOrcSchemaMergingEnabled)
 }
 
 object OrcOptions {
+  val MERGE_SCHEMA = "mergeSchema"
+
   // The ORC compression short names
   private val shortOrcCompressionCodecNames = Map(
     "none" -> "NONE",
     "uncompressed" -> "NONE",
     "snappy" -> "SNAPPY",
     "zlib" -> "ZLIB",
-    "lzo" -> "LZO")
+    "lzo" -> "LZO",
+    "lz4" -> "LZ4",
+    "zstd" -> "ZSTD")
 
   def getORCCompressionCodecName(name: String): String = shortOrcCompressionCodecNames(name)
 }

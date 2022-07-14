@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,6 +23,8 @@ import java.util.Map;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.*;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 
 public interface HiveSession extends HiveSessionBase {
 
@@ -53,11 +54,32 @@ public interface HiveSession extends HiveSessionBase {
    * execute operation handler
    * @param statement
    * @param confOverlay
+   * @param queryTimeout
    * @return
    * @throws HiveSQLException
    */
-  OperationHandle executeStatementAsync(String statement,
-      Map<String, String> confOverlay) throws HiveSQLException;
+  OperationHandle executeStatement(String statement, Map<String, String> confOverlay,
+      long queryTimeout) throws HiveSQLException;
+
+  /**
+   * execute operation handler
+   * @param statement
+   * @param confOverlay
+   * @return
+   * @throws HiveSQLException
+   */
+  OperationHandle executeStatementAsync(String statement, Map<String, String> confOverlay) throws HiveSQLException;
+
+  /**
+   * execute operation handler
+   * @param statement
+   * @param confOverlay
+   * @param queryTimeout
+   * @return
+   * @throws HiveSQLException
+   */
+  OperationHandle executeStatementAsync(String statement, Map<String, String> confOverlay,
+      long queryTimeout) throws HiveSQLException;
 
   /**
    * getTypeInfo operation handler
@@ -126,6 +148,33 @@ public interface HiveSession extends HiveSessionBase {
       String functionName) throws HiveSQLException;
 
   /**
+   * getPrimaryKeys operation handler
+   * @param catalog
+   * @param schema
+   * @param table
+   * @return
+   * @throws HiveSQLException
+   */
+  OperationHandle getPrimaryKeys(String catalog, String schema,
+      String table) throws HiveSQLException;
+
+
+  /**
+   * getCrossReference operation handler
+   * @param primaryCatalog
+   * @param primarySchema
+   * @param primaryTable
+   * @param foreignCatalog
+   * @param foreignSchema
+   * @param foreignTable
+   * @return
+   * @throws HiveSQLException
+   */
+  OperationHandle getCrossReference(String primaryCatalog,
+      String primarySchema, String primaryTable, String foreignCatalog,
+      String foreignSchema, String foreignTable) throws HiveSQLException;
+
+  /**
    * close the session
    * @throws HiveSQLException
    */
@@ -135,10 +184,10 @@ public interface HiveSession extends HiveSessionBase {
 
   void closeOperation(OperationHandle opHandle) throws HiveSQLException;
 
-  TableSchema getResultSetMetadata(OperationHandle opHandle)
+  TTableSchema getResultSetMetadata(OperationHandle opHandle)
       throws HiveSQLException;
 
-  RowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
+  TRowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
       long maxRows, FetchType fetchType) throws HiveSQLException;
 
   String getDelegationToken(HiveAuthFactory authFactory, String owner,

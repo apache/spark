@@ -35,6 +35,7 @@ import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD}
+import org.apache.spark.resource.ResourceInformation
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -73,7 +74,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jarFile JAR file to send to the cluster. This can be a path on the local file system
    *                or an HDFS, HTTP, HTTPS, or FTP URL.
    */
@@ -83,7 +84,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
@@ -93,7 +94,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes
@@ -114,6 +115,8 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   def appName: String = sc.appName
 
+  def resources: JMap[String, ResourceInformation] = sc.resources.asJava
+
   def jars: util.List[String] = sc.jars.asJava
 
   def startTime: java.lang.Long = sc.startTime
@@ -130,7 +133,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
-    sc.parallelize(list.asScala, numSlices)
+    sc.parallelize(list.asScala.toSeq, numSlices)
   }
 
   /** Get an RDD that has no partitions or elements. */
@@ -149,7 +152,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   : JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[V] = fakeClassTag
-    JavaPairRDD.fromRDD(sc.parallelize(list.asScala, numSlices))
+    JavaPairRDD.fromRDD(sc.parallelize(list.asScala.toSeq, numSlices))
   }
 
   /** Distribute a local Scala collection to form an RDD. */
@@ -158,7 +161,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double], numSlices: Int): JavaDoubleRDD =
-    JavaDoubleRDD.fromRDD(sc.parallelize(list.asScala.map(_.doubleValue()), numSlices))
+    JavaDoubleRDD.fromRDD(sc.parallelize(list.asScala.map(_.doubleValue()).toSeq, numSlices))
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double]): JavaDoubleRDD =
@@ -543,7 +546,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)(fakeClassTag)
 
   /** Shut down the SparkContext. */
-  def stop() {
+  def stop(): Unit = {
     sc.stop()
   }
 
@@ -564,7 +567,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addFile(path: String) {
+  def addFile(path: String): Unit = {
     sc.addFile(path)
   }
 
@@ -590,7 +593,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addJar(path: String) {
+  def addJar(path: String): Unit = {
     sc.addJar(path)
   }
 
@@ -606,9 +609,9 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /**
    * Set the directory under which RDDs are going to be checkpointed. The directory must
-   * be a HDFS path if running on a cluster.
+   * be an HDFS path if running on a cluster.
    */
-  def setCheckpointDir(dir: String) {
+  def setCheckpointDir(dir: String): Unit = {
     sc.setCheckpointDir(dir)
   }
 
@@ -628,14 +631,14 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * Pass-through to SparkContext.setCallSite.  For API support only.
    */
-  def setCallSite(site: String) {
+  def setCallSite(site: String): Unit = {
     sc.setCallSite(site)
   }
 
   /**
    * Pass-through to SparkContext.setCallSite.  For API support only.
    */
-  def clearCallSite() {
+  def clearCallSite(): Unit = {
     sc.clearCallSite()
   }
 
@@ -666,7 +669,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @param logLevel The desired log level as a string.
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
-  def setLogLevel(logLevel: String) {
+  def setLogLevel(logLevel: String): Unit = {
     sc.setLogLevel(logLevel)
   }
 
@@ -724,7 +727,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
-    sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s))
+    sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s)).toMap
       .asJava.asInstanceOf[JMap[java.lang.Integer, JavaRDD[_]]]
   }
 

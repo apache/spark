@@ -19,10 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil, SparkSubmit}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util._
@@ -32,7 +30,7 @@ import org.apache.spark.util._
  * This is used in standalone cluster mode only.
  */
 object DriverWrapper extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     args.toList match {
       /*
        * IMPORTANT: Spark 1.3 provides a stable application submission gateway that is both
@@ -76,30 +74,23 @@ object DriverWrapper extends Logging {
 
   private def setupDependencies(loader: MutableURLClassLoader, userJar: String): Unit = {
     val sparkConf = new SparkConf()
-    val secMgr = new SecurityManager(sparkConf)
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
-    val Seq(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath) =
-      Seq(
-        "spark.jars.excludes",
-        "spark.jars.packages",
-        "spark.jars.repositories",
-        "spark.jars.ivy",
-        "spark.jars.ivySettings"
-      ).map(sys.props.get(_).orNull)
+    val ivyProperties = DependencyUtils.getIvyProperties()
 
-    val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(packagesExclusions,
-      packages, repositories, ivyRepoPath, Option(ivySettingsPath))
+    val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(true,
+      ivyProperties.packagesExclusions, ivyProperties.packages, ivyProperties.repositories,
+      ivyProperties.ivyRepoPath, Option(ivyProperties.ivySettingsPath))
     val jars = {
-      val jarsProp = sys.props.get("spark.jars").orNull
-      if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
-        DependencyUtils.mergeFileLists(jarsProp, resolvedMavenCoordinates)
+      val jarsProp = sys.props.get(config.JARS.key).orNull
+      if (resolvedMavenCoordinates.nonEmpty) {
+        DependencyUtils.mergeFileLists(jarsProp,
+          DependencyUtils.mergeFileLists(resolvedMavenCoordinates: _*))
       } else {
         jarsProp
       }
     }
-    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf,
-      secMgr)
+    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf)
     DependencyUtils.addJarsToClassPath(localJars, loader)
   }
 }

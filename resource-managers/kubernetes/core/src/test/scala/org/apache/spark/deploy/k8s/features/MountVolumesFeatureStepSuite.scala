@@ -16,10 +16,13 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.internal.config.EXECUTOR_INSTANCES
 
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
   test("Mounts hostPath volumes") {
@@ -42,7 +45,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
   }
 
-  test("Mounts pesistentVolumeClaims") {
+  test("Mounts persistentVolumeClaims") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
@@ -64,6 +67,124 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
 
   }
 
+  test("SPARK-32713 Mounts parameterized persistentVolumeClaims in executors") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      true,
+      KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID")
+    )
+    val driverConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val driverStep = new MountVolumesFeatureStep(driverConf)
+    val driverPod = driverStep.configurePod(SparkPod.initialPod())
+
+    assert(driverPod.pod.getSpec.getVolumes.size() === 1)
+    val driverPVC = driverPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(driverPVC.getClaimName === "pvc-spark-SPARK_EXECUTOR_ID")
+
+    val executorConf = KubernetesTestConf.createExecutorConf(volumes = Seq(volumeConf))
+    val executorStep = new MountVolumesFeatureStep(executorConf)
+    val executorPod = executorStep.configurePod(SparkPod.initialPod())
+
+    assert(executorPod.pod.getSpec.getVolumes.size() === 1)
+    val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(executorPVC.getClaimName === s"pvc-spark-${KubernetesTestConf.EXECUTOR_ID}")
+  }
+
+  test("SPARK-32713 Mounts parameterized persistentVolumeClaims in executors with storage class") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      true,
+      KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID", Some("fast"), Some("512mb"))
+    )
+    val driverConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val driverStep = new MountVolumesFeatureStep(driverConf)
+    val driverPod = driverStep.configurePod(SparkPod.initialPod())
+
+    assert(driverPod.pod.getSpec.getVolumes.size() === 1)
+    val driverPVC = driverPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(driverPVC.getClaimName === "pvc-spark-SPARK_EXECUTOR_ID")
+
+    val executorConf = KubernetesTestConf.createExecutorConf(volumes = Seq(volumeConf))
+    val executorStep = new MountVolumesFeatureStep(executorConf)
+    val executorPod = executorStep.configurePod(SparkPod.initialPod())
+
+    assert(executorPod.pod.getSpec.getVolumes.size() === 1)
+    val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(executorPVC.getClaimName === s"pvc-spark-${KubernetesTestConf.EXECUTOR_ID}")
+  }
+
+  test("Create and mounts persistentVolumeClaims in driver") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      true,
+      KubernetesPVCVolumeConf("OnDemand")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    val pvcClaim = configuredPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(pvcClaim.getClaimName.endsWith("-driver-pvc-0"))
+  }
+
+  test("Create and mount persistentVolumeClaims in executors") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      true,
+      KubernetesPVCVolumeConf(MountVolumesFeatureStep.PVC_ON_DEMAND)
+    )
+    val executorConf = KubernetesTestConf.createExecutorConf(volumes = Seq(volumeConf))
+    val executorStep = new MountVolumesFeatureStep(executorConf)
+    val executorPod = executorStep.configurePod(SparkPod.initialPod())
+
+    assert(executorPod.pod.getSpec.getVolumes.size() === 1)
+    val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(executorPVC.getClaimName.endsWith("-exec-1-pvc-0"))
+  }
+
+  test("SPARK-39006: Check PVC ClaimName") {
+    val claimName = s"pvc-${UUID.randomUUID().toString}"
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      mountReadOnly = true,
+      KubernetesPVCVolumeConf(claimName)
+    )
+    // Create pvc without specified claimName unsuccessfully when requiring multiple executors
+    val conf = new SparkConf().set(EXECUTOR_INSTANCES, 2)
+    var executorConf =
+      KubernetesTestConf.createExecutorConf(sparkConf = conf, volumes = Seq(volumeConf))
+    var executorStep = new MountVolumesFeatureStep(executorConf)
+    assertThrows[IllegalArgumentException] {
+      executorStep.configurePod(SparkPod.initialPod())
+    }
+    assert(intercept[IllegalArgumentException] {
+      executorStep.configurePod(SparkPod.initialPod())
+    }.getMessage.equals(s"PVC ClaimName: $claimName " +
+      "should contain OnDemand or SPARK_EXECUTOR_ID when requiring multiple executors"))
+
+    // Create and mount pvc with any claimName successfully when requiring one executor
+    conf.set(EXECUTOR_INSTANCES, 1)
+    executorConf =
+      KubernetesTestConf.createExecutorConf(sparkConf = conf, volumes = Seq(volumeConf))
+    executorStep = new MountVolumesFeatureStep(executorConf)
+    val executorPod = executorStep.configurePod(SparkPod.initialPod())
+
+    assert(executorPod.pod.getSpec.getVolumes.size() === 1)
+    val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(executorPVC.getClaimName.equals(claimName))
+  }
+
   test("Mounts emptyDir") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
@@ -79,7 +200,8 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     val emptyDir = configuredPod.pod.getSpec.getVolumes.get(0).getEmptyDir
     assert(emptyDir.getMedium === "Memory")
-    assert(emptyDir.getSizeLimit.getAmount === "6G")
+    assert(emptyDir.getSizeLimit.getAmount ===  "6")
+    assert(emptyDir.getSizeLimit.getFormat === "G")
     assert(configuredPod.container.getVolumeMounts.size() === 1)
     assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
     assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
@@ -101,11 +223,55 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     val emptyDir = configuredPod.pod.getSpec.getVolumes.get(0).getEmptyDir
     assert(emptyDir.getMedium === "")
-    assert(emptyDir.getSizeLimit.getAmount === null)
+    assert(emptyDir.getSizeLimit === null)
     assert(configuredPod.container.getVolumeMounts.size() === 1)
     assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
     assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
     assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
+  }
+
+  test("Mounts read/write nfs volumes") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      false,
+      KubernetesNFSVolumeConf("/share/name", "nfs.example.com")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getPath === "/share/name")
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getReadOnly === null)
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getServer === "nfs.example.com")
+    assert(configuredPod.container.getVolumeMounts.size() === 1)
+    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
+    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
+    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
+  }
+
+  test("Mounts read-only nfs volumes") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      true,
+      KubernetesNFSVolumeConf("/share/name", "nfs.example.com")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getPath === "/share/name")
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getReadOnly === null)
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getServer === "nfs.example.com")
+    assert(configuredPod.container.getVolumeMounts.size() === 1)
+    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
+    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
+    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === true)
   }
 
   test("Mounts multiple volumes") {
@@ -130,6 +296,31 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 2)
     assert(configuredPod.container.getVolumeMounts.size() === 2)
+  }
+
+  test("mountPath should be unique") {
+    val hpVolumeConf = KubernetesVolumeSpec(
+      "hpVolume",
+      "/data",
+      "",
+      false,
+      KubernetesHostPathVolumeConf("/hostPath/tmp")
+    )
+    val pvcVolumeConf = KubernetesVolumeSpec(
+      "checkpointVolume",
+      "/data",
+      "",
+      true,
+      KubernetesPVCVolumeConf("pvcClaim")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(
+      volumes = Seq(hpVolumeConf, pvcVolumeConf))
+
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val m = intercept[IllegalArgumentException] {
+      step.configurePod(SparkPod.initialPod())
+    }.getMessage
+    assert(m.contains("Found duplicated mountPath: '/data'"))
   }
 
   test("Mounts subpath on emptyDir") {

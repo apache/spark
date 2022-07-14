@@ -113,7 +113,7 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
   test("Cannot fit an empty DataFrame") {
     val rdd = Array.empty[Vector].map(FeatureData).toSeq.toDF()
     val vectorIndexer = getIndexer
-    intercept[IllegalArgumentException] {
+    intercept[NoSuchElementException] {
       vectorIndexer.fit(rdd)
     }
   }

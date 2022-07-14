@@ -14,16 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
 from pyspark.testing.utils import PySparkTestCase
+from pyspark.find_spark_home import _find_spark_home
 
 
 class KeywordOnlyTests(unittest.TestCase):
-    class Wrapped(object):
+    class Wrapped:
         @keyword_only
         def set(self, x=None, y=None):
             if "x" in self._input_kwargs:
@@ -46,7 +48,7 @@ class KeywordOnlyTests(unittest.TestCase):
 
     def test_kwarg_ownership(self):
         # test _input_kwargs is owned by each class instance and not a shared static variable
-        class Setter(object):
+        class Setter:
             @keyword_only
             def set(self, x=None, other=None, other_x=None):
                 if "other" in self._input_kwargs:
@@ -61,26 +63,35 @@ class KeywordOnlyTests(unittest.TestCase):
 
 
 class UtilTests(PySparkTestCase):
-    def test_py4j_exception_message(self):
-        from pyspark.util import _exception_message
-
+    def test_py4j_str(self):
         with self.assertRaises(Py4JJavaError) as context:
             # This attempts java.lang.String(null) which throws an NPE.
             self.sc._jvm.java.lang.String(None)
 
-        self.assertTrue('NullPointerException' in _exception_message(context.exception))
+        self.assertTrue("NullPointerException" in str(context.exception))
 
     def test_parsing_version_string(self):
         from pyspark.util import VersionUtils
+
         self.assertRaises(ValueError, lambda: VersionUtils.majorMinorVersion("abced"))
+
+    def test_find_spark_home(self):
+        # SPARK-38827: Test find_spark_home without `SPARK_HOME` environment variable set.
+        origin = os.environ["SPARK_HOME"]
+        try:
+            del os.environ["SPARK_HOME"]
+            self.assertEquals(origin, _find_spark_home())
+        finally:
+            os.environ["SPARK_HOME"] = origin
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_util import *
+    from pyspark.tests.test_util import *  # noqa: F401
 
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

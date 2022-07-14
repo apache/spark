@@ -23,9 +23,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.Matchers._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
@@ -84,7 +84,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter with TimeLim
     }
     clock.advance(blockIntervalMs)  // advance clock to generate blocks
     withClue("blocks not generated or pushed") {
-      eventually(timeout(1 second)) {
+      eventually(timeout(1.second)) {
         assert(listener.onGenerateBlockCalled)
         assert(listener.onPushBlockCalled)
       }
@@ -100,7 +100,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter with TimeLim
     listener.addedData.asScala.toSeq should contain theSameElementsInOrderAs (data2)
     listener.addedMetadata.asScala.toSeq should contain theSameElementsInOrderAs (metadata2)
     clock.advance(blockIntervalMs)  // advance clock to generate blocks
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       val combined = data1 ++ data2
       listener.pushedData.asScala.toSeq should contain theSameElementsInOrderAs combined
     }
@@ -112,7 +112,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter with TimeLim
     val combinedMetadata = metadata2 :+ metadata3
     listener.addedMetadata.asScala.toSeq should contain theSameElementsInOrderAs (combinedMetadata)
     clock.advance(blockIntervalMs)  // advance clock to generate blocks
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       val combinedData = data1 ++ data2 ++ data3
       listener.pushedData.asScala.toSeq should contain theSameElementsInOrderAs (combinedData)
     }
@@ -120,7 +120,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter with TimeLim
     // Stop the block generator by starting the stop on a different thread and
     // then advancing the manual clock for the stopping to proceed.
     val thread = stopBlockGenerator(blockGenerator)
-    eventually(timeout(1 second), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       clock.advance(blockIntervalMs)
       assert(blockGenerator.isStopped())
     }
@@ -160,7 +160,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter with TimeLim
     // - Finally, wait for all blocks to be pushed
     clock.advance(1) // to make sure that the timer for another interval to complete
     val thread = stopBlockGenerator(blockGenerator)
-    eventually(timeout(1 second), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(blockGenerator.isActive() === false)
     }
     assert(blockGenerator.isStopped() === false)
@@ -181,7 +181,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter with TimeLim
     // (expected as stop() should never complete) or a SparkException (unexpected as stop()
     // completed and thread terminated).
     val exception = intercept[Exception] {
-      failAfter(200 milliseconds) {
+      failAfter(200.milliseconds) {
         thread.join()
         throw new SparkException(
           "BlockGenerator.stop() completed before generating timer was stopped")
@@ -193,7 +193,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter with TimeLim
     // Verify that the final data is present in the final generated block and
     // pushed before complete stop
     assert(blockGenerator.isStopped() === false) // generator has not stopped yet
-    eventually(timeout(10 seconds), interval(10 milliseconds)) {
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
       // Keep calling `advance` to avoid blocking forever in `clock.waitTillTime`
       clock.advance(blockIntervalMs)
       assert(thread.isAlive === false)
@@ -213,7 +213,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter with TimeLim
     blockGenerator.start()
     assert(listener.onErrorCalled === false)
     blockGenerator.addData(1)
-    eventually(timeout(1 second), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(listener.onErrorCalled)
     }
     blockGenerator.stop()

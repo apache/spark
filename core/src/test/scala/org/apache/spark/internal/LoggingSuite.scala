@@ -17,40 +17,54 @@
 
 package org.apache.spark.internal
 
-import org.apache.log4j.{Level, Logger}
-import org.apache.log4j.spi.{Filter, LoggingEvent}
+import org.apache.logging.log4j.{Level, LogManager}
+import org.apache.logging.log4j.core.{Filter, Logger}
+import org.apache.logging.log4j.core.impl.Log4jLogEvent.Builder
+import org.apache.logging.log4j.message.SimpleMessage
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.util.Utils
 
 class LoggingSuite extends SparkFunSuite {
 
   test("spark-shell logging filter") {
     val ssf = new SparkShellLoggingFilter()
-    val rootLogger = Logger.getRootLogger()
+    val rootLogger = LogManager.getRootLogger().asInstanceOf[Logger]
     val originalLevel = rootLogger.getLevel()
     rootLogger.setLevel(Level.INFO)
     val originalThreshold = Logging.sparkShellThresholdLevel
     Logging.sparkShellThresholdLevel = Level.WARN
     try {
-      val logger = Logger.getLogger("a.b.c.D")
-      val logEvent = new LoggingEvent(logger.getName(), logger, Level.INFO, "Test", null)
-      assert(ssf.decide(logEvent) === Filter.DENY)
+      // without custom log level configured
+      val logger1 = LogManager.getLogger("a.b.c.D")
+        .asInstanceOf[Logger]
+      val logEvent1 = new Builder().setLevel(Level.INFO)
+        .setLoggerName(logger1.getName()).setMessage(new SimpleMessage("Test")).build()
+      assert(ssf.filter(logEvent1) == Filter.Result.DENY)
 
-      // log level is less than threshold level but different from root level
-      val logEvent1 = new LoggingEvent(logger.getName(), logger, Level.DEBUG, "Test", null)
-      assert(ssf.decide(logEvent1) != Filter.DENY)
+      // custom log level configured (programmingly)
+      val parentLogger = LogManager.getLogger("a.b.c")
+        .asInstanceOf[Logger]
+      parentLogger.setLevel(Level.DEBUG)
+      val logEvent2 = new Builder().setLevel(Level.INFO)
+        .setLoggerName(parentLogger.getName()).setMessage(new SimpleMessage("Test")).build()
+      assert(ssf.filter(logEvent2) == Filter.Result.NEUTRAL)
 
-      // custom log level configured
-      val parentLogger = Logger.getLogger("a.b.c")
-      parentLogger.setLevel(Level.INFO)
-      assert(ssf.decide(logEvent) != Filter.DENY)
+      // custom log level configured (by log4j2.properties)
+      val jettyLogger = LogManager.getLogger("org.sparkproject.jetty")
+        .asInstanceOf[Logger]
+      val logEvent3 = new Builder().setLevel(Level.INFO)
+        .setLoggerName(jettyLogger.getName()).setMessage(new SimpleMessage("Test")).build()
+      assert(ssf.filter(logEvent3) != Filter.Result.DENY)
 
       // log level is greater than or equal to threshold level
-      val logger2 = Logger.getLogger("a.b.E")
-      val logEvent2 = new LoggingEvent(logger2.getName(), logger2, Level.INFO, "Test", null)
+      val logger2 = LogManager.getLogger("a.b.E")
+        .asInstanceOf[Logger]
+      val logEvent4 = new Builder().setLevel(Level.INFO)
+        .setLoggerName(logger2.getName()).setMessage(new SimpleMessage("Test")).build()
       Utils.setLogLevel(Level.INFO)
-      assert(ssf.decide(logEvent2) != Filter.DENY)
+      assert(ssf.filter(logEvent4) != Filter.Result.DENY)
     } finally {
       rootLogger.setLevel(originalLevel)
       Logging.sparkShellThresholdLevel = originalThreshold

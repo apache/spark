@@ -16,39 +16,46 @@
 #
 
 import sys
+from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
 from pyspark import since, SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column
 
+from py4j.java_gateway import JavaObject
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import ColumnOrName, ColumnOrName_
+
 __all__ = ["Window", "WindowSpec"]
 
 
-def _to_java_cols(cols):
+def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> int:
     sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], list):
-        cols = cols[0]
-    return _to_seq(sc, cols, _to_java_column)
+        cols = cols[0]  # type: ignore[assignment]
+    assert sc is not None
+    return _to_seq(sc, cast(Iterable["ColumnOrName"], cols), _to_java_column)
 
 
-class Window(object):
+class Window:
     """
     Utility functions for defining window in DataFrames.
 
-    For example:
+    .. versionadded:: 1.4
 
+    Notes
+    -----
+    When ordering is not defined, an unbounded window frame (rowFrame,
+    unboundedPreceding, unboundedFollowing) is used by default. When ordering is defined,
+    a growing window frame (rangeFrame, unboundedPreceding, currentRow) is used by default.
+
+    Examples
+    --------
     >>> # ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     >>> window = Window.orderBy("date").rowsBetween(Window.unboundedPreceding, Window.currentRow)
 
     >>> # PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
     >>> window = Window.orderBy("date").partitionBy("country").rangeBetween(-3, 3)
-
-    .. note:: When ordering is not defined, an unbounded window frame (rowFrame,
-         unboundedPreceding, unboundedFollowing) is used by default. When ordering is defined,
-         a growing window frame (rangeFrame, unboundedPreceding, currentRow) is used by default.
-
-    .. note:: Experimental
-
-    .. versionadded:: 1.4
     """
 
     _JAVA_MIN_LONG = -(1 << 63)  # -9223372036854775808
@@ -56,35 +63,36 @@ class Window(object):
     _PRECEDING_THRESHOLD = max(-sys.maxsize, _JAVA_MIN_LONG)
     _FOLLOWING_THRESHOLD = min(sys.maxsize, _JAVA_MAX_LONG)
 
-    unboundedPreceding = _JAVA_MIN_LONG
+    unboundedPreceding: int = _JAVA_MIN_LONG
 
-    unboundedFollowing = _JAVA_MAX_LONG
+    unboundedFollowing: int = _JAVA_MAX_LONG
 
-    currentRow = 0
+    currentRow: int = 0
 
     @staticmethod
     @since(1.4)
-    def partitionBy(*cols):
+    def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the partitioning defined.
         """
         sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
     @staticmethod
     @since(1.4)
-    def orderBy(*cols):
+    def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the ordering defined.
         """
         sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
     @staticmethod
-    @since(2.1)
-    def rowsBetween(start, end):
+    def rowsBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
         from `start` (inclusive) to `end` (inclusive).
@@ -101,8 +109,23 @@ class Window(object):
         An offset indicates the number of rows above or below the current row, the frame for the
         current row starts or ends. For instance, given a row based sliding frame with a lower bound
         offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
-        index 4 to index 6.
+        index 4 to index 7.
 
+        .. versionadded:: 2.1.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to -9223372036854775808.
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to 9223372036854775807.
+
+        Examples
+        --------
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
         >>> from pyspark.sql import SQLContext
@@ -111,36 +134,30 @@ class Window(object):
         >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
         >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
         >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
-        >>> df.withColumn("sum", func.sum("id").over(window)).show()
+        >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category", "sum").show()
         +---+--------+---+
         | id|category|sum|
         +---+--------+---+
-        |  1|       b|  3|
-        |  2|       b|  5|
-        |  3|       b|  3|
         |  1|       a|  2|
         |  1|       a|  3|
+        |  1|       b|  3|
         |  2|       a|  2|
+        |  2|       b|  5|
+        |  3|       b|  3|
         +---+--------+---+
 
-        :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to -9223372036854775808.
-        :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to 9223372036854775807.
         """
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
         return WindowSpec(jspec)
 
     @staticmethod
-    @since(2.1)
-    def rangeBetween(start, end):
+    def rangeBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
         from `start` (inclusive) to `end` (inclusive).
@@ -162,6 +179,21 @@ class Window(object):
         unbounded, because no value modification is needed, in this case multiple and non-numeric
         ORDER BY expression are allowed.
 
+        .. versionadded:: 2.1.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+
+        Examples
+        --------
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
         >>> from pyspark.sql import SQLContext
@@ -170,69 +202,69 @@ class Window(object):
         >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
         >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
         >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
-        >>> df.withColumn("sum", func.sum("id").over(window)).show()
+        >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category").show()
         +---+--------+---+
         | id|category|sum|
         +---+--------+---+
+        |  1|       a|  4|
+        |  1|       a|  4|
         |  1|       b|  3|
+        |  2|       a|  2|
         |  2|       b|  5|
         |  3|       b|  3|
-        |  1|       a|  4|
-        |  1|       a|  4|
-        |  2|       a|  2|
         +---+--------+---+
 
-        :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
-        :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
         return WindowSpec(jspec)
 
 
-class WindowSpec(object):
+class WindowSpec:
     """
     A window specification that defines the partitioning, ordering,
     and frame boundaries.
 
     Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
 
-    .. note:: Experimental
-
-    .. versionadded:: 1.4
+    .. versionadded:: 1.4.0
     """
 
-    def __init__(self, jspec):
+    def __init__(self, jspec: JavaObject) -> None:
         self._jspec = jspec
 
-    @since(1.4)
-    def partitionBy(self, *cols):
+    def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
 
-        :param cols: names of columns or expressions
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        cols : str, :class:`Column` or list
+            names of columns or expressions
         """
         return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
 
-    @since(1.4)
-    def orderBy(self, *cols):
+    def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Defines the ordering columns in a :class:`WindowSpec`.
 
-        :param cols: names of columns or expressions
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        cols : str, :class:`Column` or list
+            names of columns or expressions
         """
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
-    @since(1.4)
-    def rowsBetween(self, start, end):
+    def rowsBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
 
@@ -244,12 +276,18 @@ class WindowSpec(object):
         and ``Window.currentRow`` to specify special boundary values, rather than using integral
         values directly.
 
-        :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
-        :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
@@ -257,8 +295,7 @@ class WindowSpec(object):
             end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
-    @since(1.4)
-    def rangeBetween(self, start, end):
+    def rangeBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
 
@@ -270,12 +307,18 @@ class WindowSpec(object):
         and ``Window.currentRow`` to specify special boundary values, rather than using integral
         values directly.
 
-        :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
-        :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
@@ -284,14 +327,15 @@ class WindowSpec(object):
         return WindowSpec(self._jspec.rangeBetween(start, end))
 
 
-def _test():
+def _test() -> None:
     import doctest
     import pyspark.sql.window
-    SparkContext('local[4]', 'PythonTest')
+
+    SparkContext("local[4]", "PythonTest")
     globs = pyspark.sql.window.__dict__.copy()
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.window, globs=globs,
-        optionflags=doctest.NORMALIZE_WHITESPACE)
+        pyspark.sql.window, globs=globs, optionflags=doctest.NORMALIZE_WHITESPACE
+    )
     if failure_count:
         sys.exit(-1)
 

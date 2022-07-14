@@ -23,7 +23,7 @@ import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.StageStatus
-import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils}
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 /** Web UI showing progress status of all stages in the given SparkContext. */
 private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
@@ -37,7 +37,9 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
   attachPage(new StagePage(this, store))
   attachPage(new PoolPage(this))
 
+  // Show pool information for only live UI.
   def isFairScheduler: Boolean = {
+    sc.isDefined &&
     store
       .environmentInfo()
       .sparkProperties

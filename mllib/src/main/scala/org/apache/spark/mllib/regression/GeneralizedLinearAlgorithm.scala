@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.feature.StandardScaler
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -28,7 +28,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
- * :: DeveloperApi ::
  * GeneralizedLinearModel (GLM) represents a model trained using
  * GeneralizedLinearAlgorithm. GLMs consist of a weight vector and
  * an intercept.
@@ -38,7 +37,6 @@ import org.apache.spark.storage.StorageLevel
  *
  */
 @Since("0.8.0")
-@DeveloperApi
 abstract class GeneralizedLinearModel @Since("1.0.0") (
     @Since("1.0.0") val weights: Vector,
     @Since("0.8.0") val intercept: Double)
@@ -94,13 +92,11 @@ abstract class GeneralizedLinearModel @Since("1.0.0") (
 }
 
 /**
- * :: DeveloperApi ::
  * GeneralizedLinearAlgorithm implements methods to train a Generalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
  *
  */
 @Since("0.8.0")
-@DeveloperApi
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 

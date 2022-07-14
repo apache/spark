@@ -21,7 +21,7 @@ import java.io.Closeable
 
 import org.apache.hadoop.mapreduce.RecordReader
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * An adaptor from a Hadoop [[RecordReader]] to an [[Iterator]] over the values returned.
@@ -50,11 +50,18 @@ class RecordReaderIterator[T](
 
   override def next(): T = {
     if (!hasNext) {
-      throw new java.util.NoSuchElementException("End of stream")
+      throw QueryExecutionErrors.endOfStreamError()
     }
     havePair = false
     rowReader.getCurrentValue
   }
+
+  override def map[B](f: (T) => B): Iterator[B] with Closeable =
+    new Iterator[B] with Closeable {
+      override def hasNext: Boolean = RecordReaderIterator.this.hasNext
+      override def next(): B = f(RecordReaderIterator.this.next())
+      override def close(): Unit = RecordReaderIterator.this.close()
+    }
 
   override def close(): Unit = {
     if (rowReader != null) {

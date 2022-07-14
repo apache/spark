@@ -18,12 +18,14 @@
 package org.apache.spark.sql.execution.streaming
 
 
+import java.{util => ju}
 import java.io.{InputStream, OutputStream}
 import java.nio.charset.StandardCharsets._
 
 import scala.io.{Source => IOSource}
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 
 /**
  * This class is used to log offsets to persistent files in HDFS.
@@ -45,9 +47,26 @@ import org.apache.spark.sql.SparkSession
 class OffsetSeqLog(sparkSession: SparkSession, path: String)
   extends HDFSMetadataLog[OffsetSeq](sparkSession, path) {
 
+  private val cachedMetadata = new ju.TreeMap[Long, OffsetSeq]()
+
+  override def add(batchId: Long, metadata: OffsetSeq): Boolean = {
+    val added = super.add(batchId, metadata)
+    if (added) {
+      // cache metadata as it will be read again
+      cachedMetadata.put(batchId, metadata)
+      // we don't access metadata for (batchId - 2) batches; evict them
+      cachedMetadata.headMap(batchId - 2, true).clear()
+    }
+    added
+  }
+
+  override def get(batchId: Long): Option[OffsetSeq] = {
+    Option(cachedMetadata.get(batchId)).orElse(super.get(batchId))
+  }
+
   override protected def deserialize(in: InputStream): OffsetSeq = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    def parseOffset(value: String): Offset = value match {
+    def parseOffset(value: String): OffsetV2 = value match {
       case OffsetSeqLog.SERIALIZED_VOID_OFFSET => null
       case json => SerializedOffset(json)
     }
@@ -56,7 +75,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
       throw new IllegalStateException("Incomplete log file")
     }
 
-    val version = parseVersion(lines.next(), OffsetSeqLog.VERSION)
+    validateVersion(lines.next(), OffsetSeqLog.VERSION)
 
     // read metadata
     val metadata = lines.next().trim match {

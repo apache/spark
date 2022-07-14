@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -65,31 +64,15 @@ public class ExternalShuffleBlockResolverSuite {
   public void testBadRequests() throws IOException {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     // Unregistered executor
-    try {
-      resolver.getBlockData("app0", "exec1", 1, 1, 0);
-      fail("Should have failed");
-    } catch (RuntimeException e) {
-      assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
-    }
-
-    // Invalid shuffle manager
-    try {
-      resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
-      resolver.getBlockData("app0", "exec2", 1, 1, 0);
-      fail("Should have failed");
-    } catch (UnsupportedOperationException e) {
-      // pass
-    }
+    RuntimeException e = assertThrows(RuntimeException.class,
+      () -> resolver.getBlockData("app0", "exec1", 1, 1, 0));
+    assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
 
     // Nonexistent shuffle block
     resolver.registerExecutor("app0", "exec3",
       dataContext.createExecutorInfo(SORT_MANAGER));
-    try {
-      resolver.getBlockData("app0", "exec3", 1, 1, 0);
-      fail("Should have failed");
-    } catch (Exception e) {
-      // pass
-    }
+    assertThrows(Exception.class,
+      () -> resolver.getBlockData("app0", "exec3", 1, 1, 0));
   }
 
   @Test
@@ -110,6 +93,13 @@ public class ExternalShuffleBlockResolverSuite {
       String block1 =
         CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
       assertEquals(sortBlock1, block1);
+    }
+
+    try (InputStream blocksStream = resolver.getContinuousBlocksData(
+        "app0", "exec0", 0, 0, 0, 2).createInputStream()) {
+      String blocks =
+        CharStreams.toString(new InputStreamReader(blocksStream, StandardCharsets.UTF_8));
+      assertEquals(sortBlock0 + sortBlock1, blocks);
     }
   }
 
@@ -137,22 +127,4 @@ public class ExternalShuffleBlockResolverSuite {
     assertEquals(shuffleInfo, mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
   }
 
-  @Test
-  public void testNormalizeAndInternPathname() {
-    assertPathsMatch("/foo", "bar", "baz", "/foo/bar/baz");
-    assertPathsMatch("//foo/", "bar/", "//baz", "/foo/bar/baz");
-    assertPathsMatch("foo", "bar", "baz///", "foo/bar/baz");
-    assertPathsMatch("/foo/", "/bar//", "/baz", "/foo/bar/baz");
-    assertPathsMatch("/", "", "", "/");
-    assertPathsMatch("/", "/", "/", "/");
-  }
-
-  private void assertPathsMatch(String p1, String p2, String p3, String expectedPathname) {
-    String normPathname =
-      ExternalShuffleBlockResolver.createNormalizedInternedPathname(p1, p2, p3);
-    assertEquals(expectedPathname, normPathname);
-    File file = new File(normPathname);
-    String returnedPath = file.getPath();
-    assertTrue(normPathname == returnedPath);
-  }
 }

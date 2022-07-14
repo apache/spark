@@ -26,7 +26,6 @@ import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.sql.vectorized.ColumnarRow;
-import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -39,17 +38,10 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public final class MutableColumnarRow extends InternalRow {
   public int rowId;
-  private final ColumnVector[] columns;
-  private final WritableColumnVector[] writableColumns;
-
-  public MutableColumnarRow(ColumnVector[] columns) {
-    this.columns = columns;
-    this.writableColumns = null;
-  }
+  private final WritableColumnVector[] columns;
 
   public MutableColumnarRow(WritableColumnVector[] writableColumns) {
     this.columns = writableColumns;
-    this.writableColumns = writableColumns;
   }
 
   @Override
@@ -88,6 +80,12 @@ public final class MutableColumnarRow extends InternalRow {
           row.setInt(i, getInt(i));
         } else if (dt instanceof TimestampType) {
           row.setLong(i, getLong(i));
+        } else if (dt instanceof StructType) {
+          row.update(i, getStruct(i, ((StructType) dt).fields().length).copy());
+        } else if (dt instanceof ArrayType) {
+          row.update(i, getArray(i).copy());
+        } else if (dt instanceof MapType) {
+          row.update(i, getMap(i).copy());
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
@@ -220,6 +218,8 @@ public final class MutableColumnarRow extends InternalRow {
         DecimalType t = (DecimalType) dt;
         Decimal d = Decimal.apply((BigDecimal) value, t.precision(), t.scale());
         setDecimal(ordinal, d, t.precision());
+      } else if (dt instanceof CalendarIntervalType) {
+        setInterval(ordinal, (CalendarInterval) value);
       } else {
         throw new UnsupportedOperationException("Datatype not supported " + dt);
       }
@@ -228,54 +228,60 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public void setNullAt(int ordinal) {
-    writableColumns[ordinal].putNull(rowId);
+    columns[ordinal].putNull(rowId);
   }
 
   @Override
   public void setBoolean(int ordinal, boolean value) {
-    writableColumns[ordinal].putNotNull(rowId);
-    writableColumns[ordinal].putBoolean(rowId, value);
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putBoolean(rowId, value);
   }
 
   @Override
   public void setByte(int ordinal, byte value) {
-    writableColumns[ordinal].putNotNull(rowId);
-    writableColumns[ordinal].putByte(rowId, value);
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putByte(rowId, value);
   }
 
   @Override
   public void setShort(int ordinal, short value) {
-    writableColumns[ordinal].putNotNull(rowId);
-    writableColumns[ordinal].putShort(rowId, value);
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putShort(rowId, value);
   }
 
   @Override
   public void setInt(int ordinal, int value) {
-    writableColumns[ordinal].putNotNull(rowId);
-    writableColumns[ordinal].putInt(rowId, value);
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putInt(rowId, value);
   }
 
   @Override
   public void setLong(int ordinal, long value) {
-    writableColumns[ordinal].putNotNull(rowId);
-    writableColumns[ordinal].putLong(rowId, value);
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putLong(rowId, value);
   }
 
   @Override
   public void setFloat(int ordinal, float value) {
-    writableColumns[ordinal].putNotNull(rowId);
-    writableColumns[ordinal].putFloat(rowId, value);
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putFloat(rowId, value);
   }
 
   @Override
   public void setDouble(int ordinal, double value) {
-    writableColumns[ordinal].putNotNull(rowId);
-    writableColumns[ordinal].putDouble(rowId, value);
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putDouble(rowId, value);
   }
 
   @Override
   public void setDecimal(int ordinal, Decimal value, int precision) {
-    writableColumns[ordinal].putNotNull(rowId);
-    writableColumns[ordinal].putDecimal(rowId, value, precision);
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putDecimal(rowId, value, precision);
+  }
+
+  @Override
+  public void setInterval(int ordinal, CalendarInterval value) {
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putInterval(rowId, value);
   }
 }

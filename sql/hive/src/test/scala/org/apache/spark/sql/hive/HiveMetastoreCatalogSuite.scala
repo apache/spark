@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types._
 
@@ -46,7 +46,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   test("duplicated metastore relations") {
     val df = spark.sql("SELECT * FROM src")
     logInfo(df.queryExecution.toString)
-    df.as('a).join(df.as('b), $"a.key" === $"b.key")
+    df.as("a").join(df.as("b"), $"a.key" === $"b.key")
   }
 
   test("should not truncate struct type catalog string") {
@@ -62,7 +62,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
       spark.sql("create view vw1 as select 1 as id")
       val plan = spark.sql("select id from vw1").queryExecution.analyzed
       val aliases = plan.collect {
-        case x @ SubqueryAlias(AliasIdentifier("vw1", Some("default")), _) => x
+        case x @ SubqueryAlias(AliasIdentifier("vw1", Seq("spark_catalog", "default")), _) => x
       }
       assert(aliases.size == 1)
     }
@@ -97,7 +97,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
           |c22 map<int,char(10)>,
           |c23 struct<a:int,b:int>,
           |c24 struct<c:varchar(10),d:int>
-          |)
+          |) USING hive
         """.stripMargin)
 
       val schema = hiveClient.getTable("default", "t").schema
@@ -113,24 +113,19 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
         .add("c9", "date")
         .add("c10", "timestamp")
         .add("c11", "string")
-        .add("c12", "string", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "char(10)").build())
-        .add("c13", "string", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "varchar(10)").build())
+        .add("c12", CharType(10), true)
+        .add("c13", VarcharType(10), true)
         .add("c14", "binary")
         .add("c15", "decimal")
         .add("c16", "decimal(10)")
         .add("c17", "decimal(10,2)")
         .add("c18", "array<string>")
         .add("c19", "array<int>")
-        .add("c20", "array<string>", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "array<char(10)>").build())
+        .add("c20", ArrayType(CharType(10)), true)
         .add("c21", "map<int,int>")
-        .add("c22", "map<int,string>", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "map<int,char(10)>").build())
+        .add("c22", MapType(IntegerType, CharType(10)), true)
         .add("c23", "struct<a:int,b:int>")
-        .add("c24", "struct<c:string,d:int>", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "struct<c:varchar(10),d:int>").build())
+        .add("c24", new StructType().add("c", VarcharType(10)).add("d", "int"), true)
       assert(schema == expectedSchema)
     }
   }
@@ -142,8 +137,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
   import testImplicits._
 
   private val testDF = range(1, 3).select(
-    ('id + 0.1) cast DecimalType(10, 3) as 'd1,
-    'id cast StringType as 'd2
+    ($"id" + 0.1) cast DecimalType(10, 3) as "d1",
+    $"id" cast StringType as "d2"
   ).coalesce(1)
 
   override def beforeAll(): Unit = {
@@ -206,7 +201,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
         checkAnswer(table("t"), testDF)
-        assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+        assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+          Seq("1.100\t1", "2.100\t2"))
       }
     }
 
@@ -239,7 +235,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
           checkAnswer(table("t"), testDF)
           assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
-            Seq("1.1\t1", "2.1\t2"))
+            Seq("1.100\t1", "2.100\t2"))
         }
       }
     }
@@ -272,5 +268,146 @@ class DataSourceWithHiveMetastoreCatalogSuite
       }
     }
 
+  }
+
+  test("SPARK-27592 set the bucketed data source table SerDe correctly") {
+    val provider = "parquet"
+    withTable("t") {
+      spark.sql(
+        s"""
+          |CREATE TABLE t
+          |USING $provider
+          |CLUSTERED BY (c1)
+          |SORTED BY (c1)
+          |INTO 2 BUCKETS
+          |AS SELECT 1 AS c1, 2 AS c2
+        """.stripMargin)
+
+      val metadata = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
+
+      val hiveSerDe = HiveSerDe.sourceToSerDe(provider).get
+      assert(metadata.storage.serde === hiveSerDe.serde)
+      assert(metadata.storage.inputFormat === hiveSerDe.inputFormat)
+      assert(metadata.storage.outputFormat === hiveSerDe.outputFormat)
+
+      // It's a bucketed table at Spark side
+      assert(sql("DESC FORMATTED t").collect().containsSlice(
+        Seq(Row("Num Buckets", "2", ""), Row("Bucket Columns", "[`c1`]", ""))
+      ))
+      checkAnswer(table("t"), Row(1, 2))
+
+      // It's not a bucketed table at Hive side
+      val hiveSide = sparkSession.metadataHive.runSqlHive("DESC FORMATTED t")
+      assert(hiveSide.contains("Num Buckets:        \t-1                  \t "))
+      assert(hiveSide.contains("Bucket Columns:     \t[]                  \t "))
+      assert(hiveSide.contains("\tspark.sql.sources.schema.numBuckets\t2                   "))
+      assert(hiveSide.contains("\tspark.sql.sources.schema.bucketCol.0\tc1                  "))
+      assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") === Seq("1\t2"))
+    }
+  }
+
+  test("SPARK-27592 set the partitioned bucketed data source table SerDe correctly") {
+    val provider = "parquet"
+    withTable("t") {
+      spark.sql(
+        s"""
+           |CREATE TABLE t
+           |USING $provider
+           |PARTITIONED BY (p)
+           |CLUSTERED BY (key)
+           |SORTED BY (value)
+           |INTO 2 BUCKETS
+           |AS SELECT key, value, cast(key % 3 as string) as p FROM src
+        """.stripMargin)
+
+      val metadata = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
+
+      val hiveSerDe = HiveSerDe.sourceToSerDe(provider).get
+      assert(metadata.storage.serde === hiveSerDe.serde)
+      assert(metadata.storage.inputFormat === hiveSerDe.inputFormat)
+      assert(metadata.storage.outputFormat === hiveSerDe.outputFormat)
+
+      // It's a bucketed table at Spark side
+      assert(sql("DESC FORMATTED t").collect().containsSlice(
+        Seq(Row("Num Buckets", "2", ""), Row("Bucket Columns", "[`key`]", ""))
+      ))
+      checkAnswer(table("t").select("key", "value"), table("src"))
+
+      // It's not a bucketed table at Hive side
+      val hiveSide = sparkSession.metadataHive.runSqlHive("DESC FORMATTED t")
+      assert(hiveSide.contains("Num Buckets:        \t-1                  \t "))
+      assert(hiveSide.contains("Bucket Columns:     \t[]                  \t "))
+      assert(hiveSide.contains("\tspark.sql.sources.schema.numBuckets\t2                   "))
+      assert(hiveSide.contains("\tspark.sql.sources.schema.bucketCol.0\tkey                 "))
+      assert(sparkSession.metadataHive.runSqlHive("SELECT count(*) FROM t") ===
+        Seq(table("src").count().toString))
+    }
+  }
+
+  test("SPARK-29869: Fix convertToLogicalRelation throws unclear AssertionError") {
+    withTempPath(dir => {
+      val baseDir = s"${dir.getCanonicalFile.toURI.toString}/non_partition_table"
+      val partitionLikeDir = s"$baseDir/dt=20191113"
+      spark.range(3).selectExpr("id").write.parquet(partitionLikeDir)
+      withTable("non_partition_table") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
+          spark.sql(
+            s"""
+               |CREATE TABLE non_partition_table (id bigint)
+               |STORED AS PARQUET LOCATION '$baseDir'
+               |""".stripMargin)
+          val e = intercept[AnalysisException](
+            spark.table("non_partition_table")).getMessage
+          assert(e.contains("Converted table has 2 columns, but source Hive table has 1 columns."))
+        }
+      }
+    })
+  }
+
+  Seq(
+    "parquet" -> (
+      "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+      HiveUtils.CONVERT_METASTORE_PARQUET.key),
+    "orc" -> (
+      "org.apache.hadoop.hive.ql.io.orc.OrcSerde",
+      HiveUtils.CONVERT_METASTORE_ORC.key)
+  ).foreach { case (format, (serde, formatConvertConf)) =>
+    test("SPARK-28266: convertToLogicalRelation should not interpret `path` property when " +
+      s"reading Hive tables using $format file format") {
+      withTempPath(dir => {
+        val baseDir = dir.getAbsolutePath
+        withSQLConf(formatConvertConf -> "true") {
+
+          withTable("t1") {
+            hiveClient.runSqlHive(
+              s"""
+                 |CREATE TABLE t1 (id bigint)
+                 |ROW FORMAT SERDE '$serde'
+                 |WITH SERDEPROPERTIES ('path'='someNonLocationValue')
+                 |STORED AS $format LOCATION '$baseDir'
+                 |""".stripMargin)
+
+            assertResult(0) {
+              spark.sql("SELECT * FROM t1").count()
+            }
+          }
+
+          spark.range(3).selectExpr("id").write.format(format).save(baseDir)
+          withTable("t2") {
+            hiveClient.runSqlHive(
+              s"""
+                 |CREATE TABLE t2 (id bigint)
+                 |ROW FORMAT SERDE '$serde'
+                 |WITH SERDEPROPERTIES ('path'='$baseDir')
+                 |STORED AS $format LOCATION '$baseDir'
+                 |""".stripMargin)
+
+            assertResult(3) {
+              spark.sql("SELECT * FROM t2").count()
+            }
+          }
+        }
+      })
+    }
   }
 }

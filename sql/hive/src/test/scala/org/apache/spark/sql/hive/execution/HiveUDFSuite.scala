@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.execution
 import java.io.{DataInput, DataOutput, File, PrintWriter}
 import java.util.{ArrayList, Arrays, Properties}
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
@@ -30,12 +32,14 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectIns
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
 
+import org.apache.spark.{SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
 case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
@@ -49,6 +53,7 @@ case class ListStringCaseClass(l: Seq[String])
 /**
  * A test suite for Hive custom UDFs.
  */
+@SlowHiveTest
 class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   import spark.udf
@@ -146,13 +151,6 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
     checkAnswer(sql("SELECT percentile(key, array(1, 1)) FROM src LIMIT 1"),
       sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)
-  }
-
-  test("SPARK-16228 Percentile needs explicit cast to double") {
-    sql("select percentile(value, cast(0.5 as double)) from values 1,2,3 T(value)")
-    sql("select percentile_approx(value, cast(0.5 as double)) from values 1.0,2.0,3.0 T(value)")
-    sql("select percentile(value, 0.5) from values 1,2,3 T(value)")
-    sql("select percentile_approx(value, 0.5) from values 1.0,2.0,3.0 T(value)")
   }
 
   test("Generic UDAF aggregates") {
@@ -440,8 +438,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     withTempView("tab1") {
       Seq(Tuple1(1451400761)).toDF("test_date").createOrReplaceTempView("tab1")
       sql(s"CREATE TEMPORARY FUNCTION testUDFToDate AS '${classOf[GenericUDFToDate].getName}'")
-      val count = sql("select testUDFToDate(cast(test_date as timestamp))" +
-        " from tab1 group by testUDFToDate(cast(test_date as timestamp))").count()
+      val count = sql("select testUDFToDate(timestamp_seconds(test_date))" +
+        " from tab1 group by testUDFToDate(timestamp_seconds(test_date))").count()
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToDate")
       assert(count == 1)
     }
@@ -454,14 +452,14 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       // EXTERNAL OpenCSVSerde table pointing to LOCATION
 
       val file1 = new File(tempDir + "/data1")
-      val writer1 = new PrintWriter(file1)
-      writer1.write("1,2")
-      writer1.close()
+      Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+        writer.write("1,2")
+      }
 
       val file2 = new File(tempDir + "/data2")
-      val writer2 = new PrintWriter(file2)
-      writer2.write("1,2")
-      writer2.close()
+      Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+        writer.write("1,2")
+      }
 
       sql(
         s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
@@ -552,23 +550,6 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
-  test("Show persistent functions") {
-    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    withTempView("inputTable") {
-      testData.createOrReplaceTempView("inputTable")
-      withUserDefinedFunction("testUDFToListInt" -> false) {
-        val numFunc = spark.catalog.listFunctions().count()
-        sql(s"CREATE FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
-        assert(spark.catalog.listFunctions().count() == numFunc + 1)
-        checkAnswer(
-          sql("SELECT testUDFToListInt(s) FROM inputTable"),
-          Seq(Row(Seq(1, 2, 3))))
-        assert(sql("show functions").count() == numFunc + 1)
-        assert(spark.catalog.listFunctions().count() == numFunc + 1)
-      }
-    }
-  }
-
   test("Temp function has dots in the names") {
     withUserDefinedFunction("test_avg" -> false, "`default.test_avg`" -> true) {
       sql(s"CREATE FUNCTION test_avg AS '${classOf[GenericUDAFAverage].getName}'")
@@ -592,8 +573,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           val message = intercept[AnalysisException] {
             sql("SELECT dAtABaSe1.unknownFunc(1)")
           }.getMessage
-          assert(message.contains("Undefined function: 'unknownFunc'") &&
-            message.contains("nor a permanent function registered in the database 'dAtABaSe1'"))
+          assert(message.contains("Undefined function: dAtABaSe1.unknownFunc"))
         }
       }
     }
@@ -649,6 +629,76 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         checkAnswer(
           sql("SELECT testGenericUDAFPercentileApprox(id, 0.5) FROM inputTable"),
           Seq(Row(4.0)))
+      }
+    }
+  }
+  test("SPARK-28012 Hive UDF supports struct type foldable expression") {
+    withUserDefinedFunction("testUDFStructType" -> false) {
+      // Simulate a hive udf that supports struct parameters
+      sql("CREATE FUNCTION testUDFStructType AS '" +
+        s"${classOf[GenericUDFArray].getName}'")
+      checkAnswer(
+        sql("SELECT testUDFStructType(named_struct('name', 'xx', 'value', 1))[0].value"),
+        Seq(Row(1)))
+    }
+  }
+
+  test("SPARK-32877: add test for Hive UDF complex decimal type") {
+    withUserDefinedFunction("testArraySum" -> false) {
+      sql(s"CREATE FUNCTION testArraySum AS '${classOf[ArraySumUDF].getName}'")
+      checkAnswer(
+        sql("SELECT testArraySum(array(1, 1.1, 1.2))"),
+        Seq(Row(3.3)))
+
+      val msg = intercept[AnalysisException] {
+        sql("SELECT testArraySum(1)")
+      }.getMessage
+      assert(msg.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+
+      val msg2 = intercept[AnalysisException] {
+        sql("SELECT testArraySum(1, 2)")
+      }.getMessage
+      assert(msg2.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+    }
+  }
+
+  test("SPARK-35236: CREATE FUNCTION should take an archive in USING clause") {
+    withTempDir { dir =>
+      withUserDefinedFunction("testListFiles1" -> false) {
+        val text1 = File.createTempFile("test1_", ".txt", dir)
+        val json1 = File.createTempFile("test1_", ".json", dir)
+        val zipFile1 = File.createTempFile("test1_", ".zip", dir)
+        TestUtils.createJar(Seq(text1, json1), zipFile1)
+
+        sql(s"CREATE FUNCTION testListFiles1 AS '${classOf[ListFiles].getName}' " +
+          s"USING ARCHIVE '${zipFile1.getAbsolutePath}'")
+        val df1 = sql(s"SELECT testListFiles1('${SparkFiles.get(zipFile1.getName)}')")
+        val fileList1 =
+          df1.collect().map(_.getList[String](0)).head.asScala.filter(_ != "META-INF")
+
+        assert(fileList1.length === 2)
+        assert(fileList1.contains(text1.getName))
+        assert(fileList1.contains(json1.getName))
+      }
+
+      // Test for file#alias style archive registration.
+      withUserDefinedFunction("testListFiles2" -> false) {
+        val text2 = File.createTempFile("test2_", ".txt", dir)
+        val json2 = File.createTempFile("test2_", ".json", dir)
+        val csv2 = File.createTempFile("test2", ".csv", dir)
+        val zipFile2 = File.createTempFile("test2_", ".zip", dir)
+        TestUtils.createJar(Seq(text2, json2, csv2), zipFile2)
+
+        sql(s"CREATE FUNCTION testListFiles2 AS '${classOf[ListFiles].getName}' " +
+          s"USING ARCHIVE '${zipFile2.getAbsolutePath}#foo'")
+        val df2 = sql(s"SELECT testListFiles2('${SparkFiles.get("foo")}')")
+        val fileList2 =
+          df2.collect().map(_.getList[String](0)).head.asScala.filter(_ != "META-INF")
+
+        assert(fileList2.length === 3)
+        assert(fileList2.contains(text2.getName))
+        assert(fileList2.contains(json2.getName))
+        assert(fileList2.contains(csv2.getName))
       }
     }
   }
@@ -733,5 +783,23 @@ class StatelessUDF extends UDF {
   def evaluate(): LongWritable = {
     result.set(result.get() + 1)
     result
+  }
+}
+
+class ArraySumUDF extends UDF {
+  def evaluate(values: java.util.List[java.lang.Double]): java.lang.Double = {
+    var r = 0d
+    for (v <- values.asScala) {
+      r += v
+    }
+    r
+  }
+}
+
+class ListFiles extends UDF {
+  import java.util.{ArrayList, Arrays, List => JList}
+  def evaluate(path: String): JList[String] = {
+    val fileArray = new File(path).list()
+    if (fileArray != null) Arrays.asList(fileArray: _*) else new ArrayList[String]()
   }
 }

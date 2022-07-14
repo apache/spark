@@ -19,8 +19,6 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
-import scala.language.reflectiveCalls
-
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.partial.CountEvaluator
@@ -149,7 +147,7 @@ object TestObject {
 }
 
 class TestClass extends Serializable {
-  var x = 5
+  val x = 5
 
   def getX: Int = x
 
@@ -181,7 +179,7 @@ class TestClassWithoutFieldAccess {
 
   def run(): Int = {
     var nonSer2 = new NonSerializable
-    var x = 5
+    val x = 5
     withSpark(new SparkContext("local", "test")) { sc =>
       val nums = sc.parallelize(Array(1, 2, 3, 4))
       nums.map(_ + x).reduce(_ + _)
@@ -220,10 +218,10 @@ object TestObjectWithNesting {
     var answer = 0
     withSpark(new SparkContext("local", "test")) { sc =>
       val nums = sc.parallelize(Array(1, 2, 3, 4))
-      var y = 1
+      val y = 1
       for (i <- 1 to 4) {
         var nonSer2 = new NonSerializable
-        var x = i
+        val x = i
         answer += nums.map(_ + x + y).reduce(_ + _)
       }
       answer
@@ -241,7 +239,7 @@ class TestClassWithNesting(val y: Int) extends Serializable {
       val nums = sc.parallelize(Array(1, 2, 3, 4))
       for (i <- 1 to 4) {
         var nonSer2 = new NonSerializable
-        var x = i
+        val x = i
         answer += nums.map(_ + x + getY).reduce(_ + _)
       }
       answer
@@ -301,7 +299,7 @@ private object TestUserClosuresActuallyCleaned {
     rdd.aggregateByKey(0)({ case (_, _) => return; 1 }, { case (_, _) => return; 1 }).count()
   }
   def testFoldByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.foldByKey(0) { case (_, _) => return; 1 } }
-  def testReduceByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.reduceByKey { case (_, _) => return; 1 } }
+  def testReduceByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.reduceByKey { (_, _) => return; 1 } }
   def testReduceByKeyLocally(rdd: RDD[(Int, Int)]): Unit = {
     rdd.reduceByKeyLocally { case (_, _) => return; 1 }
   }
@@ -341,7 +339,7 @@ private object TestUserClosuresActuallyCleaned {
 
 class TestCreateNullValue {
 
-  var x = 5
+  val x = 5
 
   def getX: Int = x
 

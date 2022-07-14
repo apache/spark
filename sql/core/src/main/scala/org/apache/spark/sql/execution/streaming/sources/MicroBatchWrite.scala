@@ -18,26 +18,29 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, WriterCommitMessage}
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 
 /**
  * A [[BatchWrite]] used to hook V2 stream writers into a microbatch plan. It implements
  * the non-streaming interface, forwarding the epoch ID determined at construction to a wrapped
  * streaming write support.
  */
-class MicroBatchWrite(eppchId: Long, val writeSupport: StreamingWrite) extends BatchWrite {
+class MicroBatchWrite(epochId: Long, val writeSupport: StreamingWrite) extends BatchWrite {
+  override def toString: String = {
+    s"MicroBathWrite[epoch: $epochId, writer: $writeSupport]"
+  }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    writeSupport.commit(eppchId, messages)
+    writeSupport.commit(epochId, messages)
   }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
-    writeSupport.abort(eppchId, messages)
+    writeSupport.abort(epochId, messages)
   }
 
-  override def createBatchWriterFactory(): DataWriterFactory = {
-    new MicroBatchWriterFactory(eppchId, writeSupport.createStreamingWriterFactory())
+  override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
+    new MicroBatchWriterFactory(epochId, writeSupport.createStreamingWriterFactory(info))
   }
 }
 

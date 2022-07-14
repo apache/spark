@@ -23,9 +23,8 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SQLTestUtils}
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.ChildFirstURLClassLoader
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -51,6 +50,15 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
       val hiveConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
       assert(!hiveConf.contains("spark.hadoop.foo"))
       assert(hiveConf("foo") === "bar")
+    }
+  }
+
+  test("newTemporaryConfiguration respect spark.hive.foo=bar in SparkConf") {
+    sys.props.put("spark.hive.foo", "bar")
+    Seq(true, false) foreach { useInMemoryDerby =>
+      val hiveConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
+      assert(!hiveConf.contains("spark.hive.foo"))
+      assert(hiveConf("hive.foo") === "bar")
     }
   }
 

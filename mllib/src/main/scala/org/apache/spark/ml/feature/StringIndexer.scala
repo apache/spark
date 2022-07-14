@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.language.existentials
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -33,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -58,8 +56,6 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
     ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
 
-  setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
-
   /**
    * Param for how to order labels of string column. The first label after ordering is assigned
    * an index of 0.
@@ -81,6 +77,9 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     "The first label after ordering is assigned an index of 0. " +
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
     ParamValidators.inArray(StringIndexer.supportedStringOrderType))
+
+  setDefault(handleInvalid -> StringIndexer.ERROR_INVALID,
+    stringOrderType -> StringIndexer.frequencyDesc)
 
   /** @group getParam */
   @Since("2.3.0")
@@ -109,7 +108,7 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
         s"but got $inputDataType.")
     require(schema.fields.forall(_.name != outputColName),
       s"Output column $outputColName already exists.")
-    NominalAttribute.defaultAttr.withName($(outputCol)).toStructField()
+    NominalAttribute.defaultAttr.withName(outputColName).toStructField()
   }
 
   /** Validates and transforms the input schema. */
@@ -157,7 +156,6 @@ class StringIndexer @Since("1.4.0") (
   /** @group setParam */
   @Since("2.3.0")
   def setStringOrderType(value: String): this.type = set(stringOrderType, value)
-  setDefault(stringOrderType, StringIndexer.frequencyDesc)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -175,14 +173,12 @@ class StringIndexer @Since("1.4.0") (
   @Since("3.0.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  private def countByValue(
-      dataset: Dataset[_],
-      inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
-
-    val aggregator = new StringIndexerAggregator(inputCols.length)
-    implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
-
-    val selectedCols = inputCols.map { colName =>
+  /**
+   * Gets columns from dataset. If a column is not string type, we replace NaN values
+   * with null. Columns are casted to string type.
+   */
+  private def getSelectedCols(dataset: Dataset[_], inputCols: Seq[String]): Seq[Column] = {
+    inputCols.map { colName =>
       val col = dataset.col(colName)
       if (col.expr.dataType == StringType) {
         col
@@ -192,7 +188,16 @@ class StringIndexer @Since("1.4.0") (
         new Column(If(col.isNaN.expr, Literal(null), col.expr)).cast(StringType)
       }
     }
+  }
 
+  private def countByValue(
+      dataset: Dataset[_],
+      inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
+
+    val aggregator = new StringIndexerAggregator(inputCols.length)
+    implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
+
+    val selectedCols = getSelectedCols(dataset, inputCols)
     dataset.select(selectedCols: _*)
       .toDF
       .groupBy().agg(aggregator.toColumn)
@@ -200,51 +205,44 @@ class StringIndexer @Since("1.4.0") (
       .collect()(0)
   }
 
+  private def sortByFreq(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
+    val (inputCols, _) = getInOutCols()
+
+    val sortFunc = StringIndexer.getSortFunc(ascending = ascending)
+    val orgStrings = countByValue(dataset, inputCols).toSeq
+    ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
+      counts.toSeq.sortWith(sortFunc).map(_._1).toArray
+    }.toArray
+  }
+
+  private def sortByAlphabet(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
+    val (inputCols, _) = getInOutCols()
+
+    val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
+    val allLabels = dataset.select(selectedCols: _*)
+      .collect().toSeq.flatMap(_.toSeq)
+      .asInstanceOf[scala.collection.Seq[scala.collection.Seq[String]]].toSeq
+    ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
+      val sorted = labels.filter(_ != null).sorted
+      if (ascending) {
+        sorted.toArray
+      } else {
+        sorted.reverse.toArray
+      }
+    }.toArray
+  }
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val (inputCols, _) = getInOutCols()
-
-    // If input dataset is not originally cached, we need to unpersist it
-    // once we persist it later.
-    val needUnpersist = dataset.storageLevel == StorageLevel.NONE
-
     // In case of equal frequency when frequencyDesc/Asc, the strings are further sorted
     // alphabetically.
     val labelsArray = $(stringOrderType) match {
-      case StringIndexer.frequencyDesc =>
-        val sortFunc = StringIndexer.getSortFunc(ascending = false)
-        countByValue(dataset, inputCols).map { counts =>
-          counts.toSeq.sortWith(sortFunc).map(_._1).toArray
-        }
-      case StringIndexer.frequencyAsc =>
-        val sortFunc = StringIndexer.getSortFunc(ascending = true)
-        countByValue(dataset, inputCols).map { counts =>
-          counts.toSeq.sortWith(sortFunc).map(_._1).toArray
-        }
-      case StringIndexer.alphabetDesc =>
-        import dataset.sparkSession.implicits._
-        dataset.persist()
-        val labels = inputCols.map { inputCol =>
-          dataset.select(inputCol).na.drop().distinct().sort(dataset(s"$inputCol").desc)
-            .as[String].collect()
-        }
-        if (needUnpersist) {
-          dataset.unpersist()
-        }
-        labels
-      case StringIndexer.alphabetAsc =>
-        import dataset.sparkSession.implicits._
-        dataset.persist()
-        val labels = inputCols.map { inputCol =>
-          dataset.select(inputCol).na.drop().distinct().sort(dataset(s"$inputCol").asc)
-            .as[String].collect()
-        }
-        if (needUnpersist) {
-          dataset.unpersist()
-        }
-        labels
+      case StringIndexer.frequencyDesc => sortByFreq(dataset, ascending = false)
+      case StringIndexer.frequencyAsc => sortByFreq(dataset, ascending = true)
+      case StringIndexer.alphabetDesc => sortByAlphabet(dataset, ascending = false)
+      case StringIndexer.alphabetAsc => sortByAlphabet(dataset, ascending = true)
      }
     copyValues(new StringIndexerModel(uid, labelsArray).setParent(this))
   }
@@ -369,7 +367,7 @@ class StringIndexerModel (
   // This filters out any null values and also the input labels which are not in
   // the dataset used for fitting.
   private def filterInvalidData(dataset: Dataset[_], inputColNames: Seq[String]): Dataset[_] = {
-    val conditions: Seq[Column] = (0 until inputColNames.length).map { i =>
+    val conditions: Seq[Column] = inputColNames.indices.map { i =>
       val inputColName = inputColNames(i)
       val labelToIndex = labelsToIndexArray(i)
       // We have this additional lookup at `labelToIndex` when `handleInvalid` is set to
@@ -415,7 +413,7 @@ class StringIndexerModel (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    var (inputColNames, outputColNames) = getInOutCols()
+    val (inputColNames, outputColNames) = getInOutCols()
     val outputColumns = new Array[Column](outputColNames.length)
 
     // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
@@ -425,7 +423,7 @@ class StringIndexerModel (
       dataset
     }
 
-    for (i <- 0 until outputColNames.length) {
+    for (i <- outputColNames.indices) {
       val inputColName = inputColNames(i)
       val outputColName = outputColNames(i)
       val labelToIndex = labelsToIndexArray(i)
@@ -476,6 +474,14 @@ class StringIndexerModel (
 
   @Since("1.6.0")
   override def write: StringIndexModelWriter = new StringIndexModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"StringIndexerModel: uid=$uid, handleInvalid=${$(handleInvalid)}" +
+      get(stringOrderType).map(t => s", stringOrderType=$t").getOrElse("") +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(outputCols).map(c => s", numOutputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")
@@ -517,7 +523,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         val data = sparkSession.read.parquet(dataPath)
           .select("labelsArray")
           .head()
-        data.getAs[Seq[Seq[String]]](0).map(_.toArray).toArray
+        data.getSeq[scala.collection.Seq[String]](0).map(_.toArray).toArray
       }
       val model = new StringIndexerModel(metadata.uid, labelsArray)
       metadata.getAndSetParams(model)

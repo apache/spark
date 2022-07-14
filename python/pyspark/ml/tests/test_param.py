@@ -17,7 +17,6 @@
 #
 
 import inspect
-import sys
 import array as pyarray
 import unittest
 
@@ -26,17 +25,21 @@ import numpy as np
 from pyspark import keyword_only
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.clustering import KMeans
-from pyspark.ml.feature import Binarizer, Bucketizer, ElementwiseProduct, IndexToString, \
-    VectorSlicer, Word2Vec
-from pyspark.ml.linalg import DenseVector, SparseVector
+from pyspark.ml.feature import (
+    Binarizer,
+    Bucketizer,
+    ElementwiseProduct,
+    IndexToString,
+    MaxAbsScaler,
+    VectorSlicer,
+    Word2Vec,
+)
+from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
+from pyspark.ml.regression import LinearRegressionModel, GeneralizedLinearRegressionModel
 from pyspark.ml.wrapper import JavaParams
 from pyspark.testing.mlutils import check_params, PySparkTestCase, SparkSessionTestCase
-
-
-if sys.version > '3':
-    xrange = range
 
 
 class ParamTypeConversionTests(PySparkTestCase):
@@ -65,17 +68,30 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(TypeError, lambda: ElementwiseProduct(scalingVec=["a", "b"]))
 
     def test_list(self):
-        l = [0, 1]
-        for lst_like in [l, np.array(l), DenseVector(l), SparseVector(len(l), range(len(l)), l),
-                         pyarray.array('l', l), xrange(2), tuple(l)]:
+        lst = [0, 1]
+        for lst_like in [
+            lst,
+            np.array(lst),
+            DenseVector(lst),
+            SparseVector(len(lst), range(len(lst)), lst),
+            pyarray.array("l", lst),
+            range(2),
+            tuple(lst),
+        ]:
             converted = TypeConverters.toList(lst_like)
             self.assertEqual(type(converted), list)
-            self.assertListEqual(converted, l)
+            self.assertListEqual(converted, lst)
 
     def test_list_int(self):
-        for indices in [[1.0, 2.0], np.array([1.0, 2.0]), DenseVector([1.0, 2.0]),
-                        SparseVector(2, {0: 1.0, 1: 2.0}), xrange(1, 3), (1.0, 2.0),
-                        pyarray.array('d', [1.0, 2.0])]:
+        for indices in [
+            [1.0, 2.0],
+            np.array([1.0, 2.0]),
+            DenseVector([1.0, 2.0]),
+            SparseVector(2, {0: 1.0, 1: 2.0}),
+            range(1, 3),
+            (1.0, 2.0),
+            pyarray.array("d", [1.0, 2.0]),
+        ]:
             vs = VectorSlicer(indices=indices)
             self.assertListEqual(vs.getIndices(), [1, 2])
             self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
@@ -87,17 +103,26 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertTrue(all([type(v) == float for v in b.getSplits()]))
         self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", 1.0]))
 
+    def test_list_list_float(self):
+        b = Bucketizer(splitsArray=[[-0.1, 0.5, 3], [-5, 1.5]])
+        self.assertEqual(b.getSplitsArray(), [[-0.1, 0.5, 3.0], [-5.0, 1.5]])
+        self.assertTrue(all([type(v) == list for v in b.getSplitsArray()]))
+        self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[0]]))
+        self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[1]]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=["a", 1.0]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=[[-5, 1.5], ["a", 1.0]]))
+
     def test_list_string(self):
-        for labels in [np.array(['a', u'b']), ['a', u'b'], np.array(['a', 'b'])]:
+        for labels in [np.array(["a", "b"]), ["a", "b"], np.array(["a", "b"])]:
             idx_to_string = IndexToString(labels=labels)
-            self.assertListEqual(idx_to_string.getLabels(), ['a', 'b'])
-        self.assertRaises(TypeError, lambda: IndexToString(labels=['a', 2]))
+            self.assertListEqual(idx_to_string.getLabels(), ["a", "b"])
+        self.assertRaises(TypeError, lambda: IndexToString(labels=["a", 2]))
 
     def test_string(self):
         lr = LogisticRegression()
-        for col in ['features', u'features', np.str_('features')]:
+        for col in ["features", "features", np.str_("features")]:
             lr.setFeaturesCol(col)
-            self.assertEqual(lr.getFeaturesCol(), 'features')
+            self.assertEqual(lr.getFeaturesCol(), "features")
         self.assertRaises(TypeError, lambda: LogisticRegression(featuresCol=2.3))
 
     def test_bool(self):
@@ -109,6 +134,7 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
     """
     A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
     """
+
     @keyword_only
     def __init__(self, seed=None):
         super(TestParams, self).__init__()
@@ -130,6 +156,7 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
     """
     A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
     """
+
     @keyword_only
     def __init__(self, seed=None):
         super(OtherTestParams, self).__init__()
@@ -148,7 +175,6 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
 
 
 class HasThrowableProperty(Params):
-
     def __init__(self):
         super(HasThrowableProperty, self).__init__()
         self.p = Param(self, "none", "empty param")
@@ -159,7 +185,6 @@ class HasThrowableProperty(Params):
 
 
 class ParamTests(SparkSessionTestCase):
-
     def test_copy_new_parent(self):
         testParams = TestParams()
         # Copying an instantiated param should fail
@@ -183,20 +208,19 @@ class ParamTests(SparkSessionTestCase):
         testParams = TestParams()
         self.assertTrue(all([testParams.hasParam(p.name) for p in testParams.params]))
         self.assertFalse(testParams.hasParam("notAParameter"))
-        self.assertTrue(testParams.hasParam(u"maxIter"))
+        self.assertTrue(testParams.hasParam("maxIter"))
 
     def test_resolveparam(self):
         testParams = TestParams()
         self.assertEqual(testParams._resolveParam(testParams.maxIter), testParams.maxIter)
         self.assertEqual(testParams._resolveParam("maxIter"), testParams.maxIter)
 
-        self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
-        if sys.version_info[0] >= 3:
-            # In Python 3, it is allowed to get/set attributes with non-ascii characters.
-            e_cls = AttributeError
-        else:
-            e_cls = UnicodeEncodeError
-        self.assertRaises(e_cls, lambda: testParams._resolveParam(u"아"))
+        self.assertEqual(testParams._resolveParam("maxIter"), testParams.maxIter)
+        self.assertRaises(AttributeError, lambda: testParams._resolveParam("아"))
+
+        # Invalid type
+        invalid_type = 1
+        self.assertRaises(TypeError, testParams._resolveParam, invalid_type)
 
     def test_params(self):
         testParams = TestParams()
@@ -212,9 +236,6 @@ class ParamTests(SparkSessionTestCase):
         self.assertFalse(testParams.isSet(maxIter))
         self.assertTrue(testParams.isDefined(maxIter))
         self.assertEqual(testParams.getMaxIter(), 10)
-        testParams.setMaxIter(100)
-        self.assertTrue(testParams.isSet(maxIter))
-        self.assertEqual(testParams.getMaxIter(), 100)
 
         self.assertTrue(testParams.hasParam(inputCol.name))
         self.assertFalse(testParams.hasDefault(inputCol))
@@ -223,21 +244,40 @@ class ParamTests(SparkSessionTestCase):
         with self.assertRaises(KeyError):
             testParams.getInputCol()
 
-        otherParam = Param(Params._dummy(), "otherParam", "Parameter used to test that " +
-                           "set raises an error for a non-member parameter.",
-                           typeConverter=TypeConverters.toString)
+        otherParam = Param(
+            Params._dummy(),
+            "otherParam",
+            "Parameter used to test that " + "set raises an error for a non-member parameter.",
+            typeConverter=TypeConverters.toString,
+        )
         with self.assertRaises(ValueError):
             testParams.set(otherParam, "value")
 
         # Since the default is normally random, set it to a known number for debug str
         testParams._setDefault(seed=41)
-        testParams.setSeed(43)
 
         self.assertEqual(
             testParams.explainParams(),
-            "\n".join(["inputCol: input column name. (undefined)",
-                       "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
-                       "seed: random seed. (default: 41, current: 43)"]))
+            "\n".join(
+                [
+                    "inputCol: input column name. (undefined)",
+                    "maxIter: max number of iterations (>= 0). (default: 10)",
+                    "seed: random seed. (default: 41)",
+                ]
+            ),
+        )
+
+    def test_clear_param(self):
+        df = self.spark.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
+        maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
+        model = maScaler.fit(df)
+        self.assertTrue(model.isSet(model.outputCol))
+        self.assertEqual(model.getOutputCol(), "scaled")
+        model.clear(model.outputCol)
+        self.assertFalse(model.isSet(model.outputCol))
+        self.assertEqual(model.getOutputCol()[:12], "MaxAbsScaler")
+        output = model.transform(df)
+        self.assertEqual(model.getOutputCol(), output.schema.names[1])
 
     def test_kmeans_param(self):
         algo = KMeans()
@@ -290,17 +330,22 @@ class ParamTests(SparkSessionTestCase):
                 copied_no_extra[k] = v
         self.assertEqual(tp._paramMap, copied_no_extra)
         self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
+        with self.assertRaises(TypeError):
+            tp.copy(extra={"unknown_parameter": None})
+        with self.assertRaises(TypeError):
+            tp.copy(extra=["must be a dict"])
 
     def test_logistic_regression_check_thresholds(self):
         self.assertIsInstance(
-            LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
-            LogisticRegression
+            LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]), LogisticRegression
         )
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             ValueError,
             "Logistic Regression getThreshold found inconsistent.*$",
-            LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
+            LogisticRegression,
+            threshold=0.42,
+            thresholds=[0.5, 0.5],
         )
 
     def test_preserve_set_state(self):
@@ -309,8 +354,10 @@ class ParamTests(SparkSessionTestCase):
         self.assertFalse(binarizer.isSet("threshold"))
         binarizer.transform(dataset)
         binarizer._transfer_params_from_java()
-        self.assertFalse(binarizer.isSet("threshold"),
-                         "Params not explicitly set should remain unset after transform")
+        self.assertFalse(
+            binarizer.isSet("threshold"),
+            "Params not explicitly set should remain unset after transform",
+        )
 
     def test_default_params_transferred(self):
         dataset = self.spark.createDataFrame([(0.5,)], ["data"])
@@ -321,6 +368,16 @@ class ParamTests(SparkSessionTestCase):
         self.assertFalse(binarizer.isSet(binarizer.outputCol))
         self.assertEqual(result[0][0], 1.0)
 
+    def test_lr_evaluate_invaild_type(self):
+        lr = LinearRegressionModel()
+        invalid_type = ""
+        self.assertRaises(TypeError, lr.evaluate, invalid_type)
+
+    def test_glr_evaluate_invaild_type(self):
+        glr = GeneralizedLinearRegressionModel()
+        invalid_type = ""
+        self.assertRaises(TypeError, glr.evaluate, invalid_type)
+
 
 class DefaultValuesTests(PySparkTestCase):
     """
@@ -329,6 +386,8 @@ class DefaultValuesTests(PySparkTestCase):
     """
 
     def test_java_params(self):
+        import re
+
         import pyspark.ml.feature
         import pyspark.ml.classification
         import pyspark.ml.clustering
@@ -337,30 +396,46 @@ class DefaultValuesTests(PySparkTestCase):
         import pyspark.ml.recommendation
         import pyspark.ml.regression
 
-        modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
-                   pyspark.ml.evaluation, pyspark.ml.pipeline, pyspark.ml.recommendation,
-                   pyspark.ml.regression]
+        modules = [
+            pyspark.ml.feature,
+            pyspark.ml.classification,
+            pyspark.ml.clustering,
+            pyspark.ml.evaluation,
+            pyspark.ml.pipeline,
+            pyspark.ml.recommendation,
+            pyspark.ml.regression,
+        ]
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
-                if not name.endswith('Model') and not name.endswith('Params') \
-                        and issubclass(cls, JavaParams) and not inspect.isabstract(cls):
-                    # NOTE: disable check_params_exist until there is parity with Scala API
-                    check_params(self, cls(), check_params_exist=False)
+                if (
+                    not name.endswith("Model")
+                    and not name.endswith("Params")
+                    and issubclass(cls, JavaParams)
+                    and not inspect.isabstract(cls)
+                    and not re.match("_?Java", name)
+                    and name != "_LSH"
+                    and name != "_Selector"
+                ):
+                    check_params(self, cls(), check_params_exist=True)
 
         # Additional classes that need explicit construction
         from pyspark.ml.feature import CountVectorizerModel, StringIndexerModel
-        check_params(self, CountVectorizerModel.from_vocabulary(['a'], 'input'),
-                     check_params_exist=False)
-        check_params(self, StringIndexerModel.from_labels(['a', 'b'], 'input'),
-                     check_params_exist=False)
+
+        check_params(
+            self, CountVectorizerModel.from_vocabulary(["a"], "input"), check_params_exist=True
+        )
+        check_params(
+            self, StringIndexerModel.from_labels(["a", "b"], "input"), check_params_exist=True
+        )
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_param import *
+    from pyspark.ml.tests.test_param import *  # noqa: F401
 
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

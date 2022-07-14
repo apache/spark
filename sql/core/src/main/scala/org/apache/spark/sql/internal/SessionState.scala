@@ -18,21 +18,24 @@
 package org.apache.spark.sql.internal
 
 import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Unstable}
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.streaming.StreamingQueryManager
-import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
+import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.util.{DependencyUtils, Utils}
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -49,8 +52,10 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
  *                        unresolved attributes and relations.
  * @param optimizerBuilder a function to create the logical query plan optimizer.
  * @param planner Planner that converts optimized logical plans to physical plans.
- * @param streamingQueryManager Interface to start and stop streaming queries.
- * @param listenerManager Interface to register custom [[QueryExecutionListener]]s.
+ * @param streamingQueryManagerBuilder A function to create a streaming query manager to
+ *                                     start and stop streaming queries.
+ * @param listenerManager Interface to register custominternal/SessionState.scala
+ *                        [[org.apache.spark.sql.util.QueryExecutionListener]]s.
  * @param resourceLoaderBuilder a function to create a session shared resource loader to load JARs,
  *                              files, etc.
  * @param createQueryExecution Function used to create QueryExecution objects.
@@ -61,17 +66,20 @@ private[sql] class SessionState(
     val conf: SQLConf,
     val experimentalMethods: ExperimentalMethods,
     val functionRegistry: FunctionRegistry,
+    val tableFunctionRegistry: TableFunctionRegistry,
     val udfRegistration: UDFRegistration,
     catalogBuilder: () => SessionCatalog,
     val sqlParser: ParserInterface,
     analyzerBuilder: () => Analyzer,
     optimizerBuilder: () => Optimizer,
     val planner: SparkPlanner,
-    val streamingQueryManager: StreamingQueryManager,
+    val streamingQueryManagerBuilder: () => StreamingQueryManager,
     val listenerManager: ExecutionListenerManager,
     resourceLoaderBuilder: () => SessionResourceLoader,
-    createQueryExecution: LogicalPlan => QueryExecution,
-    createClone: (SparkSession, SessionState) => SessionState) {
+    createQueryExecution: (LogicalPlan, CommandExecutionMode.Value) => QueryExecution,
+    createClone: (SparkSession, SessionState) => SessionState,
+    val columnarRules: Seq[ColumnarRule],
+    val adaptiveRulesHolder: AdaptiveRulesHolder) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -81,6 +89,12 @@ private[sql] class SessionState(
   lazy val optimizer: Optimizer = optimizerBuilder()
 
   lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
+
+  // The streamingQueryManager is lazy to avoid creating a StreamingQueryManager for each session
+  // when connecting to ThriftServer.
+  lazy val streamingQueryManager: StreamingQueryManager = streamingQueryManagerBuilder()
+
+  def catalogManager: CatalogManager = analyzer.catalogManager
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
     sharedState.sparkContext.hadoopConfiguration,
@@ -105,11 +119,10 @@ private[sql] class SessionState(
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  def executePlan(plan: LogicalPlan): QueryExecution = createQueryExecution(plan)
-
-  def refreshTable(tableName: String): Unit = {
-    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
-  }
+  def executePlan(
+      plan: LogicalPlan,
+      mode: CommandExecutionMode.Value = CommandExecutionMode.ALL): QueryExecution =
+    createQueryExecution(plan, mode)
 }
 
 private[sql] object SessionState {
@@ -123,11 +136,10 @@ private[sql] object SessionState {
 /**
  * Concrete implementation of a [[BaseSessionStateBuilder]].
  */
-@Experimental
 @Unstable
 class SessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState] = None)
+    parentState: Option[SessionState])
   extends BaseSessionStateBuilder(session, parentState) {
   override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
 }
@@ -141,10 +153,14 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     resource.resourceType match {
       case JarResource => addJar(resource.uri)
       case FileResource => session.sparkContext.addFile(resource.uri)
-      case ArchiveResource =>
-        throw new AnalysisException(
-          "Archive is not allowed to be loaded. If YARN mode is used, " +
-            "please use --archives options while calling spark-submit.")
+      case ArchiveResource => session.sparkContext.addArchive(resource.uri)
+    }
+  }
+
+  def resolveJars(path: URI): Seq[String] = {
+    path.getScheme match {
+      case "ivy" => DependencyUtils.resolveMavenDependencies(path)
+      case _ => path.toString :: Nil
     }
   }
 
@@ -156,16 +172,19 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * [[SessionState]].
    */
   def addJar(path: String): Unit = {
-    session.sparkContext.addJar(path)
-    val uri = new Path(path).toUri
-    val jarURL = if (uri.getScheme == null) {
-      // `path` is a local file path without a URL scheme
-      new File(path).toURI.toURL
-    } else {
-      // `path` is a URL with a scheme
-      uri.toURL
+    val uri = Utils.resolveURI(path)
+    resolveJars(uri).foreach { p =>
+      session.sparkContext.addJar(p)
+      val uri = new Path(p).toUri
+      val jarURL = if (uri.getScheme == null) {
+        // `path` is a local file path without a URL scheme
+        new File(p).toURI.toURL
+      } else {
+        // `path` is a URL with a scheme
+        uri.toURL
+      }
+      session.sharedState.jarClassLoader.addURL(jarURL)
     }
-    session.sharedState.jarClassLoader.addURL(jarURL)
     Thread.currentThread().setContextClassLoader(session.sharedState.jarClassLoader)
   }
 }

@@ -168,7 +168,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /** Set multiple parameters together */
-  def setAll(settings: Traversable[(String, String)]): SparkConf = {
+  def setAll(settings: Iterable[(String, String)]): SparkConf = {
     settings.foreach { case (k, v) => set(k, v) }
     this
   }
@@ -406,7 +406,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
-
   /**
    * Get a parameter as an integer, falling back to a default if not set
    * @throws NumberFormatException If the value cannot be interpreted as an integer
@@ -491,11 +490,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
   }
 
+
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
    * idempotent - may mutate this conf object to convert deprecated settings to supported ones.
    */
-  private[spark] def validateSettings() {
+  private[spark] def validateSettings(): Unit = {
     if (contains("spark.local.dir")) {
       val msg = "Note that spark.local.dir will be overridden by the value set by " +
         "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone/kubernetes and LOCAL_DIRS" +
@@ -539,23 +539,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.master") && get("spark.master").startsWith("yarn-")) {
-      val warning = s"spark.master ${get("spark.master")} is deprecated in Spark 2.0+, please " +
-        "instead use \"yarn\" with specified deploy mode."
-
-      get("spark.master") match {
-        case "yarn-cluster" =>
-          logWarning(warning)
-          set("spark.master", "yarn")
-          set(SUBMIT_DEPLOY_MODE, "cluster")
-        case "yarn-client" =>
-          logWarning(warning)
-          set("spark.master", "yarn")
-          set(SUBMIT_DEPLOY_MODE, "client")
-        case _ => // Any other unexpected master will be checked when creating scheduler backend.
-      }
-    }
-
     if (contains(SUBMIT_DEPLOY_MODE)) {
       get(SUBMIT_DEPLOY_MODE) match {
         case "cluster" | "client" =>
@@ -585,8 +568,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
     require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
-      s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be no less than the value of " +
-      s"spark.executor.heartbeatInterval=${executorHeartbeatIntervalMs}ms.")
+      s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be greater than the value of " +
+      s"${EXECUTOR_HEARTBEAT_INTERVAL.key}=${executorHeartbeatIntervalMs}ms.")
   }
 
   /**
@@ -620,14 +603,42 @@ private[spark] object SparkConf extends Logging {
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
       DeprecatedConfig("spark.rpc", "2.0", "Not used anymore."),
       DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
-        "Please use the new blacklisting options, spark.blacklist.*"),
+        "Please use the new excludedOnFailure options, spark.excludeOnFailure.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.executor.port", "2.0.0", "Not used anymore"),
+      DeprecatedConfig("spark.rpc.numRetries", "2.2.0", "Not used anymore"),
+      DeprecatedConfig("spark.rpc.retry.wait", "2.2.0", "Not used anymore"),
       DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
         "Not used anymore. Please use spark.shuffle.service.index.cache.size"),
       DeprecatedConfig("spark.yarn.credentials.file.retention.count", "2.4.0", "Not used anymore."),
       DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore."),
-      DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available.")
+      DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available."),
+      DeprecatedConfig("spark.executor.plugins", "3.0.0",
+        "Feature replaced with new plugin API. See Monitoring documentation."),
+      DeprecatedConfig("spark.blacklist.enabled", "3.1.0",
+        "Please use spark.excludeOnFailure.enabled"),
+      DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerExecutor", "3.1.0",
+        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor"),
+      DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerNode", "3.1.0",
+        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerNode"),
+      DeprecatedConfig("spark.blacklist.application.maxFailedTasksPerExecutor", "3.1.0",
+        "Please use spark.excludeOnFailure.application.maxFailedTasksPerExecutor"),
+      DeprecatedConfig("spark.blacklist.stage.maxFailedTasksPerExecutor", "3.1.0",
+        "Please use spark.excludeOnFailure.stage.maxFailedTasksPerExecutor"),
+      DeprecatedConfig("spark.blacklist.application.maxFailedExecutorsPerNode", "3.1.0",
+        "Please use spark.excludeOnFailure.application.maxFailedExecutorsPerNode"),
+      DeprecatedConfig("spark.blacklist.stage.maxFailedExecutorsPerNode", "3.1.0",
+        "Please use spark.excludeOnFailure.stage.maxFailedExecutorsPerNode"),
+      DeprecatedConfig("spark.blacklist.timeout", "3.1.0",
+        "Please use spark.excludeOnFailure.timeout"),
+      DeprecatedConfig("spark.blacklist.application.fetchFailure.enabled", "3.1.0",
+        "Please use spark.excludeOnFailure.application.fetchFailure.enabled"),
+      DeprecatedConfig("spark.scheduler.blacklist.unschedulableTaskSetTimeout", "3.1.0",
+        "Please use spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout"),
+      DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
+        "Please use spark.excludeOnFailure.killExcludedExecutors"),
+      DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
+        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -658,12 +669,12 @@ private[spark] object SparkConf extends Logging {
         translation = s => s"${s.toLong * 10}s")),
     REDUCER_MAX_SIZE_IN_FLIGHT.key -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
-    "spark.kryoserializer.buffer" -> Seq(
+    KRYO_SERIALIZER_BUFFER_SIZE.key -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
         translation = s => s"${(s.toDouble * 1000).toInt}k")),
-    "spark.kryoserializer.buffer.max" -> Seq(
+    KRYO_SERIALIZER_MAX_BUFFER_SIZE.key -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
-    "spark.shuffle.file.buffer" -> Seq(
+    SHUFFLE_FILE_BUFFER_SIZE.key -> Seq(
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
     EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
@@ -671,10 +682,6 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
     IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
       AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
-    RPC_NUM_RETRIES.key -> Seq(
-      AlternateConfig("spark.akka.num.retries", "1.4")),
-    RPC_RETRY_WAIT.key -> Seq(
-      AlternateConfig("spark.akka.retry.wait", "1.4")),
     RPC_ASK_TIMEOUT.key -> Seq(
       AlternateConfig("spark.akka.askTimeout", "1.4")),
     RPC_LOOKUP_TIMEOUT.key -> Seq(
@@ -690,7 +697,8 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
     MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
-      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3"),
+      AlternateConfig("spark.maxRemoteBlockSizeFetchToMem", "3.0")),
     LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
       AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
     DRIVER_MEMORY_OVERHEAD.key -> Seq(
@@ -705,7 +713,9 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0")),
     KERBEROS_FILESYSTEMS_TO_ACCESS.key -> Seq(
       AlternateConfig("spark.yarn.access.namenodes", "2.2"),
-      AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0"))
+      AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0")),
+    "spark.kafka.consumer.cache.capacity" -> Seq(
+      AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0"))
   )
 
   /**

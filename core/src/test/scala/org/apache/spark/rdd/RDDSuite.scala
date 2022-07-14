@@ -18,14 +18,17 @@
 package org.apache.spark.rdd
 
 import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
+import java.lang.management.ManagementFactory
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.KryoException
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -33,7 +36,7 @@ import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-class RDDSuite extends SparkFunSuite with SharedSparkContext {
+class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   var tempDir: File = _
 
   override def beforeAll(): Unit = {
@@ -233,11 +236,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("aggregate") {
-    val pairs = sc.makeRDD(Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
-    type StringMap = HashMap[String, Int]
-    val emptyMap = new StringMap {
-      override def default(key: String): Int = 0
-    }
+    val pairs = sc.makeRDD(Seq(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
+    type StringMap = scala.collection.mutable.Map[String, Int]
+    val emptyMap = HashMap[String, Int]().withDefaultValue(0)
     val mergeElement: (StringMap, (String, Int)) => StringMap = (map, pair) => {
       map(pair._1) += pair._2
       map
@@ -271,6 +272,16 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     for (depth <- 1 until 10) {
       val sum = rdd.treeAggregate(Array(0))(op, op, depth)
       assert(sum(0) === -1000)
+    }
+  }
+
+  test("SPARK-36419: treeAggregate with finalAggregateOnExecutor set to true") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10)
+    def seqOp: (Long, Int) => Long = (c: Long, x: Int) => c + x
+    def combOp: (Long, Long) => Long = (c1: Long, c2: Long) => c1 + c2
+    for (depth <- 1 until 10) {
+      val sum = rdd.treeAggregate(0L, seqOp, combOp, depth, finalAggregateOnExecutor = true)
+      assert(sum === -1000)
     }
   }
 
@@ -363,7 +374,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(math.abs(partitions1(1).length - 500) < initialPartitions)
     assert(repartitioned1.collect() === input)
 
-    def testSplitPartitions(input: Seq[Int], initialPartitions: Int, finalPartitions: Int) {
+    def testSplitPartitions(input: Seq[Int], initialPartitions: Int, finalPartitions: Int): Unit = {
       val data = sc.parallelize(input, initialPartitions)
       val repartitioned = data.repartition(finalPartitions)
       assert(repartitioned.partitions.size === finalPartitions)
@@ -653,7 +664,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("top with predefined ordering") {
-    val nums = Array.range(1, 100000)
+    val nums = Seq.range(1, 100000)
     val ints = sc.makeRDD(scala.util.Random.shuffle(nums), 2)
     val topK = ints.top(5)
     assert(topK.size === 5)
@@ -857,6 +868,20 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     val partitions = repartitioned.glom().collect()
     assert(partitions(0) === Seq((0, 5), (0, 8), (2, 6)))
     assert(partitions(1) === Seq((1, 3), (3, 8), (3, 8)))
+  }
+
+  test("SPARK-32384: repartitionAndSortWithinPartitions without shuffle") {
+    val data = sc.parallelize(Seq((0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)), 2)
+
+    val partitioner = new HashPartitioner(2)
+    val agged = data.reduceByKey(_ + _, 2)
+    assert(agged.partitioner == Some(partitioner))
+
+    val sorted = agged.repartitionAndSortWithinPartitions(partitioner)
+    assert(sorted.partitioner == Some(partitioner))
+
+    assert(sorted.dependencies.nonEmpty &&
+      sorted.dependencies.forall(_.isInstanceOf[OneToOneDependency[_]]))
   }
 
   test("cartesian on empty RDD") {
@@ -1095,13 +1120,13 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     override def getPartitions: Array[Partition] = Array(new Partition {
       override def index: Int = 0
     })
-    override def getDependencies: Seq[Dependency[_]] = mutableDependencies
-    def addDependency(dep: Dependency[_]) {
+    override def getDependencies: Seq[Dependency[_]] = mutableDependencies.toSeq
+    def addDependency(dep: Dependency[_]): Unit = {
       mutableDependencies += dep
     }
   }
 
-  test("RDD.partitions() fails fast when partitions indicies are incorrect (SPARK-13021)") {
+  test("RDD.partitions() fails fast when partitions indices are incorrect (SPARK-13021)") {
     class BadRDD[T: ClassTag](prev: RDD[T]) extends RDD[T](prev) {
 
       override def compute(part: Partition, context: TaskContext): Iterator[T] = {
@@ -1174,6 +1199,31 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
         iter
       }
     }.collect()
+  }
+
+  test("SPARK-27666: Do not release lock while TaskContext already completed") {
+    val rdd = sc.parallelize(Range(0, 10), 1).cache()
+    val tid = sc.longAccumulator("threadId")
+    // validate cache
+    rdd.collect()
+    rdd.mapPartitions { iter =>
+      val t = new Thread(() => {
+        while (iter.hasNext) {
+          iter.next()
+          Thread.sleep(100)
+        }
+      })
+      t.setDaemon(false)
+      t.start()
+      tid.add(t.getId)
+      Iterator(0)
+    }.collect()
+    val tmx = ManagementFactory.getThreadMXBean
+    eventually(timeout(10.seconds))  {
+      // getThreadInfo() will return null after child thread `t` died
+      val t = tmx.getThreadInfo(tid.value)
+      assert(t == null || t.getThreadState == Thread.State.TERMINATED)
+    }
   }
 
   test("SPARK-23496: order of input partitions can result in severe skew in coalesce") {
@@ -1270,19 +1320,15 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
       val splitSize = fileSplit.getLength
       if (currentSum + splitSize < maxSize) {
         addPartition(partition, splitSize)
-        index += 1
-        if (index == partitions.size) {
-          updateGroups
-        }
       } else {
-        if (currentGroup.partitions.size == 0) {
-          addPartition(partition, splitSize)
-          index += 1
-        } else {
-          updateGroups
+        if (currentGroup.partitions.nonEmpty) {
+          updateGroups()
         }
+        addPartition(partition, splitSize)
       }
+      index += 1
     }
+    updateGroups()
     groups.toArray
   }
 }

@@ -28,11 +28,16 @@ import com.google.common.io.Files
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
+import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{DRIVER_RESOURCES_FILE, SPARK_DRIVER_PREFIX}
+import org.apache.spark.internal.config.UI.UI_REVERSE_PROXY
 import org.apache.spark.internal.config.Worker.WORKER_DRIVER_TERMINATE_TIMEOUT
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
 
 /**
@@ -47,7 +52,9 @@ private[deploy] class DriverRunner(
     val driverDesc: DriverDescription,
     val worker: RpcEndpointRef,
     val workerUrl: String,
-    val securityManager: SecurityManager)
+    val workerWebUiUrl: String,
+    val securityManager: SecurityManager,
+    val resources: Map[String, ResourceInformation] = Map.empty)
   extends Logging {
 
   @volatile private var process: Option[Process] = None
@@ -80,7 +87,7 @@ private[deploy] class DriverRunner(
   /** Starts a thread to run and manage the driver. */
   private[worker] def start() = {
     new Thread("DriverRunner for " + driverId) {
-      override def run() {
+      override def run(): Unit = {
         var shutdownHook: AnyRef = null
         try {
           shutdownHook = ShutdownHookManager.addShutdownHook { () =>
@@ -156,7 +163,6 @@ private[deploy] class DriverRunner(
         driverDesc.jarUrl,
         driverDir,
         conf,
-        securityManager,
         SparkHadoopUtil.get.newConfiguration(conf),
         System.currentTimeMillis(),
         useCache = false)
@@ -171,6 +177,7 @@ private[deploy] class DriverRunner(
   private[worker] def prepareAndRunDriver(): Int = {
     val driverDir = createWorkingDirectory()
     val localJarFilename = downloadUserJar(driverDir)
+    val resourceFileOpt = prepareResourcesFile(SPARK_DRIVER_PREFIX, resources, driverDir)
 
     def substituteVariables(argument: String): String = argument match {
       case "{{WORKER_URL}}" => workerUrl
@@ -178,9 +185,20 @@ private[deploy] class DriverRunner(
       case other => other
     }
 
+    // config resource file for driver, which would be used to load resources when driver starts up
+    val javaOpts = driverDesc.command.javaOpts ++ resourceFileOpt.map(f =>
+      Seq(s"-D${DRIVER_RESOURCES_FILE.key}=${f.getAbsolutePath}")).getOrElse(Seq.empty)
     // TODO: If we add ability to submit multiple jars they should also be added here
-    val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
-      driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
+    val builder = CommandUtils.buildProcessBuilder(driverDesc.command.copy(javaOpts = javaOpts),
+      securityManager, driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
+
+    // add WebUI driver log url to environment
+    val reverseProxy = conf.get(UI_REVERSE_PROXY)
+    val workerUrlRef = UIUtils.makeHref(reverseProxy, driverId, workerWebUiUrl)
+    builder.environment.put("SPARK_DRIVER_LOG_URL_STDOUT",
+      s"$workerUrlRef/logPage/?driverId=$driverId&logType=stdout")
+    builder.environment.put("SPARK_DRIVER_LOG_URL_STDERR",
+      s"$workerUrlRef/logPage/?driverId=$driverId&logType=stderr")
 
     runDriver(builder, driverDir, driverDesc.supervise)
   }
@@ -193,7 +211,7 @@ private[deploy] class DriverRunner(
       CommandUtils.redirectStream(process.getInputStream, stdout)
 
       val stderr = new File(baseDir, "stderr")
-      val redactedCommand = Utils.redactCommandLineArgs(conf, builder.command.asScala)
+      val redactedCommand = Utils.redactCommandLineArgs(conf, builder.command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
       val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=" * 40)
       Files.append(header, stderr, StandardCharsets.UTF_8)
@@ -254,6 +272,6 @@ private[deploy] trait ProcessBuilderLike {
 private[deploy] object ProcessBuilderLike {
   def apply(processBuilder: ProcessBuilder): ProcessBuilderLike = new ProcessBuilderLike {
     override def start(): Process = processBuilder.start()
-    override def command: Seq[String] = processBuilder.command().asScala
+    override def command: Seq[String] = processBuilder.command().asScala.toSeq
   }
 }

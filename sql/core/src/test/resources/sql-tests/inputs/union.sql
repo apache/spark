@@ -45,10 +45,24 @@ SELECT array(1, 2), 'str'
 UNION ALL
 SELECT array(1, 2, 3, NULL), 1;
 
+-- SPARK-32638: corrects references when adding aliases in WidenSetOperationTypes
+CREATE OR REPLACE TEMPORARY VIEW t3 AS VALUES (decimal(1)) tbl(v);
+SELECT t.v FROM (
+  SELECT v FROM t3
+  UNION ALL
+  SELECT v + v AS v FROM t3
+) t;
+
+SELECT SUM(t.v) FROM (
+  SELECT v FROM t3
+  UNION
+  SELECT v + v AS v FROM t3
+) t;
 
 -- Clean-up
 DROP VIEW IF EXISTS t1;
 DROP VIEW IF EXISTS t2;
+DROP VIEW IF EXISTS t3;
 DROP VIEW IF EXISTS p1;
 DROP VIEW IF EXISTS p2;
 DROP VIEW IF EXISTS p3;

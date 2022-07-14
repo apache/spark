@@ -26,7 +26,7 @@ import org.apache.spark.sql.SparkSession
  * Usage: MultiBroadcastTest [partitions] [numElem]
  */
 object MultiBroadcastTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val spark = SparkSession
       .builder
@@ -37,12 +37,12 @@ object MultiBroadcastTest {
     val num = if (args.length > 1) args(1).toInt else 1000000
 
     val arr1 = new Array[Int](num)
-    for (i <- 0 until arr1.length) {
+    for (i <- arr1.indices) {
       arr1(i) = i
     }
 
     val arr2 = new Array[Int](num)
-    for (i <- 0 until arr2.length) {
+    for (i <- arr2.indices) {
       arr2(i) = i
     }
 

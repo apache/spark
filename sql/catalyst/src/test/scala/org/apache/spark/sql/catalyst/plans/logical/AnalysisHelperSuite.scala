@@ -41,7 +41,7 @@ class AnalysisHelperSuite extends SparkFunSuite {
   test("setAnalyze is recursive") {
     val plan = Project(Nil, LocalRelation())
     plan.setAnalyzed()
-    assert(plan.find(!_.analyzed).isEmpty)
+    assert(!plan.exists(!_.analyzed))
   }
 
   test("resolveOperator runs on operators recursively") {
@@ -118,7 +118,7 @@ class AnalysisHelperSuite extends SparkFunSuite {
 
   test("do not allow transform in analyzer") {
     val plan = Project(Nil, LocalRelation())
-    // These should be OK since we are not in the analzyer
+    // These should be OK since we are not in the analyzer
     plan.transform { case p: Project => p }
     plan.transformUp { case p: Project => p }
     plan.transformDown { case p: Project => p }

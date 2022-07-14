@@ -17,6 +17,7 @@
 
 package org.apache.spark;
 
+import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.scheduler.*;
 
 /**
@@ -27,7 +28,11 @@ import org.apache.spark.scheduler.*;
  * new methods to SparkListener: forgetting to add a method will result in a compilation error (if
  * this was a concrete Scala class, default implementations of new event handlers would be inherited
  * from the SparkListener trait).
+ *
+ * Please note until Spark 3.1.0 this was missing the DevelopApi annotation, this needs to be
+ * taken into account if changing this API before a major release.
  */
+@DeveloperApi
 public class SparkFirehoseListener implements SparkListenerInterface {
 
   public void onEvent(SparkListenerEvent event) { }
@@ -125,9 +130,20 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
+  public final void onExecutorExcluded(SparkListenerExecutorExcluded executorExcluded) {
+    onEvent(executorExcluded);
+  }
+
+  @Override
   public void onExecutorBlacklistedForStage(
       SparkListenerExecutorBlacklistedForStage executorBlacklistedForStage) {
     onEvent(executorBlacklistedForStage);
+  }
+
+  @Override
+  public void onExecutorExcludedForStage(
+      SparkListenerExecutorExcludedForStage executorExcludedForStage) {
+    onEvent(executorExcludedForStage);
   }
 
   @Override
@@ -137,9 +153,21 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
+  public void onNodeExcludedForStage(
+      SparkListenerNodeExcludedForStage nodeExcludedForStage) {
+    onEvent(nodeExcludedForStage);
+  }
+
+  @Override
   public final void onExecutorUnblacklisted(
       SparkListenerExecutorUnblacklisted executorUnblacklisted) {
     onEvent(executorUnblacklisted);
+  }
+
+  @Override
+  public final void onExecutorUnexcluded(
+      SparkListenerExecutorUnexcluded executorUnexcluded) {
+    onEvent(executorUnexcluded);
   }
 
   @Override
@@ -148,8 +176,18 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
+  public final void onNodeExcluded(SparkListenerNodeExcluded nodeExcluded) {
+    onEvent(nodeExcluded);
+  }
+
+  @Override
   public final void onNodeUnblacklisted(SparkListenerNodeUnblacklisted nodeUnblacklisted) {
     onEvent(nodeUnblacklisted);
+  }
+
+  @Override
+  public final void onNodeUnexcluded(SparkListenerNodeUnexcluded nodeUnexcluded) {
+    onEvent(nodeUnexcluded);
   }
 
   @Override
@@ -160,6 +198,23 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   @Override
   public void onSpeculativeTaskSubmitted(SparkListenerSpeculativeTaskSubmitted speculativeTask) {
     onEvent(speculativeTask);
+  }
+
+  @Override
+  public void onUnschedulableTaskSetAdded(
+      SparkListenerUnschedulableTaskSetAdded unschedulableTaskSetAdded) {
+    onEvent(unschedulableTaskSetAdded);
+  }
+
+  @Override
+  public void onUnschedulableTaskSetRemoved(
+      SparkListenerUnschedulableTaskSetRemoved unschedulableTaskSetRemoved) {
+    onEvent(unschedulableTaskSetRemoved);
+  }
+
+  @Override
+  public void onResourceProfileAdded(SparkListenerResourceProfileAdded event) {
+    onEvent(event);
   }
 
   @Override

@@ -21,6 +21,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * A non-concrete data type, reserved for internal uses.
@@ -79,10 +80,18 @@ private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
 private[sql] object TypeCollection {
 
   /**
-   * Types that include numeric types and interval type. They are only used in unary_minus,
-   * unary_positive, add and subtract operations.
+   * Types that include numeric types and ANSI interval types.
    */
-  val NumericAndInterval = TypeCollection(NumericType, CalendarIntervalType)
+  val NumericAndAnsiInterval = TypeCollection(
+    NumericType,
+    DayTimeIntervalType,
+    YearMonthIntervalType)
+
+  /**
+   * Types that include numeric and ANSI interval types, and additionally the legacy interval type.
+   * They are only used in unary_minus, unary_positive, add and subtract operations.
+   */
+  val NumericAndInterval = new TypeCollection(NumericAndAnsiInterval.types :+ CalendarIntervalType)
 
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
@@ -100,7 +109,8 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
-  override private[sql] def defaultConcreteType: DataType = throw new UnsupportedOperationException
+  override private[sql] def defaultConcreteType: DataType =
+    throw QueryExecutionErrors.unsupportedOperationExceptionError()
 
   override private[sql] def simpleString: String = "any"
 
@@ -142,6 +152,8 @@ abstract class NumericType extends AtomicType {
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer a no argument constructor and thus the JVM cannot serialize the object anymore.
   private[sql] val numeric: Numeric[InternalType]
+
+  private[sql] def exactNumeric: Numeric[InternalType] = numeric
 }
 
 
@@ -203,3 +215,21 @@ private[sql] abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[InternalType]
   private[sql] val asIntegral: Integral[InternalType]
 }
+
+private[sql] object AnyTimestampType extends AbstractDataType with Serializable {
+  override private[sql] def defaultConcreteType: DataType = TimestampType
+
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampNTZType]
+
+  override private[sql] def simpleString = "(timestamp or timestamp without time zone)"
+
+  def unapply(e: Expression): Boolean = acceptsType(e.dataType)
+}
+
+private[sql] abstract class DatetimeType extends AtomicType
+
+/**
+ * The interval type which conforms to the ANSI SQL standard.
+ */
+private[sql] abstract class AnsiIntervalType extends AtomicType

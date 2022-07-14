@@ -40,7 +40,14 @@ import org.apache.spark.sql.types.{DataType, LongType}
       within each partition. The assumption is that the data frame has less than 1 billion
       partitions, and each partition has less than 8 billion records.
       The function is non-deterministic because its result depends on partition IDs.
-  """)
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       0
+  """,
+  since = "1.4.0",
+  group = "misc_funcs")
 case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
 
   /**
@@ -78,7 +85,7 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
       $countTerm++;""", isNull = FalseLiteral)
   }
 
-  override def prettyName: String = "monotonically_increasing_id"
+  override def nodeName: String = "monotonically_increasing_id"
 
   override def sql: String = s"$prettyName()"
 

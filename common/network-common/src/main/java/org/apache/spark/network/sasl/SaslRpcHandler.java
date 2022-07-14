@@ -28,10 +28,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.server.AbstractAuthRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -43,7 +42,7 @@ import org.apache.spark.network.util.TransportConf;
  * Note that the authentication process consists of multiple challenge-response pairs, each of
  * which are individual RPCs.
  */
-public class SaslRpcHandler extends RpcHandler {
+public class SaslRpcHandler extends AbstractAuthRpcHandler {
   private static final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
 
   /** Transport configuration. */
@@ -52,37 +51,28 @@ public class SaslRpcHandler extends RpcHandler {
   /** The client channel. */
   private final Channel channel;
 
-  /** RpcHandler we will delegate to for authenticated connections. */
-  private final RpcHandler delegate;
-
   /** Class which provides secret keys which are shared by server and client on a per-app basis. */
   private final SecretKeyHolder secretKeyHolder;
 
   private SparkSaslServer saslServer;
-  private boolean isComplete;
-  private boolean isAuthenticated;
 
   public SaslRpcHandler(
       TransportConf conf,
       Channel channel,
       RpcHandler delegate,
       SecretKeyHolder secretKeyHolder) {
+    super(delegate);
     this.conf = conf;
     this.channel = channel;
-    this.delegate = delegate;
     this.secretKeyHolder = secretKeyHolder;
     this.saslServer = null;
-    this.isComplete = false;
-    this.isAuthenticated = false;
   }
 
   @Override
-  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
-    if (isComplete) {
-      // Authentication complete, delegate to base handler.
-      delegate.receive(client, message, callback);
-      return;
-    }
+  public boolean doAuthChallenge(
+      TransportClient client,
+      ByteBuffer message,
+      RpcResponseCallback callback) {
     if (saslServer == null || !saslServer.isComplete()) {
       ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
       SaslMessage saslMessage;
@@ -118,53 +108,26 @@ public class SaslRpcHandler extends RpcHandler {
       if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("SASL authentication successful for channel {}", client);
         complete(true);
-        return;
+        return true;
       }
 
       logger.debug("Enabling encryption for channel {}", client);
       SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
       complete(false);
-      return;
+      return true;
     }
-  }
-
-  @Override
-  public void receive(TransportClient client, ByteBuffer message) {
-    delegate.receive(client, message);
-  }
-
-  @Override
-  public StreamCallbackWithID receiveStream(
-      TransportClient client,
-      ByteBuffer message,
-      RpcResponseCallback callback) {
-    return delegate.receiveStream(client, message, callback);
-  }
-
-  @Override
-  public StreamManager getStreamManager() {
-    return delegate.getStreamManager();
-  }
-
-  @Override
-  public void channelActive(TransportClient client) {
-    delegate.channelActive(client);
+    return false;
   }
 
   @Override
   public void channelInactive(TransportClient client) {
     try {
-      delegate.channelInactive(client);
+      super.channelInactive(client);
     } finally {
       if (saslServer != null) {
         saslServer.dispose();
       }
     }
-  }
-
-  @Override
-  public void exceptionCaught(Throwable cause, TransportClient client) {
-    delegate.exceptionCaught(cause, client);
   }
 
   private void complete(boolean dispose) {
@@ -177,7 +140,6 @@ public class SaslRpcHandler extends RpcHandler {
     }
 
     saslServer = null;
-    isComplete = true;
   }
 
 }

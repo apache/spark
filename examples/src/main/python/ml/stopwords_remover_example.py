@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml.feature import StopWordsRemover
 # $example off$

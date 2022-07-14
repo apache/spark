@@ -64,6 +64,9 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
               if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
+                // kill the task so that it will not become zombie task
+                scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
+                  "Tasks result size has exceeded maxResultSize"))
                 return
               }
               // deserialize "value" without holding any lock so that it won't block other threads.
@@ -75,9 +78,12 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               if (!taskSetManager.canFetchMoreResults(size)) {
                 // dropped by executor if size is larger than maxResultSize
                 sparkEnv.blockManager.master.removeBlock(blockId)
+                // kill the task so that it will not become zombie task
+                scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
+                  "Tasks result size has exceeded maxResultSize"))
                 return
               }
-              logDebug("Fetching indirect task result for TID %s".format(tid))
+              logDebug(s"Fetching indirect task result for ${taskSetManager.taskName(tid)}")
               scheduler.handleTaskGettingResult(taskSetManager, tid)
               val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
               if (serializedTaskResult.isEmpty) {
@@ -125,7 +131,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   }
 
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
-    serializedData: ByteBuffer) {
+    serializedData: ByteBuffer): Unit = {
     var reason : TaskFailedReason = UnknownReason
     try {
       getTaskResultExecutor.execute(() => Utils.logUncaughtExceptions {
@@ -155,7 +161,16 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     }
   }
 
-  def stop() {
+  // This method calls `TaskSchedulerImpl.handlePartitionCompleted` asynchronously. We do not want
+  // DAGScheduler to call `TaskSchedulerImpl.handlePartitionCompleted` directly, as it's
+  // synchronized and may hurt the throughput of the scheduler.
+  def enqueuePartitionCompletionNotification(stageId: Int, partitionId: Int): Unit = {
+    getTaskResultExecutor.execute(() => Utils.logUncaughtExceptions {
+      scheduler.handlePartitionCompleted(stageId, partitionId)
+    })
+  }
+
+  def stop(): Unit = {
     getTaskResultExecutor.shutdownNow()
   }
 }

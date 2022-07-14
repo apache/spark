@@ -132,7 +132,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return Platform.getByte(null, nulls + rowId) == 1;
+    return isAllNull || Platform.getByte(null, nulls + rowId) == 1;
   }
 
   //
@@ -150,6 +150,18 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i) {
       Platform.putByte(null, data + rowId + i, v);
     }
+  }
+
+  @Override
+  public void putBooleans(int rowId, byte src) {
+    Platform.putByte(null, data + rowId, (byte)(src & 1));
+    Platform.putByte(null, data + rowId + 1, (byte)(src >>> 1 & 1));
+    Platform.putByte(null, data + rowId + 2, (byte)(src >>> 2 & 1));
+    Platform.putByte(null, data + rowId + 3, (byte)(src >>> 3 & 1));
+    Platform.putByte(null, data + rowId + 4, (byte)(src >>> 4 & 1));
+    Platform.putByte(null, data + rowId + 5, (byte)(src >>> 5 & 1));
+    Platform.putByte(null, data + rowId + 6, (byte)(src >>> 6 & 1));
+    Platform.putByte(null, data + rowId + 7, (byte)(src >>> 7 & 1));
   }
 
   @Override
@@ -207,6 +219,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
     return UTF8String.fromAddress(null, data + rowId, count);
+  }
+
+  @Override
+  public ByteBuffer getByteBuffer(int rowId, int count) {
+    return ByteBuffer.wrap(getBytes(rowId, count));
   }
 
   //
@@ -321,6 +338,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
    * This should only be called when the ColumnVector is dictionaryIds.
    * We have this separate method for dictionaryIds as per SPARK-16928.
    */
+  @Override
   public int getDictId(int rowId) {
     assert(dictionary == null)
             : "A ColumnVector dictionary should not have a dictionary for itself.";
@@ -413,9 +431,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+        null, data + rowId * 4L, count * 4L);
+  }
+
+  @Override
+  public void putFloatsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
-      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-          null, data + rowId * 4L, count * 4L);
+      putFloats(rowId, count, src, srcIndex);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       long offset = data + 4L * rowId;
@@ -468,9 +491,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 8L, count * 8L);
+  }
+
+  @Override
+  public void putDoublesLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
-      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-        null, data + rowId * 8L, count * 8L);
+      putDoubles(rowId, count, src, srcIndex);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       long offset = data + 8L * rowId;
@@ -540,10 +568,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     } else if (type instanceof ShortType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 2L, newCapacity * 2L);
     } else if (type instanceof IntegerType || type instanceof FloatType ||
-        type instanceof DateType || DecimalType.is32BitDecimalType(type)) {
+        type instanceof DateType || DecimalType.is32BitDecimalType(type) ||
+        type instanceof YearMonthIntervalType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
     } else if (type instanceof LongType || type instanceof DoubleType ||
-        DecimalType.is64BitDecimalType(type) || type instanceof TimestampType) {
+        DecimalType.is64BitDecimalType(type) || type instanceof TimestampType ||
+        type instanceof TimestampNTZType || type instanceof DayTimeIntervalType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
     } else if (childColumns != null) {
       // Nothing to store.

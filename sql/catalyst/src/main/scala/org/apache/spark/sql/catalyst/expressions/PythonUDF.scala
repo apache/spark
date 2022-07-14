@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types.DataType
 
@@ -27,7 +28,8 @@ import org.apache.spark.sql.types.DataType
 object PythonUDF {
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
-    PythonEvalType.SQL_SCALAR_PANDAS_UDF
+    PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
@@ -45,7 +47,8 @@ object PythonUDF {
 }
 
 /**
- * A serialized version of a Python lambda function.
+ * A serialized version of a Python lambda function. This is a special expression, which needs a
+ * dedicated physical operator to execute it, and thus can't be pushed down to data sources.
  */
 case class PythonUDF(
     name: String,
@@ -59,10 +62,39 @@ case class PythonUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  override def toString: String = s"$name(${children.mkString(", ")})"
+  override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
 
   override def nullable: Boolean = true
+
+  override lazy val preCanonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.preCanonicalized)
+    // `resultId` can be seen as cosmetic variation in PythonUDF, as it doesn't affect the result.
+    this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDF =
+    copy(children = newChildren)
+}
+
+/**
+ * A place holder used when printing expressions without debugging information such as the
+ * result id.
+ */
+case class PrettyPythonUDF(
+    name: String,
+    dataType: DataType,
+    children: Seq[Expression])
+  extends Expression with Unevaluable with NonSQLExpression {
+
+  override def toString: String = s"$name(${children.mkString(", ")})"
+
+  override def nullable: Boolean = true
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): PrettyPythonUDF = copy(children = newChildren)
 }

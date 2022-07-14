@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SortOrder}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 
 /**
  * Physical plan node for scanning a micro-batch of data from a data source.
@@ -31,7 +31,9 @@ case class MicroBatchScanExec(
     @transient scan: Scan,
     @transient stream: MicroBatchStream,
     @transient start: Offset,
-    @transient end: Offset) extends DataSourceV2ScanExecBase {
+    @transient end: Offset,
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    ordering: Option[Seq[SortOrder]] = None) extends DataSourceV2ScanExecBase {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
@@ -41,11 +43,11 @@ case class MicroBatchScanExec(
 
   override def hashCode(): Int = stream.hashCode()
 
-  override lazy val partitions: Seq[InputPartition] = stream.planInputPartitions(start, end)
+  override lazy val inputPartitions: Seq[InputPartition] = stream.planInputPartitions(start, end)
 
   override lazy val readerFactory: PartitionReaderFactory = stream.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
+    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar, customMetrics)
   }
 }

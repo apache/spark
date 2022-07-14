@@ -56,7 +56,6 @@ public class JavaStreamingLinearRegressionSuite {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void javaAPI() {
     List<LabeledPoint> trainingBatch = Arrays.asList(
       new LabeledPoint(1.0, Vectors.dense(1.0)),

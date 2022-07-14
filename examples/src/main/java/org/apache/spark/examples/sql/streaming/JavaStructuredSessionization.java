@@ -16,22 +16,15 @@
  */
 package org.apache.spark.examples.sql.streaming;
 
-import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.MapFunction;
-import org.apache.spark.api.java.function.MapGroupsWithStateFunction;
 import org.apache.spark.sql.*;
-import org.apache.spark.sql.streaming.GroupState;
-import org.apache.spark.sql.streaming.GroupStateTimeout;
 import org.apache.spark.sql.streaming.StreamingQuery;
 
-import java.io.Serializable;
-import java.sql.Timestamp;
-import java.util.*;
+import static org.apache.spark.sql.functions.*;
 
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network.
  * <p>
- * Usage: JavaStructuredNetworkWordCount <hostname> <port>
+ * Usage: JavaStructuredSessionization <hostname> <port>
  * <hostname> and <port> describe the TCP server that Structured Streaming
  * would connect to receive data.
  * <p>
@@ -66,86 +59,20 @@ public final class JavaStructuredSessionization {
         .option("includeTimestamp", true)
         .load();
 
-    FlatMapFunction<LineWithTimestamp, Event> linesToEvents =
-      new FlatMapFunction<LineWithTimestamp, Event>() {
-        @Override
-        public Iterator<Event> call(LineWithTimestamp lineWithTimestamp) {
-          ArrayList<Event> eventList = new ArrayList<Event>();
-          for (String word : lineWithTimestamp.getLine().split(" ")) {
-            eventList.add(new Event(word, lineWithTimestamp.getTimestamp()));
-          }
-          return eventList.iterator();
-        }
-      };
+    // Split the lines into words, retaining timestamps
+    // split() splits each line into an array, and explode() turns the array into multiple rows
+    // treat words as sessionId of events
+    Dataset<Row> events = lines
+        .selectExpr("explode(split(value, ' ')) AS sessionId", "timestamp AS eventTime");
 
-    // Split the lines into words, treat words as sessionId of events
-    Dataset<Event> events = lines
-        .withColumnRenamed("value", "line")
-        .as(Encoders.bean(LineWithTimestamp.class))
-        .flatMap(linesToEvents, Encoders.bean(Event.class));
-
-    // Sessionize the events. Track number of events, start and end timestamps of session, and
+    // Sessionize the events. Track number of events, start and end timestamps of session,
     // and report session updates.
-    //
-    // Step 1: Define the state update function
-    MapGroupsWithStateFunction<String, Event, SessionInfo, SessionUpdate> stateUpdateFunc =
-      new MapGroupsWithStateFunction<String, Event, SessionInfo, SessionUpdate>() {
-        @Override public SessionUpdate call(
-            String sessionId, Iterator<Event> events, GroupState<SessionInfo> state) {
-          // If timed out, then remove session and send final update
-          if (state.hasTimedOut()) {
-            SessionUpdate finalUpdate = new SessionUpdate(
-                sessionId, state.get().calculateDuration(), state.get().getNumEvents(), true);
-            state.remove();
-            return finalUpdate;
-
-          } else {
-            // Find max and min timestamps in events
-            long maxTimestampMs = Long.MIN_VALUE;
-            long minTimestampMs = Long.MAX_VALUE;
-            int numNewEvents = 0;
-            while (events.hasNext()) {
-              Event e = events.next();
-              long timestampMs = e.getTimestamp().getTime();
-              maxTimestampMs = Math.max(timestampMs, maxTimestampMs);
-              minTimestampMs = Math.min(timestampMs, minTimestampMs);
-              numNewEvents += 1;
-            }
-            SessionInfo updatedSession = new SessionInfo();
-
-            // Update start and end timestamps in session
-            if (state.exists()) {
-              SessionInfo oldSession = state.get();
-              updatedSession.setNumEvents(oldSession.numEvents + numNewEvents);
-              updatedSession.setStartTimestampMs(oldSession.startTimestampMs);
-              updatedSession.setEndTimestampMs(Math.max(oldSession.endTimestampMs, maxTimestampMs));
-            } else {
-              updatedSession.setNumEvents(numNewEvents);
-              updatedSession.setStartTimestampMs(minTimestampMs);
-              updatedSession.setEndTimestampMs(maxTimestampMs);
-            }
-            state.update(updatedSession);
-            // Set timeout such that the session will be expired if no data received for 10 seconds
-            state.setTimeoutDuration("10 seconds");
-            return new SessionUpdate(
-                sessionId, state.get().calculateDuration(), state.get().getNumEvents(), false);
-          }
-        }
-      };
-
-    // Step 2: Apply the state update function to the events streaming Dataset grouped by sessionId
-    Dataset<SessionUpdate> sessionUpdates = events
-        .groupByKey(
-            new MapFunction<Event, String>() {
-              @Override public String call(Event event) {
-                return event.getSessionId();
-              }
-            }, Encoders.STRING())
-        .mapGroupsWithState(
-            stateUpdateFunc,
-            Encoders.bean(SessionInfo.class),
-            Encoders.bean(SessionUpdate.class),
-            GroupStateTimeout.ProcessingTimeTimeout());
+    Dataset<Row> sessionUpdates = events
+        .groupBy(session_window(col("eventTime"), "10 seconds").as("session"), col("sessionId"))
+        .agg(count("*").as("numEvents"))
+        .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
+            "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
+            "numEvents");
 
     // Start running the query that prints the session updates to the console
     StreamingQuery query = sessionUpdates
@@ -155,97 +82,5 @@ public final class JavaStructuredSessionization {
         .start();
 
     query.awaitTermination();
-  }
-
-  /**
-   * User-defined data type representing the raw lines with timestamps.
-   */
-  public static class LineWithTimestamp implements Serializable {
-    private String line;
-    private Timestamp timestamp;
-
-    public Timestamp getTimestamp() { return timestamp; }
-    public void setTimestamp(Timestamp timestamp) { this.timestamp = timestamp; }
-
-    public String getLine() { return line; }
-    public void setLine(String sessionId) { this.line = sessionId; }
-  }
-
-  /**
-   * User-defined data type representing the input events
-   */
-  public static class Event implements Serializable {
-    private String sessionId;
-    private Timestamp timestamp;
-
-    public Event() { }
-    public Event(String sessionId, Timestamp timestamp) {
-      this.sessionId = sessionId;
-      this.timestamp = timestamp;
-    }
-
-    public Timestamp getTimestamp() { return timestamp; }
-    public void setTimestamp(Timestamp timestamp) { this.timestamp = timestamp; }
-
-    public String getSessionId() { return sessionId; }
-    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
-  }
-
-  /**
-   * User-defined data type for storing a session information as state in mapGroupsWithState.
-   */
-  public static class SessionInfo implements Serializable {
-    private int numEvents = 0;
-    private long startTimestampMs = -1;
-    private long endTimestampMs = -1;
-
-    public int getNumEvents() { return numEvents; }
-    public void setNumEvents(int numEvents) { this.numEvents = numEvents; }
-
-    public long getStartTimestampMs() { return startTimestampMs; }
-    public void setStartTimestampMs(long startTimestampMs) {
-      this.startTimestampMs = startTimestampMs;
-    }
-
-    public long getEndTimestampMs() { return endTimestampMs; }
-    public void setEndTimestampMs(long endTimestampMs) { this.endTimestampMs = endTimestampMs; }
-
-    public long calculateDuration() { return endTimestampMs - startTimestampMs; }
-
-    @Override public String toString() {
-      return "SessionInfo(numEvents = " + numEvents +
-          ", timestamps = " + startTimestampMs + " to " + endTimestampMs + ")";
-    }
-  }
-
-  /**
-   * User-defined data type representing the update information returned by mapGroupsWithState.
-   */
-  public static class SessionUpdate implements Serializable {
-    private String id;
-    private long durationMs;
-    private int numEvents;
-    private boolean expired;
-
-    public SessionUpdate() { }
-
-    public SessionUpdate(String id, long durationMs, int numEvents, boolean expired) {
-      this.id = id;
-      this.durationMs = durationMs;
-      this.numEvents = numEvents;
-      this.expired = expired;
-    }
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-
-    public long getDurationMs() { return durationMs; }
-    public void setDurationMs(long durationMs) { this.durationMs = durationMs; }
-
-    public int getNumEvents() { return numEvents; }
-    public void setNumEvents(int numEvents) { this.numEvents = numEvents; }
-
-    public boolean isExpired() { return expired; }
-    public void setExpired(boolean expired) { this.expired = expired; }
   }
 }

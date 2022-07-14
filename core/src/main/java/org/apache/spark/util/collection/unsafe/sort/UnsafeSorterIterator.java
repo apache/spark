@@ -34,4 +34,6 @@ public abstract class UnsafeSorterIterator {
   public abstract long getKeyPrefix();
 
   public abstract int getNumRecords();
+
+  public abstract long getCurrentPageNumber();
 }

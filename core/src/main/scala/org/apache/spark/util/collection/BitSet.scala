@@ -150,12 +150,12 @@ class BitSet(numBits: Int) extends Serializable {
    * Sets the bit at the specified index to true.
    * @param index the bit index
    */
-  def set(index: Int) {
+  def set(index: Int): Unit = {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) |= bitmask        // div by 64 and mask
   }
 
-  def unset(index: Int) {
+  def unset(index: Int): Unit = {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) &= ~bitmask        // div by 64 and mask
   }
@@ -234,6 +234,18 @@ class BitSet(numBits: Int) extends Serializable {
     }
 
     -1
+  }
+
+  /**
+   * Compute bit-wise union with another BitSet and overwrite bits in this BitSet with the result.
+   */
+  def union(other: BitSet): Unit = {
+    require(this.numWords <= other.numWords)
+    var ind = 0
+    while( ind < this.numWords ) {
+      this.words(ind) = this.words(ind) | other.words(ind)
+      ind += 1
+    }
   }
 
   /** Return the number of longs it would take to hold numBits. */

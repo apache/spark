@@ -21,11 +21,12 @@ import java.{lang => jl}
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -57,13 +58,13 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(val f: Double => Double, name: String)
-  extends UnaryExpression with Serializable with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
-  override def toString: String = s"$name($child)"
-  override def prettyName: String = name
+  override def toString: String = s"$prettyName($child)"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
 
   protected override def nullSafeEval(input: Any): Any = {
     f(input.asInstanceOf[Double])
@@ -96,7 +97,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = java.lang.Math.${funcName}($c);
+          ${ev.value} = java.lang.StrictMath.${funcName}($c);
         }
       """
     )
@@ -111,13 +112,13 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
-  override def toString: String = s"$name($left, $right)"
+  override def toString: String = s"$prettyName($left, $right)"
 
-  override def prettyName: String = name
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
 
   override def dataType: DataType = DoubleType
 
@@ -147,7 +148,9 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
     Examples:
       > SELECT _FUNC_();
        2.718281828459045
-  """)
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
 case class EulerNumber() extends LeafMathExpression(math.E, "E")
 
 /**
@@ -160,7 +163,9 @@ case class EulerNumber() extends LeafMathExpression(math.E, "E")
     Examples:
       > SELECT _FUNC_();
        3.141592653589793
-  """)
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
 case class Pi() extends LeafMathExpression(math.Pi, "PI")
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -180,8 +185,12 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
        0.0
       > SELECT _FUNC_(2);
        NaN
-  """)
-case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS") {
+  override protected def withNewChildInternal(newChild: Expression): Acos = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -194,8 +203,12 @@ case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS"
        0.0
       > SELECT _FUNC_(2);
        NaN
-  """)
-case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN") {
+  override protected def withNewChildInternal(newChild: Expression): Asin = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -206,8 +219,12 @@ case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN"
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
-case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN") {
+  override protected def withNewChildInternal(newChild: Expression): Atan = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the cube root of `expr`.",
@@ -215,18 +232,13 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
     Examples:
       > SELECT _FUNC_(27.0);
        3.0
-  """)
-case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT") {
+  override protected def withNewChildInternal(newChild: Expression): Cbrt = copy(child = newChild)
+}
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the smallest integer not smaller than `expr`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(-0.1);
-       0
-      > SELECT _FUNC_(5);
-       5
-  """)
 case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -253,6 +265,67 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
+}
+
+trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
+  protected def buildWithOneParam(param: Expression): Expression
+  protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      buildWithOneParam(expressions.head)
+    } else if (numArgs == 2) {
+      val scale = expressions(1)
+      if (!(scale.foldable && scale.dataType == IntegerType)) {
+        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+      }
+      if (scale.eval() == null) {
+        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+      }
+      buildWithTwoParams(expressions(0), scale)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(-0.1);
+       0
+      > SELECT _FUNC_(5);
+       5
+      > SELECT _FUNC_(3.1411, 3);
+       3.142
+      > SELECT _FUNC_(3.1411, -3);
+       1000
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+object CeilExpressionBuilder extends CeilFloorExpressionBuilderBase {
+  override protected def buildWithOneParam(param: Expression): Expression = Ceil(param)
+
+  override protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression =
+    RoundCeil(param1, param2)
+}
+
+case class RoundCeil(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING") {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
+
+  override def nodeName: String = "ceil"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RoundCeil =
+    copy(child = newLeft, scale = newRight)
 }
 
 @ExpressionDescription(
@@ -268,8 +341,35 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     Examples:
       > SELECT _FUNC_(0);
        1.0
-  """)
-case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS") {
+  override protected def withNewChildInternal(newChild: Expression): Cos = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the secant of `expr`, as if computed by `1/java.lang.Math.cos`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       1.0
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class Sec(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.cos(x), "SEC") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.cos($c);")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Sec = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -284,8 +384,34 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
     Examples:
       > SELECT _FUNC_(0);
        1.0
-  """)
-case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH") {
+  override protected def withNewChildInternal(newChild: Expression): Cosh = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns inverse hyperbolic cosine of `expr`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1);
+       0.0
+      > SELECT _FUNC_(0);
+       NaN
+  """,
+  since = "3.0.0",
+  group = "math_funcs")
+case class Acosh(child: Expression)
+  extends UnaryMathExpression((x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev,
+      c => s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
+}
 
 /**
  * Convert a num from one base to another
@@ -302,18 +428,22 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
        4
       > SELECT _FUNC_(-10, 16, -10);
        -16
-  """)
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
+  override def first: Expression = numExpr
+  override def second: Expression = fromBaseExpr
+  override def third: Expression = toBaseExpr
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
   override def dataType: DataType = StringType
   override def nullable: Boolean = true
 
   override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
     NumberConverter.convert(
-      num.asInstanceOf[UTF8String].getBytes,
+      num.asInstanceOf[UTF8String].trim().getBytes,
       fromBase.asInstanceOf[Int],
       toBase.asInstanceOf[Int])
   }
@@ -322,13 +452,17 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
-       ${ev.value} = $numconv.convert($num.getBytes(), $from, $to);
+       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to);
        if (${ev.value} == null) {
          ${ev.isNull} = true;
        }
        """
     )
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+    copy(numExpr = newFirst, fromBaseExpr = newSecond, toBaseExpr = newThird)
 }
 
 @ExpressionDescription(
@@ -337,8 +471,15 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
     Examples:
       > SELECT _FUNC_(0);
        1.0
-  """)
-case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "EXP") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.exp($c)")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Exp = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns exp(`expr`) - 1.",
@@ -346,18 +487,16 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
-case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1, "EXPM1") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.expm1($c)")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Expm1 = copy(child = newChild)
+}
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(-0.1);
-       -1
-      > SELECT _FUNC_(5);
-       5
-  """)
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -383,7 +522,45 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
-  }
+ }
+ override protected def withNewChildInternal(newChild: Expression): Floor =
+  copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = " _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(-0.1);
+       -1
+      > SELECT _FUNC_(5);
+       5
+      > SELECT _FUNC_(3.1411, 3);
+       3.141
+      > SELECT _FUNC_(3.1411, -3);
+       0
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+object FloorExpressionBuilder extends CeilFloorExpressionBuilderBase {
+  override protected def buildWithOneParam(param: Expression): Expression = Floor(param)
+
+  override protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression =
+    RoundFloor(param1, param2)
+}
+
+case class RoundFloor(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR") {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
+
+  override def nodeName: String = "floor"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RoundFloor =
+    copy(child = newLeft, scale = newRight)
 }
 
 object Factorial {
@@ -423,8 +600,11 @@ object Factorial {
     Examples:
       > SELECT _FUNC_(5);
        120
-  """)
-case class Factorial(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
+case class Factorial(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
@@ -454,6 +634,9 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
       """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Factorial =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -462,8 +645,13 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
     Examples:
       > SELECT _FUNC_(1);
        0.0
-  """)
-case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG") {
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("ln")
+  override protected def withNewChildInternal(newChild: Expression): Log = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 2.",
@@ -471,20 +659,23 @@ case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
     Examples:
       > SELECT _FUNC_(2);
        1.0
-  """)
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
 case class Log2(child: Expression)
-  extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  extends UnaryLogExpression((x: Double) => StrictMath.log(x) / StrictMath.log(2), "LOG2") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = java.lang.Math.log($c) / java.lang.Math.log(2);
+          ${ev.value} = java.lang.StrictMath.log($c) / java.lang.StrictMath.log(2);
         }
       """
     )
   }
+  override protected def withNewChildInternal(newChild: Expression): Log2 = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -493,8 +684,12 @@ case class Log2(child: Expression)
     Examples:
       > SELECT _FUNC_(10);
        1.0
-  """)
-case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG10")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10, "LOG10") {
+  override protected def withNewChildInternal(newChild: Expression): Log10 = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns log(1 + `expr`).",
@@ -502,9 +697,12 @@ case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG1
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
-case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1P") {
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p, "LOG1P") {
   protected override val yAsymptote: Double = -1.0
+  override protected def withNewChildInternal(newChild: Expression): Log1p = copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -514,10 +712,14 @@ case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1
     Examples:
       > SELECT _FUNC_(12.3456);
        12.0
-  """)
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("rint")
+  override protected def withNewChildInternal(newChild: Expression): Rint = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -526,8 +728,19 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
     Examples:
       > SELECT _FUNC_(40);
        1.0
-  """)
-case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
+      > SELECT _FUNC_(INTERVAL -'100' YEAR);
+       -1.0
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM") {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType))
+  protected override def nullSafeEval(input: Any): Any = {
+    f(input.asInstanceOf[Number].doubleValue())
+  }
+  override protected def withNewChildInternal(newChild: Expression): Signum = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sine of `expr`, as if computed by `java.lang.Math._FUNC_`.",
@@ -539,8 +752,35 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
-case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN") {
+  override protected def withNewChildInternal(newChild: Expression): Sin = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the cosecant of `expr`, as if computed by `1/java.lang.Math.sin`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1);
+       1.1883951057781212
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class Csc(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.sin(x), "CSC") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.sin($c);")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Csc = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -554,8 +794,35 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
-case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH") {
+  override protected def withNewChildInternal(newChild: Expression): Sinh = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns inverse hyperbolic sine of `expr`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       0.0
+  """,
+  since = "3.0.0",
+  group = "math_funcs")
+case class Asinh(child: Expression)
+  extends UnaryMathExpression((x: Double) => x match {
+    case Double.NegativeInfinity => Double.NegativeInfinity
+    case _ => StrictMath.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c =>
+      s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
+      s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Asinh = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the square root of `expr`.",
@@ -563,8 +830,12 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
     Examples:
       > SELECT _FUNC_(4);
        2.0
-  """)
-case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
+  """,
+  since = "1.1.1",
+  group = "math_funcs")
+case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT") {
+  override protected def withNewChildInternal(newChild: Expression): Sqrt = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -578,12 +849,16 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
-case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN") {
+  override protected def withNewChildInternal(newChild: Expression): Tan = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the cotangent of `expr`, as if computed by `1/java.lang.Math._FUNC_`.
+    _FUNC_(expr) - Returns the cotangent of `expr`, as if computed by `1/java.lang.Math.tan`.
   """,
   arguments = """
     Arguments:
@@ -593,12 +868,15 @@ case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
     Examples:
       > SELECT _FUNC_(1);
        0.6420926159343306
-  """)
+  """,
+  since = "2.3.0",
+  group = "math_funcs")
 case class Cot(child: Expression)
   extends UnaryMathExpression((x: Double) => 1 / math.tan(x), "COT") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.tan($c);")
   }
+  override protected def withNewChildInternal(newChild: Expression): Cot = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -614,8 +892,36 @@ case class Cot(child: Expression)
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
-case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
+case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH") {
+  override protected def withNewChildInternal(newChild: Expression): Tanh = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns inverse hyperbolic tangent of `expr`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       0.0
+      > SELECT _FUNC_(2);
+       NaN
+  """,
+  since = "3.0.0",
+  group = "math_funcs")
+case class Atanh(child: Expression)
+  // SPARK-28519: more accurate express for 1/2 * ln((1 + x) / (1 - x))
+  extends UnaryMathExpression((x: Double) =>
+    0.5 * (StrictMath.log1p(x) - StrictMath.log1p(-x)), "ATANH") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev,
+      c => s"0.5 * (java.lang.StrictMath.log1p($c) - java.lang.StrictMath.log1p(- $c))")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Atanh = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Converts radians to degrees.",
@@ -627,9 +933,13 @@ case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH"
     Examples:
       > SELECT _FUNC_(3.141592653589793);
        180.0
-  """)
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
 case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES") {
   override def funcName: String = "toDegrees"
+  override protected def withNewChildInternal(newChild: Expression): ToDegrees =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -642,9 +952,13 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
     Examples:
       > SELECT _FUNC_(180);
        3.141592653589793
-  """)
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
 case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
   override def funcName: String = "toRadians"
+  override protected def withNewChildInternal(newChild: Expression): ToRadians =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -658,10 +972,12 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
        1111111111111111111111111111111111111111111111111111111111110011
       > SELECT _FUNC_(13.3);
        1101
-  """)
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Bin(child: Expression)
-  extends UnaryExpression with Serializable with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
@@ -673,6 +989,8 @@ case class Bin(child: Expression)
     defineCodeGen(ctx, ev, (c) =>
       s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Bin = copy(child = newChild)
 }
 
 object Hex {
@@ -759,8 +1077,11 @@ object Hex {
        11
       > SELECT _FUNC_('Spark SQL');
        537061726B2053514C
-  """)
-case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
+case class Hex(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(LongType, BinaryType, StringType))
@@ -782,6 +1103,8 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
       })
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Hex = copy(child = newChild)
 }
 
 /**
@@ -794,8 +1117,11 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
     Examples:
       > SELECT decode(_FUNC_('537061726B2053514C'), 'UTF-8');
        Spark SQL
-  """)
-case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
+case class Unhex(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
@@ -814,6 +1140,8 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
        """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Unhex = copy(child = newChild)
 }
 
 
@@ -838,7 +1166,9 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
     Examples:
       > SELECT _FUNC_(0, 0);
        0.0
-  """)
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
@@ -850,6 +1180,9 @@ case class Atan2(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -858,12 +1191,16 @@ case class Atan2(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(2, 3);
        8.0
-  """)
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
 case class Pow(left: Expression, right: Expression)
-  extends BinaryMathExpression(math.pow, "POWER") {
+  extends BinaryMathExpression(StrictMath.pow, "POWER") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.StrictMath.pow($c1, $c2)")
   }
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 
@@ -879,9 +1216,11 @@ case class Pow(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(2, 1);
        4
-  """)
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
 case class ShiftLeft(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -898,6 +1237,9 @@ case class ShiftLeft(left: Expression, right: Expression)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left << $right")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ShiftLeft = copy(left = newLeft, right = newRight)
 }
 
 
@@ -913,9 +1255,11 @@ case class ShiftLeft(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(4, 1);
        2
-  """)
+  """,
+  since = "1.5.0",
+  group = "bitwise_funcs")
 case class ShiftRight(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -932,6 +1276,9 @@ case class ShiftRight(left: Expression, right: Expression)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >> $right")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ShiftRight = copy(left = newLeft, right = newRight)
 }
 
 
@@ -947,9 +1294,11 @@ case class ShiftRight(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(4, 1);
        2
-  """)
+  """,
+  since = "1.5.0",
+  group = "bitwise_funcs")
 case class ShiftRightUnsigned(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -966,6 +1315,10 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >>> $right")
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ShiftRightUnsigned =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -974,9 +1327,14 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(3, 4);
        5.0
-  """)
+  """,
+  since = "1.4.0",
+  group = "math_funcs")
 case class Hypot(left: Expression, right: Expression)
-  extends BinaryMathExpression(math.hypot, "HYPOT")
+  extends BinaryMathExpression(math.hypot, "HYPOT") {
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Hypot =
+    copy(left = newLeft, right = newRight)
+}
 
 
 /**
@@ -991,9 +1349,11 @@ case class Hypot(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(10, 100);
        2.0
-  """)
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
 case class Logarithm(left: Expression, right: Expression)
-  extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+  extends BinaryMathExpression((c1, c2) => StrictMath.log(c2) / StrictMath.log(c1), "LOG") {
 
   /**
    * Natural log, i.e. using e as the base.
@@ -1008,7 +1368,7 @@ case class Logarithm(left: Expression, right: Expression)
     val dLeft = input1.asInstanceOf[Double]
     val dRight = input2.asInstanceOf[Double]
     // Unlike Hive, we support Log base in (0.0, 1.0]
-    if (dLeft <= 0.0 || dRight <= 0.0) null else math.log(dRight) / math.log(dLeft)
+    if (dLeft <= 0.0 || dRight <= 0.0) null else StrictMath.log(dRight) / StrictMath.log(dLeft)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1018,7 +1378,7 @@ case class Logarithm(left: Expression, right: Expression)
           if ($c2 <= 0.0) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = java.lang.Math.log($c2);
+            ${ev.value} = java.lang.StrictMath.log($c2);
           }
         """)
     } else {
@@ -1027,11 +1387,14 @@ case class Logarithm(left: Expression, right: Expression)
           if ($c1 <= 0.0 || $c2 <= 0.0) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
+            ${ev.value} = java.lang.StrictMath.log($c2) / java.lang.StrictMath.log($c1);
           }
         """)
     }
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Logarithm = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1062,9 +1425,21 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def foldable: Boolean = child.foldable
 
   override lazy val dataType: DataType = child.dataType match {
-    // if the new scale is bigger which means we are scaling up,
-    // keep the original scale as `Decimal` does
-    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+    case DecimalType.Fixed(p, s) =>
+      // After rounding we may need one more digit in the integral part,
+      // e.g. `ceil(9.9, 0)` -> `10`, `ceil(99, -1)` -> `100`.
+      val integralLeastNumDigits = p - s + 1
+      if (_scale < 0) {
+        // negative scale means we need to adjust `-scale` number of digits before the decimal
+        // point, which means we need at lease `-scale + 1` digits (after rounding).
+        val newPrecision = math.max(integralLeastNumDigits, -_scale + 1)
+        // We have to accept the risk of overflow as we can't exceed the max precision.
+        DecimalType(math.min(newPrecision, DecimalType.MAX_PRECISION), 0)
+      } else {
+        val newScale = math.min(s, _scale)
+        // We have to accept the risk of overflow as we can't exceed the max precision.
+        DecimalType(math.min(integralLeastNumDigits + newScale, 38), newScale)
+      }
     case t => t
   }
 
@@ -1086,7 +1461,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
   // avoid unnecessary `child` evaluation in both codegen and non-codegen eval
   // by checking if scaleV == null as well.
   private lazy val scaleV: Any = scale.eval(EmptyRow)
-  private lazy val _scale: Int = scaleV.asInstanceOf[Int]
+  protected lazy val _scale: Int = scaleV.asInstanceOf[Int]
 
   override def eval(input: InternalRow): Any = {
     if (scaleV == null) { // if scale is null, no need to eval its child at all
@@ -1104,9 +1479,14 @@ abstract class RoundBase(child: Expression, scale: Expression,
   // not overriding since _scale is a constant int at runtime
   def nullSafeEval(input1: Any): Any = {
     dataType match {
-      case DecimalType.Fixed(_, s) =>
+      case DecimalType.Fixed(p, s) =>
         val decimal = input1.asInstanceOf[Decimal]
-        decimal.toPrecision(decimal.precision, s, mode)
+        if (_scale >= 0) {
+          // Overflow cannot happen, so no need to control nullOnOverflow
+          decimal.toPrecision(decimal.precision, s, mode)
+        } else {
+          Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
+        }
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType =>
@@ -1136,10 +1516,18 @@ abstract class RoundBase(child: Expression, scale: Expression,
     val ce = child.genCode(ctx)
 
     val evaluationCode = dataType match {
-      case DecimalType.Fixed(_, s) =>
-        s"""
-        ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s, Decimal.$modeStr());
-        ${ev.isNull} = ${ev.value} == null;"""
+      case DecimalType.Fixed(p, s) =>
+        if (_scale >= 0) {
+          s"""
+            ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
+            Decimal.$modeStr(), true, "");
+            ${ev.isNull} = ${ev.value} == null;"""
+       } else {
+          s"""
+            ${ev.value} = new Decimal().set(${ce.value}.toBigDecimal()
+            .setScale(${_scale}, Decimal.$modeStr()), $p, $s);
+            ${ev.isNull} = ${ev.value} == null;"""
+        }
       case ByteType =>
         if (_scale < 0) {
           s"""
@@ -1217,13 +1605,18 @@ abstract class RoundBase(child: Expression, scale: Expression,
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
-       3.0
-  """)
+       3
+      > SELECT _FUNC_(25, -1);
+       30
+  """,
+  since = "1.5.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Round(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
-    with Serializable with ImplicitCastInputTypes {
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP") {
   def this(child: Expression) = this(child, Literal(0))
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
+    copy(child = newLeft, scale = newRight)
 }
 
 /**
@@ -1237,11 +1630,169 @@ case class Round(child: Expression, scale: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
-       2.0
-  """)
+       2
+      > SELECT _FUNC_(25, -1);
+       20
+  """,
+  since = "2.0.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
 case class BRound(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
-    with Serializable with ImplicitCastInputTypes {
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN") {
   def this(child: Expression) = this(child, Literal(0))
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
+}
+
+object WidthBucket {
+  def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
+    if (isNull(value, min, max, numBucket)) {
+      null
+    } else {
+      computeBucketNumberNotNull(value, min, max, numBucket)
+    }
+  }
+
+  /** This function is called by generated Java code, so it needs to be public. */
+  def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
+    numBucket <= 0 ||
+      numBucket == Long.MaxValue ||
+      jl.Double.isNaN(value) ||
+      min == max ||
+      jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
+      jl.Double.isNaN(max) || jl.Double.isInfinite(max)
+  }
+
+  /** This function is called by generated Java code, so it needs to be public. */
+  def computeBucketNumberNotNull(
+      value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
+    val lower = Math.min(min, max)
+    val upper = Math.max(min, max)
+
+    if (min < max) {
+      if (value < lower) {
+        0L
+      } else if (value >= upper) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (value - lower) / (upper - lower)).toLong + 1L
+      }
+    } else { // `min > max` case
+      if (value > upper) {
+        0L
+      } else if (value <= lower) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (upper - value) / (upper - lower)).toLong + 1L
+      }
+    }
+  }
+}
+
+/**
+ * Returns the bucket number into which the value of this expression would fall
+ * after being evaluated. Note that input arguments must follow conditions listed below;
+ * otherwise, the method will return null.
+ *  - `numBucket` must be greater than zero and be less than Long.MaxValue
+ *  - `value`, `min`, and `max` cannot be NaN
+ *  - `min` bound cannot equal `max`
+ *  - `min` and `max` must be finite
+ *
+ * Note: If `minValue` > `maxValue`, a return value is as follows;
+ *  if `value` > `minValue`, it returns 0.
+ *  if `value` <= `maxValue`, it returns `numBucket` + 1.
+ *  otherwise, it returns (`numBucket` * (`minValue` - `value`) / (`minValue` - `maxValue`)) + 1
+ *
+ * @param value is the expression to compute a bucket number in the histogram
+ * @param minValue is the minimum value of the histogram
+ * @param maxValue is the maximum value of the histogram
+ * @param numBucket is the number of buckets
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(value, min_value, max_value, num_bucket) - Returns the bucket number to which
+      `value` would be assigned in an equiwidth histogram with `num_bucket` buckets,
+      in the range `min_value` to `max_value`."
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(5.3, 0.2, 10.6, 5);
+       3
+      > SELECT _FUNC_(-2.1, 1.3, 3.4, 3);
+       0
+      > SELECT _FUNC_(8.1, 0.0, 5.7, 4);
+       5
+      > SELECT _FUNC_(-0.9, 5.2, 0.5, 2);
+       3
+      > SELECT _FUNC_(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10);
+       1
+      > SELECT _FUNC_(INTERVAL '1' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10);
+       2
+      > SELECT _FUNC_(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
+       1
+      > SELECT _FUNC_(INTERVAL '1' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
+       2
+  """,
+  since = "3.1.0",
+  group = "math_funcs")
+case class WidthBucket(
+    value: Expression,
+    minValue: Expression,
+    maxValue: Expression,
+    numBucket: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    LongType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckSuccess =>
+        (value.dataType, minValue.dataType, maxValue.dataType) match {
+          case (_: YearMonthIntervalType, _: YearMonthIntervalType, _: YearMonthIntervalType) =>
+            TypeCheckSuccess
+          case (_: DayTimeIntervalType, _: DayTimeIntervalType, _: DayTimeIntervalType) =>
+            TypeCheckSuccess
+          case _ =>
+            val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)
+            TypeUtils.checkForSameTypeInputExpr(types, s"function $prettyName")
+        }
+      case f => f
+    }
+  }
+
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = true
+  override def prettyName: String = "width_bucket"
+
+  override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
+    WidthBucket.computeBucketNumber(
+      input.asInstanceOf[Number].doubleValue(),
+      min.asInstanceOf[Number].doubleValue(),
+      max.asInstanceOf[Number].doubleValue(),
+      numBucket.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (input, min, max, numBucket) => {
+      s"""${ev.isNull} = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |  .isNull($input, $min, $max, $numBucket);
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |    .computeBucketNumberNotNull($input, $min, $max, $numBucket);
+         |}""".stripMargin
+    })
+  }
+
+  override def first: Expression = value
+  override def second: Expression = minValue
+  override def third: Expression = maxValue
+  override def fourth: Expression = numBucket
+
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression, fourth: Expression): WidthBucket =
+    copy(value = first, minValue = second, maxValue = third, numBucket = fourth)
 }

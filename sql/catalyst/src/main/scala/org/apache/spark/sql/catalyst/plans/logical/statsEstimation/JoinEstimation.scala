@@ -56,7 +56,7 @@ case class JoinEstimation(join: Join) extends Logging {
     case _ if !rowCountsExist(join.left, join.right) =>
       None
 
-    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, _, _) =>
+    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, _, _, _) =>
       // 1. Compute join selectivity
       val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
       val (numInnerJoinedRows, keyStatsAfterJoin) = computeCardinalityAndStats(joinKeyPairs)
@@ -308,22 +308,17 @@ case class JoinEstimation(join: Join) extends Logging {
         outputAttrStats += a -> keyStatsAfterJoin(a)
       } else {
         val oldColStat = oldAttrStats(a)
-        val oldNdv = oldColStat.distinctCount
-        val newNdv = if (oldNdv.isDefined) {
-          Some(if (join.left.outputSet.contains(a)) {
-            updateNdv(oldNumRows = leftRows, newNumRows = outputRows, oldNdv = oldNdv.get)
-          } else {
-            updateNdv(oldNumRows = rightRows, newNumRows = outputRows, oldNdv = oldNdv.get)
-          })
+        val oldNumRows = if (join.left.outputSet.contains(a)) {
+          leftRows
         } else {
-          None
+          rightRows
         }
-        val newColStat = oldColStat.copy(distinctCount = newNdv)
+        val newColStat = oldColStat.updateCountStats(oldNumRows, outputRows)
         // TODO: support nullCount updates for specific outer joins
         outputAttrStats += a -> newColStat
       }
     }
-    outputAttrStats
+    outputAttrStats.toSeq
   }
 
   private def extractJoinKeysWithColStats(

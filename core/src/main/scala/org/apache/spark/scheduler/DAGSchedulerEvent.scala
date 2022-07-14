@@ -19,8 +19,6 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.language.existentials
-
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{AccumulatorV2, CallSite}
@@ -78,6 +76,7 @@ private[scheduler] case class CompletionEvent(
     reason: TaskEndReason,
     result: Any,
     accumUpdates: Seq[AccumulatorV2[_, _]],
+    metricPeaks: Array[Long],
     taskInfo: TaskInfo)
   extends DAGSchedulerEvent
 
@@ -90,6 +89,10 @@ private[scheduler] case class WorkerRemoved(workerId: String, host: String, mess
   extends DAGSchedulerEvent
 
 private[scheduler]
+case class StageFailed(stageId: Int, reason: String, exception: Option[Throwable])
+  extends DAGSchedulerEvent
+
+private[scheduler]
 case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
   extends DAGSchedulerEvent
 
@@ -98,3 +101,21 @@ private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent
 private[scheduler]
 case class SpeculativeTaskSubmitted(task: Task[_]) extends DAGSchedulerEvent
 
+private[scheduler]
+case class UnschedulableTaskSetAdded(stageId: Int, stageAttemptId: Int)
+  extends DAGSchedulerEvent
+
+private[scheduler]
+case class UnschedulableTaskSetRemoved(stageId: Int, stageAttemptId: Int)
+  extends DAGSchedulerEvent
+
+private[scheduler] case class RegisterMergeStatuses(
+    stage: ShuffleMapStage, mergeStatuses: Seq[(Int, MergeStatus)])
+  extends DAGSchedulerEvent
+
+private[scheduler] case class ShuffleMergeFinalized(stage: ShuffleMapStage)
+  extends DAGSchedulerEvent
+
+private[scheduler] case class ShufflePushCompleted(
+    shuffleId: Int, shuffleMergeId: Int, mapIndex: Int)
+  extends DAGSchedulerEvent

@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeArrayData, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeProjection}
 import org.apache.spark.sql.types._
 
 class ArrayDataIndexedSeqSuite extends SparkFunSuite {
@@ -45,7 +45,7 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
       if (e != null) {
         elementDt match {
           // For Nan, etc.
-          case FloatType | DoubleType => assert(seq(i).equals(e))
+          case FloatType | DoubleType => assert(seq(i) == e)
           case _ => assert(seq(i) === e)
         }
       } else {
@@ -73,8 +73,8 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
     arrayTypes.foreach { dt =>
       val schema = StructType(StructField("col_1", dt, nullable = false) :: Nil)
       val row = RandomDataGenerator.randomRow(random, schema)
-      val rowConverter = RowEncoder(schema)
-      val internalRow = rowConverter.toRow(row)
+      val toRow = RowEncoder(schema).createSerializer()
+      val internalRow = toRow(row)
 
       val unsafeRowConverter = UnsafeProjection.create(schema)
       val safeRowConverter = SafeProjection.create(schema)
@@ -83,7 +83,7 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
       val safeRow = safeRowConverter(unsafeRow)
 
       val genericArrayData = safeRow.getArray(0).asInstanceOf[GenericArrayData]
-      val unsafeArrayData = unsafeRow.getArray(0).asInstanceOf[UnsafeArrayData]
+      val unsafeArrayData = unsafeRow.getArray(0)
 
       val elementType = dt.elementType
       test("ArrayDataIndexedSeq - UnsafeArrayData - " + dt.toString) {

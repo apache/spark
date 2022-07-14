@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 from pyspark import SparkContext
 
 if __name__ == "__main__":

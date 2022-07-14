@@ -43,9 +43,9 @@ private[spark] object RUtils {
    * Check if SparkR is installed before running tests that use SparkR.
    */
   def isSparkRInstalled: Boolean = {
-    localSparkRPackagePath.filter { pkgDir =>
+    localSparkRPackagePath.exists { pkgDir =>
       new File(Seq(pkgDir, "SparkR").mkString(File.separator)).exists
-    }.isDefined
+    }
   }
 
   /**
@@ -60,7 +60,7 @@ private[spark] object RUtils {
   def sparkRPackagePath(isDriver: Boolean): Seq[String] = {
     val (master, deployMode) =
       if (isDriver) {
-        (sys.props("spark.master"), sys.props("spark.submit.deployMode"))
+        (sys.props("spark.master"), sys.props(SUBMIT_DEPLOY_MODE.key))
       } else {
         val sparkConf = SparkEnv.get.conf
         (sparkConf.get("spark.master"), sparkConf.get(SUBMIT_DEPLOY_MODE))

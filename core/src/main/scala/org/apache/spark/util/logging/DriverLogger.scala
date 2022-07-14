@@ -18,15 +18,21 @@
 package org.apache.spark.util.logging
 
 import java.io._
+import java.util.EnumSet
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.log4j.{FileAppender => Log4jFileAppender, _}
+import org.apache.hadoop.hdfs.client.HdfsDataOutputStream
+import org.apache.logging.log4j._
+import org.apache.logging.log4j.core.Logger
+import org.apache.logging.log4j.core.appender.{FileAppender => Log4jFileAppender}
+import org.apache.logging.log4j.core.layout.PatternLayout
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
@@ -36,7 +42,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private val UPLOAD_CHUNK_SIZE = 1024 * 1024
   private val UPLOAD_INTERVAL_IN_SECS = 5
-  private val DEFAULT_LAYOUT = "%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n"
+  private val DEFAULT_LAYOUT = "%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n%ex"
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   private val localLogFile: String = FileUtils.getFile(
@@ -48,18 +54,30 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   addLogAppender()
 
   private def addLogAppender(): Unit = {
-    val appenders = LogManager.getRootLogger().getAllAppenders()
+    val logger = LogManager.getRootLogger().asInstanceOf[Logger]
     val layout = if (conf.contains(DRIVER_LOG_LAYOUT)) {
-      new PatternLayout(conf.get(DRIVER_LOG_LAYOUT).get)
-    } else if (appenders.hasMoreElements()) {
-      appenders.nextElement().asInstanceOf[Appender].getLayout()
+      PatternLayout.newBuilder().withPattern(conf.get(DRIVER_LOG_LAYOUT).get).build()
     } else {
-      new PatternLayout(DEFAULT_LAYOUT)
+      PatternLayout.newBuilder().withPattern(DEFAULT_LAYOUT).build()
     }
-    val fa = new Log4jFileAppender(layout, localLogFile)
-    fa.setName(DriverLogger.APPENDER_NAME)
-    LogManager.getRootLogger().addAppender(fa)
-    logInfo(s"Added a local log appender at: ${localLogFile}")
+    val config = logger.getContext.getConfiguration()
+    def log4jFileAppender() = {
+      // SPARK-37853: We can't use the chained API invocation mode because
+      // `AbstractFilterable.Builder.asBuilder()` method will return `Any` in Scala.
+      val builder: Log4jFileAppender.Builder[_] = Log4jFileAppender.newBuilder()
+      builder.withAppend(false)
+      builder.withBufferedIo(false)
+      builder.setConfiguration(config)
+      builder.withFileName(localLogFile)
+      builder.setIgnoreExceptions(false)
+      builder.setLayout(layout)
+      builder.setName(DriverLogger.APPENDER_NAME)
+      builder.build()
+    }
+    val fa = log4jFileAppender()
+    logger.addAppender(fa)
+    fa.start()
+    logInfo(s"Added a local log appender at: $localLogFile")
   }
 
   def startSync(hadoopConf: Configuration): Unit = {
@@ -75,9 +93,10 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   def stop(): Unit = {
     try {
-      val fa = LogManager.getRootLogger.getAppender(DriverLogger.APPENDER_NAME)
-      LogManager.getRootLogger().removeAppender(DriverLogger.APPENDER_NAME)
-      Utils.tryLogNonFatalError(fa.close())
+      val logger = LogManager.getRootLogger().asInstanceOf[Logger]
+      val fa = logger.getAppenders.get(DriverLogger.APPENDER_NAME)
+      logger.removeAppender(fa)
+      Utils.tryLogNonFatalError(fa.stop())
       writer.foreach(_.closeWriter())
     } catch {
       case e: Exception =>
@@ -111,7 +130,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
       try {
         inStream = new BufferedInputStream(new FileInputStream(localLogFile))
-        outputStream = fileSystem.create(new Path(dfsLogFile), true)
+        outputStream = SparkHadoopUtil.createFile(fileSystem, new Path(dfsLogFile),
+          conf.get(DRIVER_LOG_ALLOW_EC))
         fileSystem.setPermission(new Path(dfsLogFile), LOG_FILE_PERMISSIONS)
       } catch {
         case e: Exception =>
@@ -131,12 +151,20 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       }
       try {
         var remaining = inStream.available()
+        val hadData = remaining > 0
         while (remaining > 0) {
           val read = inStream.read(tmpBuffer, 0, math.min(remaining, UPLOAD_CHUNK_SIZE))
           outputStream.write(tmpBuffer, 0, read)
           remaining -= read
         }
-        outputStream.hflush()
+        if (hadData) {
+          outputStream match {
+            case hdfsStream: HdfsDataOutputStream =>
+              hdfsStream.hsync(EnumSet.allOf(classOf[HdfsDataOutputStream.SyncFlag]))
+            case other =>
+              other.hflush()
+          }
+        }
       } catch {
         case e: Exception => logError("Failed writing driver logs to dfs", e)
       }

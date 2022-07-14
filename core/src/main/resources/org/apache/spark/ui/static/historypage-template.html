@@ -20,6 +20,11 @@
   <thead>
     <tr>
       <th>
+        <span data-toggle="tooltip" data-placement="top" title="Spark version of this application.">
+          Version
+        </span>
+      </th>
+      <th>
         <span data-toggle="tooltip" data-placement="top" title="ID of this application.">
           App ID
         </span>
@@ -70,25 +75,6 @@
       </th>
   </thead>
   <tbody>
-  {{#applications}}
-    <tr>
-      <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}><span title="{{id}}"><a href="{{uiroot}}/history/{{id}}/{{num}}/jobs/">{{id}}</a></span></td>
-      <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}>{{name}}</td>
-      {{#attempts}}
-      {{#hasMultipleAttempts}}
-      <td><a href="{{uiroot}}/history/{{id}}/{{attemptId}}/jobs/">{{attemptId}}</a></td>
-      {{/hasMultipleAttempts}}
-      <td>{{startTime}}</td>
-      {{#showCompletedColumns}}
-      <td>{{endTime}}</td>
-      <td><span title="{{durationMillisec}}">{{duration}}</span></td>
-      {{/showCompletedColumns}}
-      <td>{{sparkUser}}</td>
-      <td>{{lastUpdated}}</td>
-      <td><a href="{{log}}" class="btn btn-info btn-mini">Download</a></td>
-      {{/attempts}}
-    </tr>
-  {{/applications}}
   </tbody>
 </table>
 </script>

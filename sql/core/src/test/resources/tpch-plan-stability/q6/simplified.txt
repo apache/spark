@@ -1,0 +1,7 @@
+WholeStageCodegen (2)
+  HashAggregate [sum,isEmpty] [sum((l_extendedprice * l_discount)),revenue,sum,isEmpty]
+    InputAdapter
+      Exchange #1
+        WholeStageCodegen (1)
+          HashAggregate [l_extendedprice,l_discount] [sum,isEmpty,sum,isEmpty]
+            LocalTableScan [l_extendedprice,l_discount]

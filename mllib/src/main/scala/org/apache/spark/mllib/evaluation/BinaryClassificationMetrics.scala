@@ -20,7 +20,7 @@ package org.apache.spark.mllib.evaluation
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.evaluation.binary._
-import org.apache.spark.rdd.{RDD, UnionRDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
 /**
@@ -45,6 +45,9 @@ class BinaryClassificationMetrics @Since("3.0.0") (
     @Since("1.3.0") val scoreAndLabels: RDD[_ <: Product],
     @Since("1.3.0") val numBins: Int = 1000)
   extends Logging {
+
+  @deprecated("The variable `scoreLabelsWeight` should be private and " +
+    "will be removed in 4.0.0.", "3.4.0")
   val scoreLabelsWeight: RDD[(Double, (Double, Double))] = scoreAndLabels.map {
     case (prediction: Double, label: Double, weight: Double) =>
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
@@ -81,7 +84,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
    * Unpersist intermediate RDDs used in the computation.
    */
   @Since("1.0.0")
-  def unpersist() {
+  def unpersist(): Unit = {
     cumulativeCounts.unpersist()
   }
 
@@ -101,10 +104,19 @@ class BinaryClassificationMetrics @Since("3.0.0") (
   @Since("1.0.0")
   def roc(): RDD[(Double, Double)] = {
     val rocCurve = createCurve(FalsePositiveRate, Recall)
-    val sc = confusions.context
-    val first = sc.makeRDD(Seq((0.0, 0.0)), 1)
-    val last = sc.makeRDD(Seq((1.0, 1.0)), 1)
-    new UnionRDD[(Double, Double)](sc, Seq(first, rocCurve, last))
+    val numParts = rocCurve.getNumPartitions
+    rocCurve.mapPartitionsWithIndex { case (pid, iter) =>
+      if (numParts == 1) {
+        require(pid == 0)
+        Iterator.single((0.0, 0.0)) ++ iter ++ Iterator.single((1.0, 1.0))
+      } else if (pid == 0) {
+        Iterator.single((0.0, 0.0)) ++ iter
+      } else if (pid == numParts - 1) {
+        iter ++ Iterator.single((1.0, 1.0))
+      } else {
+        iter
+      }
+    }
   }
 
   /**
@@ -124,7 +136,13 @@ class BinaryClassificationMetrics @Since("3.0.0") (
   def pr(): RDD[(Double, Double)] = {
     val prCurve = createCurve(Recall, Precision)
     val (_, firstPrecision) = prCurve.first()
-    confusions.context.parallelize(Seq((0.0, firstPrecision)), 1).union(prCurve)
+    prCurve.mapPartitionsWithIndex { case (pid, iter) =>
+      if (pid == 0) {
+        Iterator.single((0.0, firstPrecision)) ++ iter
+      } else {
+        iter
+      }
+    }
   }
 
   /**
@@ -182,25 +200,40 @@ class BinaryClassificationMetrics @Since("3.0.0") (
         val countsSize = counts.count()
         // Group the iterator into chunks of about countsSize / numBins points,
         // so that the resulting number of bins is about numBins
-        var grouping = countsSize / numBins
+        val grouping = countsSize / numBins
         if (grouping < 2) {
           // numBins was more than half of the size; no real point in down-sampling to bins
           logInfo(s"Curve is too small ($countsSize) for $numBins bins to be useful")
           counts
         } else {
-          if (grouping >= Int.MaxValue) {
-            logWarning(
-              s"Curve too large ($countsSize) for $numBins bins; capping at ${Int.MaxValue}")
-            grouping = Int.MaxValue
+          counts.mapPartitions { iter =>
+            if (iter.hasNext) {
+              var score = Double.NaN
+              var agg = new BinaryLabelCounter()
+              var cnt = 0L
+              iter.flatMap { pair =>
+                score = pair._1
+                agg += pair._2
+                cnt += 1
+                if (cnt == grouping) {
+                  // The score of the combined point will be just the last one's score,
+                  // which is also the minimal in each chunk since all scores are already
+                  // sorted in descending.
+                  // The combined point will contain all counts in this chunk. Thus, calculated
+                  // metrics (like precision, recall, etc.) on its score (or so-called threshold)
+                  // are the same as those without sampling.
+                  val ret = (score, agg)
+                  agg = new BinaryLabelCounter()
+                  cnt = 0
+                  Some(ret)
+                } else None
+              } ++ {
+                if (cnt > 0) {
+                  Iterator.single((score, agg))
+                } else Iterator.empty
+              }
+            } else Iterator.empty
           }
-          counts.mapPartitions(_.grouped(grouping.toInt).map { pairs =>
-            // The score of the combined point will be just the first one's score
-            val firstScore = pairs.head._1
-            // The point will contain all counts in this chunk
-            val agg = new BinaryLabelCounter()
-            pairs.foreach(pair => agg += pair._2)
-            (firstScore, agg)
-          })
         }
       }
 

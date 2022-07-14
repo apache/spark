@@ -21,7 +21,9 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
+import java.util.zip.Checksum;
 
+import org.apache.spark.SparkException;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -39,6 +41,7 @@ import org.apache.spark.memory.TooLargePageException;
 import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumSupport;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.FileSegment;
@@ -65,7 +68,7 @@ import org.apache.spark.util.Utils;
  * spill files. Instead, this merging is performed in {@link UnsafeShuffleWriter}, which uses a
  * specialized merge procedure that avoids extra serialization/deserialization.
  */
-final class ShuffleExternalSorter extends MemoryConsumer {
+final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleChecksumSupport {
 
   private static final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
 
@@ -107,6 +110,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   @Nullable private MemoryBlock currentPage = null;
   private long pageCursor = -1;
 
+  // Checksum calculator for each partition. Empty when shuffle checksum disabled.
+  private final Checksum[] partitionChecksums;
+
   ShuffleExternalSorter(
       TaskMemoryManager memoryManager,
       BlockManager blockManager,
@@ -114,7 +120,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       int initialSize,
       int numPartitions,
       SparkConf conf,
-      ShuffleWriteMetricsReporter writeMetrics) {
+      ShuffleWriteMetricsReporter writeMetrics) throws SparkException {
     super(memoryManager,
       (int) Math.min(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, memoryManager.pageSizeBytes()),
       memoryManager.getTungstenMemoryMode());
@@ -133,6 +139,11 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.peakMemoryUsedBytes = getMemoryUsage();
     this.diskWriteBufferSize =
         (int) (long) conf.get(package$.MODULE$.SHUFFLE_DISK_WRITE_BUFFER_SIZE());
+    this.partitionChecksums = createPartitionChecksums(numPartitions, conf);
+  }
+
+  public long[] getChecksums() {
+    return getChecksumValues(partitionChecksums);
   }
 
   /**
@@ -204,6 +215,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
             spillInfo.partitionLengths[currentPartition] = fileSegment.length();
           }
           currentPartition = partition;
+          if (partitionChecksums.length > 0) {
+            writer.setChecksum(partitionChecksums[currentPartition]);
+          }
         }
 
         final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
@@ -423,7 +437,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    *
    * @return metadata for the spill files written by this sorter. If no records were ever inserted
    *         into this sorter, then this will return an empty array.
-   * @throws IOException
    */
   public SpillInfo[] closeAndGetSpills() throws IOException {
     if (inMemSorter != null) {

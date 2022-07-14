@@ -38,11 +38,11 @@ public class UTF8StringSuite {
   private static void checkBasic(String str, int len) {
     UTF8String s1 = fromString(str);
     UTF8String s2 = fromBytes(str.getBytes(StandardCharsets.UTF_8));
-    assertEquals(s1.numChars(), len);
-    assertEquals(s2.numChars(), len);
+    assertEquals(len, s1.numChars());
+    assertEquals(len, s2.numChars());
 
-    assertEquals(s1.toString(), str);
-    assertEquals(s2.toString(), str);
+    assertEquals(str, s1.toString());
+    assertEquals(str, s2.toString());
     assertEquals(s1, s2);
 
     assertEquals(s1.hashCode(), s2.hashCode());
@@ -227,6 +227,7 @@ public class UTF8StringSuite {
   @Test
   public void trims() {
     assertEquals(fromString("1"), fromString("1").trim());
+    assertEquals(fromString("1"), fromString("1\t").trimAll());
 
     assertEquals(fromString("hello"), fromString("  hello ").trim());
     assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
@@ -375,32 +376,77 @@ public class UTF8StringSuite {
   @Test
   public void substringSQL() {
     UTF8String e = fromString("example");
-    assertEquals(e.substringSQL(0, 2), fromString("ex"));
-    assertEquals(e.substringSQL(1, 2), fromString("ex"));
-    assertEquals(e.substringSQL(0, 7), fromString("example"));
-    assertEquals(e.substringSQL(1, 2), fromString("ex"));
-    assertEquals(e.substringSQL(0, 100), fromString("example"));
-    assertEquals(e.substringSQL(1, 100), fromString("example"));
-    assertEquals(e.substringSQL(2, 2), fromString("xa"));
-    assertEquals(e.substringSQL(1, 6), fromString("exampl"));
-    assertEquals(e.substringSQL(2, 100), fromString("xample"));
-    assertEquals(e.substringSQL(0, 0), fromString(""));
-    assertEquals(e.substringSQL(100, 4), EMPTY_UTF8);
-    assertEquals(e.substringSQL(0, Integer.MAX_VALUE), fromString("example"));
-    assertEquals(e.substringSQL(1, Integer.MAX_VALUE), fromString("example"));
-    assertEquals(e.substringSQL(2, Integer.MAX_VALUE), fromString("xample"));
+    assertEquals(fromString("ex"), e.substringSQL(0, 2));
+    assertEquals(fromString("ex"), e.substringSQL(1, 2));
+    assertEquals(fromString("example"), e.substringSQL(0, 7));
+    assertEquals(fromString("ex"), e.substringSQL(1, 2));
+    assertEquals(fromString("example"), e.substringSQL(0, 100));
+    assertEquals(fromString("example"), e.substringSQL(1, 100));
+    assertEquals(fromString("xa"), e.substringSQL(2, 2));
+    assertEquals(fromString("exampl"), e.substringSQL(1, 6));
+    assertEquals(fromString("xample"), e.substringSQL(2, 100));
+    assertEquals(fromString(""), e.substringSQL(0, 0));
+    assertEquals(EMPTY_UTF8, e.substringSQL(100, 4));
+    assertEquals(fromString("example"), e.substringSQL(0, Integer.MAX_VALUE));
+    assertEquals(fromString("example"), e.substringSQL(1, Integer.MAX_VALUE));
+    assertEquals(fromString("xample"), e.substringSQL(2, Integer.MAX_VALUE));
+    assertEquals(EMPTY_UTF8, e.substringSQL(-100, -100));
+    assertEquals(EMPTY_UTF8, e.substringSQL(-1207959552, -1207959552));
+    assertEquals(fromString("pl"), e.substringSQL(-3, 2));
+    assertEquals(EMPTY_UTF8, e.substringSQL(Integer.MIN_VALUE, 6));
   }
 
   @Test
   public void split() {
     UTF8String[] negativeAndZeroLimitCase =
       new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
-    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 0),
-      negativeAndZeroLimitCase));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), -1),
-      negativeAndZeroLimitCase));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi,")}));
+    assertArrayEquals(
+      negativeAndZeroLimitCase,
+      fromString("ab,def,ghi,").split(fromString(","), 0));
+    assertArrayEquals(
+      negativeAndZeroLimitCase,
+      fromString("ab,def,ghi,").split(fromString(","), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("ab"), fromString("def,ghi,")},
+      fromString("ab,def,ghi,").split(fromString(","), 2));
+  }
+
+  @Test
+  public void replace() {
+    assertEquals(
+      fromString("re123ace"),
+      fromString("replace").replace(fromString("pl"), fromString("123")));
+    assertEquals(
+      fromString("reace"),
+      fromString("replace").replace(fromString("pl"), fromString("")));
+    assertEquals(
+      fromString("replace"),
+      fromString("replace").replace(fromString(""), fromString("123")));
+    // tests for multiple replacements
+    assertEquals(
+      fromString("a12ca12c"),
+      fromString("abcabc").replace(fromString("b"), fromString("12")));
+    assertEquals(
+      fromString("adad"),
+      fromString("abcdabcd").replace(fromString("bc"), fromString("")));
+    // tests for single character search and replacement strings
+    assertEquals(
+      fromString("AbcAbc"),
+      fromString("abcabc").replace(fromString("a"), fromString("A")));
+    assertEquals(
+      fromString("abcabc"),
+      fromString("abcabc").replace(fromString("Z"), fromString("A")));
+    // Tests with non-ASCII characters
+    assertEquals(
+      fromString("花ab界"),
+      fromString("花花世界").replace(fromString("花世"), fromString("ab")));
+    assertEquals(
+      fromString("a水c"),
+      fromString("a火c").replace(fromString("火"), fromString("水")));
+    // Tests for a large number of replacements, triggering UTF8StringBuilder resize
+    assertEquals(
+      fromString("abcd").repeat(17),
+      fromString("a").repeat(17).replace(fromString("a"), fromString("abcd")));
   }
 
   @Test
@@ -422,27 +468,27 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("1a2s3ae"),
       fromString("translate").translate(ImmutableMap.of(
-        'r', '1',
-        'n', '2',
-        'l', '3',
-        't', '\0'
+        "r", "1",
+        "n", "2",
+        "l", "3",
+        "t", "\0"
       )));
     assertEquals(
       fromString("translate"),
-      fromString("translate").translate(new HashMap<Character, Character>()));
+      fromString("translate").translate(new HashMap<>()));
     assertEquals(
       fromString("asae"),
       fromString("translate").translate(ImmutableMap.of(
-        'r', '\0',
-        'n', '\0',
-        'l', '\0',
-        't', '\0'
+        "r", "\0",
+        "n", "\0",
+        "l", "\0",
+        "t", "\0"
       )));
     assertEquals(
       fromString("aa世b"),
       fromString("花花世界").translate(ImmutableMap.of(
-        '花', 'a',
-        '界', 'b'
+        "花", "a",
+        "界", "b"
       )));
   }
 
@@ -468,50 +514,50 @@ public class UTF8StringSuite {
 
   @Test
   public void soundex() {
-    assertEquals(fromString("Robert").soundex(), fromString("R163"));
-    assertEquals(fromString("Rupert").soundex(), fromString("R163"));
-    assertEquals(fromString("Rubin").soundex(), fromString("R150"));
-    assertEquals(fromString("Ashcraft").soundex(), fromString("A261"));
-    assertEquals(fromString("Ashcroft").soundex(), fromString("A261"));
-    assertEquals(fromString("Burroughs").soundex(), fromString("B620"));
-    assertEquals(fromString("Burrows").soundex(), fromString("B620"));
-    assertEquals(fromString("Ekzampul").soundex(), fromString("E251"));
-    assertEquals(fromString("Example").soundex(), fromString("E251"));
-    assertEquals(fromString("Ellery").soundex(), fromString("E460"));
-    assertEquals(fromString("Euler").soundex(), fromString("E460"));
-    assertEquals(fromString("Ghosh").soundex(), fromString("G200"));
-    assertEquals(fromString("Gauss").soundex(), fromString("G200"));
-    assertEquals(fromString("Gutierrez").soundex(), fromString("G362"));
-    assertEquals(fromString("Heilbronn").soundex(), fromString("H416"));
-    assertEquals(fromString("Hilbert").soundex(), fromString("H416"));
-    assertEquals(fromString("Jackson").soundex(), fromString("J250"));
-    assertEquals(fromString("Kant").soundex(), fromString("K530"));
-    assertEquals(fromString("Knuth").soundex(), fromString("K530"));
-    assertEquals(fromString("Lee").soundex(), fromString("L000"));
-    assertEquals(fromString("Lukasiewicz").soundex(), fromString("L222"));
-    assertEquals(fromString("Lissajous").soundex(), fromString("L222"));
-    assertEquals(fromString("Ladd").soundex(), fromString("L300"));
-    assertEquals(fromString("Lloyd").soundex(), fromString("L300"));
-    assertEquals(fromString("Moses").soundex(), fromString("M220"));
-    assertEquals(fromString("O'Hara").soundex(), fromString("O600"));
-    assertEquals(fromString("Pfister").soundex(), fromString("P236"));
-    assertEquals(fromString("Rubin").soundex(), fromString("R150"));
-    assertEquals(fromString("Robert").soundex(), fromString("R163"));
-    assertEquals(fromString("Rupert").soundex(), fromString("R163"));
-    assertEquals(fromString("Soundex").soundex(), fromString("S532"));
-    assertEquals(fromString("Sownteks").soundex(), fromString("S532"));
-    assertEquals(fromString("Tymczak").soundex(), fromString("T522"));
-    assertEquals(fromString("VanDeusen").soundex(), fromString("V532"));
-    assertEquals(fromString("Washington").soundex(), fromString("W252"));
-    assertEquals(fromString("Wheaton").soundex(), fromString("W350"));
+    assertEquals(fromString("R163"), fromString("Robert").soundex());
+    assertEquals(fromString("R163"), fromString("Rupert").soundex());
+    assertEquals(fromString("R150"), fromString("Rubin").soundex());
+    assertEquals(fromString("A261"), fromString("Ashcraft").soundex());
+    assertEquals(fromString("A261"), fromString("Ashcroft").soundex());
+    assertEquals(fromString("B620"), fromString("Burroughs").soundex());
+    assertEquals(fromString("B620"), fromString("Burrows").soundex());
+    assertEquals(fromString("E251"), fromString("Ekzampul").soundex());
+    assertEquals(fromString("E251"), fromString("Example").soundex());
+    assertEquals(fromString("E460"), fromString("Ellery").soundex());
+    assertEquals(fromString("E460"), fromString("Euler").soundex());
+    assertEquals(fromString("G200"), fromString("Ghosh").soundex());
+    assertEquals(fromString("G200"), fromString("Gauss").soundex());
+    assertEquals(fromString("G362"), fromString("Gutierrez").soundex());
+    assertEquals(fromString("H416"), fromString("Heilbronn").soundex());
+    assertEquals(fromString("H416"), fromString("Hilbert").soundex());
+    assertEquals(fromString("J250"), fromString("Jackson").soundex());
+    assertEquals(fromString("K530"), fromString("Kant").soundex());
+    assertEquals(fromString("K530"), fromString("Knuth").soundex());
+    assertEquals(fromString("L000"), fromString("Lee").soundex());
+    assertEquals(fromString("L222"), fromString("Lukasiewicz").soundex());
+    assertEquals(fromString("L222"), fromString("Lissajous").soundex());
+    assertEquals(fromString("L300"), fromString("Ladd").soundex());
+    assertEquals(fromString("L300"), fromString("Lloyd").soundex());
+    assertEquals(fromString("M220"), fromString("Moses").soundex());
+    assertEquals(fromString("O600"), fromString("O'Hara").soundex());
+    assertEquals(fromString("P236"), fromString("Pfister").soundex());
+    assertEquals(fromString("R150"), fromString("Rubin").soundex());
+    assertEquals(fromString("R163"), fromString("Robert").soundex());
+    assertEquals(fromString("R163"), fromString("Rupert").soundex());
+    assertEquals(fromString("S532"), fromString("Soundex").soundex());
+    assertEquals(fromString("S532"), fromString("Sownteks").soundex());
+    assertEquals(fromString("T522"), fromString("Tymczak").soundex());
+    assertEquals(fromString("V532"), fromString("VanDeusen").soundex());
+    assertEquals(fromString("W252"), fromString("Washington").soundex());
+    assertEquals(fromString("W350"), fromString("Wheaton").soundex());
 
-    assertEquals(fromString("a").soundex(), fromString("A000"));
-    assertEquals(fromString("ab").soundex(), fromString("A100"));
-    assertEquals(fromString("abc").soundex(), fromString("A120"));
-    assertEquals(fromString("abcd").soundex(), fromString("A123"));
-    assertEquals(fromString("").soundex(), fromString(""));
-    assertEquals(fromString("123").soundex(), fromString("123"));
-    assertEquals(fromString("世界千世").soundex(), fromString("世界千世"));
+    assertEquals(fromString("A000"), fromString("a").soundex());
+    assertEquals(fromString("A100"), fromString("ab").soundex());
+    assertEquals(fromString("A120"), fromString("abc").soundex());
+    assertEquals(fromString("A123"), fromString("abcd").soundex());
+    assertEquals(fromString(""), fromString("").soundex());
+    assertEquals(fromString("123"), fromString("123").soundex());
+    assertEquals(fromString("世界千世"), fromString("世界千世").soundex());
   }
 
   @Test
@@ -567,12 +613,8 @@ public class UTF8StringSuite {
 
     for (final long offset : offsets) {
       try {
-        fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length)
-            .writeTo(outputStream);
-
-        throw new IllegalStateException(Long.toString(offset));
-      } catch (ArrayIndexOutOfBoundsException e) {
-        // ignore
+        assertThrows(ArrayIndexOutOfBoundsException.class,
+          () -> fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length).writeTo(outputStream));
       } finally {
         outputStream.reset();
       }
@@ -583,13 +625,13 @@ public class UTF8StringSuite {
   public void writeToOutputStream() throws IOException {
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     EMPTY_UTF8.writeTo(outputStream);
-    assertEquals("", outputStream.toString("UTF-8"));
+    assertEquals("", outputStream.toString(StandardCharsets.UTF_8.name()));
     outputStream.reset();
 
     fromString("数据砖很重").writeTo(outputStream);
     assertEquals(
         "数据砖很重",
-        outputStream.toString("UTF-8"));
+        outputStream.toString(StandardCharsets.UTF_8.name()));
     outputStream.reset();
   }
 
@@ -613,7 +655,7 @@ public class UTF8StringSuite {
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     fromAddress(array, Platform.INT_ARRAY_OFFSET, length)
         .writeTo(outputStream);
-    assertEquals("大千世界", outputStream.toString("UTF-8"));
+    assertEquals("大千世界", outputStream.toString(StandardCharsets.UTF_8.name()));
   }
 
   @Test
@@ -809,9 +851,9 @@ public class UTF8StringSuite {
     };
     byte[] c = new byte[1];
 
-    for (int i = 0; i < wrongFirstBytes.length; ++i) {
-      c[0] = (byte)wrongFirstBytes[i];
-      assertEquals(fromBytes(c).numChars(), 1);
+    for (int wrongFirstByte : wrongFirstBytes) {
+      c[0] = (byte) wrongFirstByte;
+      assertEquals(1, fromBytes(c).numChars());
     }
   }
 }

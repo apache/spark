@@ -24,7 +24,7 @@ import scala.concurrent.duration.Duration
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JObject, _}
+import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
@@ -161,27 +161,40 @@ final class OneVsRestModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false,
+      getClassifier.featuresDataType)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), numClasses)
+    }
+    if ($(rawPredictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(rawPredictionCol), numClasses)
+    }
+    outputSchema
   }
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     // Check schema
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    if (getPredictionCol == "" && getRawPredictionCol == "") {
-      logWarning(s"$uid: OneVsRestModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+    if (getPredictionCol.isEmpty && getRawPredictionCol.isEmpty) {
+      logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
+        " because no output columns were set.")
       return dataset.toDF
     }
 
-    // determine the input columns: these need to be passed through
-    val origCols = dataset.schema.map(f => col(f.name))
+    val isProbModel = models.head.isInstanceOf[ProbabilisticClassificationModel[_, _]]
+
+    // use a temporary raw prediction column to avoid column conflict
+    val tmpRawPredName = "mbc$raw" + UUID.randomUUID().toString
 
     // add an accumulator column to store predictions of all the models
     val accColName = "mbc$acc" + UUID.randomUUID().toString
-    val initUDF = udf { () => Map[Int, Double]() }
-    val newDataset = dataset.withColumn(accColName, initUDF())
+    val newDataset = dataset.withColumn(accColName, lit(Array.emptyDoubleArray))
+    val columns = newDataset.schema.fieldNames.map(col)
+    val updateUDF = udf { (preds: Array[Double], pred: Vector) => preds :+ pred(1) }
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = !dataset.isStreaming && dataset.storageLevel == StorageLevel.NONE
@@ -190,25 +203,19 @@ final class OneVsRestModel private[ml] (
     }
 
     // update the accumulator column with the result of prediction of models
-    val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
-      case (df, (model, index)) =>
-        val rawPredictionCol = model.getRawPredictionCol
-        val columns = origCols ++ List(col(rawPredictionCol), col(accColName))
+    val aggregatedDataset = models.foldLeft[DataFrame](newDataset) { case (df, model) =>
+      // avoid calling directly setter of model
+      val tmpModel = model.copy(ParamMap.empty).asInstanceOf[ClassificationModel[_, _]]
+      tmpModel.setFeaturesCol($(featuresCol))
+      tmpModel.setRawPredictionCol(tmpRawPredName)
+      tmpModel.setPredictionCol("")
+      if (isProbModel) {
+        tmpModel.asInstanceOf[ProbabilisticClassificationModel[_, _]].setProbabilityCol("")
+      }
 
-        // add temporary column to store intermediate scores and update
-        val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
-        val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
-          predictions + ((index, prediction(1)))
-        }
-
-        model.setFeaturesCol($(featuresCol))
-        val transformedDataset = model.transform(df).select(columns: _*)
-        val updatedDataset = transformedDataset
-          .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
-        val newColumns = origCols ++ List(col(tmpColName))
-
-        // switch out the intermediate column with the accumulator column
-        updatedDataset.select(newColumns: _*).withColumnRenamed(tmpColName, accColName)
+      tmpModel.transform(df)
+        .withColumn(accColName, updateUDF(col(accColName), col(tmpRawPredName)))
+        .select(columns: _*)
     }
 
     if (handlePersistence) {
@@ -218,28 +225,19 @@ final class OneVsRestModel private[ml] (
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
 
-    if (getRawPredictionCol != "") {
-      val numClass = models.length
-
+    if (getRawPredictionCol.nonEmpty) {
       // output the RawPrediction as vector
-      val rawPredictionUDF = udf { (predictions: Map[Int, Double]) =>
-        val predArray = Array.fill[Double](numClass)(0.0)
-        predictions.foreach { case (idx, value) => predArray(idx) = value }
-        Vectors.dense(predArray)
-      }
-
-      predictionColNames = predictionColNames :+ getRawPredictionCol
-      predictionColumns = predictionColumns :+ rawPredictionUDF(col(accColName))
+      val rawPredictionUDF = udf { preds: Array[Double] => Vectors.dense(preds) }
+      predictionColNames :+= getRawPredictionCol
+      predictionColumns :+= rawPredictionUDF(col(accColName))
+        .as($(rawPredictionCol), outputSchema($(rawPredictionCol)).metadata)
     }
 
-    if (getPredictionCol != "") {
+    if (getPredictionCol.nonEmpty) {
       // output the index of the classifier with highest confidence as prediction
-      val labelUDF = udf { (predictions: Map[Int, Double]) =>
-        predictions.maxBy(_._2)._1.toDouble
-      }
-
-      predictionColNames = predictionColNames :+ getPredictionCol
-      predictionColumns = predictionColumns :+ labelUDF(col(accColName))
+      val labelUDF = udf { (preds: Array[Double]) => preds.indices.maxBy(preds.apply).toDouble }
+      predictionColNames :+= getPredictionCol
+      predictionColumns :+= labelUDF(col(accColName))
         .as(getPredictionCol, labelMetadata)
     }
 
@@ -257,6 +255,12 @@ final class OneVsRestModel private[ml] (
 
   @Since("2.0.0")
   override def write: MLWriter = new OneVsRestModel.OneVsRestModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"OneVsRestModel: uid=$uid, classifier=${$(classifier)}, numClasses=$numClasses, " +
+      s"numFeatures=$numFeatures"
+  }
 }
 
 @Since("2.0.0")

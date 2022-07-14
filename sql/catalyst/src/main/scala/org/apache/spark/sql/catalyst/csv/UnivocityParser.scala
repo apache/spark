@@ -23,10 +23,16 @@ import scala.util.control.NonFatal
 
 import com.univocity.parsers.csv.CsvParser
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -39,15 +45,20 @@ import org.apache.spark.unsafe.types.UTF8String
  * @param requiredSchema The schema of the data that should be output for each row. This should be a
  *                       subset of the columns in dataSchema.
  * @param options Configuration options for a CSV parser.
+ * @param filters The pushdown filters that should be applied to converted values.
  */
 class UnivocityParser(
     dataSchema: StructType,
     requiredSchema: StructType,
-    val options: CSVOptions) extends Logging {
+    val options: CSVOptions,
+    filters: Seq[Filter]) extends Logging {
   require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
     s"requiredSchema (${requiredSchema.catalogString}) should be the subset of " +
       s"dataSchema (${dataSchema.catalogString}).")
 
+  def this(dataSchema: StructType, requiredSchema: StructType, options: CSVOptions) = {
+    this(dataSchema, requiredSchema, options, Seq.empty)
+  }
   def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
 
   // A `ValueConverter` is responsible for converting the given value to a desired type.
@@ -57,32 +68,61 @@ class UnivocityParser(
   private val tokenIndexArr =
     requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
 
+  // True if we should inform the Univocity CSV parser to select which fields to read by their
+  // positions. Generally assigned by input configuration options, except when input column(s) have
+  // default values, in which case we omit the explicit indexes in order to know how many tokens
+  // were present in each line instead.
+  private def columnPruning: Boolean = options.columnPruning &&
+    !requiredSchema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+
   // When column pruning is enabled, the parser only parses the required columns based on
   // their positions in the data schema.
-  private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
+  private val parsedSchema = if (columnPruning) requiredSchema else dataSchema
 
-  val tokenizer = {
+  val tokenizer: CsvParser = {
     val parserSetting = options.asParserSettings
     // When to-be-parsed schema is shorter than the to-be-read data schema, we let Univocity CSV
     // parser select a sequence of fields for reading by their positions.
-    // if (options.columnPruning && requiredSchema.length < dataSchema.length) {
     if (parsedSchema.length < dataSchema.length) {
       parserSetting.selectIndexes(tokenIndexArr: _*)
     }
     new CsvParser(parserSetting)
   }
 
-  private val row = new GenericInternalRow(requiredSchema.length)
+  // Pre-allocated Some to avoid the overhead of building Some per each-row.
+  private val requiredRow = Some(new GenericInternalRow(requiredSchema.length))
+  // Pre-allocated empty sequence returned when the parsed row cannot pass filters.
+  // We preallocate it avoid unnecessary allocations.
+  private val noRows = None
 
-  private val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+  private lazy val timestampFormatter = TimestampFormatter(
+    options.timestampFormatInRead,
     options.zoneId,
-    options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private val csvFilters = if (SQLConf.get.csvFilterPushDown) {
+    new OrderedFilters(filters, requiredSchema)
+  } else {
+    new NoopFilters
+  }
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
-    UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
+    val currentContent = tokenizer.getContext.currentParsedContent()
+    if (currentContent == null) null else UTF8String.fromString(currentContent.stripLineEnd)
   }
 
   // This parser first picks some tokens from the input tokens, according to the required schema,
@@ -158,19 +198,59 @@ class UnivocityParser(
       }
 
     case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(timestampFormatter.parse)
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          timestampFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
+        }
+      }
+
+    case _: TimestampNTZType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timestampNTZFormatter.parseWithoutTimeZone(datum, false)
+      }
 
     case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(dateFormatter.parse)
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          dateFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            DateTimeUtils.stringToDate(str).getOrElse(throw e)
+        }
+      }
 
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
-    case udt: UserDefinedType[_] => (datum: String) =>
+    case CalendarIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        IntervalUtils.safeStringToInterval(UTF8String.fromString(datum))
+      }
+
+    case ym: YearMonthIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        Cast(Literal(datum), ym).eval(EmptyRow)
+      }
+
+    case dt: DayTimeIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        Cast(Literal(datum), dt).eval(EmptyRow)
+      }
+
+    case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
     // We don't actually hit this exception though, we keep it for understandability
-    case _ => throw new RuntimeException(s"Unsupported type: ${dataType.typeName}")
+    case _ => throw QueryExecutionErrors.unsupportedTypeError(dataType)
   }
 
   private def nullSafeDatum(
@@ -180,7 +260,7 @@ class UnivocityParser(
        options: CSVOptions)(converter: ValueConverter): Any = {
     if (datum == options.nullValue || datum == null) {
       if (!nullable) {
-        throw new RuntimeException(s"null value found but field $name is not nullable.")
+        throw QueryExecutionErrors.foundNullValueForNotNullableFieldError(name)
       }
       null
     } else {
@@ -188,74 +268,77 @@ class UnivocityParser(
     }
   }
 
-  private val doParse = if (requiredSchema.nonEmpty) {
-    (input: String) => convert(tokenizer.parseLine(input))
-  } else {
-    // If `columnPruning` enabled and partition attributes scanned only,
-    // `schema` gets empty.
-    (_: String) => InternalRow.empty
-  }
-
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): InternalRow = doParse(input)
+  val parse: String => Option[InternalRow] = {
+    // This is intentionally a val to create a function once and reuse.
+    if (columnPruning && requiredSchema.isEmpty) {
+      // If `columnPruning` enabled and partition attributes scanned only,
+      // `schema` gets empty.
+      (_: String) => Some(InternalRow.empty)
+    } else {
+      // parse if the columnPruning is disabled or requiredSchema is nonEmpty
+      (input: String) => convert(tokenizer.parseLine(input))
+    }
+  }
 
-  private val getToken = if (options.columnPruning) {
+  private val getToken = if (columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
   } else {
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
-  private def convert(tokens: Array[String]): InternalRow = {
+  private def convert(tokens: Array[String]): Option[InternalRow] = {
     if (tokens == null) {
       throw BadRecordException(
         () => getCurrentInput,
         () => None,
-        new RuntimeException("Malformed CSV record"))
-    } else if (tokens.length != parsedSchema.length) {
-      // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
-      // However, we still have chance to parse some of the tokens, by adding extra null tokens in
-      // the tail if the number is smaller, or by dropping extra tokens if the number is larger.
-      val checkedTokens = if (parsedSchema.length > tokens.length) {
-        tokens ++ new Array[String](parsedSchema.length - tokens.length)
-      } else {
-        tokens.take(parsedSchema.length)
-      }
-      def getPartialResult(): Option[InternalRow] = {
-        try {
-          Some(convert(checkedTokens))
-        } catch {
-          case _: BadRecordException => None
-        }
-      }
-      // For records with less or more tokens than the schema, tries to return partial results
-      // if possible.
-      throw BadRecordException(
-        () => getCurrentInput,
-        () => getPartialResult(),
-        new RuntimeException("Malformed CSV record"))
-    } else {
-      // When the length of the returned tokens is identical to the length of the parsed schema,
-      // we just need to convert the tokens that correspond to the required columns.
-      var badRecordException: Option[Throwable] = None
-      var i = 0
-      while (i < requiredSchema.length) {
-        try {
-          row(i) = valueConverters(i).apply(getToken(tokens, i))
-        } catch {
-          case NonFatal(e) =>
-            badRecordException = badRecordException.orElse(Some(e))
-            row.setNullAt(i)
-        }
-        i += 1
-      }
+        QueryExecutionErrors.malformedCSVRecordError())
+    }
 
-      if (badRecordException.isEmpty) {
-        row
+    var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
+      // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
+      // However, we still have chance to parse some of the tokens. It continues to parses the
+      // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
+      // tokens.
+      Some(QueryExecutionErrors.malformedCSVRecordError())
+    } else None
+    // When the length of the returned tokens is identical to the length of the parsed schema,
+    // we just need to:
+    //  1. Convert the tokens that correspond to the required schema.
+    //  2. Apply the pushdown filters to `requiredRow`.
+    var i = 0
+    val row = requiredRow.get
+    var skipRow = false
+    while (i < requiredSchema.length) {
+      try {
+        if (skipRow) {
+          row.setNullAt(i)
+        } else {
+          row(i) = valueConverters(i).apply(getToken(tokens, i))
+          if (csvFilters.skipRow(row, i)) {
+            skipRow = true
+          }
+        }
+      } catch {
+        case e: SparkUpgradeException => throw e
+        case NonFatal(e) =>
+          badRecordException = badRecordException.orElse(Some(e))
+          // Use the corresponding DEFAULT value associated with the column, if any.
+          row.update(i, requiredSchema.existenceDefaultValues(i))
+      }
+      i += 1
+    }
+    if (skipRow) {
+      noRows
+    } else {
+      if (badRecordException.isDefined) {
+        throw BadRecordException(
+          () => getCurrentInput, () => requiredRow.headOption, badRecordException.get)
       } else {
-        throw BadRecordException(() => getCurrentInput, () => Some(row), badRecordException.get)
+        requiredRow
       }
     }
   }
@@ -287,7 +370,7 @@ private[sql] object UnivocityParser {
       schema: StructType): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
-      input => Seq(parser.convert(input)),
+      input => parser.convert(input),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -317,7 +400,7 @@ private[sql] object UnivocityParser {
 
     override def next(): T = {
       if (!hasNext) {
-        throw new NoSuchElementException("End of stream")
+        throw QueryExecutionErrors.endOfStreamError()
       }
       val curRecord = convert(nextRecord)
       nextRecord = tokenizer.parseNext()
@@ -340,7 +423,7 @@ private[sql] object UnivocityParser {
     val filteredLines: Iterator[String] = CSVExprUtils.filterCommentAndEmpty(lines, options)
 
     val safeParser = new FailureSafeParser[String](
-      input => Seq(parser.parse(input)),
+      input => parser.parse(input),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)

@@ -27,12 +27,13 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.regression.IsotonicRegressionModel.IsotonicRegressionModelWriter
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.regression.{IsotonicRegression => MLlibIsotonicRegression}
 import org.apache.spark.mllib.regression.{IsotonicRegressionModel => MLlibIsotonicRegressionModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit, udf}
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
 
@@ -80,18 +81,20 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
    */
   protected[ml] def extractWeightedLabeledPoints(
       dataset: Dataset[_]): RDD[(Double, Double, Double)] = {
+    val l = checkRegressionLabels($(labelCol))
+
     val f = if (dataset.schema($(featuresCol)).dataType.isInstanceOf[VectorUDT]) {
       val idx = $(featureIndex)
       val extract = udf { v: Vector => v(idx) }
-      extract(col($(featuresCol)))
+      extract(checkNonNanVectors($(featuresCol)))
     } else {
-      col($(featuresCol))
+      checkNonNanValues($(featuresCol), "Features")
     }
-    val w = if (hasWeightCol) col($(weightCol)).cast(DoubleType) else lit(1.0)
 
-    dataset.select(col($(labelCol)).cast(DoubleType), f, w).rdd.map {
-      case Row(label: Double, feature: Double, weight: Double) =>
-        (label, feature, weight)
+    val w = checkNonNegativeWeights(get(weightCol))
+
+    dataset.select(l, f, w).rdd.map {
+      case Row(label: Double, feature: Double, weight: Double) => (label, feature, weight)
     }
   }
 
@@ -240,7 +243,7 @@ class IsotonicRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>
         udf { feature: Double => oldModel.predict(feature) }
@@ -248,17 +251,33 @@ class IsotonicRegressionModel private[ml] (
         val idx = $(featureIndex)
         udf { features: Vector => oldModel.predict(features(idx)) }
     }
-    dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
+    dataset.withColumn($(predictionCol), predict(col($(featuresCol))),
+      outputSchema($(predictionCol)).metadata)
   }
+
+  @Since("3.0.0")
+  def predict(value: Double): Double = oldModel.predict(value)
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+    }
+    outputSchema
   }
 
   @Since("1.6.0")
   override def write: MLWriter =
     new IsotonicRegressionModelWriter(this)
+
+  @Since("3.0.0")
+  val numFeatures: Int = 1
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"IsotonicRegressionModel: uid=$uid, numFeatures=$numFeatures"
+  }
 }
 
 @Since("1.6.0")

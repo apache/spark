@@ -18,8 +18,13 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.plans
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ListQuery, Literal, NamedExpression, Rand}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.types.IntegerType
 
@@ -28,7 +33,7 @@ class QueryPlanSuite extends SparkFunSuite {
   test("origin remains the same after mapExpressions (SPARK-23823)") {
     CurrentOrigin.setPosition(0, 0)
     val column = AttributeReference("column", IntegerType)(NamedExpression.newExprId)
-    val query = plans.DslLogicalPlan(plans.table("table")).select(column)
+    val query = DslLogicalPlan(table("table")).select(column)
     CurrentOrigin.reset()
 
     val mappedQuery = query mapExpressions {
@@ -39,4 +44,120 @@ class QueryPlanSuite extends SparkFunSuite {
     assert(mappedOrigin == Origin.apply(Some(0), Some(0)))
   }
 
+  test("collectInPlanAndSubqueries") {
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val plan =
+      Union(
+        Seq(
+          Project(
+            Seq(a),
+            Filter(
+              ListQuery(Project(
+                Seq(a),
+                Filter(
+                  ListQuery(Project(
+                    Seq(a),
+                    UnresolvedRelation(TableIdentifier("t", None))
+                  )),
+                  UnresolvedRelation(TableIdentifier("t", None))
+                )
+              )),
+              UnresolvedRelation(TableIdentifier("t", None))
+            )
+          ),
+          Project(
+            Seq(a),
+            Filter(
+              ListQuery(Project(
+                Seq(a),
+                UnresolvedRelation(TableIdentifier("t", None))
+              )),
+              UnresolvedRelation(TableIdentifier("t", None))
+            )
+          )
+        )
+      )
+
+    val countRelationsInPlan = plan.collect({ case _: UnresolvedRelation => 1 }).sum
+    val countRelationsInPlanAndSubqueries =
+      plan.collectWithSubqueries({ case _: UnresolvedRelation => 1 }).sum
+
+    assert(countRelationsInPlan == 2)
+    assert(countRelationsInPlanAndSubqueries == 5)
+  }
+
+  test("SPARK-33035: consecutive attribute updates in parent plan nodes") {
+    val testRule = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+        case p @ Project(projList, _) =>
+          // Assigns new `ExprId`s for output references
+          val newPlan = p.copy(projectList = projList.map { ne => Alias(ne, ne.name)() })
+          val attrMapping = p.output.zip(newPlan.output)
+          newPlan -> attrMapping
+      }
+    }
+
+    val t = LocalRelation($"a".int, $"b".int)
+    val plan = t.select($"a", $"b").select($"a", $"b").select($"a", $"b").analyze
+    assert(testRule(plan).resolved)
+  }
+
+  test("SPARK-37199: add a deterministic field to QueryPlan") {
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val aRand: NamedExpression = Alias(a + Rand(1), "aRand")()
+    val deterministicPlan = Project(
+      Seq(a),
+      Filter(
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
+    assert(deterministicPlan.deterministic)
+
+    val nonDeterministicPlan = Project(
+      Seq(aRand),
+      Filter(
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
+    assert(!nonDeterministicPlan.deterministic)
+  }
+
+  test("SPARK-38347: Nullability propagation in transformUpWithNewOutput") {
+    // A test rule that replaces Attributes in Project's project list.
+    val testRule = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+        case p @ Project(projectList, _) =>
+          val newProjectList = projectList.map {
+            case a: AttributeReference => a.newInstance()
+            case ne => ne
+          }
+          val newProject = p.copy(projectList = newProjectList)
+          newProject -> p.output.zip(newProject.output)
+      }
+    }
+
+    // Test a Left Outer Join plan in which right-hand-side input attributes are not nullable.
+    // Those attributes should be nullable after join even with a `transformUpWithNewOutput`
+    // started below the Left Outer join.
+    val t1 = LocalRelation($"a".int.withNullability(false),
+      $"b".int.withNullability(false), $"c".int.withNullability(false))
+    val t2 = LocalRelation($"c".int.withNullability(false),
+      $"d".int.withNullability(false), $"e".int.withNullability(false))
+    val plan = t1.select($"a", $"b")
+      .join(t2.select($"c", $"d"), LeftOuter, Some($"a" === $"c"))
+      .select($"a" + $"d").analyze
+    // The output Attribute of `plan` is nullable even though `d` is not nullable before the join.
+    assert(plan.output(0).nullable)
+    // The test rule with `transformUpWithNewOutput` should not change the nullability.
+    val planAfterTestRule = testRule(plan)
+    assert(planAfterTestRule.output(0).nullable)
+  }
 }

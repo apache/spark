@@ -101,10 +101,11 @@ import org.apache.spark.SparkConf;
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 2.7+ or Python 3.4+. It can use the standard CPython interpreter,
-so C libraries like NumPy can be used. It also works with PyPy 2.3+.
+Spark {{site.SPARK_VERSION}} works with Python 3.7+. It can use the standard CPython interpreter,
+so C libraries like NumPy can be used. It also works with PyPy 7.3.6+.
 
-Python 2.6 support was removed in Spark 2.2.0.
+Python 2, 3.4 and 3.5 supports were removed in Spark 3.1.0.
+Python 3.6 support was removed in Spark 3.3.0.
 
 Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including it in your setup.py as:
 
@@ -134,8 +135,8 @@ PySpark requires the same minor version of Python in both driver and workers. It
 you can specify which version of Python you want to use by `PYSPARK_PYTHON`, for example:
 
 {% highlight bash %}
-$ PYSPARK_PYTHON=python3.4 bin/pyspark
-$ PYSPARK_PYTHON=/opt/pypy-2.5/bin/pypy bin/spark-submit examples/src/main/python/pi.py
+$ PYSPARK_PYTHON=python3.8 bin/pyspark
+$ PYSPARK_PYTHON=/path-to-your-pypy/pypy bin/spark-submit examples/src/main/python/pi.py
 {% endhighlight %}
 
 </div>
@@ -149,8 +150,8 @@ $ PYSPARK_PYTHON=/opt/pypy-2.5/bin/pypy bin/spark-submit examples/src/main/pytho
 
 <div data-lang="scala"  markdown="1">
 
-The first thing a Spark program must do is to create a [SparkContext](api/scala/index.html#org.apache.spark.SparkContext) object, which tells Spark
-how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object
+The first thing a Spark program must do is to create a [SparkContext](api/scala/org/apache/spark/SparkContext.html) object, which tells Spark
+how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/scala/org/apache/spark/SparkConf.html) object
 that contains information about your application.
 
 Only one SparkContext should be active per JVM. You must `stop()` the active SparkContext before creating a new one.
@@ -177,8 +178,8 @@ JavaSparkContext sc = new JavaSparkContext(conf);
 
 <div data-lang="python"  markdown="1">
 
-The first thing a Spark program must do is to create a [SparkContext](api/python/pyspark.html#pyspark.SparkContext) object, which tells Spark
-how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/pyspark.html#pyspark.SparkConf) object
+The first thing a Spark program must do is to create a [SparkContext](api/python/reference/api/pyspark.SparkContext.html#pyspark.SparkContext) object, which tells Spark
+how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/reference/api/pyspark.SparkConf.html#pyspark.SparkConf) object
 that contains information about your application.
 
 {% highlight python %}
@@ -240,12 +241,12 @@ For a complete list of options, run `spark-shell --help`. Behind the scenes,
 In the PySpark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
-to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
+to the runtime path by passing a comma-separated list to `--py-files`. For third-party Python dependencies,
+see [Python Package Management](api/python/user_guide/python_packaging.html). You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of Maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
-can be passed to the `--repositories` argument. Any Python dependencies a Spark package has (listed in
-the requirements.txt of that package) must be manually installed using `pip` when necessary.
-For example, to run `bin/pyspark` on exactly four cores, use:
+can be passed to the `--repositories` argument. For example, to run
+`bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}
 $ ./bin/pyspark --master local[4]
@@ -276,7 +277,7 @@ $ PYSPARK_DRIVER_PYTHON=jupyter PYSPARK_DRIVER_PYTHON_OPTS=notebook ./bin/pyspar
 
 You can customize the `ipython` or `jupyter` commands by setting `PYSPARK_DRIVER_PYTHON_OPTS`.
 
-After the Jupyter Notebook server is launched, you can create a new "Python 2" notebook from
+After the Jupyter Notebook server is launched, you can create a new notebook from
 the "Files" tab. Inside the notebook, you can input the command `%pylab inline` as part of
 your notebook before you start to try Spark from the Jupyter notebook.
 
@@ -345,7 +346,7 @@ One important parameter for parallel collections is the number of *partitions* t
 
 <div data-lang="scala"  markdown="1">
 
-Spark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
+Spark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
 Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes a URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
@@ -360,7 +361,7 @@ Some notes on reading files with Spark:
 
 * If using a path on the local filesystem, the file must also be accessible at the same path on worker nodes. Either copy the file to all workers or use a network-mounted shared file system.
 
-* All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
+* All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`. When multiple files are read, the order of the partitions depends on the order the files are returned from the filesystem. It may or may not, for example, follow the lexicographic ordering of the files by path. Within a partition, elements are ordered according to their order in the underlying file.
 
 * The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 128MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
@@ -368,7 +369,7 @@ Apart from text files, Spark's Scala API also supports several other data format
 
 * `SparkContext.wholeTextFiles` lets you read a directory containing multiple small text files, and returns each of them as (filename, content) pairs. This is in contrast with `textFile`, which would return one record per line in each file. Partitioning is determined by data locality which, in some cases, may result in too few partitions. For those cases, `wholeTextFiles` provides an optional second argument for controlling the minimal number of partitions.
 
-* For [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), use SparkContext's `sequenceFile[K, V]` method where `K` and `V` are the types of key and values in the file. These should be subclasses of Hadoop's [Writable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Writable.html) interface, like [IntWritable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/IntWritable.html) and [Text](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Text.html). In addition, Spark allows you to specify native types for a few common Writables; for example, `sequenceFile[Int, String]` will automatically read IntWritables and Texts.
+* For [SequenceFiles](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), use SparkContext's `sequenceFile[K, V]` method where `K` and `V` are the types of key and values in the file. These should be subclasses of Hadoop's [Writable](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/io/Writable.html) interface, like [IntWritable](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/io/IntWritable.html) and [Text](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/io/Text.html). In addition, Spark allows you to specify native types for a few common Writables; for example, `sequenceFile[Int, String]` will automatically read IntWritables and Texts.
 
 * For other Hadoop InputFormats, you can use the `SparkContext.hadoopRDD` method, which takes an arbitrary `JobConf` and input format class, key class and value class. Set these the same way you would for a Hadoop job with your input source. You can also use `SparkContext.newAPIHadoopRDD` for InputFormats based on the "new" MapReduce API (`org.apache.hadoop.mapreduce`).
 
@@ -378,7 +379,7 @@ Apart from text files, Spark's Scala API also supports several other data format
 
 <div data-lang="java"  markdown="1">
 
-Spark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
+Spark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
 Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes a URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
@@ -400,7 +401,7 @@ Apart from text files, Spark's Java API also supports several other data formats
 
 * `JavaSparkContext.wholeTextFiles` lets you read a directory containing multiple small text files, and returns each of them as (filename, content) pairs. This is in contrast with `textFile`, which would return one record per line in each file.
 
-* For [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), use SparkContext's `sequenceFile[K, V]` method where `K` and `V` are the types of key and values in the file. These should be subclasses of Hadoop's [Writable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Writable.html) interface, like [IntWritable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/IntWritable.html) and [Text](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Text.html).
+* For [SequenceFiles](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), use SparkContext's `sequenceFile[K, V]` method where `K` and `V` are the types of key and values in the file. These should be subclasses of Hadoop's [Writable](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/io/Writable.html) interface, like [IntWritable](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/io/IntWritable.html) and [Text](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/io/Text.html).
 
 * For other Hadoop InputFormats, you can use the `JavaSparkContext.hadoopRDD` method, which takes an arbitrary `JobConf` and input format class, key class and value class. Set these the same way you would for a Hadoop job with your input source. You can also use `JavaSparkContext.newAPIHadoopRDD` for InputFormats based on the "new" MapReduce API (`org.apache.hadoop.mapreduce`).
 
@@ -410,7 +411,7 @@ Apart from text files, Spark's Java API also supports several other data formats
 
 <div data-lang="python"  markdown="1">
 
-PySpark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
+PySpark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
 Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes a URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
@@ -441,13 +442,13 @@ Apart from text files, Spark's Python API also supports several other data forma
 **Writable Support**
 
 PySpark SequenceFile support loads an RDD of key-value pairs within Java, converts Writables to base Java types, and pickles the
-resulting Java objects using [Pyrolite](https://github.com/irmen/Pyrolite/). When saving an RDD of key-value pairs to SequenceFile,
+resulting Java objects using [pickle](https://github.com/irmen/pickle/). When saving an RDD of key-value pairs to SequenceFile,
 PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following
 Writables are automatically converted:
 
 <table class="table">
 <tr><th>Writable Type</th><th>Python Type</th></tr>
-<tr><td>Text</td><td>unicode str</td></tr>
+<tr><td>Text</td><td>str</td></tr>
 <tr><td>IntWritable</td><td>int</td></tr>
 <tr><td>FloatWritable</td><td>float</td></tr>
 <tr><td>DoubleWritable</td><td>float</td></tr>
@@ -499,8 +500,8 @@ the key and value classes can easily be converted according to the above table,
 then this approach should work well for such cases.
 
 If you have custom serialized binary data (such as loading data from Cassandra / HBase), then you will first need to
-transform that data on the Scala/Java side to something which can be handled by Pyrolite's pickler.
-A [Converter](api/scala/index.html#org.apache.spark.api.python.Converter) trait is provided
+transform that data on the Scala/Java side to something which can be handled by pickle's pickler.
+A [Converter](api/scala/org/apache/spark/api/python/Converter.html) trait is provided
 for this. Simply extend this trait and implement your transformation code in the ```convert```
 method. Remember to ensure that this class, along with any dependencies required to access your ```InputFormat```, are packaged into your Spark job jar and included on the PySpark
 classpath.
@@ -856,7 +857,7 @@ by a key.
 In Scala, these operations are automatically available on RDDs containing
 [Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
 (the built-in tuples in the language, created by simply writing `(a, b)`). The key-value pair operations are available in the
-[PairRDDFunctions](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) class,
+[PairRDDFunctions](api/scala/org/apache/spark/rdd/PairRDDFunctions.html) class,
 which automatically wraps around an RDD of tuples.
 
 For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
@@ -946,12 +947,12 @@ We could also use `counts.sortByKey()`, for example, to sort the pairs alphabeti
 
 The following table lists some of the common transformations supported by Spark. Refer to the
 RDD API doc
-([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
+([Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.html#pyspark.RDD),
+ [Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
  [R](api/R/index.html))
 and pair RDD functions doc
-([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
+([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
@@ -1060,13 +1061,13 @@ for details.
 
 The following table lists some of the common actions supported by Spark. Refer to the
 RDD API doc
-([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
+([Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.html#pyspark.RDD),
+ [Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
  [R](api/R/index.html))
 
 and pair RDD functions doc
-([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
+([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
@@ -1208,9 +1209,9 @@ In addition, each persisted RDD can be stored using a different *storage level*,
 to persist the dataset on disk, persist it in memory but as serialized Java objects (to save space),
 replicate it across nodes.
 These levels are set by passing a
-`StorageLevel` object ([Scala](api/scala/index.html#org.apache.spark.storage.StorageLevel),
+`StorageLevel` object ([Scala](api/scala/org/apache/spark/storage/StorageLevel.html),
 [Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
-[Python](api/python/pyspark.html#pyspark.StorageLevel))
+[Python](api/python/reference/api/pyspark.StorageLevel.html#pyspark.StorageLevel))
 to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
@@ -1254,9 +1255,9 @@ storage levels is:
 </tr>
 </table>
 
-**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library,
+**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/3/library/pickle.html) library,
 so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`,
-`MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, and `DISK_ONLY_2`.*
+`MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, `DISK_ONLY_2`, and `DISK_ONLY_3`.*
 
 Spark also automatically persists some intermediate data in shuffle operations (e.g. `reduceByKey`), even without users calling `persist`. This is done to avoid recomputing the entire input if a node fails during the shuffle. We still recommend users call `persist` on the resulting RDD if they plan to reuse it.
 
@@ -1404,11 +1405,11 @@ res2: Long = 10
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Long, programmers can also
-create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
+create their own types by subclassing [AccumulatorV2](api/scala/org/apache/spark/util/AccumulatorV2.html).
 The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
 the accumulator to zero, `add` for adding another value into the accumulator,
 `merge` for merging another same-type accumulator into this one. Other methods that must be overridden
-are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
+are contained in the [API documentation](api/scala/org/apache/spark/util/AccumulatorV2.html). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight scala %}
@@ -1457,11 +1458,11 @@ accum.value();
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Long, programmers can also
-create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
+create their own types by subclassing [AccumulatorV2](api/scala/org/apache/spark/util/AccumulatorV2.html).
 The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
 the accumulator to zero, `add` for adding another value into the accumulator,
 `merge` for merging another same-type accumulator into this one. Other methods that must be overridden
-are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
+are contained in the [API documentation](api/scala/org/apache/spark/util/AccumulatorV2.html). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight java %}
@@ -1515,7 +1516,7 @@ Accumulator<id=0, value=0>
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Int, programmers can also
-create their own types by subclassing [AccumulatorParam](api/python/pyspark.html#pyspark.AccumulatorParam).
+create their own types by subclassing [AccumulatorParam](api/python/reference/api/pyspark.AccumulatorParam.html#pyspark.AccumulatorParam).
 The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
 type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
 representing mathematical vectors, we could write:
@@ -1620,4 +1621,4 @@ For help on deploying, the [cluster mode overview](cluster-overview.html) descri
 in distributed operation and supported cluster managers.
 
 Finally, full API documentation is available in
-[Scala](api/scala/#org.apache.spark.package), [Java](api/java/), [Python](api/python/) and [R](api/R/).
+[Scala](api/scala/org/apache/spark/), [Java](api/java/), [Python](api/python/) and [R](api/R/).

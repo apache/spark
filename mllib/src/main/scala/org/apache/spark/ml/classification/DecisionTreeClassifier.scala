@@ -22,7 +22,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -30,13 +30,13 @@ import org.apache.spark.ml.tree.{DecisionTreeModel, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Decision tree learning algorithm (http://en.wikipedia.org/wiki/Decision_tree_learning)
@@ -116,45 +116,31 @@ class DecisionTreeClassifier @Since("1.4.0") (
       dataset: Dataset[_]): DecisionTreeClassificationModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    val categoricalFeatures: Map[Int, Int] =
-      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses: Int = getNumClasses(dataset)
+    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val numClasses = getNumClasses(dataset, $(labelCol))
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
         ".train() called with non-matching numClasses and thresholds.length." +
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
-    validateNumClasses(numClasses)
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances =
-      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          validateLabel(label, numClasses)
-          Instance(label, weight, features)
-      }
+
+    val instances = dataset.select(
+      checkClassificationLabels($(labelCol), Some(numClasses)),
+      checkNonNegativeWeights(get(weightCol)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v)
+    }.setName("training instances")
+
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
+    require(!strategy.bootstrap, "DecisionTreeClassifier does not need bootstrap sampling")
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
-      probabilityCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
-      cacheNodeIds, checkpointInterval, impurity, seed)
+      probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain,
+      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed, thresholds)
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
-
-    trees.head.asInstanceOf[DecisionTreeClassificationModel]
-  }
-
-  /** (private[ml]) Train a decision tree on an RDD */
-  private[ml] def train(data: RDD[LabeledPoint],
-      oldStrategy: OldStrategy): DecisionTreeClassificationModel = instrumented { instr =>
-    val instances = data.map(_.toInstance)
-    instr.logPipelineStage(this)
-    instr.logDataset(instances)
-    instr.logParams(this, maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
-      cacheNodeIds, checkpointInterval, impurity, seed)
-    val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,
-      featureSubsetStrategy = "all", seed = 0L, instr = Some(instr), parentUID = Some(uid))
 
     trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
@@ -210,7 +196,30 @@ class DecisionTreeClassificationModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateField(outputSchema, getLeafField($(leafCol)))
+    }
+    outputSchema
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+
+    val outputData = super.transform(dataset)
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
+        outputSchema($(leafCol)).metadata)
+    } else {
+      outputData
+    }
+  }
+
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     Vectors.dense(rootNode.predictImpl(features).impurityStats.stats.clone())
   }
 
@@ -233,7 +242,8 @@ class DecisionTreeClassificationModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"DecisionTreeClassificationModel (uid=$uid) of depth $depth with $numNodes nodes"
+    s"DecisionTreeClassificationModel: uid=$uid, depth=$depth, numNodes=$numNodes, " +
+      s"numClasses=$numClasses, numFeatures=$numFeatures"
   }
 
   /**
@@ -286,7 +296,8 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(nodeData).write.parquet(dataPath)
+      val numDataParts = NodeData.inferNumPartitions(instance.numNodes)
+      sparkSession.createDataFrame(nodeData).repartition(numDataParts).write.parquet(dataPath)
     }
   }
 

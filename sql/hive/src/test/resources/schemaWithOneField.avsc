@@ -1,0 +1,12 @@
+{
+  "namespace": "test",
+  "name": "some_schema",
+  "type": "record",
+  "fields": [
+    {
+      "name": "col2",
+      "type": "string"
+    }
+  ]
+}
+

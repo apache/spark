@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,9 +21,9 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hive.service.cli.thrift.TColumnValue;
-import org.apache.hive.service.cli.thrift.TRow;
-import org.apache.hive.service.cli.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TColumnValue;
+import org.apache.hive.service.rpc.thrift.TRow;
+import org.apache.hive.service.rpc.thrift.TRowSet;
 
 /**
  * RowBasedSet
@@ -33,22 +32,22 @@ public class RowBasedSet implements RowSet {
 
   private long startOffset;
 
-  private final Type[] types; // non-null only for writing (server-side)
+  private final TypeDescriptor[] descriptors; // non-null only for writing (server-side)
   private final RemovableList<TRow> rows;
 
   public RowBasedSet(TableSchema schema) {
-    types = schema.toTypes();
+    descriptors = schema.toTypeDescriptors();
     rows = new RemovableList<TRow>();
   }
 
   public RowBasedSet(TRowSet tRowSet) {
-    types = null;
+    descriptors = null;
     rows = new RemovableList<TRow>(tRowSet.getRows());
     startOffset = tRowSet.getStartRowOffset();
   }
 
-  private RowBasedSet(Type[] types, List<TRow> rows, long startOffset) {
-    this.types = types;
+  private RowBasedSet(TypeDescriptor[] descriptors, List<TRow> rows, long startOffset) {
+    this.descriptors = descriptors;
     this.rows = new RemovableList<TRow>(rows);
     this.startOffset = startOffset;
   }
@@ -57,7 +56,7 @@ public class RowBasedSet implements RowSet {
   public RowBasedSet addRow(Object[] fields) {
     TRow tRow = new TRow();
     for (int i = 0; i < fields.length; i++) {
-      tRow.addToColVals(ColumnValue.toTColumnValue(types[i], fields[i]));
+      tRow.addToColVals(ColumnValue.toTColumnValue(descriptors[i], fields[i]));
     }
     rows.add(tRow);
     return this;
@@ -75,7 +74,7 @@ public class RowBasedSet implements RowSet {
 
   public RowBasedSet extractSubset(int maxRows) {
     int numRows = Math.min(numRows(), maxRows);
-    RowBasedSet result = new RowBasedSet(types, rows.subList(0, numRows), startOffset);
+    RowBasedSet result = new RowBasedSet(descriptors, rows.subList(0, numRows), startOffset);
     rows.removeRange(0, numRows);
     startOffset += numRows;
     return result;

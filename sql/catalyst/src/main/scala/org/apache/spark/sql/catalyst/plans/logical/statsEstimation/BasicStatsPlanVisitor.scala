@@ -27,13 +27,26 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   /** Falls back to the estimation computed by [[SizeInBytesOnlyStatsPlanVisitor]]. */
   private def fallback(p: LogicalPlan): Statistics = SizeInBytesOnlyStatsPlanVisitor.visit(p)
 
-  override def default(p: LogicalPlan): Statistics = fallback(p)
+  override def default(p: LogicalPlan): Statistics = p match {
+    case p: LeafNode => p.computeStats()
+    case _: LogicalPlan =>
+      val stats = p.children.map(_.stats)
+      val rowCount = if (stats.exists(_.rowCount.isEmpty)) {
+        None
+      } else {
+        Some(stats.map(_.rowCount.get).filter(_ > 0L).product)
+      }
+      Statistics(sizeInBytes = stats.map(_.sizeInBytes).filter(_ > 0L).product, rowCount = rowCount)
+  }
 
   override def visitAggregate(p: Aggregate): Statistics = {
     AggregateEstimation.estimate(p).getOrElse(fallback(p))
   }
 
-  override def visitDistinct(p: Distinct): Statistics = fallback(p)
+  override def visitDistinct(p: Distinct): Statistics = {
+    val child = p.child
+    visitAggregate(Aggregate(child.output, child.output, child))
+  }
 
   override def visitExcept(p: Except): Statistics = fallback(p)
 
@@ -43,11 +56,23 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     FilterEstimation(p).estimate.getOrElse(fallback(p))
   }
 
-  override def visitGenerate(p: Generate): Statistics = fallback(p)
+  override def visitGenerate(p: Generate): Statistics = default(p)
 
   override def visitGlobalLimit(p: GlobalLimit): Statistics = fallback(p)
 
-  override def visitIntersect(p: Intersect): Statistics = fallback(p)
+  override def visitOffset(p: Offset): Statistics = fallback(p)
+
+  override def visitIntersect(p: Intersect): Statistics = {
+    val leftStats = p.left.stats
+    val rightStats = p.right.stats
+    val leftSize = leftStats.sizeInBytes
+    val rightSize = rightStats.sizeInBytes
+    if (leftSize < rightSize) {
+      Statistics(sizeInBytes = leftSize, rowCount = leftStats.rowCount)
+    } else {
+      Statistics(sizeInBytes = rightSize, rowCount = rightStats.rowCount)
+    }
+  }
 
   override def visitJoin(p: Join): Statistics = {
     JoinEstimation(p).estimate.getOrElse(fallback(p))
@@ -55,7 +80,7 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitLocalLimit(p: LocalLimit): Statistics = fallback(p)
 
-  override def visitPivot(p: Pivot): Statistics = fallback(p)
+  override def visitPivot(p: Pivot): Statistics = default(p)
 
   override def visitProject(p: Project): Statistics = {
     ProjectEstimation.estimate(p).getOrElse(fallback(p))
@@ -65,11 +90,23 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = fallback(p)
 
+  override def visitRebalancePartitions(p: RebalancePartitions): Statistics = fallback(p)
+
   override def visitSample(p: Sample): Statistics = fallback(p)
 
-  override def visitScriptTransform(p: ScriptTransformation): Statistics = fallback(p)
+  override def visitScriptTransform(p: ScriptTransformation): Statistics = default(p)
 
-  override def visitUnion(p: Union): Statistics = fallback(p)
+  override def visitUnion(p: Union): Statistics = {
+    UnionEstimation.estimate(p).getOrElse(fallback(p))
+  }
 
   override def visitWindow(p: Window): Statistics = fallback(p)
+
+  override def visitSort(p: Sort): Statistics = fallback(p)
+
+  override def visitTail(p: Tail): Statistics = {
+    fallback(p)
+  }
+
+  override def visitWithCTE(p: WithCTE): Statistics = fallback(p)
 }

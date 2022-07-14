@@ -33,7 +33,9 @@ private[spark] class BarrierJobRunWithDynamicAllocationException
   extends BarrierJobAllocationFailed(
     BarrierJobAllocationFailed.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
 
-private[spark] class BarrierJobSlotsNumberCheckFailed
+private[spark] class BarrierJobSlotsNumberCheckFailed(
+    val requiredConcurrentTasks: Int,
+    val maxConcurrentTasks: Int)
   extends BarrierJobAllocationFailed(
     BarrierJobAllocationFailed.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
 
@@ -43,10 +45,10 @@ private[spark] object BarrierJobAllocationFailed {
   val ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN =
     "[SPARK-24820][SPARK-24821]: Barrier execution mode does not allow the following pattern of " +
       "RDD chain within a barrier stage:\n1. Ancestor RDDs that have different number of " +
-      "partitions from the resulting RDD (eg. union()/coalesce()/first()/take()/" +
+      "partitions from the resulting RDD (e.g. union()/coalesce()/first()/take()/" +
       "PartitionPruningRDD). A workaround for first()/take() can be barrierRdd.collect().head " +
       "(scala) or barrierRdd.collect()[0] (python).\n" +
-      "2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2))."
+      "2. An RDD that depends on multiple barrier RDDs (e.g. barrierRdd1.zip(barrierRdd2))."
 
   // Error message when running a barrier stage with dynamic resource allocation enabled.
   val ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION =
@@ -58,6 +60,6 @@ private[spark] object BarrierJobAllocationFailed {
   val ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER =
     "[SPARK-24819]: Barrier execution mode does not allow run a barrier stage that requires " +
       "more slots than the total number of slots in the cluster currently. Please init a new " +
-      "cluster with more CPU cores or repartition the input RDD(s) to reduce the number of " +
-      "slots required to run this barrier stage."
+      "cluster with more resources(e.g. CPU, GPU) or repartition the input RDD(s) to reduce " +
+      "the number of slots required to run this barrier stage."
 }

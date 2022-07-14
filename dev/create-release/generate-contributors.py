@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -22,7 +22,21 @@ import os
 import re
 import sys
 
-from releaseutils import *
+from releaseutils import (
+    tag_exists,
+    get_commits,
+    yesOrNoPrompt,
+    get_date,
+    is_valid_author,
+    capitalize_author,
+    JIRA,
+    find_components,
+    translate_issue_type,
+    translate_component,
+    CORE_COMPONENT,
+    contributors_file_name,
+    nice_join,
+)
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
@@ -31,11 +45,12 @@ PREVIOUS_RELEASE_TAG = os.environ.get("PREVIOUS_RELEASE_TAG", "v1.1.0")
 
 # If the release tags are not provided, prompt the user to provide them
 while not tag_exists(RELEASE_TAG):
-    RELEASE_TAG = raw_input("Please provide a valid release tag: ")
+    RELEASE_TAG = input("Please provide a valid release tag: ")
 while not tag_exists(PREVIOUS_RELEASE_TAG):
     print("Please specify the previous release tag.")
-    PREVIOUS_RELEASE_TAG = raw_input(
-        "For instance, if you are releasing v1.2.0, you should specify v1.1.0: ")
+    PREVIOUS_RELEASE_TAG = input(
+        "For instance, if you are releasing v1.2.0, you should specify v1.1.0: "
+    )
 
 # Gather commits found in the new tag but not in the old tag.
 # This filters commits based on both the git hash and the PR number.
@@ -73,6 +88,8 @@ print("")
 def print_indented(_list):
     for x in _list:
         print("  %s" % x)
+
+
 if yesOrNoPrompt("Show all commits?"):
     print_indented(new_commits)
 print("==================================================================================\n")
@@ -88,15 +105,16 @@ filtered_commits = []
 
 
 def is_release(commit_title):
-    return ("[release]" in commit_title.lower() or
-            "preparing spark release" in commit_title.lower() or
-            "preparing development version" in commit_title.lower() or
-            "CHANGES.txt" in commit_title)
+    return (
+        "[release]" in commit_title.lower()
+        or "preparing spark release" in commit_title.lower()
+        or "preparing development version" in commit_title.lower()
+        or "CHANGES.txt" in commit_title
+    )
 
 
 def is_maintenance(commit_title):
-    return "maintenance" in commit_title.lower() or \
-        "manually close" in commit_title.lower()
+    return "maintenance" in commit_title.lower() or "manually close" in commit_title.lower()
 
 
 def has_no_jira(commit_title):
@@ -108,8 +126,7 @@ def is_revert(commit_title):
 
 
 def is_docs(commit_title):
-    return re.findall("docs*", commit_title.lower()) or \
-        "programming guide" in commit_title.lower()
+    return re.findall("docs*", commit_title.lower()) or "programming guide" in commit_title.lower()
 
 
 for c in new_commits:
@@ -211,14 +228,16 @@ for commit in filtered_commits:
             author_info[author][issue_type] = set()
         for component in components:
             author_info[author][issue_type].add(component)
+
     # Find issues and components associated with this commit
     for issue in issues:
         try:
             jira_issue = jira_client.issue(issue)
             jira_type = jira_issue.fields.issuetype.name
             jira_type = translate_issue_type(jira_type, issue, warnings)
-            jira_components = [translate_component(c.name, _hash, warnings)
-                               for c in jira_issue.fields.components]
+            jira_components = [
+                translate_component(c.name, _hash, warnings) for c in jira_issue.fields.components
+            ]
             all_components = set(jira_components + commit_components)
             populate(jira_type, all_components)
         except Exception as e:
@@ -234,7 +253,7 @@ print("=========================================================================
 # e.g. * Andrew Or -- Bug fixes in Windows, Core, and Web UI; improvements in Core
 # e.g. * Tathagata Das -- Bug fixes and new features in Streaming
 contributors_file = open(contributors_file_name, "w")
-authors = author_info.keys()
+authors = list(author_info.keys())
 authors.sort()
 for author in authors:
     contribution = ""
@@ -250,8 +269,10 @@ for author in authors:
     # Otherwise, group contributions by issue types instead of modules
     # e.g. Bug fixes in MLlib, Core, and Streaming; documentation in YARN
     else:
-        contributions = ["%s in %s" % (issue_type, nice_join(comps))
-                         for issue_type, comps in author_info[author].items()]
+        contributions = [
+            "%s in %s" % (issue_type, nice_join(comps))
+            for issue_type, comps in author_info[author].items()
+        ]
         contribution = "; ".join(contributions)
     # Do not use python's capitalize() on the whole string to preserve case
     assert contribution

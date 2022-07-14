@@ -48,15 +48,19 @@ public abstract class GenericFileInputStreamSuite {
   }
 
   @After
-  public void tearDown() {
+  public void tearDown() throws IOException {
     inputFile.delete();
+
+    for (InputStream is : inputStreams) {
+      is.close();
+    }
   }
 
   @Test
   public void testReadOneByte() throws IOException {
     for (InputStream inputStream: inputStreams) {
-      for (int i = 0; i < randomBytes.length; i++) {
-        assertEquals(randomBytes[i], (byte) inputStream.read());
+      for (byte randomByte : randomBytes) {
+        assertEquals(randomByte, (byte) inputStream.read());
       }
     }
   }
@@ -140,5 +144,16 @@ public abstract class GenericFileInputStreamSuite {
       assertEquals(randomBytes.length, inputStream.skip(randomBytes.length + 1));
       assertEquals(-1, inputStream.read());
     }
+  }
+
+  @Test
+  public void testReadPastEOF() throws IOException {
+    InputStream is = inputStreams[0];
+    byte[] buf = new byte[1024];
+    int read;
+    while ((read = is.read(buf, 0, buf.length)) != -1);
+
+    int readAfterEOF = is.read(buf, 0, buf.length);
+    assertEquals(-1, readAfterEOF);
   }
 }

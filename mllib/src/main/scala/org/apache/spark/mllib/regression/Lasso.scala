@@ -19,12 +19,11 @@ package org.apache.spark.mllib.regression
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression.impl.GLMRegressionModel
 import org.apache.spark.mllib.util.{Loader, Saveable}
-import org.apache.spark.rdd.RDD
 
 /**
  * Regression model trained using Lasso.
@@ -44,7 +43,7 @@ class LassoModel @Since("1.1.0") (
       dataMatrix: Vector,
       weightMatrix: Vector,
       intercept: Double): Double = {
-    weightMatrix.asBreeze.dot(dataMatrix.asBreeze) + intercept
+    BLAS.dot(weightMatrix, dataMatrix) + intercept
   }
 
   @Since("1.3.0")
@@ -99,117 +98,7 @@ class LassoWithSGD private[mllib] (
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
-  /**
-   * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
-   * regParam: 0.01, miniBatchFraction: 1.0}.
-   */
-  @Since("0.8.0")
-  @deprecated("Use ml.regression.LinearRegression with elasticNetParam = 1.0. Note the default " +
-    "regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.", "2.0.0")
-  def this() = this(1.0, 100, 0.01, 1.0)
-
   override protected def createModel(weights: Vector, intercept: Double) = {
     new LassoModel(weights, intercept)
-  }
-}
-
-/**
- * Top-level methods for calling Lasso.
- *
- */
-@Since("0.8.0")
-@deprecated("Use ml.regression.LinearRegression with elasticNetParam = 1.0. Note the default " +
-  "regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.", "2.0.0")
-object LassoWithSGD {
-
-  /**
-   * Train a Lasso model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient. The weights used
-   * in gradient descent are initialized using the initial weights provided.
-   *
-   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
-   *              matrix A as well as the corresponding right hand side label y
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param stepSize Step size scaling to be used for the iterations of gradient descent.
-   * @param regParam Regularization parameter.
-   * @param miniBatchFraction Fraction of data to be used per iteration.
-   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
-   *        the number of features in the data.
-   *
-   */
-  @Since("1.0.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double,
-      regParam: Double,
-      miniBatchFraction: Double,
-      initialWeights: Vector): LassoModel = {
-    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction)
-      .run(input, initialWeights)
-  }
-
-  /**
-   * Train a Lasso model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient.
-   *
-   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
-   *              matrix A as well as the corresponding right hand side label y
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param regParam Regularization parameter.
-   * @param miniBatchFraction Fraction of data to be used per iteration.
-   *
-   */
-  @Since("0.8.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double,
-      regParam: Double,
-      miniBatchFraction: Double): LassoModel = {
-    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
-  }
-
-  /**
-   * Train a Lasso model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. We use the entire data set to
-   * update the true gradient in each iteration.
-   *
-   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
-   *              matrix A as well as the corresponding right hand side label y
-   * @param stepSize Step size to be used for each iteration of Gradient Descent.
-   * @param regParam Regularization parameter.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @return a LassoModel which has the weights and offset from training.
-   *
-   */
-  @Since("0.8.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double,
-      regParam: Double): LassoModel = {
-    train(input, numIterations, stepSize, regParam, 1.0)
-  }
-
-  /**
-   * Train a Lasso model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
-   * compute the true gradient in each iteration.
-   *
-   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
-   *              matrix A as well as the corresponding right hand side label y
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @return a LassoModel which has the weights and offset from training.
-   *
-   */
-  @Since("0.8.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int): LassoModel = {
-    train(input, numIterations, 1.0, 0.01, 1.0)
   }
 }

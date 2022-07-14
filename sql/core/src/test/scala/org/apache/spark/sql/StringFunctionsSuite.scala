@@ -18,10 +18,11 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
 
-class StringFunctionsSuite extends QueryTest with SharedSQLContext {
+class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("string concat") {
@@ -48,13 +49,74 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("a||b"))
   }
 
+  test("SPARK-31993: concat_ws in agg function with plenty of string/array types columns") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+
+      val (df, genColNames, genColValues) = prepareTestConcatWsColumns()
+      val groupedCols = Seq($"a") ++ genColNames.map(col)
+      val concatCols = Seq(collect_list($"b"), collect_list($"c")) ++ genColNames.map(col)
+      val df2 = df
+        .groupBy(groupedCols: _*)
+        .agg(concat_ws(",", concatCols: _*).as("con"))
+        .select("con")
+
+      val expected = Seq(
+        Row((Seq("b1", "b2") ++ genColValues).mkString(",")),
+        Row((Seq("b3", "b4") ++ genColValues).mkString(","))
+      )
+
+      checkAnswer(df2, expected)
+    }
+  }
+
+  // This test doesn't fail without SPARK-31993, but still be useful for regression test.
+  test("SPARK-31993: concat_ws in agg function with plenty of string types columns") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+
+      val (df, genColNames, genColValues) = prepareTestConcatWsColumns()
+      val groupedCols = Seq($"a") ++ genColNames.map(col)
+      val concatCols = groupedCols
+      val df2 = df
+        .groupBy(groupedCols: _*)
+        .agg(concat_ws(",", concatCols: _*).as("con"))
+        .select("con")
+
+      val expected = Seq(
+        Row((Seq("a") ++ genColValues).mkString(",")),
+        Row((Seq("b") ++ genColValues).mkString(","))
+      )
+
+      checkAnswer(df2, expected)
+    }
+  }
+
+  private def prepareTestConcatWsColumns(): (DataFrame, Seq[String], Seq[String]) = {
+    val genColNames = (1 to 30).map { idx => s"col_$idx" }
+    val genColValues = (1 to 30).map { _.toString }
+    val genCols = genColValues.map(lit)
+
+    val df = Seq[(String, String, String)](
+      ("a", "b1", null),
+      ("a", "b2", null),
+      ("b", "b3", null),
+      ("b", "b4", null))
+      .toDF("a", "b", "c")
+      .withColumns(genColNames, genCols)
+
+    (df, genColNames, genColValues)
+  }
+
   test("string elt") {
     val df = Seq[(String, String, String, Int)](("hello", "world", null, 15))
       .toDF("a", "b", "c", "d")
 
-    checkAnswer(
-      df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
-      Row(null, "hello", null))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(
+        df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
+        Row(null, "hello", null))
+    }
 
     // check implicit type cast
     checkAnswer(
@@ -96,6 +158,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("non-matching optional group") {
     val df = Seq(Tuple1("aaaac")).toDF("s")
+
     checkAnswer(
       df.select(regexp_extract($"s", "(foo)", 1)),
       Row("")
@@ -127,6 +190,37 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("base64(a)", "unbase64(b)"),
       Row("AQIDBA==", bytes))
+  }
+
+  test("string overlay function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("Spark SQL", "Spark的SQL", "_", "CORE", "ANSI ", "tructured", 6, 7, 0, 2, 4)).
+      toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k")
+    checkAnswer(df.select(overlay($"a", $"c", $"g")), Row("Spark_SQL"))
+    checkAnswer(df.select(overlay($"a", $"d", $"h")), Row("Spark CORE"))
+    checkAnswer(df.select(overlay($"a", $"e", $"h", $"i")), Row("Spark ANSI SQL"))
+    checkAnswer(df.select(overlay($"a", $"f", $"j", $"k")), Row("Structured SQL"))
+    checkAnswer(df.select(overlay($"b", $"c", $"g")), Row("Spark_SQL"))
+    // scalastyle:on
+  }
+
+  test("binary overlay function") {
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq((
+      Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9),
+      Array[Byte](-1),
+      Array[Byte](-1, -1, -1, -1),
+      Array[Byte](-1, -1),
+      Array[Byte](-1, -1, -1, -1, -1),
+      6, 7, 0, 2, 4)).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
+    checkAnswer(df.select(overlay($"a", $"b", $"f")), Row(Array[Byte](1, 2, 3, 4, 5, -1, 7, 8, 9)))
+    checkAnswer(df.select(overlay($"a", $"c", $"g")),
+      Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, -1, -1)))
+    checkAnswer(df.select(overlay($"a", $"d", $"g", $"h")),
+      Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, 7, 8, 9)))
+    checkAnswer(df.select(overlay($"a", $"e", $"i", $"j")),
+      Row(Array[Byte](1, -1, -1, -1, -1, -1, 6, 7, 8, 9)))
   }
 
   test("string / binary substring function") {
@@ -254,7 +348,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("string parse_url function") {
 
-    def testUrl(url: String, expected: Row) {
+    def testUrl(url: String, expected: Row): Unit = {
       checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
         "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
         "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",
@@ -291,9 +385,11 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("host", "/file;param", "query;p2", null, "http", "/file;param?query;p2",
         "user:pass@host", "user:pass", null))
 
-    testUrl(
-      "inva lid://user:pass@host/file;param?query;p2",
-      Row(null, null, null, null, null, null, null, null, null))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      testUrl(
+        "inva lid://user:pass@host/file;param?query;p2",
+        Row(null, null, null, null, null, null, null, null, null))
+    }
 
   }
 
@@ -394,6 +490,58 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-36751: add octet length api for scala") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
+      .toDF("a", "b", "c", "d", "e", "f")
+    // string and binary input
+    checkAnswer(
+      df.select(octet_length($"a"), octet_length($"b")),
+      Row(3, 4))
+    // string and binary input
+    checkAnswer(
+      df.selectExpr("octet_length(a)", "octet_length(b)"),
+      Row(3, 4))
+    // integer, float and double input
+    checkAnswer(
+      df.selectExpr("octet_length(c)", "octet_length(d)", "octet_length(e)"),
+      Row(3, 3, 5)
+    )
+    // multi-byte character input
+    checkAnswer(
+      df.selectExpr("octet_length(f)"),
+      Row(4)
+    )
+    // scalastyle:on
+  }
+
+  test("SPARK-36751: add bit length api for scala") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
+      .toDF("a", "b", "c", "d", "e", "f")
+    // string and binary input
+    checkAnswer(
+      df.select(bit_length($"a"), bit_length($"b")),
+      Row(24, 32))
+    // string and binary input
+    checkAnswer(
+      df.selectExpr("bit_length(a)", "bit_length(b)"),
+      Row(24, 32))
+    // integer, float and double input
+    checkAnswer(
+      df.selectExpr("bit_length(c)", "bit_length(d)", "bit_length(e)"),
+      Row(24, 24, 40)
+    )
+    // multi-byte character input
+    checkAnswer(
+      df.selectExpr("bit_length(f)"),
+      Row(32)
+    )
+    // scalastyle:on
+  }
+
   test("initcap function") {
     val df = Seq(("ab", "a B", "sParK")).toDF("x", "y", "z")
     checkAnswer(
@@ -465,9 +613,16 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("sentences(str, language, country)"),
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 
+    checkAnswer(
+      df.select(sentences($"str", $"language", $"country")),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
     // Type coercion
     checkAnswer(
       df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),
+      Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
+
+    checkAnswer(df.select(sentences(lit(null)), sentences(lit(10)), sentences(lit(3.14))),
       Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
 
     // Argument number exception
@@ -498,5 +653,12 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
+  }
+
+  test("SPARK-36148: check input data types of regexp_replace") {
+    val m = intercept[AnalysisException] {
+      sql("select regexp_replace(collect_list(1), '1', '2')")
+    }.getMessage
+    assert(m.contains("data type mismatch: argument 1 requires string type"))
   }
 }

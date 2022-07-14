@@ -17,81 +17,91 @@
 package org.apache.spark.examples.sql;
 
 // $example on:untyped_custom_aggregation$
-import java.util.ArrayList;
-import java.util.List;
+import java.io.Serializable;
 
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoder;
+import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.expressions.MutableAggregationBuffer;
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.expressions.Aggregator;
+import org.apache.spark.sql.functions;
 // $example off:untyped_custom_aggregation$
 
 public class JavaUserDefinedUntypedAggregation {
 
   // $example on:untyped_custom_aggregation$
-  public static class MyAverage extends UserDefinedAggregateFunction {
+  public static class Average implements Serializable  {
+    private long sum;
+    private long count;
 
-    private StructType inputSchema;
-    private StructType bufferSchema;
+    // Constructors, getters, setters...
+    // $example off:typed_custom_aggregation$
+    public Average() {
+    }
 
-    public MyAverage() {
-      List<StructField> inputFields = new ArrayList<>();
-      inputFields.add(DataTypes.createStructField("inputColumn", DataTypes.LongType, true));
-      inputSchema = DataTypes.createStructType(inputFields);
+    public Average(long sum, long count) {
+      this.sum = sum;
+      this.count = count;
+    }
 
-      List<StructField> bufferFields = new ArrayList<>();
-      bufferFields.add(DataTypes.createStructField("sum", DataTypes.LongType, true));
-      bufferFields.add(DataTypes.createStructField("count", DataTypes.LongType, true));
-      bufferSchema = DataTypes.createStructType(bufferFields);
+    public long getSum() {
+      return sum;
     }
-    // Data types of input arguments of this aggregate function
-    public StructType inputSchema() {
-      return inputSchema;
+
+    public void setSum(long sum) {
+      this.sum = sum;
     }
-    // Data types of values in the aggregation buffer
-    public StructType bufferSchema() {
-      return bufferSchema;
+
+    public long getCount() {
+      return count;
     }
-    // The data type of the returned value
-    public DataType dataType() {
-      return DataTypes.DoubleType;
+
+    public void setCount(long count) {
+      this.count = count;
     }
-    // Whether this function always returns the same output on the identical input
-    public boolean deterministic() {
-      return true;
+    // $example on:typed_custom_aggregation$
+  }
+
+  public static class MyAverage extends Aggregator<Long, Average, Double> {
+    // A zero value for this aggregation. Should satisfy the property that any b + zero = b
+    @Override
+    public Average zero() {
+      return new Average(0L, 0L);
     }
-    // Initializes the given aggregation buffer. The buffer itself is a `Row` that in addition to
-    // standard methods like retrieving a value at an index (e.g., get(), getBoolean()), provides
-    // the opportunity to update its values. Note that arrays and maps inside the buffer are still
-    // immutable.
-    public void initialize(MutableAggregationBuffer buffer) {
-      buffer.update(0, 0L);
-      buffer.update(1, 0L);
+    // Combine two values to produce a new value. For performance, the function may modify `buffer`
+    // and return it instead of constructing a new object
+    @Override
+    public Average reduce(Average buffer, Long data) {
+      long newSum = buffer.getSum() + data;
+      long newCount = buffer.getCount() + 1;
+      buffer.setSum(newSum);
+      buffer.setCount(newCount);
+      return buffer;
     }
-    // Updates the given aggregation buffer `buffer` with new input data from `input`
-    public void update(MutableAggregationBuffer buffer, Row input) {
-      if (!input.isNullAt(0)) {
-        long updatedSum = buffer.getLong(0) + input.getLong(0);
-        long updatedCount = buffer.getLong(1) + 1;
-        buffer.update(0, updatedSum);
-        buffer.update(1, updatedCount);
-      }
+    // Merge two intermediate values
+    @Override
+    public Average merge(Average b1, Average b2) {
+      long mergedSum = b1.getSum() + b2.getSum();
+      long mergedCount = b1.getCount() + b2.getCount();
+      b1.setSum(mergedSum);
+      b1.setCount(mergedCount);
+      return b1;
     }
-    // Merges two aggregation buffers and stores the updated buffer values back to `buffer1`
-    public void merge(MutableAggregationBuffer buffer1, Row buffer2) {
-      long mergedSum = buffer1.getLong(0) + buffer2.getLong(0);
-      long mergedCount = buffer1.getLong(1) + buffer2.getLong(1);
-      buffer1.update(0, mergedSum);
-      buffer1.update(1, mergedCount);
+    // Transform the output of the reduction
+    @Override
+    public Double finish(Average reduction) {
+      return ((double) reduction.getSum()) / reduction.getCount();
     }
-    // Calculates the final result
-    public Double evaluate(Row buffer) {
-      return ((double) buffer.getLong(0)) / buffer.getLong(1);
+    // Specifies the Encoder for the intermediate value type
+    @Override
+    public Encoder<Average> bufferEncoder() {
+      return Encoders.bean(Average.class);
+    }
+    // Specifies the Encoder for the final output value type
+    @Override
+    public Encoder<Double> outputEncoder() {
+      return Encoders.DOUBLE();
     }
   }
   // $example off:untyped_custom_aggregation$
@@ -104,7 +114,7 @@ public class JavaUserDefinedUntypedAggregation {
 
     // $example on:untyped_custom_aggregation$
     // Register the function to access it
-    spark.udf().register("myAverage", new MyAverage());
+    spark.udf().register("myAverage", functions.udaf(new MyAverage(), Encoders.LONG()));
 
     Dataset<Row> df = spark.read().json("examples/src/main/resources/employees.json");
     df.createOrReplaceTempView("employees");

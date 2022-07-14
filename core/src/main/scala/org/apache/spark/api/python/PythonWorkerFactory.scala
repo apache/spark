@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream, OutputStreamWriter}
+import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
@@ -76,7 +77,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   @GuardedBy("self")
   private var daemon: Process = null
-  val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
+  val daemonHost = InetAddress.getLoopbackAddress()
   @GuardedBy("self")
   private var daemonPort: Int = 0
   @GuardedBy("self")
@@ -95,11 +96,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
 
-  def create(): Socket = {
+  def create(): (Socket, Option[Int]) = {
     if (useDaemon) {
       self.synchronized {
         if (idleWorkers.nonEmpty) {
-          return idleWorkers.dequeue()
+          val worker = idleWorkers.dequeue()
+          return (worker, daemonWorkers.get(worker))
         }
       }
       createThroughDaemon()
@@ -113,9 +115,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
    * processes itself to avoid the high cost of forking from Java. This currently only works
    * on UNIX-based systems.
    */
-  private def createThroughDaemon(): Socket = {
+  private def createThroughDaemon(): (Socket, Option[Int]) = {
 
-    def createSocket(): Socket = {
+    def createSocket(): (Socket, Option[Int]) = {
       val socket = new Socket(daemonHost, daemonPort)
       val pid = new DataInputStream(socket.getInputStream).readInt()
       if (pid < 0) {
@@ -124,7 +126,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       authHelper.authToServer(socket)
       daemonWorkers.put(socket, pid)
-      socket
+      (socket, Some(pid))
     }
 
     self.synchronized {
@@ -148,10 +150,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   /**
    * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
-  private def createSimpleWorker(): Socket = {
+  private def createSimpleWorker(): (Socket, Option[Int]) = {
     var serverSocket: ServerSocket = null
     try {
-      serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
+      serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())
 
       // Create and start the worker
       val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", workerModule))
@@ -162,6 +164,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       workerEnv.put("PYTHONUNBUFFERED", "YES")
       workerEnv.put("PYTHON_WORKER_FACTORY_PORT", serverSocket.getLocalPort.toString)
       workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
+      if (Utils.preferIPv6) {
+        workerEnv.put("SPARK_PREFER_IPV6", "True")
+      }
       val worker = pb.start()
 
       // Redirect worker stdout and stderr
@@ -173,10 +178,15 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       try {
         val socket = serverSocket.accept()
         authHelper.authClient(socket)
+        // TODO: When we drop JDK 8, we can just use worker.pid()
+        val pid = new DataInputStream(socket.getInputStream).readInt()
+        if (pid < 0) {
+          throw new IllegalStateException("Python failed to launch worker with code " + pid)
+        }
         self.synchronized {
           simpleWorkers.put(socket, worker)
         }
-        return socket
+        return (socket, Some(pid))
       } catch {
         case e: Exception =>
           throw new SparkException("Python worker failed to connect back.", e)
@@ -189,7 +199,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     null
   }
 
-  private def startDaemon() {
+  private def startDaemon(): Unit = {
     self.synchronized {
       // Is it already running?
       if (daemon != null) {
@@ -204,6 +214,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
         workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
+        if (Utils.preferIPv6) {
+          workerEnv.put("SPARK_PREFER_IPV6", "True")
+        }
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")
         daemon = pb.start()
@@ -212,8 +225,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         try {
           daemonPort = in.readInt()
         } catch {
+          case _: EOFException if daemon.isAlive =>
+            throw SparkCoreErrors.eofExceptionWhileReadPortNumberError(
+              daemonModule)
           case _: EOFException =>
-            throw new SparkException(s"No port number in $daemonModule's stdout")
+            throw SparkCoreErrors.
+              eofExceptionWhileReadPortNumberError(daemonModule, Some(daemon.exitValue))
         }
 
         // test that the returned port number is within a valid range.
@@ -271,7 +288,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   /**
    * Redirect the given streams to our stderr in separate threads.
    */
-  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream) {
+  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream): Unit = {
     try {
       new RedirectThread(stdout, System.err, "stdout reader for " + pythonExec).start()
       new RedirectThread(stderr, System.err, "stderr reader for " + pythonExec).start()
@@ -288,7 +305,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
     setDaemon(true)
 
-    override def run() {
+    override def run(): Unit = {
       while (true) {
         self.synchronized {
           if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivityNs) {
@@ -301,7 +318,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  private def cleanupIdleWorkers() {
+  private def cleanupIdleWorkers(): Unit = {
     while (idleWorkers.nonEmpty) {
       val worker = idleWorkers.dequeue()
       try {
@@ -314,7 +331,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  private def stopDaemon() {
+  private def stopDaemon(): Unit = {
     self.synchronized {
       if (useDaemon) {
         cleanupIdleWorkers()
@@ -332,11 +349,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  def stop() {
+  def stop(): Unit = {
     stopDaemon()
   }
 
-  def stopWorker(worker: Socket) {
+  def stopWorker(worker: Socket): Unit = {
     self.synchronized {
       if (useDaemon) {
         if (daemon != null) {
@@ -355,7 +372,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     worker.close()
   }
 
-  def releaseWorker(worker: Socket) {
+  def releaseWorker(worker: Socket): Unit = {
     if (useDaemon) {
       self.synchronized {
         lastActivityNs = System.nanoTime()

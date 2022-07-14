@@ -19,17 +19,25 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.net.{URI, URISyntaxException}
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
+import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
 import java.util.regex.Pattern
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{StringType, _}
+import org.apache.spark.unsafe.UTF8StringBuilder
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,12 +53,16 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
+  usage = "_FUNC_(sep[, str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
   examples = """
     Examples:
       > SELECT _FUNC_(' ', 'Spark', 'SQL');
         Spark SQL
-  """)
+      > SELECT _FUNC_('s');
+
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class ConcatWs(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
@@ -114,47 +126,72 @@ case class ConcatWs(children: Seq[Expression])
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
     } else {
+      val isNullArgs = ctx.freshName("isNullArgs")
+      val valueArgs = ctx.freshName("valueArgs")
+
       val array = ctx.freshName("array")
       val varargNum = ctx.freshName("varargNum")
       val idxVararg = ctx.freshName("idxInVararg")
 
       val evals = children.map(_.genCode(ctx))
-      val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
-        child.dataType match {
+      val (argBuild, varargCount, varargBuild) = children.tail.zip(evals.tail)
+        .zipWithIndex.map { case ((child, eval), idx) =>
+        val reprForIsNull = s"$isNullArgs[$idx]"
+        val reprForValue = s"$valueArgs[$idx]"
+
+        val arg =
+          s"""
+           ${eval.code}
+           $reprForIsNull = ${eval.isNull};
+           $reprForValue = ${eval.value};
+           """
+
+        val (varCount, varBuild) = child.dataType match {
           case StringType =>
+            val reprForValueCast = s"((UTF8String) $reprForValue)"
             ("", // we count all the StringType arguments num at once below.
-             if (eval.isNull == TrueLiteral) {
-               ""
-             } else {
-               s"$array[$idxVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
-             })
+              if (eval.isNull == TrueLiteral) {
+                ""
+              } else {
+                s"$array[$idxVararg ++] = $reprForIsNull ? (UTF8String) null : $reprForValueCast;"
+              })
           case _: ArrayType =>
+            val reprForValueCast = s"((ArrayData) $reprForValue)"
             val size = ctx.freshName("n")
             if (eval.isNull == TrueLiteral) {
               ("", "")
             } else {
+              // scalastyle:off line.size.limit
               (s"""
-                if (!${eval.isNull}) {
-                  $varargNum += ${eval.value}.numElements();
+                if (!$reprForIsNull) {
+                  $varargNum += $reprForValueCast.numElements();
                 }
                 """,
-               s"""
-                if (!${eval.isNull}) {
-                  final int $size = ${eval.value}.numElements();
+                s"""
+                if (!$reprForIsNull) {
+                  final int $size = $reprForValueCast.numElements();
                   for (int j = 0; j < $size; j ++) {
-                    $array[$idxVararg ++] = ${CodeGenerator.getValue(eval.value, StringType, "j")};
+                    $array[$idxVararg ++] = ${CodeGenerator.getValue(reprForValueCast, StringType, "j")};
                   }
                 }
                 """)
+              // scalastyle:on line.size.limit
             }
         }
-      }.unzip
 
-      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code.toString))
+        (arg, varCount, varBuild)
+      }.unzip3
+
+      val argBuilds = ctx.splitExpressionsWithCurrentInputs(
+        expressions = argBuild,
+        funcName = "initializeArgsArrays",
+        extraArguments = ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil
+      )
 
       val varargCounts = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargCount,
         funcName = "varargCountsConcatWs",
+        extraArguments = ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
@@ -167,7 +204,8 @@ case class ConcatWs(children: Seq[Expression])
       val varargBuilds = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargBuild,
         funcName = "varargBuildsConcatWs",
-        extraArguments = ("UTF8String []", array) :: ("int", idxVararg) :: Nil,
+        extraArguments = ("UTF8String []", array) :: ("int", idxVararg) ::
+          ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
@@ -178,17 +216,23 @@ case class ConcatWs(children: Seq[Expression])
 
       ev.copy(
         code"""
-        $codes
+        boolean[] $isNullArgs = new boolean[${children.length - 1}];
+        Object[] $valueArgs = new Object[${children.length - 1}];
+        $argBuilds
         int $varargNum = ${children.count(_.dataType == StringType) - 1};
         int $idxVararg = 0;
         $varargCounts
         UTF8String[] $array = new UTF8String[$varargNum];
         $varargBuilds
+        ${evals.head.code}
         UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $array);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ConcatWs =
+    copy(children = newChildren)
 }
 
 /**
@@ -198,14 +242,26 @@ case class ConcatWs(children: Seq[Expression])
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.",
+  usage = """
+    _FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
+    The function returns NULL if the index exceeds the length of the array
+    and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
+    it throws ArrayIndexOutOfBoundsException for invalid indices.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
-  """)
+  """,
+  since = "2.0.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Elt(children: Seq[Expression]) extends Expression {
+case class Elt(
+    children: Seq[Expression],
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends Expression
+  with SupportQueryContext {
+
+  def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   private lazy val indexExpr = children.head
   private lazy val inputExprs = children.tail.toArray
@@ -241,7 +297,11 @@ case class Elt(children: Seq[Expression]) extends Expression {
     } else {
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
-        null
+        if (failOnError) {
+          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length, queryContext)
+        } else {
+          null
+        }
       } else {
         inputExprs(index - 1).eval(input)
       }
@@ -289,18 +349,45 @@ case class Elt(children: Seq[Expression]) extends Expression {
          """.stripMargin
       }.mkString)
 
+    val indexOutOfBoundBranch = if (failOnError) {
+      val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+      // scalastyle:off line.size.limit
+      s"""
+         |if (!$indexMatched) {
+         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length}, $errorContext);
+         |}
+       """.stripMargin
+      // scalastyle:on line.size.limit
+    } else {
+      ""
+    }
+
     ev.copy(
       code"""
          |${index.code}
-         |final int $indexVal = ${index.value};
-         |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
-         |$inputVal = null;
-         |do {
-         |  $codes
-         |} while (false);
-         |final ${CodeGenerator.javaType(dataType)} ${ev.value} = $inputVal;
-         |final boolean ${ev.isNull} = ${ev.value} == null;
+         |boolean ${ev.isNull} = ${index.isNull};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = null;
+         |if (!${index.isNull}) {
+         |  final int $indexVal = ${index.value};
+         |  ${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
+         |  $inputVal = null;
+         |  do {
+         |    $codes
+         |  } while (false);
+         |  $indexOutOfBoundBranch
+         |  ${ev.value} = $inputVal;
+         |  ${ev.isNull} = ${ev.value} == null;
+         |}
        """.stripMargin)
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
+    copy(children = newChildren)
+
+  override def initQueryContext(): String = if (failOnError) {
+    origin.context
+  } else {
+    ""
   }
 }
 
@@ -326,17 +413,23 @@ trait String2StringExpression extends ImplicitCastInputTypes {
     Examples:
       > SELECT _FUNC_('SparkSql');
        SPARKSQL
-  """)
+  """,
+  since = "1.0.1",
+  group = "string_funcs")
 case class Upper(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+  extends UnaryExpression with String2StringExpression with NullIntolerant {
 
   // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
   // scalastyle:on caselocale
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Upper = copy(child = newChild)
 }
 
 /**
@@ -348,16 +441,26 @@ case class Upper(child: Expression)
     Examples:
       > SELECT _FUNC_('SparkSql');
        sparksql
-  """)
-case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
+  """,
+  since = "1.0.1",
+  group = "string_funcs")
+case class Lower(child: Expression)
+  extends UnaryExpression with String2StringExpression with NullIntolerant {
 
   // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
   // scalastyle:on caselocale
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
   }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("lower")
+
+  override protected def withNewChildInternal(newChild: Expression): Lower = copy(child = newChild)
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
@@ -374,34 +477,164 @@ abstract class StringPredicate extends BinaryExpression
   override def toString: String = s"$nodeName($left, $right)"
 }
 
-/**
- * A function that returns true if the string `left` contains the string `right`.
- */
+trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 2) {
+      if (expressions(0).dataType == BinaryType && expressions(1).dataType == BinaryType) {
+        BinaryPredicate(funcName, expressions(0), expressions(1))
+      } else {
+        createStringPredicate(expressions(0), expressions(1))
+      }
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+    }
+  }
+
+  protected def createStringPredicate(left: Expression, right: Expression): Expression
+}
+
+object BinaryPredicate {
+  def unapply(expr: Expression): Option[StaticInvoke] = expr match {
+    case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _)
+      if clz == classOf[ByteArrayMethods] => Some(s)
+    case _ => None
+  }
+}
+
+case class BinaryPredicate(override val prettyName: String, left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  private lazy val realFuncName = prettyName match {
+    case "startswith" => "startsWith"
+    case "endswith" => "endsWith"
+    case name => name
+  }
+
+  override lazy val replacement =
+    StaticInvoke(
+      classOf[ByteArrayMethods],
+      BooleanType,
+      realFuncName,
+      Seq(left, right),
+      Seq(BinaryType, BinaryType))
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(left, right) - Returns a boolean. The value is True if right is found inside left.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 'Spark');
+       true
+      > SELECT _FUNC_('Spark SQL', 'SPARK');
+       false
+      > SELECT _FUNC_('Spark SQL', null);
+       NULL
+      > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
+       true
+  """,
+  since = "3.3.0",
+  group = "string_funcs"
+)
+object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
+  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+    Contains(left, right)
+  }
+}
+
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
 
-/**
- * A function that returns true if the string `left` starts with the string `right`.
- */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(left, right) - Returns a boolean. The value is True if left starts with right.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 'Spark');
+       true
+      > SELECT _FUNC_('Spark SQL', 'SQL');
+       false
+      > SELECT _FUNC_('Spark SQL', null);
+       NULL
+      > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
+       true
+      > SELECT _FUNC_(x'537061726b2053514c', x'53514c');
+       false
+  """,
+  since = "3.3.0",
+  group = "string_funcs"
+)
+object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
+  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+    StartsWith(left, right)
+  }
+}
+
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
 
-/**
- * A function that returns true if the string `left` ends with the string `right`.
- */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(left, right) - Returns a boolean. The value is True if left ends with right.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 'SQL');
+       true
+      > SELECT _FUNC_('Spark SQL', 'Spark');
+       false
+      > SELECT _FUNC_('Spark SQL', null);
+       NULL
+      > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
+       false
+      > SELECT _FUNC_(x'537061726b2053514c', x'53514c');
+       true
+  """,
+  since = "3.3.0",
+  group = "string_funcs"
+)
+object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
+  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+    EndsWith(left, right)
+  }
+}
+
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -421,10 +654,12 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
     Examples:
       > SELECT _FUNC_('ABCabc', 'abc', 'DEF');
        ABCDEF
-  """)
+  """,
+  since = "2.3.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(srcExpr: Expression, searchExpr: Expression) = {
     this(srcExpr, searchExpr, Literal(""))
@@ -443,24 +678,159 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
-  override def children: Seq[Expression] = srcExpr :: searchExpr :: replaceExpr :: Nil
+  override def first: Expression = srcExpr
+  override def second: Expression = searchExpr
+  override def third: Expression = replaceExpr
+
   override def prettyName: String = "replace"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringReplace =
+    copy(srcExpr = newFirst, searchExpr = newSecond, replaceExpr = newThird)
+}
+
+object Overlay {
+
+  def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
+    val builder = new UTF8StringBuilder
+    builder.append(input.substringSQL(1, pos - 1))
+    builder.append(replace)
+    // If you specify length, it must be a positive whole number or zero.
+    // Otherwise it will be ignored.
+    // The default value for length is the length of replace.
+    val length = if (len >= 0) {
+      len
+    } else {
+      replace.numChars
+    }
+    builder.append(input.substringSQL(pos + length, Int.MaxValue))
+    builder.build()
+  }
+
+  def calculate(input: Array[Byte], replace: Array[Byte], pos: Int, len: Int): Array[Byte] = {
+    // If you specify length, it must be a positive whole number or zero.
+    // Otherwise it will be ignored.
+    // The default value for length is the length of replace.
+    val length = if (len >= 0) {
+      len
+    } else {
+      replace.length
+    }
+    ByteArray.concat(ByteArray.subStringSQL(input, 1, pos - 1),
+      replace, ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(input, replace, pos[, len]) - Replace `input` with `replace` that starts at `pos` and is of length `len`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL' PLACING '_' FROM 6);
+       Spark_SQL
+      > SELECT _FUNC_('Spark SQL' PLACING 'CORE' FROM 7);
+       Spark CORE
+      > SELECT _FUNC_('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0);
+       Spark ANSI SQL
+      > SELECT _FUNC_('Spark SQL' PLACING 'tructured' FROM 2 FOR 4);
+       Structured SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('_', 'utf-8') FROM 6);
+       Spark_SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('CORE', 'utf-8') FROM 7);
+       Spark CORE
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('ANSI ', 'utf-8') FROM 7 FOR 0);
+       Spark ANSI SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('tructured', 'utf-8') FROM 2 FOR 4);
+       Structured SQL
+  """,
+  since = "3.0.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(str: Expression, replace: Expression, pos: Expression) = {
+    this(str, replace, pos, Literal.create(-1, IntegerType))
+  }
+
+  override def dataType: DataType = input.dataType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType),
+    TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isSuccess) {
+      TypeUtils.checkForSameTypeInputExpr(
+        input.dataType :: replace.dataType :: Nil, s"function $prettyName")
+    } else {
+      inputTypeCheck
+    }
+  }
+
+  private lazy val replaceFunc = input.dataType match {
+    case StringType =>
+      (inputEval: Any, replaceEval: Any, posEval: Int, lenEval: Int) => {
+        Overlay.calculate(
+          inputEval.asInstanceOf[UTF8String],
+          replaceEval.asInstanceOf[UTF8String],
+          posEval, lenEval)
+      }
+    case BinaryType =>
+      (inputEval: Any, replaceEval: Any, posEval: Int, lenEval: Int) => {
+        Overlay.calculate(
+          inputEval.asInstanceOf[Array[Byte]],
+          replaceEval.asInstanceOf[Array[Byte]],
+          posEval, lenEval)
+      }
+  }
+
+  override def nullSafeEval(inputEval: Any, replaceEval: Any, posEval: Any, lenEval: Any): Any = {
+    replaceFunc(inputEval, replaceEval, posEval.asInstanceOf[Int], lenEval.asInstanceOf[Int])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (input, replace, pos, len) =>
+      "org.apache.spark.sql.catalyst.expressions.Overlay" +
+        s".calculate($input, $replace, $pos, $len);")
+  }
+
+  override def first: Expression = input
+  override def second: Expression = replace
+  override def third: Expression = pos
+  override def fourth: Expression = len
+
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression, fourth: Expression): Overlay =
+    copy(input = first, replace = second, pos = third, len = fourth)
 }
 
 object StringTranslate {
 
   def buildDict(matchingString: UTF8String, replaceString: UTF8String)
-    : JMap[Character, Character] = {
+    : JMap[String, String] = {
     val matching = matchingString.toString()
     val replace = replaceString.toString()
-    val dict = new HashMap[Character, Character]()
+    val dict = new HashMap[String, String]()
     var i = 0
-    while (i < matching.length()) {
-      val rep = if (i < replace.length()) replace.charAt(i) else '\u0000'
-      if (null == dict.get(matching.charAt(i))) {
-        dict.put(matching.charAt(i), rep)
+    var j = 0
+
+    while (i < matching.length) {
+      val rep = if (j < replace.length) {
+        val repCharCount = Character.charCount(replace.codePointAt(j))
+        val repStr = replace.substring(j, j + repCharCount)
+        j += repCharCount
+        repStr
+      } else {
+        "\u0000"
       }
-      i += 1
+
+      val matchCharCount = Character.charCount(matching.codePointAt(i))
+      val matchStr = matching.substring(i, i + matchCharCount)
+      if (null == dict.get(matchStr)) {
+        dict.put(matchStr, rep)
+      }
+      i += matchCharCount
     }
     dict
   }
@@ -479,14 +849,16 @@ object StringTranslate {
     Examples:
       > SELECT _FUNC_('AaBbCc', 'abc', '123');
        A1B2C3
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
-  @transient private var dict: JMap[Character, Character] = _
+  @transient private var dict: JMap[String, String] = _
 
   override def nullSafeEval(srcEval: Any, matchingEval: Any, replaceEval: Any): Any = {
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
@@ -524,8 +896,14 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
-  override def children: Seq[Expression] = srcExpr :: matchingExpr :: replaceExpr :: Nil
+  override def first: Expression = srcExpr
+  override def second: Expression = matchingExpr
+  override def third: Expression = replaceExpr
   override def prettyName: String = "translate"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringTranslate =
+    copy(srcExpr = newFirst, matchingExpr = newSecond, replaceExpr = newThird)
 }
 
 /**
@@ -543,10 +921,12 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     Examples:
       > SELECT _FUNC_('ab','abc,b,ab,c,def');
        3
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
-    with ImplicitCastInputTypes {
+    with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
@@ -562,15 +942,78 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override def dataType: DataType = IntegerType
 
   override def prettyName: String = "find_in_set"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): FindInSet = copy(left = newLeft, right = newRight)
 }
 
 trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
+  protected def srcStr: Expression
+  protected def trimStr: Option[Expression]
+  protected def direction: String
+
+  override def children: Seq[Expression] = srcStr +: trimStr.toSeq
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+
+  protected def doEval(srcString: UTF8String): UTF8String
+  protected def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String
+
+  override def eval(input: InternalRow): Any = {
+    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
+    if (srcString == null) {
+      null
+    } else if (trimStr.isDefined) {
+      doEval(srcString, trimStr.get.eval(input).asInstanceOf[UTF8String])
+    } else {
+      doEval(srcString)
+    }
+  }
+
+  protected val trimMethod: String
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val evals = children.map(_.genCode(ctx))
+    val srcString = evals(0)
+
+    if (evals.length == 1) {
+      ev.copy(code = code"""
+         |${srcString.code}
+         |boolean ${ev.isNull} = false;
+         |UTF8String ${ev.value} = null;
+         |if (${srcString.isNull}) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${ev.value} = ${srcString.value}.$trimMethod();
+         |}""".stripMargin)
+    } else {
+      val trimString = evals(1)
+      ev.copy(code = code"""
+         |${srcString.code}
+         |boolean ${ev.isNull} = false;
+         |UTF8String ${ev.value} = null;
+         |if (${srcString.isNull}) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${trimString.code}
+         |  if (${trimString.isNull}) {
+         |    ${ev.isNull} = true;
+         |  } else {
+         |    ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
+         |  }
+         |}""".stripMargin)
+    }
+  }
+
+  override def sql: String = if (trimStr.isDefined) {
+    s"TRIM($direction ${trimStr.get.sql} FROM ${srcStr.sql})"
+  } else {
+    super.sql
+  }
 }
 
 object StringTrim {
@@ -596,11 +1039,19 @@ object StringTrim {
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
 
-    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`
+    _FUNC_(BOTH FROM str) - Removes the leading and trailing space characters from `str`.
 
-    _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`
+    _FUNC_(LEADING FROM str) - Removes the leading space characters from `str`.
 
-    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing `trimStr` characters from `str`
+    _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
+
+    _FUNC_(trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
+
+    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
+
+    _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`.
+
+    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing `trimStr` characters from `str`.
   """,
   arguments = """
     Arguments:
@@ -617,7 +1068,13 @@ object StringTrim {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('SL', 'SSparkSQLS');
+      > SELECT _FUNC_(BOTH FROM '    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(LEADING FROM '    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
+           SparkSQL
+      > SELECT _FUNC_('SL' FROM 'SSparkSQLS');
        parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
        parkSQ
@@ -625,10 +1082,10 @@ object StringTrim {
        parkSQLS
       > SELECT _FUNC_(TRAILING 'SL' FROM 'SSparkSQLS');
        SSparkSQ
-  """)
-case class StringTrim(
-    srcStr: Expression,
-    trimStr: Option[Expression] = None)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
@@ -637,56 +1094,69 @@ case class StringTrim(
 
   override def prettyName: String = "trim"
 
-  override def children: Seq[Expression] = if (trimStr.isDefined) {
-    srcStr :: trimStr.get :: Nil
-  } else {
-    srcStr :: Nil
-  }
-  override def eval(input: InternalRow): Any = {
-    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString == null) {
-      null
-    } else {
-      if (trimStr.isDefined) {
-        srcString.trim(trimStr.get.eval(input).asInstanceOf[UTF8String])
-      } else {
-        srcString.trim()
-      }
-    }
+  override protected def direction: String = "BOTH"
+
+  override def doEval(srcString: UTF8String): UTF8String = srcString.trim()
+
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
+    srcString.trim(trimString)
+
+  override val trimMethod: String = "trim"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(
+      srcStr = newChildren.head,
+      trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
+}
+
+/**
+ * A function that takes a character string, removes the leading and trailing characters matching
+ * with any character in the trim string, returns the new string.
+ * trimStr: A character string to be trimmed from the source string, if it has multiple characters,
+ * the function searches for each character in the source string, removes the characters from the
+ * source string until it encounters the first non-match character.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+
+    _FUNC_(str, trimStr) - Remove the leading and trailing `trimStr` characters from `str`.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * trimStr - the trim string characters to trim, the default value is a single space
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(encode('    SparkSQL   ', 'utf-8'));
+       SparkSQL
+      > SELECT _FUNC_('SSparkSQLS', 'SL');
+       parkSQ
+      > SELECT _FUNC_(encode('SSparkSQLS', 'utf-8'), encode('SL', 'utf-8'));
+       parkSQ
+  """,
+  since = "3.2.0",
+  group = "string_funcs")
+case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(srcStr: Expression, trimStr: Expression) = {
+    this(srcStr, Option(trimStr), StringTrim(srcStr, trimStr))
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evals = children.map(_.genCode(ctx))
-    val srcString = evals(0)
-
-    if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trim();
-        }""")
-    } else {
-      val trimString = evals(1)
-      val getTrimFunction =
-        s"""
-        if (${trimString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trim(${trimString.value});
-        }"""
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          $getTrimFunction
-        }""")
-    }
+  def this(srcStr: Expression) = {
+    this(srcStr, None, StringTrim(srcStr))
   }
+
+  override def prettyName: String = "btrim"
+
+  override def parameters: Seq[Expression] = srcStr +: trimStr.toSeq
+
+  override protected def withNewChildInternal(newChild: Expression): StringTrimBoth =
+    copy(replacement = newChild)
 }
 
 object StringTrimLeft {
@@ -710,8 +1180,6 @@ object StringTrimLeft {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
-
-    _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string
   """,
   arguments = """
     Arguments:
@@ -722,12 +1190,10 @@ object StringTrimLeft {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('Sp', 'SSparkSQLS');
-       arkSQLS
-  """)
-case class StringTrimLeft(
-    srcStr: Expression,
-    trimStr: Option[Expression] = None)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
@@ -736,57 +1202,20 @@ case class StringTrimLeft(
 
   override def prettyName: String = "ltrim"
 
-  override def children: Seq[Expression] = if (trimStr.isDefined) {
-    srcStr :: trimStr.get :: Nil
-  } else {
-    srcStr :: Nil
-  }
+  override protected def direction: String = "LEADING"
 
-  override def eval(input: InternalRow): Any = {
-    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString == null) {
-      null
-    } else {
-      if (trimStr.isDefined) {
-        srcString.trimLeft(trimStr.get.eval(input).asInstanceOf[UTF8String])
-      } else {
-        srcString.trimLeft()
-      }
-    }
-  }
+  override def doEval(srcString: UTF8String): UTF8String = srcString.trimLeft()
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evals = children.map(_.genCode(ctx))
-    val srcString = evals(0)
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
+    srcString.trimLeft(trimString)
 
-    if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trimLeft();
-        }""")
-    } else {
-      val trimString = evals(1)
-      val getTrimLeftFunction =
-        s"""
-        if (${trimString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trimLeft(${trimString.value});
-        }"""
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          $getTrimLeftFunction
-        }""")
-    }
-  }
+  override val trimMethod: String = "trimLeft"
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): StringTrimLeft =
+    copy(
+      srcStr = newChildren.head,
+      trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
 }
 
 object StringTrimRight {
@@ -811,8 +1240,6 @@ object StringTrimRight {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
-
-    _FUNC_(trimStr, str) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
@@ -823,13 +1250,11 @@ object StringTrimRight {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('LQSa', 'SSparkSQLS');
-       SSpark
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
-case class StringTrimRight(
-    srcStr: Expression,
-    trimStr: Option[Expression] = None)
+case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
@@ -838,57 +1263,20 @@ case class StringTrimRight(
 
   override def prettyName: String = "rtrim"
 
-  override def children: Seq[Expression] = if (trimStr.isDefined) {
-    srcStr :: trimStr.get :: Nil
-  } else {
-    srcStr :: Nil
-  }
+  override protected def direction: String = "TRAILING"
 
-  override def eval(input: InternalRow): Any = {
-    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString == null) {
-      null
-    } else {
-      if (trimStr.isDefined) {
-        srcString.trimRight(trimStr.get.eval(input).asInstanceOf[UTF8String])
-      } else {
-        srcString.trimRight()
-      }
-    }
-  }
+  override def doEval(srcString: UTF8String): UTF8String = srcString.trimRight()
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evals = children.map(_.genCode(ctx))
-    val srcString = evals(0)
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
+    srcString.trimRight(trimString)
 
-    if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trimRight();
-        }""")
-    } else {
-      val trimString = evals(1)
-      val getTrimRightFunction =
-        s"""
-        if (${trimString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trimRight(${trimString.value});
-        }"""
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          $getTrimRightFunction
-        }""")
-    }
-  }
+  override val trimMethod: String = "trimRight"
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): StringTrimRight =
+    copy(
+      srcStr = newChildren.head,
+      trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
 }
 
 /**
@@ -905,10 +1293,12 @@ case class StringTrimRight(
     Examples:
       > SELECT _FUNC_('SparkSQL', 'SQL');
        6
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringInstr(str: Expression, substr: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = str
   override def right: Expression = substr
@@ -925,6 +1315,9 @@ case class StringInstr(str: Expression, substr: Expression)
     defineCodeGen(ctx, ev, (l, r) =>
       s"($l).indexOf($r, 0) + 1")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): StringInstr = copy(str = newLeft, substr = newRight)
 }
 
 /**
@@ -946,14 +1339,18 @@ case class StringInstr(str: Expression, substr: Expression)
     Examples:
       > SELECT _FUNC_('www.apache.org', '.', 2);
        www.apache
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
- extends TernaryExpression with ImplicitCastInputTypes {
+ extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = Seq(strExpr, delimExpr, countExpr)
+  override def first: Expression = strExpr
+  override def second: Expression = delimExpr
+  override def third: Expression = countExpr
   override def prettyName: String = "substring_index"
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
@@ -965,6 +1362,10 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): SubstringIndex =
+    copy(strExpr = newFirst, delimExpr = newSecond, countExpr = newThird)
 }
 
 /**
@@ -985,7 +1386,9 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
        7
       > SELECT POSITION('bar' IN 'foobarbar');
        4
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -994,7 +1397,9 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     this(substr, str, Literal(1))
   }
 
-  override def children: Seq[Expression] = substr :: str :: start :: Nil
+  override def first: Expression = substr
+  override def second: Expression = str
+  override def third: Expression = start
   override def nullable: Boolean = substr.nullable || str.nullable
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
@@ -1053,16 +1458,46 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
      """)
   }
 
-  override def prettyName: String = "locate"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("locate")
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringLocate =
+    copy(substr = newFirst, str = newSecond, start = newThird)
+
 }
 
-/**
- * Returns str, left-padded with pad to a length of len.
- */
+trait PadExpressionBuilderBase extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val behaviorChangeEnabled = !SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)
+    val numArgs = expressions.length
+    if (numArgs == 2) {
+      if (expressions(0).dataType == BinaryType && behaviorChangeEnabled) {
+        BinaryPad(funcName, expressions(0), expressions(1), Literal(Array[Byte](0)))
+      } else {
+        createStringPad(expressions(0), expressions(1), Literal(" "))
+      }
+    } else if (numArgs == 3) {
+      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType
+        && behaviorChangeEnabled) {
+        BinaryPad(funcName, expressions(0), expressions(1), expressions(2))
+      } else {
+        createStringPad(expressions(0), expressions(1), expressions(2))
+      }
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2, 3), funcName, numArgs)
+    }
+  }
+
+  protected def createStringPad(str: Expression, len: Expression, pad: Expression): Expression
+}
+
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, len, pad) - Returns `str`, left-padded with `pad` to a length of `len`.
-      If `str` is longer than `len`, the return value is shortened to `len` characters.
+    _FUNC_(str, len[, pad]) - Returns `str`, left-padded with `pad` to a length of `len`.
+      If `str` is longer than `len`, the return value is shortened to `len` characters or bytes.
+      If `pad` is not specified, `str` will be padded to the left with space characters if it is
+      a character string, and with zeros if it is a byte sequence.
   """,
   examples = """
     Examples:
@@ -1070,32 +1505,78 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
        ???hi
       > SELECT _FUNC_('hi', 1, '??');
        h
-  """)
+      > SELECT _FUNC_('hi', 5);
+          hi
+      > SELECT hex(_FUNC_(unhex('aabb'), 5));
+       000000AABB
+      > SELECT hex(_FUNC_(unhex('aabb'), 5, unhex('1122')));
+       112211AABB
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+object LPadExpressionBuilder extends PadExpressionBuilderBase {
+  override def createStringPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    StringLPad(str, len, pad)
+  }
+}
+
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def children: Seq[Expression] = str :: len :: pad :: Nil
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
+  override def first: Expression = str
+  override def second: Expression = len
+  override def third: Expression = pad
 
-  override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
-    str.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
+  override def dataType: DataType = str.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, StringType)
+
+  override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
+    string.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, len, pad) => s"$str.lpad($len, $pad)")
+    defineCodeGen(ctx, ev, (string, len, pad) => {
+      s"$string.lpad($len, $pad)"
+    })
   }
 
   override def prettyName: String = "lpad"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringLPad =
+    copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
-/**
- * Returns str, right-padded with pad to a length of len.
- */
+case class BinaryPad(funcName: String, str: Expression, len: Expression, pad: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+  assert(funcName == "lpad" || funcName == "rpad")
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ByteArray],
+    BinaryType,
+    funcName,
+    Seq(str, len, pad),
+    inputTypes,
+    returnNullable = false)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, IntegerType, BinaryType)
+
+  override def nodeName: String = funcName
+
+  override def children: Seq[Expression] = Seq(str, len, pad)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(str = newChildren(0), len = newChildren(1), pad = newChildren(2))
+  }
+}
+
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, len, pad) - Returns `str`, right-padded with `pad` to a length of `len`.
+    _FUNC_(str, len[, pad]) - Returns `str`, right-padded with `pad` to a length of `len`.
       If `str` is longer than `len`, the return value is shortened to `len` characters.
+      If `pad` is not specified, `str` will be padded to the right with space characters if it is
+      a character string, and with zeros if it is a binary string.
   """,
   examples = """
     Examples:
@@ -1103,23 +1584,46 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
        hi???
       > SELECT _FUNC_('hi', 1, '??');
        h
-  """)
-case class StringRPad(str: Expression, len: Expression, pad: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+      > SELECT _FUNC_('hi', 5);
+       hi
+      > SELECT hex(_FUNC_(unhex('aabb'), 5));
+       AABB000000
+      > SELECT hex(_FUNC_(unhex('aabb'), 5, unhex('1122')));
+       AABB112211
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+object RPadExpressionBuilder extends PadExpressionBuilderBase {
+  override def createStringPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    StringRPad(str, len, pad)
+  }
+}
 
-  override def children: Seq[Expression] = str :: len :: pad :: Nil
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
+case class StringRPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
-    str.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
+  override def first: Expression = str
+  override def second: Expression = len
+  override def third: Expression = pad
+
+  override def dataType: DataType = str.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, StringType)
+
+  override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
+    string.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, len, pad) => s"$str.rpad($len, $pad)")
+    defineCodeGen(ctx, ev, (string, len, pad) => {
+      s"$string.rpad($len, $pad)"
+    })
   }
 
   override def prettyName: String = "rpad"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringRPad =
+    copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
 object ParseUrl {
@@ -1142,15 +1646,18 @@ object ParseUrl {
   usage = "_FUNC_(url, partToExtract[, key]) - Extracts a part from a URL.",
   examples = """
     Examples:
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
        spark.apache.org
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY');
        query=1
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query');
        1
-  """)
-case class ParseUrl(children: Seq[Expression])
+  """,
+  since = "2.0.0",
+  group = "string_funcs")
+case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends Expression with ExpectsInputTypes with CodegenFallback {
+  def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   override def nullable: Boolean = true
   override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
@@ -1196,7 +1703,9 @@ case class ParseUrl(children: Seq[Expression])
     try {
       new URI(url.toString)
     } catch {
-      case e: URISyntaxException => null
+      case e: URISyntaxException if failOnError =>
+        throw QueryExecutionErrors.invalidUrlError(url, e)
+      case _: URISyntaxException => null
     }
   }
 
@@ -1287,6 +1796,9 @@ case class ParseUrl(children: Seq[Expression])
       }
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ParseUrl =
+    copy(children = newChildren)
 }
 
 /**
@@ -1299,11 +1811,17 @@ case class ParseUrl(children: Seq[Expression])
     Examples:
       > SELECT _FUNC_("Hello World %d %s", 100, "days");
        Hello World 100 days
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
-  require(children.nonEmpty, "format_string() should take at least 1 argument")
+  require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
+  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+    checkArgumentIndexNotZero(children(0))
+  }
+
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
@@ -1370,7 +1888,27 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       }""")
   }
 
-  override def prettyName: String = "format_string"
+  override def prettyName: String = getTagValue(
+    FunctionRegistry.FUNC_ALIAS).getOrElse("format_string")
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): FormatString = FormatString(newChildren: _*)
+
+  /**
+   * SPARK-37013: The `formatSpecifier` defined in `j.u.Formatter` as follows:
+   *  "%[argument_index$][flags][width][.precision][t]conversion"
+   * The optional `argument_index` is a decimal integer indicating the position of the argument
+   * in the argument list. The first argument is referenced by "1$", the second by "2$", etc.
+   * However, for the illegal definition of "%0$", Java 8 and Java 11 uses it as "%1$",
+   * and Java 17 throws IllegalFormatArgumentIndexException(Illegal format argument index = 0).
+   * Therefore, manually check that the pattern string not contains "%0$" to ensure consistent
+   * behavior of Java 8, Java 11 and Java 17.
+   */
+  private def checkArgumentIndexNotZero(expression: Expression): Unit = expression match {
+    case StringLiteral(pattern) if pattern.contains("%0$") =>
+      throw QueryCompilationErrors.zeroArgumentIndexError()
+    case _ => // do nothing
+  }
 }
 
 /**
@@ -1386,8 +1924,11 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     Examples:
       > SELECT _FUNC_('sPark sql');
        Spark Sql
-  """)
-case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+case class InitCap(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
   override def dataType: DataType = StringType
@@ -1400,6 +1941,9 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): InitCap =
+    copy(child = newChild)
 }
 
 /**
@@ -1411,9 +1955,11 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
     Examples:
       > SELECT _FUNC_('123', 2);
        123123
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringRepeat(str: Expression, times: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = str
   override def right: Expression = times
@@ -1429,6 +1975,9 @@ case class StringRepeat(str: Expression, times: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): StringRepeat = copy(str = newLeft, times = newRight)
 }
 
 /**
@@ -1440,9 +1989,11 @@ case class StringRepeat(str: Expression, times: Expression)
     Examples:
       > SELECT concat(_FUNC_(2), '1');
          1
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringSpace(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
@@ -1458,6 +2009,9 @@ case class StringSpace(child: Expression)
   }
 
   override def prettyName: String = "space"
+
+  override protected def withNewChildInternal(newChild: Expression): StringSpace =
+    copy(child = newChild)
 }
 
 /**
@@ -1468,7 +2022,11 @@ case class StringSpace(child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.",
+  usage = """
+    _FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
+
+    _FUNC_(str FROM pos[ FOR len]]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 5);
@@ -1477,7 +2035,15 @@ case class StringSpace(child: Expression)
        SQL
       > SELECT _FUNC_('Spark SQL', 5, 1);
        k
-  """)
+      > SELECT _FUNC_('Spark SQL' FROM 5);
+       k SQL
+      > SELECT _FUNC_('Spark SQL' FROM -3);
+       SQL
+      > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
+       k
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -1491,7 +2057,9 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
-  override def children: Seq[Expression] = str :: pos :: len :: Nil
+  override def first: Expression = str
+  override def second: Expression = pos
+  override def third: Expression = len
 
   override def nullSafeEval(string: Any, pos: Any, len: Any): Any = {
     str.dataType match {
@@ -1511,6 +2079,11 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
       }
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Substring =
+    copy(str = newFirst, pos = newSecond, len = newThird)
+
 }
 
 /**
@@ -1523,16 +2096,30 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
        SQL
-  """)
+  """,
+  since = "2.3.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Right(str: Expression, len: Expression, child: Expression) extends RuntimeReplaceable {
-  def this(str: Expression, len: Expression) = {
-    this(str, len, If(IsNull(str), Literal(null, StringType), If(LessThanOrEqual(len, Literal(0)),
-      Literal(UTF8String.EMPTY_UTF8, StringType), new Substring(str, UnaryMinus(len)))))
-  }
+case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
+  with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+  override lazy val replacement: Expression = If(
+    IsNull(str),
+    Literal(null, StringType),
+    If(
+      LessThanOrEqual(len, Literal(0)),
+      Literal(UTF8String.EMPTY_UTF8, StringType),
+      new Substring(str, UnaryMinus(len))
+    )
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType)
+  override def left: Expression = str
+  override def right: Expression = len
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression = {
+    copy(str = newLeft, len = newRight)
+  }
 }
 
 /**
@@ -1545,15 +2132,25 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
        Spa
-  """)
+  """,
+  since = "2.3.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Left(str: Expression, len: Expression, child: Expression) extends RuntimeReplaceable {
-  def this(str: Expression, len: Expression) = {
-    this(str, len, Substring(str, Literal(1), len))
+case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
+  with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  override lazy val replacement: Expression = Substring(str, Literal(1), len)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    Seq(TypeCollection(StringType, BinaryType), IntegerType)
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+  override def left: Expression = str
+  override def right: Expression = len
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression = {
+    copy(str = newLeft, len = newRight)
+  }
 }
 
 /**
@@ -1571,9 +2168,12 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
        10
       > SELECT CHARACTER_LENGTH('Spark SQL ');
        10
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Length(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
 
@@ -1588,6 +2188,8 @@ case class Length(child: Expression) extends UnaryExpression with ImplicitCastIn
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
     }
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Length = copy(child = newChild)
 }
 
 /**
@@ -1599,8 +2201,11 @@ case class Length(child: Expression) extends UnaryExpression with ImplicitCastIn
     Examples:
       > SELECT _FUNC_('Spark SQL');
        72
-  """)
-case class BitLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "2.3.0",
+  group = "string_funcs")
+case class BitLength(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
 
@@ -1617,6 +2222,9 @@ case class BitLength(child: Expression) extends UnaryExpression with ImplicitCas
   }
 
   override def prettyName: String = "bit_length"
+
+  override protected def withNewChildInternal(newChild: Expression): BitLength =
+    copy(child = newChild)
 }
 
 /**
@@ -1629,8 +2237,11 @@ case class BitLength(child: Expression) extends UnaryExpression with ImplicitCas
     Examples:
       > SELECT _FUNC_('Spark SQL');
        9
-  """)
-case class OctetLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "2.3.0",
+  group = "string_funcs")
+case class OctetLength(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
 
@@ -1647,6 +2258,9 @@ case class OctetLength(child: Expression) extends UnaryExpression with ImplicitC
   }
 
   override def prettyName: String = "octet_length"
+
+  override protected def withNewChildInternal(newChild: Expression): OctetLength =
+    copy(child = newChild)
 }
 
 /**
@@ -1658,9 +2272,11 @@ case class OctetLength(child: Expression) extends UnaryExpression with ImplicitC
     Examples:
       > SELECT _FUNC_('kitten', 'sitting');
        3
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
-    with ImplicitCastInputTypes {
+    with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
@@ -1672,6 +2288,9 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
     nullSafeCodeGen(ctx, ev, (left, right) =>
       s"${ev.value} = $left.levenshteinDistance($right);")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Levenshtein = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1683,8 +2302,11 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
     Examples:
       > SELECT _FUNC_('Miller');
        M460
-  """)
-case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+case class SoundEx(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
 
@@ -1695,6 +2317,9 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"$c.soundex()")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): SoundEx =
+    copy(child = newChild)
 }
 
 /**
@@ -1708,8 +2333,11 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
        50
       > SELECT _FUNC_(2);
        50
-  """)
-case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+case class Ascii(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType)
@@ -1735,6 +2363,8 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
         }
        """})
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Ascii = copy(child = newChild)
 }
 
 /**
@@ -1748,9 +2378,12 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
     Examples:
       > SELECT _FUNC_(65);
        A
-  """)
+  """,
+  since = "2.3.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Chr(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(LongType)
@@ -1780,6 +2413,8 @@ case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInput
       """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Chr = copy(child = newChild)
 }
 
 /**
@@ -1791,24 +2426,27 @@ case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInput
     Examples:
       > SELECT _FUNC_('Spark SQL');
        U3BhcmsgU1FM
-  """)
-case class Base64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+case class Base64(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(bytes: Any): Any = {
-    UTF8String.fromBytes(
-      org.apache.commons.codec.binary.Base64.encodeBase64(
-        bytes.asInstanceOf[Array[Byte]]))
+    UTF8String.fromBytes(JBase64.getMimeEncoder.encode(bytes.asInstanceOf[Array[Byte]]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
       s"""${ev.value} = UTF8String.fromBytes(
-            org.apache.commons.codec.binary.Base64.encodeBase64($child));
+            ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
        """})
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Base64 = copy(child = newChild)
 }
 
 /**
@@ -1820,20 +2458,88 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
     Examples:
       > SELECT _FUNC_('U3BhcmsgU1FM');
        Spark SQL
-  """)
-case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+case class UnBase64(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   protected override def nullSafeEval(string: Any): Any =
-    org.apache.commons.codec.binary.Base64.decodeBase64(string.asInstanceOf[UTF8String].toString)
+    JBase64.getMimeDecoder.decode(string.asInstanceOf[UTF8String].toString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
       s"""
-         ${ev.value} = org.apache.commons.codec.binary.Base64.decodeBase64($child.toString());
+         ${ev.value} = ${classOf[JBase64].getName}.getMimeDecoder().decode($child.toString());
        """})
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): UnBase64 =
+    copy(child = newChild)
+}
+
+object Decode {
+  def createExpr(params: Seq[Expression]): Expression = {
+    params.length match {
+      case 0 | 1 =>
+        throw QueryCompilationErrors.invalidFunctionArgumentsError("decode", "2", params.length)
+      case 2 => StringDecode(params.head, params.last)
+      case _ =>
+        val input = params.head
+        val other = params.tail
+        val itr = other.iterator
+        var default: Expression = Literal.create(null, StringType)
+        val branches = ArrayBuffer.empty[(Expression, Expression)]
+        while (itr.hasNext) {
+          val search = itr.next
+          if (itr.hasNext) {
+            val condition = EqualTo(input, search)
+            branches += ((condition, itr.next))
+          } else {
+            default = search
+          }
+        }
+        CaseWhen(branches.seq.toSeq, default)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(bin, charset) - Decodes the first argument using the second argument character set.
+
+    _FUNC_(expr, search, result [, search, result ] ... [, default]) - Compares expr
+      to each search value in order. If expr is equal to a search value, _FUNC_ returns
+      the corresponding result. If no match is found, then it returns default. If default
+      is omitted, it returns null.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
+       abc
+      > SELECT _FUNC_(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+       San Francisco
+      > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+       Non domestic
+      > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+       NULL
+  """,
+  since = "3.2.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class Decode(params: Seq[Expression], replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(params: Seq[Expression]) = this(params, Decode.createExpr(params))
+
+  override def parameters: Seq[Expression] = params
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
   }
 }
 
@@ -1849,10 +2555,12 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
     Examples:
       > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
        abc
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Decode(bin: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+case class StringDecode(bin: Expression, charset: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = bin
   override def right: Expression = charset
@@ -1874,6 +2582,10 @@ case class Decode(bin: Expression, charset: Expression)
         }
       """)
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): StringDecode =
+    copy(bin = newLeft, charset = newRight)
 }
 
 /**
@@ -1888,10 +2600,12 @@ case class Decode(bin: Expression, charset: Expression)
     Examples:
       > SELECT _FUNC_('abc', 'utf-8');
        abc
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Encode(value: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = value
   override def right: Expression = charset
@@ -1911,6 +2625,82 @@ case class Encode(value: Expression, charset: Expression)
         } catch (java.io.UnsupportedEncodingException e) {
           org.apache.spark.unsafe.Platform.throwException(e);
         }""")
+  }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Encode = copy(value = newLeft, charset = newRight)
+}
+
+/**
+ * Converts the input expression to a binary value based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
+      `fmt` can be a case-insensitive string literal of "hex", "utf-8", or "base64".
+      By default, the binary format for conversion is "hex" if `fmt` is omitted.
+      The function returns NULL if at least one of the input parameters is NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abc', 'utf-8');
+       abc
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class ToBinary(
+    expr: Expression,
+    format: Option[Expression],
+    nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
+  with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = format.map { f =>
+    assert(f.foldable && (f.dataType == StringType || f.dataType == NullType))
+    val value = f.eval()
+    if (value == null) {
+      Literal(null, BinaryType)
+    } else {
+      value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
+        case "hex" => Unhex(expr)
+        case "utf-8" => Encode(expr, Literal("UTF-8"))
+        case "base64" => UnBase64(expr)
+        case _ if nullOnInvalidFormat => Literal(null, BinaryType)
+        case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
+          "to_binary", "format", other,
+          Some("The value has to be a case-insensitive string literal of " +
+            "'hex', 'utf-8', or 'base64'."))
+      }
+    }
+  }.getOrElse(Unhex(expr))
+
+  def this(expr: Expression) = this(expr, None, false)
+
+  def this(expr: Expression, format: Expression) = this(expr, Some({
+      // We perform this check in the constructor to make it eager and not go through type coercion.
+      if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
+        format
+      } else {
+        throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
+      }
+    }),
+    false
+    )
+
+  override def prettyName: String = "to_binary"
+
+  override def children: Seq[Expression] = expr +: format.toSeq
+
+  override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringType)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    if (format.isDefined) {
+      copy(expr = newChildren.head, format = Some(newChildren.last))
+    } else {
+      copy(expr = newChildren.head)
+    }
   }
 }
 
@@ -1932,9 +2722,11 @@ case class Encode(value: Expression, charset: Expression)
        12,332.1235
       > SELECT _FUNC_(12332.123456, '##################.###');
        12332.123
-  """)
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def left: Expression = x
   override def right: Expression = d
@@ -2090,6 +2882,9 @@ case class FormatNumber(x: Expression, d: Expression)
   }
 
   override def prettyName: String = "format_number"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): FormatNumber = copy(x = newLeft, d = newRight)
 }
 
 /**
@@ -2102,12 +2897,14 @@ case class FormatNumber(x: Expression, d: Expression)
     Examples:
       > SELECT _FUNC_('Hi there! Good morning.');
        [["Hi","there"],["Good","morning"]]
-  """)
+  """,
+  since = "2.0.0",
+  group = "string_funcs")
 case class Sentences(
     str: Expression,
     language: Expression = Literal(""),
     country: Expression = Literal(""))
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
 
   def this(str: Expression) = this(str, Literal(""), Literal(""))
   def this(str: Expression, language: Expression) = this(str, language, Literal(""))
@@ -2116,7 +2913,9 @@ case class Sentences(
   override def dataType: DataType =
     ArrayType(ArrayType(StringType, containsNull = false), containsNull = false)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
-  override def children: Seq[Expression] = str :: language :: country :: Nil
+  override def first: Expression = str
+  override def second: Expression = language
+  override def third: Expression = country
 
   override def eval(input: InternalRow): Any = {
     val string = str.eval(input)
@@ -2152,8 +2951,86 @@ case class Sentences(
         widx = wi.current
         if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
       }
-      result += new GenericArrayData(words)
+      result += new GenericArrayData(words.toSeq)
     }
-    new GenericArrayData(result)
+    new GenericArrayData(result.toSeq)
+  }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
+    copy(str = newFirst, language = newSecond, country = newThird)
+
+}
+
+/**
+ * Splits a given string by a specified delimiter and return splits into a
+ * GenericArrayData. This expression is different from `split` function as
+ * `split` takes regex expression as the pattern to split strings while this
+ * expression take delimiter (a string without carrying special meaning on its
+ * characters, thus is not treated as regex) to split strings.
+ */
+case class StringSplitSQL(
+    str: Expression,
+    delimiter: Expression) extends BinaryExpression with NullIntolerant {
+  override def dataType: DataType = ArrayType(StringType, containsNull = false)
+  override def left: Expression = str
+  override def right: Expression = delimiter
+
+  override def nullSafeEval(string: Any, delimiter: Any): Any = {
+    val strings = string.asInstanceOf[UTF8String].splitSQL(
+      delimiter.asInstanceOf[UTF8String], -1);
+    new GenericArrayData(strings.asInstanceOf[Array[Any]])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val arrayClass = classOf[GenericArrayData].getName
+    nullSafeCodeGen(ctx, ev, (str, delimiter) => {
+      // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
+      s"${ev.value} = new $arrayClass($str.splitSQL($delimiter,-1));"
+    })
+  }
+
+  override def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression): StringSplitSQL =
+    copy(str = newFirst, delimiter = newSecond)
+}
+
+/**
+ * Splits a given string by a specified delimiter and returns the requested part.
+ * If any input is null, returns null.
+ * If index is out of range of split parts, return empty string.
+ * If index is 0, throws an ArrayIndexOutOfBoundsException.
+ */
+@ExpressionDescription(
+  usage =
+    """
+    _FUNC_(str, delimiter, partNum) - Splits `str` by delimiter and return
+      requested part of the split (1-based). If any input is null, returns null.
+      if `partNum` is out of range of split parts, returns empty string. If `partNum` is 0,
+      throws an error. If `partNum` is negative, the parts are counted backward from the
+      end of the string. If the `delimiter` is an empty string, the `str` is not split.
+  """,
+  examples =
+    """
+    Examples:
+      > SELECT _FUNC_('11.12.13', '.', 3);
+       13
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+case class SplitPart (
+    str: Expression,
+    delimiter: Expression,
+    partNum: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+  override lazy val replacement: Expression =
+    ElementAt(StringSplitSQL(str, delimiter), partNum, Some(Literal.create("", StringType)),
+      false)
+  override def nodeName: String = "split_part"
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  def children: Seq[Expression] = Seq(str, delimiter, partNum)
+  protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
+    copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),
+      partNum = newChildren.apply(2))
   }
 }

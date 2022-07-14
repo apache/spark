@@ -17,15 +17,17 @@
 package org.apache.spark.network.yarn
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import org.apache.hadoop.metrics2.MetricsRecordBuilder
+import org.apache.hadoop.metrics2.{MetricsInfo, MetricsRecordBuilder}
 import org.mockito.ArgumentMatchers.{any, anyDouble, anyInt, anyLong}
-import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest.Matchers
+import org.mockito.Mockito.{mock, verify, when}
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.server.OneForOneStreamManager
-import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleBlockResolver}
+import org.apache.spark.network.shuffle.{ExternalBlockHandler, ExternalShuffleBlockResolver}
 
 class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
@@ -33,31 +35,59 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   val blockResolver = mock(classOf[ExternalShuffleBlockResolver])
   when(blockResolver.getRegisteredExecutorsSize).thenReturn(42)
 
-  val metrics = new ExternalShuffleBlockHandler(streamManager, blockResolver).getAllMetrics
+  val metrics = new ExternalBlockHandler(streamManager, blockResolver).getAllMetrics
 
   test("metrics named as expected") {
-    val allMetrics = Set(
+    val allMetrics = Seq(
       "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
+      "blockTransferRate", "blockTransferMessageRate", "blockTransferAvgSize_1min",
       "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
-      "numRegisteredConnections")
+      "numCaughtExceptions", "finalizeShuffleMergeLatencyMillis",
+      "fetchMergedBlocksMetaLatencyMillis")
 
-    metrics.getMetrics.keySet().asScala should be (allMetrics)
+    // Use sorted Seq instead of Set for easier comparison when there is a mismatch
+    metrics.getMetrics.keySet().asScala.toSeq.sorted should be (allMetrics.sorted)
   }
 
-  // these three metrics have the same effect on the collector
+  // these metrics will generate more metrics on the collector
   for (testname <- Seq("openBlockRequestLatencyMillis",
       "registerExecutorRequestLatencyMillis",
-      "blockTransferRateBytes")) {
+      "blockTransferRateBytes", "blockTransferRate", "blockTransferMessageRate")) {
     test(s"$testname - collector receives correct types") {
       val builder = mock(classOf[MetricsRecordBuilder])
-      when(builder.addCounter(any(), anyLong())).thenReturn(builder)
-      when(builder.addGauge(any(), anyDouble())).thenReturn(builder)
+      val counterNames = mutable.Buffer[String]()
+      when(builder.addCounter(any(), anyLong())).thenAnswer(iom => {
+        counterNames += iom.getArgument[MetricsInfo](0).name()
+        builder
+      })
+      val gaugeLongNames = mutable.Buffer[String]()
+      when(builder.addGauge(any(), anyLong())).thenAnswer(iom => {
+        gaugeLongNames += iom.getArgument[MetricsInfo](0).name()
+        builder
+      })
+      val gaugeDoubleNames = mutable.Buffer[String]()
+      when(builder.addGauge(any(), anyDouble())).thenAnswer(iom => {
+        gaugeDoubleNames += iom.getArgument[MetricsInfo](0).name()
+        builder
+      })
 
       YarnShuffleServiceMetrics.collectMetric(builder, testname,
         metrics.getMetrics.get(testname))
 
-      verify(builder).addCounter(any(), anyLong())
-      verify(builder, times(4)).addGauge(any(), anyDouble())
+      assert(counterNames === Seq(s"${testname}_count"))
+      val rates = Seq("rate1", "rate5", "rate15", "rateMean")
+      val percentiles =
+        "1stPercentile" +: Seq(5, 25, 50, 75, 95, 98, 99, 999).map(_ + "thPercentile")
+      val (expectLong, expectDouble) =
+        if (testname.matches("blockTransfer(Message)?Rate(Bytes)?$")) {
+          // blockTransfer(Message)?Rate(Bytes)? metrics are Meter so just have rate information
+          (Seq(), rates)
+        } else {
+          // other metrics are Timer so have rate and timing information
+          (Seq("max", "min"), rates ++ Seq("mean", "stdDev") ++ percentiles)
+        }
+      assert(gaugeLongNames.sorted === expectLong.map(testname + "_" + _).sorted)
+      assert(gaugeDoubleNames.sorted === expectDouble.map(testname + "_" + _).sorted)
     }
   }
 

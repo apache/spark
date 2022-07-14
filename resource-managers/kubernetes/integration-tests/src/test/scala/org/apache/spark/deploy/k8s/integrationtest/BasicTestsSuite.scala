@@ -16,17 +16,35 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import io.fabric8.kubernetes.api.model.Pod
+import scala.collection.JavaConverters._
 
+import io.fabric8.kubernetes.api.model.Pod
+import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.should.Matchers._
+
+import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
 
   import BasicTestsSuite._
-  import KubernetesSuite.k8sTestTag
+  import KubernetesSuite.{k8sTestTag, localTestTag}
+  import KubernetesSuite.{TIMEOUT, INTERVAL}
 
   test("Run SparkPi with no resources", k8sTestTag) {
     runSparkPiAndVerifyCompletion()
+  }
+
+  test("Run SparkPi with no resources & statefulset allocation", k8sTestTag) {
+    sparkAppConf.set("spark.kubernetes.allocation.pods.allocator", "statefulset")
+    runSparkPiAndVerifyCompletion()
+    // Verify there is no dangling statefulset
+    // This depends on the garbage collection happening inside of K8s so give it some time.
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      val sets = kubernetesTestComponents.kubernetesClient.apps().statefulSets().list().getItems
+      val scalaSets = sets.asScala
+      scalaSets.size shouldBe (0)
+    }
   }
 
   test("Run SparkPi with a very long application name.", k8sTestTag) {
@@ -64,12 +82,14 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.driver.label.label2", "label2-value")
       .set("spark.kubernetes.driver.annotation.annotation1", "annotation1-value")
       .set("spark.kubernetes.driver.annotation.annotation2", "annotation2-value")
+      .set("spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
       .set("spark.kubernetes.driverEnv.ENV1", "VALUE1")
       .set("spark.kubernetes.driverEnv.ENV2", "VALUE2")
       .set("spark.kubernetes.executor.label.label1", "label1-value")
       .set("spark.kubernetes.executor.label.label2", "label2-value")
       .set("spark.kubernetes.executor.annotation.annotation1", "annotation1-value")
       .set("spark.kubernetes.executor.annotation.annotation2", "annotation2-value")
+      .set("spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
       .set("spark.executorEnv.ENV1", "VALUE1")
       .set("spark.executorEnv.ENV2", "VALUE2")
 
@@ -84,6 +104,13 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       })
   }
 
+  test("All pods have the same service account by default", k8sTestTag) {
+    runSparkPiAndVerifyCompletion(
+      executorPodChecker = (executorPod: Pod) => {
+        doExecutorServiceAccountCheck(executorPod, kubernetesTestComponents.serviceAccountName)
+      })
+  }
+
   test("Run extraJVMOptions check on driver", k8sTestTag) {
     sparkAppConf
       .set("spark.driver.extraJavaOptions", "-Dspark.test.foo=spark.test.bar")
@@ -91,19 +118,21 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       expectedJVMValue = Seq("(spark.test.foo,spark.test.bar)"))
   }
 
-  test("Run SparkRemoteFileTest using a remote data file", k8sTestTag) {
-    sparkAppConf
-      .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
-    runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
+  test("Run SparkRemoteFileTest using a remote data file", k8sTestTag, localTestTag) {
+    assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
+    TestUtils.withHttpServer(sys.props("spark.test.home")) { baseURL =>
+      sparkAppConf.set("spark.files", baseURL.toString +
+          REMOTE_PAGE_RANK_DATA_FILE.replace(sys.props("spark.test.home"), "").substring(1))
+      runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
+    }
   }
 }
 
-private[spark] object BasicTestsSuite {
+private[spark] object BasicTestsSuite extends SparkFunSuite {
   val SPARK_PAGE_RANK_MAIN_CLASS: String = "org.apache.spark.examples.SparkPageRank"
   val CONTAINER_LOCAL_FILE_DOWNLOAD_PATH = "/var/spark-data/spark-files"
   val CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE =
      s"$CONTAINER_LOCAL_FILE_DOWNLOAD_PATH/pagerank_data.txt"
-  val REMOTE_PAGE_RANK_DATA_FILE =
-    "https://storage.googleapis.com/spark-k8s-integration-tests/files/pagerank_data.txt"
+  val REMOTE_PAGE_RANK_DATA_FILE = getTestResourcePath("pagerank_data.txt")
   val REMOTE_PAGE_RANK_FILE_NAME = "pagerank_data.txt"
 }

@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.{Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 
 /**
- * :: Experimental ::
  * A base class for user-defined aggregations, which can be used in `Dataset` operations to take
  * all of the elements of a group and reduce them to a single value.
  *
@@ -37,6 +35,8 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  *     def reduce(b: Int, a: Data): Int = b + a.i
  *     def merge(b1: Int, b2: Int): Int = b1 + b2
  *     def finish(r: Int): Int = r
+ *     def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+ *     def outputEncoder: Encoder[Int] = Encoders.scalaInt
  *   }.toColumn()
  *
  *   val ds: Dataset[Data] = ...
@@ -50,8 +50,6 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  * @tparam OUT The type of the final output result.
  * @since 1.6.0
  */
-@Experimental
-@Evolving
 abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
   /**

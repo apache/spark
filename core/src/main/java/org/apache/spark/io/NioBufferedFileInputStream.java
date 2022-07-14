@@ -49,9 +49,8 @@ public final class NioBufferedFileInputStream extends InputStream {
   }
 
   /**
-   * Checks weather data is left to be read from the input stream.
+   * Checks whether data is left to be read from the input stream.
    * @return true if data is left, false otherwise
-   * @throws IOException
    */
   private boolean refill() throws IOException {
     if (!byteBuffer.hasRemaining()) {
@@ -60,10 +59,10 @@ public final class NioBufferedFileInputStream extends InputStream {
       while (nRead == 0) {
         nRead = fileChannel.read(byteBuffer);
       }
+      byteBuffer.flip();
       if (nRead < 0) {
         return false;
       }
-      byteBuffer.flip();
     }
     return true;
   }

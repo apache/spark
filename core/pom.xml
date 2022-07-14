@@ -21,22 +21,26 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.4.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>spark-core_2.12</artifactId>
+  <packaging>jar</packaging>
+  <name>Spark Project Core</name>
+  <url>https://spark.apache.org/</url>
+
   <properties>
     <sbt.project.name>core</sbt.project.name>
   </properties>
-  <packaging>jar</packaging>
-  <name>Spark Project Core</name>
-  <url>http://spark.apache.org/</url>
+  
   <dependencies>
+    <!-- #if scala-2.13 --><!--
     <dependency>
-      <groupId>com.thoughtworks.paranamer</groupId>
-      <artifactId>paranamer</artifactId>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
+    --><!-- #endif scala-2.13 -->
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro</artifactId>
@@ -44,7 +48,6 @@
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-mapred</artifactId>
-      <classifier>${avro.mapred.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
@@ -59,12 +62,23 @@
       <artifactId>chill-java</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.github.jnr</groupId>
+      <artifactId>jnr-posix</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-asm7-shaded</artifactId>
+      <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
+      <artifactId>${hadoop-client-api.artifact}</artifactId>
+      <version>${hadoop.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <version>${hadoop.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -159,11 +173,14 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>javax.servlet</groupId>
-      <artifactId>javax.servlet-api</artifactId>
-      <version>${javaxservlet.version}</version>
+      <groupId>jakarta.servlet</groupId>
+      <artifactId>jakarta.servlet-api</artifactId>
+      <version>${jakartaservlet.version}</version>
     </dependency>
-
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
@@ -173,6 +190,22 @@
       <artifactId>commons-math3</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-text</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-collections</groupId>
+      <artifactId>commons-collections</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-collections4</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.google.code.findbugs</groupId>
       <artifactId>jsr305</artifactId>
     </dependency>
@@ -180,6 +213,7 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
+
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>jul-to-slf4j</artifactId>
@@ -189,13 +223,22 @@
       <artifactId>jcl-over-slf4j</artifactId>
     </dependency>
     <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j-impl</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-log4j12</artifactId>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-api</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-1.2-api</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>com.ning</groupId>
       <artifactId>compress-lzf</artifactId>
@@ -217,8 +260,8 @@
       <artifactId>RoaringBitmap</artifactId>
     </dependency>
     <dependency>
-      <groupId>commons-net</groupId>
-      <artifactId>commons-net</artifactId>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-xml_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
@@ -253,13 +296,44 @@
       <artifactId>jersey-container-servlet-core</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.glassfish.jersey.inject</groupId>
+      <artifactId>jersey-hk2</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.test-framework.providers</groupId>
+      <artifactId>jersey-test-framework-provider-simple</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Netty Begin -->
+    <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-all</artifactId>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty</artifactId>
+      <artifactId>netty-transport-native-epoll</artifactId>
+      <classifier>linux-x86_64</classifier>
     </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-epoll</artifactId>
+      <classifier>linux-aarch_64</classifier>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-kqueue</artifactId>
+      <classifier>osx-aarch_64</classifier>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-kqueue</artifactId>
+      <classifier>osx-x86_64</classifier>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-tcnative-classes</artifactId>
+    </dependency>
+    <!-- Netty End -->
     <dependency>
       <groupId>com.clearspring.analytics</groupId>
       <artifactId>stream</artifactId>
@@ -279,6 +353,16 @@
     <dependency>
       <groupId>io.dropwizard.metrics</groupId>
       <artifactId>metrics-graphite</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>com.rabbitmq</groupId>
+          <artifactId>amqp-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>io.dropwizard.metrics</groupId>
+      <artifactId>metrics-jmx</artifactId>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -310,23 +394,40 @@
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>selenium-htmlunit-driver</artifactId>
+      <artifactId>htmlunit-driver</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Coerce sbt into honoring these dependency updates: -->
+    <dependency>
+      <groupId>net.sourceforge.htmlunit</groupId>
+      <artifactId>htmlunit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.sourceforge.htmlunit</groupId>
+      <artifactId>htmlunit-core-js</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- at least just for tests, coerce SBT to use the updated httpcore/client version -->
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpmime</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- Added for selenium: -->
     <dependency>
       <groupId>xml-apis</groupId>
       <artifactId>xml-apis</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.hamcrest</groupId>
-      <artifactId>hamcrest-core</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.hamcrest</groupId>
-      <artifactId>hamcrest-library</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -345,20 +446,19 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>net.razorvine</groupId>
-      <artifactId>pyrolite</artifactId>
-      <version>4.13</version>
-      <exclusions>
-        <exclusion>
-          <groupId>net.razorvine</groupId>
-          <artifactId>serpent</artifactId>
-        </exclusion>
-      </exclusions>
+      <artifactId>pickle</artifactId>
+      <version>1.2</version>
     </dependency>
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.8.1</version>
+      <version>0.10.9.5</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -391,6 +491,47 @@
       <scope>test</scope>
     </dependency>
 
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-aws</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-common</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-mapper-asl</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-core-asl</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-annotations</artifactId>
+        </exclusion>
+        <!-- Keep old SDK out of the assembly to avoid conflict with Kinesis module -->
+        <exclusion>
+          <groupId>com.amazonaws</groupId>
+          <artifactId>aws-java-sdk</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-crypto</artifactId>
@@ -457,6 +598,24 @@
                 guava,jetty-io,jetty-servlet,jetty-servlets,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client
               </includeArtifactIds>
               <silent>true</silent>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>add-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>src/main/scala-${scala.binary.version}</source>
+              </sources>
             </configuration>
           </execution>
         </executions>

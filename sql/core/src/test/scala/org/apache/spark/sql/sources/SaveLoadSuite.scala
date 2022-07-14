@@ -25,11 +25,11 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAndAfter {
   import testImplicits._
 
   protected override lazy val sql = spark.sql _
@@ -103,30 +103,32 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
   }
 
   test("save and save again") {
-    df.write.json(path.toString)
-
-    val message = intercept[AnalysisException] {
+    withTempView("jsonTable2") {
       df.write.json(path.toString)
-    }.getMessage
 
-    assert(
-      message.contains("already exists"),
-      "We should complain that the path already exists.")
+      val message = intercept[AnalysisException] {
+        df.write.json(path.toString)
+      }.getMessage
 
-    if (path.exists()) Utils.deleteRecursively(path)
+      assert(
+        message.contains("already exists"),
+        "We should complain that the path already exists.")
 
-    df.write.json(path.toString)
-    checkLoad()
+      if (path.exists()) Utils.deleteRecursively(path)
 
-    df.write.mode(SaveMode.Overwrite).json(path.toString)
-    checkLoad()
+      df.write.json(path.toString)
+      checkLoad()
 
-    // verify the append mode
-    df.write.mode(SaveMode.Append).json(path.toString)
-    val df2 = df.union(df)
-    df2.createOrReplaceTempView("jsonTable2")
+      df.write.mode(SaveMode.Overwrite).json(path.toString)
+      checkLoad()
 
-    checkLoad(df2, "jsonTable2")
+      // verify the append mode
+      df.write.mode(SaveMode.Append).json(path.toString)
+      val df2 = df.union(df)
+      df2.createOrReplaceTempView("jsonTable2")
+
+      checkLoad(df2, "jsonTable2")
+    }
   }
 
   test("SPARK-23459: Improve error message when specified unknown column in partition columns") {

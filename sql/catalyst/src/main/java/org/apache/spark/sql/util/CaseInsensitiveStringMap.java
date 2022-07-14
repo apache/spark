@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -35,10 +36,12 @@ import java.util.Set;
  * <p>
  * Methods that return keys in this map, like {@link #entrySet()} and {@link #keySet()}, return
  * keys converted to lower case. This map doesn't allow null key.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public class CaseInsensitiveStringMap implements Map<String, String> {
-  private final Logger logger = LoggerFactory.getLogger(CaseInsensitiveStringMap.class);
+  private static final Logger logger = LoggerFactory.getLogger(CaseInsensitiveStringMap.class);
 
   private String unsupportedOperationMsg = "CaseInsensitiveStringMap is read-only.";
 
@@ -177,5 +180,22 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
    */
   public Map<String, String> asCaseSensitiveMap() {
     return Collections.unmodifiableMap(original);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    CaseInsensitiveStringMap that = (CaseInsensitiveStringMap) o;
+    return delegate.equals(that.delegate);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(delegate);
   }
 }

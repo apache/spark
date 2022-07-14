@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.BinaryType
 
-class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
+class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("reflect and java_method") {
@@ -30,6 +34,50 @@ class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
         s"reflect('$className', 'method1', a, b)",
         s"java_method('$className', 'method1', a, b)"),
       Row("m1one", "m1one"))
+  }
+
+  test("version") {
+    val df = sql("SELECT version()")
+    checkAnswer(
+      df,
+      Row(SPARK_VERSION_SHORT + " " + SPARK_REVISION))
+    assert(df.schema.fieldNames === Seq("version()"))
+  }
+
+  test("SPARK-21957: get current_user in normal spark apps") {
+    val user = spark.sparkContext.sparkUser
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val df = sql("select current_user(), current_user, user, user()")
+      checkAnswer(df, Row(user, user, user, user))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      Seq("user", "current_user").foreach { func =>
+        checkAnswer(sql(s"select $func"), Row(user))
+      }
+      Seq("user()", "current_user()").foreach { func =>
+        val e = intercept[ParseException](sql(s"select $func"))
+        assert(e.getMessage.contains(func))
+      }
+    }
+  }
+
+  test("SPARK-37591: AES functions - GCM mode") {
+    Seq(
+      ("abcdefghijklmnop", ""),
+      ("abcdefghijklmnop", "abcdefghijklmnop"),
+      ("abcdefghijklmnop12345678", "Spark"),
+      ("abcdefghijklmnop12345678ABCDEFGH", "GCM mode")
+    ).foreach { case (key, input) =>
+      val df = Seq((key, input)).toDF("key", "input")
+      val encrypted = df.selectExpr("aes_encrypt(input, key, 'GCM', 'NONE') AS enc", "input", "key")
+      assert(encrypted.schema("enc").dataType === BinaryType)
+      assert(encrypted.filter($"enc" === $"input").isEmpty)
+      val result = encrypted.selectExpr(
+        "CAST(aes_decrypt(enc, key, 'GCM', 'NONE') AS STRING) AS res", "input")
+      assert(!result.filter($"res" === $"input").isEmpty &&
+        result.filter($"res" =!= $"input").isEmpty)
+    }
   }
 }
 

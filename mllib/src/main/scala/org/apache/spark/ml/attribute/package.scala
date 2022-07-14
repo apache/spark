@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
-
 /**
  * ==ML attributes==
  *

@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -39,7 +40,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   val showDbsContext = buildContext("show databases like 'identifier_with_wildcards'") { parser =>
-    parser.statement().asInstanceOf[ShowDatabasesContext]
+    parser.statement().asInstanceOf[ShowNamespacesContext]
   }
 
   val createDbContext = buildContext(
@@ -49,7 +50,25 @@ class ParserUtilsSuite extends SparkFunSuite {
       |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
     """.stripMargin
   ) { parser =>
-    parser.statement().asInstanceOf[CreateDatabaseContext]
+    parser.statement().asInstanceOf[CreateNamespaceContext]
+  }
+
+  val castClause =
+    """
+      |CAST(1 /* Convert
+      |   INT
+      |   AS
+      |   String */ as STRING)""".stripMargin.trim
+
+  val castQuery =
+    s"""
+       |SELECT
+       |$castClause /* SHOULD NOT INCLUDE THIS */
+       | AS s
+       |""".stripMargin
+
+  val castQueryContext = buildContext(castQuery) { parser =>
+    parser.statement().asInstanceOf[StatementDefaultContext]
   }
 
   val emptyContext = buildContext("") { parser =>
@@ -93,12 +112,24 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(unescapeSQLString(""""\256"""") == "256")
 
     // String including a '\u0000' style literal characters (\u732B is a cat in Kanji).
-    assert(unescapeSQLString(""""How cute \u732B are"""")  == "How cute \u732B are")
+    assert(unescapeSQLString("\"How cute \\u732B are\"")  == "How cute \u732B are")
 
     // String including a surrogate pair character
     // (\uD867\uDE3D is Okhotsk atka mackerel in Kanji).
-    assert(unescapeSQLString(""""\uD867\uDE3D is a fish"""") == "\uD867\uDE3D is a fish")
+    assert(unescapeSQLString("\"\\uD867\\uDE3D is a fish\"") == "\uD867\uDE3D is a fish")
 
+    // String including a '\U00000000' style literal characters (\u732B is a cat in Kanji).
+    assert(unescapeSQLString("\"\\U00000041B\\U000000312\\U0000732B\"") == "AB12\u732B")
+
+    // String including surrogate pair characters (U+1F408 is a cat and U+1F415 is a dog in Emoji).
+    assert(unescapeSQLString("\"\\U0001F408 \\U0001F415\"") == "\uD83D\uDC08 \uD83D\uDC15")
+
+    // String including escaped normal characters.
+    assert(unescapeSQLString(
+      """"ab\
+        |cd\ef"""".stripMargin) ==
+      """ab
+        |cdef""".stripMargin)
     // scalastyle:on nonascii
   }
 
@@ -150,16 +181,16 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   test("string") {
     assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
-    assert(string(createDbContext.comment) == "database_comment")
+    assert(string(createDbContext.commentSpec().get(0).STRING()) == "database_comment")
 
-    assert(string(createDbContext.locationSpec.STRING) == "/home/user/db")
+    assert(string(createDbContext.locationSpec.asScala.head.STRING) == "/home/user/db")
   }
 
   test("position") {
     assert(position(setConfContext.start) == Origin(Some(1), Some(0)))
     assert(position(showFuncContext.stop) == Origin(Some(1), Some(19)))
     assert(position(descFuncContext.describeFuncName.start) == Origin(Some(1), Some(27)))
-    assert(position(createDbContext.locationSpec.start) == Origin(Some(3), Some(27)))
+    assert(position(createDbContext.locationSpec.asScala.head.start) == Origin(Some(3), Some(27)))
     assert(position(emptyContext.stop) == Origin(None, None))
   }
 
@@ -177,7 +208,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("withOrigin") {
-    val ctx = createDbContext.locationSpec
+    val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get
     val (location, origin) = withOrigin(ctx) {
       (string(ctx.STRING), CurrentOrigin.get)
@@ -185,5 +216,43 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))
     assert(CurrentOrigin.get == current)
+  }
+
+  private def findCastContext(ctx: ParserRuleContext): Option[CastContext] = {
+    ctx match {
+      case context: CastContext =>
+        Some(context)
+      case _ =>
+        val it = ctx.children.iterator()
+        while(it.hasNext) {
+          it.next() match {
+            case p: ParserRuleContext =>
+              val childResult = findCastContext(p)
+              if (childResult.isDefined) {
+                return childResult
+              }
+            case _ =>
+          }
+        }
+        None
+    }
+  }
+
+  test("withOrigin: setting SQL text") {
+    withOrigin(castQueryContext, Some(castQuery)) {
+      assert(CurrentOrigin.get.sqlText.contains(castQuery))
+      val castContext = findCastContext(castQueryContext)
+      assert(castContext.isDefined)
+      withOrigin(castContext.get) {
+        val current = CurrentOrigin.get
+        assert(current.sqlText.contains(castQuery))
+        assert(current.startIndex.isDefined)
+        assert(current.stopIndex.isDefined)
+        // With sqlText, startIndex, stopIndex, we can get the corresponding SQL text of the
+        // Cast clause.
+        assert(current.sqlText.get.substring(current.startIndex.get, current.stopIndex.get + 1) ==
+          castClause)
+      }
+    }
   }
 }

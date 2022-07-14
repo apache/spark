@@ -91,11 +91,11 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * Writes down information about cached files needed in executors to the given configuration.
    */
   def updateConfiguration(conf: SparkConf): Unit = {
-    conf.set(CACHED_FILES, distCacheEntries.map(_.uri.toString))
-    conf.set(CACHED_FILES_SIZES, distCacheEntries.map(_.size))
-    conf.set(CACHED_FILES_TIMESTAMPS, distCacheEntries.map(_.modTime))
-    conf.set(CACHED_FILES_VISIBILITIES, distCacheEntries.map(_.visibility.name()))
-    conf.set(CACHED_FILES_TYPES, distCacheEntries.map(_.resType.name()))
+    conf.set(CACHED_FILES, distCacheEntries.map(_.uri.toString).toSeq)
+    conf.set(CACHED_FILES_SIZES, distCacheEntries.map(_.size).toSeq)
+    conf.set(CACHED_FILES_TIMESTAMPS, distCacheEntries.map(_.modTime).toSeq)
+    conf.set(CACHED_FILES_VISIBILITIES, distCacheEntries.map(_.visibility.name()).toSeq)
+    conf.set(CACHED_FILES_TYPES, distCacheEntries.map(_.resType.name()).toSeq)
   }
 
   /**

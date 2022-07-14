@@ -88,17 +88,17 @@ creating table, you can create a table using storage handler at Hive side, and u
   <tr>
     <td><code>inputFormat, outputFormat</code></td>
     <td>
-      These 2 options specify the name of a corresponding `InputFormat` and `OutputFormat` class as a string literal,
-      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in a pair, and you can not
-      specify them if you already specified the `fileFormat` option.
+      These 2 options specify the name of a corresponding <code>InputFormat</code> and <code>OutputFormat</code> class as a string literal,
+      e.g. <code>org.apache.hadoop.hive.ql.io.orc.OrcInputFormat</code>. These 2 options must be appeared in a pair, and you can not
+      specify them if you already specified the <code>fileFormat</code> option.
     </td>
   </tr>
 
   <tr>
     <td><code>serde</code></td>
     <td>
-      This option specifies the name of a serde class. When the `fileFormat` option is specified, do not specify this option
-      if the given `fileFormat` already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
+      This option specifies the name of a serde class. When the <code>fileFormat</code> option is specified, do not specify this option
+      if the given <code>fileFormat</code> already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
       don't include the serde information and you can use this option with these 3 fileFormats.
     </td>
   </tr>
@@ -119,40 +119,69 @@ One of the most important pieces of Spark SQL's Hive support is interaction with
 which enables Spark SQL to access metadata of Hive tables. Starting from Spark 1.4.0, a single binary
 build of Spark SQL can be used to query different versions of Hive metastores, using the configuration described below.
 Note that independent of the version of Hive that is being used to talk to the metastore, internally Spark SQL
-will compile against Hive 1.2.1 and use those classes for internal execution (serdes, UDFs, UDAFs, etc).
+will compile against built-in Hive and use those classes for internal execution (serdes, UDFs, UDAFs, etc).
 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
 <table class="table">
-  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
-    <td><code>1.2.1</code></td>
+    <td><code>2.3.9</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>0.12.0</code> through <code>2.3.4</code> and <code>3.1.0</code> through <code>3.1.1</code>.
+      options are <code>0.12.0</code> through <code>2.3.9</code> and <code>3.0.0</code> through <code>3.1.3</code>.
     </td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.hive.metastore.jars</code></td>
     <td><code>builtin</code></td>
     <td>
       Location of the jars that should be used to instantiate the HiveMetastoreClient. This
-      property can be one of three options:
+      property can be one of four options:
       <ol>
         <li><code>builtin</code></li>
-        Use Hive 1.2.1, which is bundled with the Spark assembly when <code>-Phive</code> is
+        Use Hive 2.3.9, which is bundled with the Spark assembly when <code>-Phive</code> is
         enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
-        either <code>1.2.1</code> or not defined.
+        either <code>2.3.9</code> or not defined.
         <li><code>maven</code></li>
         Use Hive jars of specified version downloaded from Maven repositories. This configuration
         is not generally recommended for production deployments.
+        <li><code>path</code></li>
+        Use Hive jars configured by <code>spark.sql.hive.metastore.jars.path</code>
+        in comma separated format. Support both local or remote paths. The provided jars should be
+        the same version as <code>spark.sql.hive.metastore.version</code>.
         <li>A classpath in the standard format for the JVM. This classpath must include all of Hive
-        and its dependencies, including the correct version of Hadoop. These jars only need to be
-        present on the driver, but if you are running in yarn cluster mode then you must ensure
-        they are packaged with your application.</li>
+        and its dependencies, including the correct version of Hadoop. The provided jars should be
+        the same version as <code>spark.sql.hive.metastore.version</code>. These jars only need to be present on the
+        driver, but if you are running in yarn cluster mode then you must ensure they are packaged
+        with your application.</li>
       </ol>
     </td>
+    <td>1.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.hive.metastore.jars.path</code></td>
+    <td><code>(empty)</code></td>
+    <td>
+      Comma-separated paths of the jars that used to instantiate the HiveMetastoreClient.
+      This configuration is useful only when <code>spark.sql.hive.metastore.jars</code> is set as <code>path</code>. 
+      <br/>
+      The paths can be any of the following format:
+      <ol>
+        <li><code>file://path/to/jar/foo.jar</code></li>
+        <li><code>hdfs://nameservice/path/to/jar/foo.jar</code></li>
+        <li><code>/path/to/jar/</code>(path without URI scheme follow conf <code>fs.defaultFS</code>'s URI schema)</li>
+        <li><code>[http/https/ftp]://path/to/jar/foo.jar</code></li>
+      </ol>
+      Note that 1, 2, and 3 support wildcard. For example:
+      <ol>
+        <li><code>file://path/to/jar/*,file://path2/to/jar/*/*.jar</code></li>
+        <li><code>hdfs://nameservice/path/to/jar/*,hdfs://nameservice2/path/to/jar/*/*.jar</code></li>
+      </ol>
+    </td>
+    <td>3.1.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.hive.metastore.sharedPrefixes</code></td>
@@ -166,6 +195,7 @@ The following options can be used to configure the version of Hive that is used 
         custom appenders that are used by log4j.
       </p>
     </td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.hive.metastore.barrierPrefixes</code></td>
@@ -177,5 +207,6 @@ The following options can be used to configure the version of Hive that is used 
         prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).
       </p>
     </td>
+    <td>1.4.0</td>
   </tr>
 </table>

@@ -73,15 +73,35 @@ class SizeEstimatorSuite
   with PrivateMethodTester
   with ResetSystemProperties {
 
-  override def beforeEach() {
-    // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
+  // Save modified system properties so that we can restore them after tests.
+  val originalArch = System.getProperty("os.arch")
+  val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
+
+  def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {
+    def set(k: String, v: String): Unit = {
+      if (v == null) {
+        System.clearProperty(k)
+      } else {
+        System.setProperty(k, v)
+      }
+    }
+    set("os.arch", arch)
+    set(TEST_USE_COMPRESSED_OOPS_KEY, useCompressedOops)
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
+    SizeEstimator invokePrivate initialize()
+  }
+
+  override def beforeEach(): Unit = {
     super.beforeEach()
-    System.setProperty("os.arch", "amd64")
-    System.setProperty(TEST_USE_COMPRESSED_OOPS_KEY, "true")
+    // Set the arch to 64-bit and compressedOops to true so that SizeEstimator
+    // provides identical results across all systems in these tests.
+    reinitializeSizeEstimator("amd64", "true")
   }
 
   override def afterEach(): Unit = {
     super.afterEach()
+    // Restore system properties and SizeEstimator to their original states.
+    reinitializeSizeEstimator(originalArch, originalCompressedOops)
   }
 
   test("simple classes") {
@@ -178,11 +198,7 @@ class SizeEstimatorSuite
   }
 
   test("32-bit arch") {
-    System.setProperty("os.arch", "x86")
-
-    val initialize = PrivateMethod[Unit]('initialize)
-    SizeEstimator invokePrivate initialize()
-
+    reinitializeSizeEstimator("x86", "true")
     assertResult(40)(SizeEstimator.estimate(DummyString("")))
     assertResult(48)(SizeEstimator.estimate(DummyString("a")))
     assertResult(48)(SizeEstimator.estimate(DummyString("ab")))
@@ -192,11 +208,7 @@ class SizeEstimatorSuite
   // NOTE: The String class definition varies across JDK versions (1.6 vs. 1.7) and vendors
   // (Sun vs IBM). Use a DummyString class to make tests deterministic.
   test("64-bit arch with no compressed oops") {
-    System.setProperty("os.arch", "amd64")
-    System.setProperty(TEST_USE_COMPRESSED_OOPS_KEY, "false")
-    val initialize = PrivateMethod[Unit]('initialize)
-    SizeEstimator invokePrivate initialize()
-
+    reinitializeSizeEstimator("amd64", "false")
     assertResult(56)(SizeEstimator.estimate(DummyString("")))
     assertResult(64)(SizeEstimator.estimate(DummyString("a")))
     assertResult(64)(SizeEstimator.estimate(DummyString("ab")))
@@ -214,14 +226,13 @@ class SizeEstimatorSuite
   }
 
   test("class field blocks rounding on 64-bit VM without useCompressedOops") {
+    reinitializeSizeEstimator("amd64", "false")
     assertResult(24)(SizeEstimator.estimate(new DummyClass5))
     assertResult(32)(SizeEstimator.estimate(new DummyClass6))
   }
 
   test("check 64-bit detection for s390x arch") {
-    System.setProperty("os.arch", "s390x")
-    val initialize = PrivateMethod[Unit]('initialize)
-    SizeEstimator invokePrivate initialize()
+    reinitializeSizeEstimator("s390x", "true")
     // Class should be 32 bytes on s390x if recognised as 64 bit platform
     assertResult(32)(SizeEstimator.estimate(new DummyClass7))
   }

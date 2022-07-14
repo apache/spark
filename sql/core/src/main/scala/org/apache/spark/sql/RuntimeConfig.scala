@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -47,7 +48,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Boolean): Unit = {
-    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
@@ -57,8 +57,15 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Long): Unit = {
-    requireNonStaticConf(key)
     set(key, value.toString)
+  }
+
+  /**
+   * Sets the given Spark runtime configuration property.
+   */
+  protected[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
+    requireNonStaticConf(entry.key)
+    sqlConf.setConf(entry, value)
   }
 
   /**
@@ -150,12 +157,12 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   }
 
   private def requireNonStaticConf(key: String): Unit = {
-    if (SQLConf.staticConfKeys.contains(key)) {
-      throw new AnalysisException(s"Cannot modify the value of a static config: $key")
+    if (SQLConf.isStaticConfigKey(key)) {
+      throw QueryCompilationErrors.cannotModifyValueOfStaticConfigError(key)
     }
     if (sqlConf.setCommandRejectsSparkCoreConfs &&
-        ConfigEntry.findEntry(key) != null && !SQLConf.sqlConfEntries.containsKey(key)) {
-      throw new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+        ConfigEntry.findEntry(key) != null && !SQLConf.containsConfigKey(key)) {
+      throw QueryCompilationErrors.cannotModifyValueOfSparkConfigError(key)
     }
   }
 }

@@ -25,6 +25,7 @@ import breeze.linalg.{norm => brzNorm, svd => brzSvd, DenseMatrix => BDM, DenseV
 import breeze.numerics.abs
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -57,7 +58,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   var denseMat: RowMatrix = _
   var sparseMat: RowMatrix = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     denseMat = new RowMatrix(sc.parallelize(denseData, 2))
     sparseMat = new RowMatrix(sc.parallelize(sparseData, 2))
@@ -119,6 +120,20 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       rowMat.getTreeAggregateIdealDepth(1100 * 1024 * 1024)
     }
     assert(objectBiggerThanResultSize.getMessage.contains("it's bigger than maxResultSize"))
+  }
+
+  test("SPARK-33043: getTreeAggregateIdealDepth with unlimited driver size") {
+    val originalMaxResultSize = sc.conf.get[Long](MAX_RESULT_SIZE)
+    sc.conf.set(MAX_RESULT_SIZE, 0L)
+    try {
+      val nbPartitions = 100
+      val vectors = sc.emptyRDD[Vector]
+        .repartition(nbPartitions)
+      val rowMat = new RowMatrix(vectors)
+      assert(rowMat.getTreeAggregateIdealDepth(700 * 1024 * 1024) === 1)
+    } finally {
+      sc.conf.set(MAX_RESULT_SIZE, originalMaxResultSize)
+    }
   }
 
   test("similar columns") {
@@ -213,7 +228,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     brzNorm(v, 1.0) < 1e-6
   }
 
-  def assertColumnEqualUpToSign(A: BDM[Double], B: BDM[Double], k: Int) {
+  def assertColumnEqualUpToSign(A: BDM[Double], B: BDM[Double], k: Int): Unit = {
     assert(A.rows === B.rows)
     for (j <- 0 until k) {
       val aj = A(::, j)
@@ -338,7 +353,7 @@ class RowMatrixClusterSuite extends SparkFunSuite with LocalClusterSparkContext 
 
   var mat: RowMatrix = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val m = 4
     val n = 200000

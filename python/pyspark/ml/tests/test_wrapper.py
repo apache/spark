@@ -21,19 +21,26 @@ import py4j
 
 from pyspark.ml.linalg import DenseVector, Vectors
 from pyspark.ml.regression import LinearRegression
-from pyspark.ml.wrapper import _java2py, _py2java, JavaParams, JavaWrapper
+from pyspark.ml.wrapper import (
+    _java2py,
+    _py2java,
+    JavaParams,
+    JavaWrapper,
+)
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.utils import eventually
 
 
 class JavaWrapperMemoryTests(SparkSessionTestCase):
-
     def test_java_object_gets_detached(self):
-        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
-                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
-                                        ["label", "weight", "features"])
-        lr = LinearRegression(maxIter=1, regParam=0.0, solver="normal", weightCol="weight",
-                              fitIntercept=False)
+        df = self.spark.createDataFrame(
+            [(1.0, 2.0, Vectors.dense(1.0)), (0.0, 2.0, Vectors.sparse(1, [], []))],
+            ["label", "weight", "features"],
+        )
+        lr = LinearRegression(
+            maxIter=1, regParam=0.0, solver="normal", weightCol="weight", fitIntercept=False
+        )
 
         model = lr.fit(df)
         summary = model.summary
@@ -43,30 +50,37 @@ class JavaWrapperMemoryTests(SparkSessionTestCase):
         self.assertIsInstance(model, JavaParams)
         self.assertNotIsInstance(summary, JavaParams)
 
-        error_no_object = 'Target Object ID does not exist for this gateway'
+        error_no_object = "Target Object ID does not exist for this gateway"
 
         self.assertIn("LinearRegression_", model._java_obj.toString())
         self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
 
         model.__del__()
 
-        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
-            model._java_obj.toString()
-        self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+        def condition():
+            with self.assertRaisesRegex(py4j.protocol.Py4JError, error_no_object):
+                model._java_obj.toString()
+            self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+            return True
+
+        eventually(condition, timeout=10, catch_assertions=True)
 
         try:
             summary.__del__()
-        except:
+        except BaseException:
             pass
 
-        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
-            model._java_obj.toString()
-        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
-            summary._java_obj.toString()
+        def condition():
+            with self.assertRaisesRegex(py4j.protocol.Py4JError, error_no_object):
+                model._java_obj.toString()
+            with self.assertRaisesRegex(py4j.protocol.Py4JError, error_no_object):
+                summary._java_obj.toString()
+            return True
+
+        eventually(condition, timeout=10, catch_assertions=True)
 
 
 class WrapperTests(MLlibTestCase):
-
     def test_new_java_array(self):
         # test array of strings
         str_list = ["a", "b", "c"]
@@ -101,18 +115,24 @@ class WrapperTests(MLlibTestCase):
         self.assertEqual(_java2py(self.sc, java_array), [])
         # test array of array of strings
         str_list = [["a", "b", "c"], ["d", "e"], ["f", "g", "h", "i"], []]
-        expected_str_list = [("a", "b", "c", None), ("d", "e", None, None), ("f", "g", "h", "i"),
-                             (None, None, None, None)]
+        expected_str_list = [
+            ("a", "b", "c", None),
+            ("d", "e", None, None),
+            ("f", "g", "h", "i"),
+            (None, None, None, None),
+        ]
         java_class = self.sc._gateway.jvm.java.lang.String
         java_array = JavaWrapper._new_java_array(str_list, java_class)
         self.assertEqual(_java2py(self.sc, java_array), expected_str_list)
 
+
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_wrapper import *
+    from pyspark.ml.tests.test_wrapper import *  # noqa: F401
 
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

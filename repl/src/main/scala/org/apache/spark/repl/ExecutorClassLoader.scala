@@ -20,10 +20,13 @@ package org.apache.spark.repl
 import java.io.{ByteArrayOutputStream, FileNotFoundException, FilterInputStream, InputStream}
 import java.net.{URI, URL, URLEncoder}
 import java.nio.channels.Channels
+import java.nio.charset.StandardCharsets.UTF_8
+
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.xbean.asm7._
-import org.apache.xbean.asm7.Opcodes._
+import org.apache.xbean.asm9._
+import org.apache.xbean.asm9.Opcodes._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -106,7 +109,17 @@ class ExecutorClassLoader(
         parentLoader.loadClass(name)
       } catch {
         case e: ClassNotFoundException =>
-          val classOption = findClassLocally(name)
+          val classOption = try {
+            findClassLocally(name)
+          } catch {
+            case e: RemoteClassLoaderError =>
+              throw e
+            case NonFatal(e) =>
+              // Wrap the error to include the class name
+              // scalastyle:off throwerror
+              throw new RemoteClassLoaderError(name, e)
+              // scalastyle:on throwerror
+          }
           classOption match {
             case None => throw new ClassNotFoundException(name, e)
             case Some(a) => a
@@ -115,13 +128,14 @@ class ExecutorClassLoader(
     }
   }
 
+  // See org.apache.spark.network.server.TransportRequestHandler.processStreamRequest.
+  private val STREAM_NOT_FOUND_REGEX = s"Stream '.*' was not found.".r.pattern
+
   private def getClassFileInputStreamFromSparkRPC(path: String): InputStream = {
-    val channel = env.rpcEnv.openChannel(s"$classUri/$path")
+    val channel = env.rpcEnv.openChannel(s"$classUri/${urlEncode(path)}")
     new FilterInputStream(Channels.newInputStream(channel)) {
 
       override def read(): Int = toClassNotFound(super.read())
-
-      override def read(b: Array[Byte]): Int = toClassNotFound(super.read(b))
 
       override def read(b: Array[Byte], offset: Int, len: Int) =
         toClassNotFound(super.read(b, offset, len))
@@ -130,8 +144,15 @@ class ExecutorClassLoader(
         try {
           fn
         } catch {
-          case e: Exception =>
+          case e: RuntimeException if e.getMessage != null
+            && STREAM_NOT_FOUND_REGEX.matcher(e.getMessage).matches() =>
+            // Convert a stream not found error to ClassNotFoundException.
+            // Driver sends this explicit acknowledgment to tell us that the class was missing.
             throw new ClassNotFoundException(path, e)
+          case NonFatal(e) =>
+            // scalastyle:off throwerror
+            throw new RemoteClassLoaderError(path, e)
+            // scalastyle:on throwerror
         }
       }
     }
@@ -163,7 +184,12 @@ class ExecutorClassLoader(
       case e: Exception =>
         // Something bad happened while checking if the class exists
         logError(s"Failed to check existence of class $name on REPL class server at $uri", e)
-        None
+        if (userClassPathFirst) {
+          // Allow to try to load from "parentLoader"
+          None
+        } else {
+          throw e
+        }
     } finally {
       if (inputStream != null) {
         try {
@@ -187,7 +213,7 @@ class ExecutorClassLoader(
         ClassWriter.COMPUTE_FRAMES + ClassWriter.COMPUTE_MAXS)
       val cleaner = new ConstructorCleaner(name, cw)
       cr.accept(cleaner, 0)
-      return cw.toByteArray
+      cw.toByteArray
     } else {
       // Pass the class through unmodified
       val bos = new ByteArrayOutputStream
@@ -201,7 +227,7 @@ class ExecutorClassLoader(
           done = true
         }
       }
-      return bos.toByteArray
+      bos.toByteArray
     }
   }
 
@@ -209,12 +235,12 @@ class ExecutorClassLoader(
    * URL-encode a string, preserving only slashes
    */
   def urlEncode(str: String): String = {
-    str.split('/').map(part => URLEncoder.encode(part, "UTF-8")).mkString("/")
+    str.split('/').map(part => URLEncoder.encode(part, UTF_8.name())).mkString("/")
   }
 }
 
 class ConstructorCleaner(className: String, cv: ClassVisitor)
-extends ClassVisitor(ASM7, cv) {
+extends ClassVisitor(ASM9, cv) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     val mv = cv.visitMethod(access, name, desc, sig, exceptions)
@@ -231,9 +257,17 @@ extends ClassVisitor(ASM7, cv) {
       mv.visitInsn(RETURN)
       mv.visitMaxs(-1, -1) // stack size and local vars will be auto-computed
       mv.visitEnd()
-      return null
+      null
     } else {
-      return mv
+      mv
     }
   }
 }
+
+/**
+ * An error when we cannot load a class due to exceptions. We don't know if this class exists, so
+ * throw a special one that's neither [[LinkageError]] nor [[ClassNotFoundException]] to make JVM
+ * retry to load this class later.
+ */
+private[repl] class RemoteClassLoaderError(className: String, cause: Throwable)
+  extends Error(className, cause)

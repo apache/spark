@@ -18,7 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -40,7 +41,7 @@ object SparseNaiveBayes {
       numFeatures: Int = -1,
       lambda: Double = 1.0) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("SparseNaiveBayes") {
@@ -70,7 +71,7 @@ object SparseNaiveBayes {
     val conf = new SparkConf().setAppName(s"SparseNaiveBayes with $params")
     val sc = new SparkContext(conf)
 
-    Logger.getRootLogger.setLevel(Level.WARN)
+    Configurator.setRootLevel(Level.WARN)
 
     val minPartitions =
       if (params.minPartitions > 0) params.minPartitions else sc.defaultMinPartitions

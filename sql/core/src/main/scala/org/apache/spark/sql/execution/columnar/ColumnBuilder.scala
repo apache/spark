@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.ColumnBuilder._
 import org.apache.spark.sql.execution.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
 import org.apache.spark.sql.types._
@@ -125,6 +126,9 @@ class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STR
 private[columnar]
 class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
 
+private[columnar]
+class IntervalColumnBuilder extends ComplexColumnBuilder(new IntervalColumnStats, CALENDAR_INTERVAL)
+
 private[columnar] class CompactDecimalColumnBuilder(dataType: DecimalType)
   extends NativeColumnBuilder(new DecimalColumnStats(dataType), COMPACT_DECIMAL(dataType))
 
@@ -170,12 +174,14 @@ private[columnar] object ColumnBuilder {
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder
       case ShortType => new ShortColumnBuilder
-      case IntegerType | DateType => new IntColumnBuilder
-      case LongType | TimestampType => new LongColumnBuilder
+      case IntegerType | DateType | _: YearMonthIntervalType => new IntColumnBuilder
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        new LongColumnBuilder
       case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
       case StringType => new StringColumnBuilder
       case BinaryType => new BinaryColumnBuilder
+      case CalendarIntervalType => new IntervalColumnBuilder
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnBuilder(dt)
       case dt: DecimalType => new DecimalColumnBuilder(dt)
@@ -185,7 +191,7 @@ private[columnar] object ColumnBuilder {
       case udt: UserDefinedType[_] =>
         return apply(udt.sqlType, initialSize, columnName, useCompression)
       case other =>
-        throw new Exception(s"not supported type: $other")
+        throw QueryExecutionErrors.notSupportTypeError(other)
     }
 
     builder.initialize(initialSize, columnName, useCompression)

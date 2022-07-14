@@ -20,7 +20,7 @@ package org.apache.spark.mllib.evaluation
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -57,32 +57,25 @@ class RegressionMetrics @Since("2.0.0") (
     })
 
   /**
-   * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
+   * Use SummarizerBuffer to calculate summary statistics of observations and errors.
    */
-  private lazy val summary: MultivariateStatisticalSummary = {
-    val summary: MultivariateStatisticalSummary = predictionAndObservations.map {
+  private lazy val summary = {
+    val weightedVectors = predictionAndObservations.map {
       case (prediction: Double, observation: Double, weight: Double) =>
-        (Vectors.dense(observation, observation - prediction), weight)
+        (Vectors.dense(observation, observation - prediction, prediction), weight)
       case (prediction: Double, observation: Double) =>
-        (Vectors.dense(observation, observation - prediction), 1.0)
-    }.treeAggregate(new MultivariateOnlineSummarizer())(
-        (summary, sample) => summary.add(sample._1, sample._2),
-        (sum1, sum2) => sum1.merge(sum2)
-      )
-    summary
+        (Vectors.dense(observation, observation - prediction, prediction), 1.0)
+    }
+    Statistics.colStats(weightedVectors,
+      Seq("mean", "normL1", "normL2", "variance"))
   }
 
   private lazy val SSy = math.pow(summary.normL2(0), 2)
   private lazy val SSerr = math.pow(summary.normL2(1), 2)
   private lazy val SStot = summary.variance(0) * (summary.weightSum - 1)
-  private lazy val SSreg = {
-    val yMean = summary.mean(0)
-    predictionAndObservations.map {
-      case (prediction: Double, _: Double, weight: Double) =>
-        math.pow(prediction - yMean, 2) * weight
-      case (prediction: Double, _: Double) => math.pow(prediction - yMean, 2)
-    }.sum()
-  }
+  private lazy val SSreg = math.pow(summary.normL2(2), 2) +
+    math.pow(summary.mean(0), 2) * summary.weightSum -
+    2 * summary.mean(0) * summary.mean(2) * summary.weightSum
 
   /**
    * Returns the variance explained by regression.
@@ -138,4 +131,6 @@ class RegressionMetrics @Since("2.0.0") (
       1 - SSerr / SStot
     }
   }
+
+  private[spark] def count: Long = summary.count
 }

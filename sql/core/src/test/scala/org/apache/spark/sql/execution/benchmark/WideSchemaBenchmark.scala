@@ -28,9 +28,10 @@ import org.apache.spark.util.Utils
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/WideSchemaBenchmark-results.txt".
  * }}}
  */
@@ -68,14 +69,14 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       desc: String,
       selector: String): Unit = {
     benchmark.addCase(desc + " (read in-mem)") { iter =>
-      df.selectExpr(s"sum($selector)").collect()
+      df.selectExpr(s"sum($selector)").noop()
     }
     benchmark.addCase(desc + " (exec in-mem)") { iter =>
-      df.selectExpr("*", s"hash($selector) as f").selectExpr(s"sum($selector)", "sum(f)").collect()
+      df.selectExpr("*", s"hash($selector) as f").selectExpr(s"sum($selector)", "sum(f)").noop()
     }
     val parquet = saveAsParquet(df)
     benchmark.addCase(desc + " (read parquet)") { iter =>
-      parquet.selectExpr(s"sum($selector) as f").collect()
+      parquet.selectExpr(s"sum($selector) as f").noop()
     }
     benchmark.addCase(desc + " (write parquet)") { iter =>
       saveAsParquet(df.selectExpr(s"sum($selector) as f"))

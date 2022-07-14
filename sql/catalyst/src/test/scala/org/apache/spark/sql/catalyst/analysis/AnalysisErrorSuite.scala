@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -26,7 +29,9 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] case class GroupableData(data: Int) {
   def getData: Int = data
@@ -85,6 +90,8 @@ case class TestFunction(
   extends Expression with ImplicitCastInputTypes with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = StringType
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(children = newChildren)
 }
 
 case class UnresolvedTestPlan() extends LeafNode {
@@ -105,29 +112,39 @@ class AnalysisErrorSuite extends AnalysisTest {
     }
   }
 
+  def errorClassTest(
+      name: String,
+      plan: LogicalPlan,
+      errorClass: String,
+      messageParameters: Array[String]): Unit = {
+    test(name) {
+      assertAnalysisErrorClass(plan, errorClass, messageParameters)
+    }
+  }
+
   val dateLit = Literal.create(null, DateType)
 
   errorTest(
     "scalar subquery with 2 columns",
      testRelation.select(
-       (ScalarSubquery(testRelation.select('a, dateLit.as('b))) + Literal(1)).as('a)),
+       (ScalarSubquery(testRelation.select($"a", dateLit.as("b"))) + Literal(1)).as("a")),
        "Scalar subquery must return only one column, but got 2" :: Nil)
 
   errorTest(
     "scalar subquery with no column",
-    testRelation.select(ScalarSubquery(LocalRelation()).as('a)),
+    testRelation.select(ScalarSubquery(LocalRelation()).as("a")),
     "Scalar subquery must return only one column, but got 0" :: Nil)
 
   errorTest(
     "single invalid type, single arg",
-    testRelation.select(TestFunction(dateLit :: Nil, IntegerType :: Nil).as('a)),
+    testRelation.select(TestFunction(dateLit :: Nil, IntegerType :: Nil).as("a")),
     "cannot resolve" :: "testfunction(CAST(NULL AS DATE))" :: "argument 1" :: "requires int type" ::
     "'CAST(NULL AS DATE)' is of date type" :: Nil)
 
   errorTest(
     "single invalid type, second arg",
     testRelation.select(
-      TestFunction(dateLit :: dateLit :: Nil, DateType :: IntegerType :: Nil).as('a)),
+      TestFunction(dateLit :: dateLit :: Nil, DateType :: IntegerType :: Nil).as("a")),
     "cannot resolve" :: "testfunction(CAST(NULL AS DATE), CAST(NULL AS DATE))" ::
       "argument 2" :: "requires int type" ::
       "'CAST(NULL AS DATE)' is of date type" :: Nil)
@@ -135,7 +152,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "multiple invalid type",
     testRelation.select(
-      TestFunction(dateLit :: dateLit :: Nil, IntegerType :: IntegerType :: Nil).as('a)),
+      TestFunction(dateLit :: dateLit :: Nil, IntegerType :: IntegerType :: Nil).as("a")),
     "cannot resolve" :: "testfunction(CAST(NULL AS DATE), CAST(NULL AS DATE))" ::
       "argument 1" :: "argument 2" :: "requires int type" ::
       "'CAST(NULL AS DATE)' is of date type" :: Nil)
@@ -148,7 +165,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          UnspecifiedFrame)).as('window)),
+          UnspecifiedFrame)).as("window")),
     "not supported within a window function" :: Nil)
 
   errorTest(
@@ -159,22 +176,79 @@ class AnalysisErrorSuite extends AnalysisTest {
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          UnspecifiedFrame)).as('window)),
+          UnspecifiedFrame)).as("window")),
     "Distinct window functions are not supported" :: Nil)
+
+  errorTest(
+    "window aggregate function with filter predicate",
+    testRelation2.select(
+      WindowExpression(
+        AggregateExpression(
+          Count(UnresolvedAttribute("b")),
+          Complete,
+          isDistinct = false,
+          filter = Some(UnresolvedAttribute("b") > 1)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    "window aggregate function with filter predicate is not supported" :: Nil
+  )
 
   errorTest(
     "distinct function",
     CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
-    "hex does not support the modifier DISTINCT" :: Nil)
+    "Function hex does not support DISTINCT" :: Nil)
+
+  errorTest(
+    "non aggregate function with filter predicate",
+    CatalystSqlParser.parsePlan("SELECT hex(a) FILTER (WHERE c = 1) FROM TaBlE2"),
+    "Function hex does not support FILTER clause" :: Nil)
 
   errorTest(
     "distinct window function",
-    CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) over () FROM TaBlE"),
-    "percent_rank does not support the modifier DISTINCT" :: Nil)
+    CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) OVER () FROM TaBlE"),
+    "Function percent_rank does not support DISTINCT" :: Nil)
+
+  errorTest(
+    "window function with filter predicate",
+    CatalystSqlParser.parsePlan("SELECT percent_rank(a) FILTER (WHERE c > 1) OVER () FROM TaBlE2"),
+    "Function percent_rank does not support FILTER clause" :: Nil)
+
+  errorTest(
+    "higher order function with filter predicate",
+    CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
+      "FILTER (WHERE c > 1)"),
+    "Function aggregate does not support FILTER clause" :: Nil)
+
+  errorTest(
+    "non-deterministic filter predicate in aggregate functions",
+    CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
+    "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
+
+  errorTest(
+    "function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
+    "Function hex does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "some window function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT percent_rank(a) IGNORE NULLS FROM TaBlE2"),
+    "Function percent_rank does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "aggregate function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT count(a) IGNORE NULLS FROM TaBlE2"),
+    "Function count does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "higher order function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
+      "IGNORE NULLS"), "Function aggregate does not support IGNORE NULLS" :: Nil)
 
   errorTest(
     "nested aggregate functions",
-    testRelation.groupBy('a)(
+    testRelation.groupBy($"a")(
       AggregateExpression(
         Max(AggregateExpression(Count(Literal(1)), Complete, isDistinct = false)),
         Complete,
@@ -190,40 +264,65 @@ class AnalysisErrorSuite extends AnalysisTest {
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as('window)),
-    "window frame" :: "must match the required frame" :: Nil)
+          SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as("window")),
+    "Cannot specify window frame for lead function" :: Nil)
+
+  errorTest(
+    "the offset of nth_value window function is negative or zero",
+    testRelation2.select(
+      WindowExpression(
+        new NthValue(AttributeReference("b", IntegerType)(), Literal(0)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
+    "The 'offset' argument of nth_value must be greater than zero but it is 0." :: Nil)
+
+  errorTest(
+    "the offset of nth_value window function is not int literal",
+    testRelation2.select(
+      WindowExpression(
+        new NthValue(AttributeReference("b", IntegerType)(), Literal(true)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
+    "argument 2 requires int type, however, 'true' is of boolean type." :: Nil)
 
   errorTest(
     "too many generators",
-    listRelation.select(Explode('list).as('a), Explode('list).as('b)),
+    listRelation.select(Explode($"list").as("a"), Explode($"list").as("b")),
     "only one generator" :: "explode" :: Nil)
 
-  errorTest(
+  errorClassTest(
     "unresolved attributes",
-    testRelation.select('abcd),
-    "cannot resolve" :: "abcd" :: Nil)
+    testRelation.select($"abcd"),
+    "UNRESOLVED_COLUMN",
+    Array("`abcd`", "`a`"))
 
-  errorTest(
+  errorClassTest(
     "unresolved attributes with a generated name",
-    testRelation2.groupBy('a)(max('b))
-      .where(sum('b) > 0)
-      .orderBy('havingCondition.asc),
-    "cannot resolve" :: "havingCondition" :: Nil)
+    testRelation2.groupBy($"a")(max($"b"))
+      .where(sum($"b") > 0)
+      .orderBy($"havingCondition".asc),
+    "UNRESOLVED_COLUMN",
+    Array("`havingCondition`", "`max(b)`"))
 
   errorTest(
     "unresolved star expansion in max",
-    testRelation2.groupBy('a)(sum(UnresolvedStar(None))),
+    testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
     "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
 
   errorTest(
     "sorting by unsupported column types",
-    mapRelation.orderBy('map.asc),
+    mapRelation.orderBy($"map".asc),
     "sort" :: "type" :: "map<int,int>" :: Nil)
 
-  errorTest(
+  errorClassTest(
     "sorting by attributes are not from grouping expressions",
-    testRelation2.groupBy('a, 'c)('a, 'c, count('a).as("a3")).orderBy('b.asc),
-    "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, c, a3]" :: Nil)
+    testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
+    "UNRESOLVED_COLUMN",
+    Array("`b`", "`a`, `c`, `a3`"))
 
   errorTest(
     "non-boolean filters",
@@ -237,8 +336,8 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "missing group by",
-    testRelation2.groupBy('a)('b),
-    "'`b`'" :: "group by" :: Nil
+    testRelation2.groupBy($"a")($"b"),
+    "'b'" :: "group by" :: Nil
   )
 
   errorTest(
@@ -312,11 +411,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation3.except(testRelation4, isAll = false),
     "except" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
 
-  errorTest(
+  errorClassTest(
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
-    testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
-    "cannot resolve '`bad_column`'" :: Nil)
+    testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
+    "UNRESOLVED_COLUMN",
+    Array("`bad_column`", "`a`, `b`, `c`, `d`, `e`"))
 
   errorTest(
     "slide duration greater than window in time window",
@@ -383,15 +483,41 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "generator nested in expressions",
-    listRelation.select(Explode('list) + 1),
-    "Generators are not supported when it's nested in expressions, but got: (explode(list) + 1)"
+    listRelation.select(Explode($"list") + 1),
+    """The generator is not supported: nested in expressions "(explode(list) + 1)""""
       :: Nil
   )
 
   errorTest(
+    "SPARK-30998: unsupported nested inner generators",
+    {
+      val nestedListRelation = LocalRelation(
+        AttributeReference("nestedList", ArrayType(ArrayType(IntegerType)))())
+      nestedListRelation.select(Explode(Explode($"nestedList")))
+    },
+    "The generator is not supported: nested in expressions " +
+      """"explode(explode(nestedList))"""" :: Nil
+  )
+
+  errorTest(
+    "SPARK-30998: unsupported nested inner generators for aggregates",
+    testRelation.select(Explode(Explode(
+      CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)))),
+    "The generator is not supported: nested in expressions " +
+      """"explode(explode(array(array(min(a), max(a)))))"""" :: Nil
+  )
+
+  errorTest(
+    "generator nested in expressions for aggregates",
+    testRelation.select(Explode(CreateArray(min($"a") :: max($"a") :: Nil)) + 1),
+    "The generator is not supported: nested in expressions " +
+      """"(explode(array(min(a), max(a))) + 1)"""" :: Nil
+  )
+
+  errorTest(
     "generator appears in operator which is not Project",
-    listRelation.sortBy(Explode('list).asc),
-    "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
+    listRelation.sortBy(Explode($"list").asc),
+    "The generator is not supported: outside the SELECT clause, found: Sort" :: Nil
   )
 
   errorTest(
@@ -407,10 +533,67 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
-    "more than one generators in SELECT",
-    listRelation.select(Explode('list), Explode('list)),
-    "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil
+    "an evaluated offset class must not be string",
+    testRelation.offset(Literal(UTF8String.fromString("abc"), StringType)),
+    "The offset expression must be integer type, but got string" :: Nil
   )
+
+  errorTest(
+    "an evaluated offset class must not be long",
+    testRelation.offset(Literal(10L, LongType)),
+    "The offset expression must be integer type, but got bigint" :: Nil
+  )
+
+  errorTest(
+    "an evaluated offset class must not be null",
+    testRelation.offset(Literal(null, IntegerType)),
+    "The evaluated offset expression must not be null, but got " :: Nil
+  )
+
+  errorTest(
+    "num_rows in offset clause must be equal to or greater than 0",
+    testRelation.offset(-1),
+    "The offset expression must be equal to or greater than 0, but got -1" :: Nil
+  )
+
+  errorTest(
+    "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
+    testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
+    "The sum of the LIMIT clause and the OFFSET clause must not be greater than" +
+      " the maximum 32-bit integer value (2,147,483,647)," +
+      " but found limit = 1000000000, offset = 2000000000." :: Nil
+  )
+
+  errorTest(
+    "more than one generators in SELECT",
+    listRelation.select(Explode($"list"), Explode($"list")),
+    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+      """"explode(list)", "explode(list)"""" :: Nil
+  )
+
+  errorTest(
+    "more than one generators for aggregates in SELECT",
+    testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
+      Explode(CreateArray(max($"a") :: Nil))),
+    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+      """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
+  )
+
+  errorTest(
+    "SPARK-38666: non-boolean aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where e) FROM TaBlE2"),
+    "FILTER expression is not of type boolean" :: Nil)
+
+  errorTest(
+    "SPARK-38666: aggregate in aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where max(e) > 1) FROM TaBlE2"),
+    "FILTER expression contains aggregate" :: Nil)
+
+  errorTest(
+    "SPARK-38666: window function in aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) " +
+       "filter (where nth_value(e, 2) over(order by b) > 1) FROM TaBlE2"),
+    "FILTER expression contains window function" :: Nil)
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
@@ -459,7 +642,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       if (shouldSuccess) {
         assertAnalysisSuccess(plan, true)
       } else {
-        assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
+        assertAnalysisError(plan, "expression a cannot be used as a grouping expression" :: Nil)
       }
     }
 
@@ -508,45 +691,31 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("Join can work on binary types but can't work on map types") {
-    val left = LocalRelation('a.binary, 'b.map(StringType, StringType))
-    val right = LocalRelation('c.binary, 'd.map(StringType, StringType))
+    val left = LocalRelation($"a".binary, Symbol("b").map(StringType, StringType))
+    val right = LocalRelation($"c".binary, Symbol("d").map(StringType, StringType))
 
     val plan1 = left.join(
       right,
       joinType = Cross,
-      condition = Some('a === 'c))
+      condition = Some($"a" === $"c"))
 
     assertAnalysisSuccess(plan1)
 
     val plan2 = left.join(
       right,
       joinType = Cross,
-      condition = Some('b === 'd))
+      condition = Some($"b" === $"d"))
     assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
   }
 
-  test("PredicateSubQuery is used outside of a filter") {
+  test("PredicateSubQuery is used outside of a allowed nodes") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val plan = Project(
-      Seq(a, Alias(InSubquery(Seq(a), ListQuery(LocalRelation(b))), "c")()),
+    val plan = Sort(
+      Seq(SortOrder(InSubquery(Seq(a), ListQuery(LocalRelation(b))), Ascending)),
+      global = true,
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used in a Filter" :: Nil)
-  }
-
-  test("PredicateSubQuery is used is a nested condition") {
-    val a = AttributeReference("a", IntegerType)()
-    val b = AttributeReference("b", IntegerType)()
-    val c = AttributeReference("c", BooleanType)()
-    val plan1 = Filter(Cast(Not(InSubquery(Seq(a), ListQuery(LocalRelation(b)))), BooleanType),
-      LocalRelation(a))
-    assertAnalysisError(plan1,
-      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
-
-    val plan2 = Filter(
-      Or(Not(InSubquery(Seq(a), ListQuery(LocalRelation(b)))), c), LocalRelation(a, c))
-    assertAnalysisError(plan2,
-      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
+    assertAnalysisError(plan, "Predicate sub-queries can only be used in " :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
@@ -593,7 +762,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan5 = Filter(
       Exists(
         Sample(0.0, 0.5, false, 1L,
-          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select('b)
+          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select("b")
       ),
       LocalRelation(a))
     assertAnalysisError(plan5,
@@ -603,8 +772,173 @@ class AnalysisErrorSuite extends AnalysisTest {
   test("Error on filter condition containing aggregate expressions") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val plan = Filter('a === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
+    val plan = Filter($"a" === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
     assertAnalysisError(plan,
       "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
+  }
+
+  test("SPARK-30811: CTE should not cause stack overflow when " +
+    "it refers to non-existent table with same name") {
+    val plan = UnresolvedWith(
+      UnresolvedRelation(TableIdentifier("t")),
+      Seq("t" -> SubqueryAlias("t",
+        Project(
+          Alias(Literal(1), "x")() :: Nil,
+          UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
+    assertAnalysisError(plan, "Table or view not found:" :: Nil)
+  }
+
+  test("SPARK-33909: Check rand functions seed is legal at analyer side") {
+    Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
+      val plan = Project(Seq(r.as("r")), testRelation)
+      assertAnalysisError(plan,
+        s"Input argument to ${r.prettyName} must be a constant." :: Nil)
+    }
+    Seq(Rand(1.0), Rand("1"), Randn("a")).foreach { r =>
+      val plan = Project(Seq(r.as("r")), testRelation)
+      assertAnalysisError(plan,
+        s"data type mismatch: argument 1 requires (int or bigint) type" :: Nil)
+    }
+  }
+
+  test("SPARK-34946: correlated scalar subquery in grouping expressions only") {
+    val c1 = AttributeReference("c1", IntegerType)()
+    val c2 = AttributeReference("c2", IntegerType)()
+    val t = LocalRelation(c1, c2)
+    val plan = Aggregate(
+      ScalarSubquery(
+        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
+          Filter($"t1.c1" === $"t2.c1",
+            t.as("t2")))
+      ) :: Nil,
+      sum($"c2").as("sum") :: Nil, t.as("t1"))
+    assertAnalysisError(plan, "Correlated scalar subqueries in the group by clause must also be " +
+      "in the aggregate expressions" :: Nil)
+  }
+
+  test("SPARK-34946: correlated scalar subquery in aggregate expressions only") {
+    val c1 = AttributeReference("c1", IntegerType)()
+    val c2 = AttributeReference("c2", IntegerType)()
+    val t = LocalRelation(c1, c2)
+    val plan = Aggregate(
+      $"c1" :: Nil,
+      ScalarSubquery(
+        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
+          Filter($"t1.c1" === $"t2.c1",
+            t.as("t2")))
+      ).as("sub") :: Nil, t.as("t1"))
+    assertAnalysisError(plan, "Correlated scalar subquery 'scalarsubquery(t1.c1)' is " +
+      "neither present in the group by, nor in an aggregate function. Add it to group by " +
+      "using ordinal position or wrap it in first() (or first_value) if you don't care " +
+      "which value you get." :: Nil)
+  }
+
+  errorTest(
+    "SPARK-34920: error code to error message",
+    testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
+    "[UNRESOLVED_COLUMN] A column or function parameter with name `bad_column` cannot be " +
+      "resolved. Did you mean one of the following? [`a`, `b`, `c`, `d`, `e`]"
+      :: Nil)
+
+  test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val d = AttributeReference("d", DoubleType)()
+    val t1 = LocalRelation(a, b, d)
+    val t2 = LocalRelation(c)
+    val conditions = Seq(
+      (abs($"a") === $"c", "abs(a) = outer(c)"),
+      (abs($"a") <=> $"c", "abs(a) <=> outer(c)"),
+      ($"a" + 1 === $"c", "(a + 1) = outer(c)"),
+      ($"a" + $"b" === $"c", "(a + b) = outer(c)"),
+      ($"a" + $"c" === $"b", "(a + outer(c)) = b"),
+      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d AS INT) = outer(c)"))
+    conditions.foreach { case (cond, msg) =>
+      val plan = Project(
+        ScalarSubquery(
+          Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
+            Filter(cond, t1))
+        ).as("sub") :: Nil,
+        t2)
+      assertAnalysisError(plan, s"Correlated column is not allowed in predicate ($msg)" :: Nil)
+    }
+  }
+
+  test("SPARK-35673: fail if the plan still contains UnresolvedHint after analysis") {
+    val hintName = "some_random_hint_that_does_not_exist"
+    val plan = UnresolvedHint(hintName, Seq.empty,
+      Project(Alias(Literal(1), "x")() :: Nil, OneRowRelation())
+    )
+    assert(plan.resolved)
+
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(plan)
+    }
+    assert(error.message.contains(s"Hint not found: ${hintName}"))
+
+    // UnresolvedHint be removed by batch `Remove Unresolved Hints`
+    assertAnalysisSuccess(plan, true)
+  }
+
+  test("SPARK-35618: Resolve star expressions in subqueries") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val t0 = OneRowRelation()
+    val t1 = LocalRelation(a, b).as("t1")
+
+    // t1.* in the subquery should be resolved into outer(t1.a) and outer(t1.b).
+    assertAnalysisError(
+      Project(ScalarSubquery(t0.select(star("t1"))).as("sub") :: Nil, t1),
+      "Scalar subquery must return only one column, but got 2" :: Nil)
+
+    // t2.* cannot be resolved and the error should be the initial analysis exception.
+    assertAnalysisError(
+      Project(ScalarSubquery(t0.select(star("t2"))).as("sub") :: Nil, t1),
+      "cannot resolve 't2.*' given input columns ''" :: Nil
+    )
+  }
+
+  test("SPARK-35618: Invalid star usage in subqueries") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val t1 = LocalRelation(a, b).as("t1")
+    val t2 = LocalRelation(b, c).as("t2")
+
+    // SELECT * FROM t1 WHERE a = (SELECT sum(c) FROM t2 WHERE t1.* = t2.b)
+    assertAnalysisError(
+      Filter(EqualTo(a, ScalarSubquery(t2.select(sum(c)).where(star("t1") === b))), t1),
+      "Invalid usage of '*' in Filter" :: Nil
+    )
+
+    // SELECT * FROM t1 JOIN t2 ON (EXISTS (SELECT 1 FROM t2 WHERE t1.* = b))
+    assertAnalysisError(
+      t1.join(t2, condition = Some(Exists(t2.select(1).where(star("t1") === b)))),
+      "Invalid usage of '*' in Filter" :: Nil
+    )
+  }
+
+  test("SPARK-36488: Regular expression expansion should fail with a meaningful message") {
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
+      assertAnalysisError(testRelation.select(Divide(UnresolvedRegex(".?", None, false), "a")),
+        s"Invalid usage of regular expression '.?' in" :: Nil)
+      assertAnalysisError(testRelation.select(
+        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".*", None, false))),
+        s"Invalid usage of regular expressions '.?', '.*' in" :: Nil)
+      assertAnalysisError(testRelation.select(
+        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".?", None, false))),
+        s"Invalid usage of regular expression '.?' in" :: Nil)
+      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), "a")),
+        "Invalid usage of '*' in" :: Nil)
+      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
+        "Invalid usage of '*' in" :: Nil)
+      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None),
+        UnresolvedRegex(".?", None, false))),
+        "Invalid usage of '*' and regular expression '.?' in" :: Nil)
+      assertAnalysisError(testRelation.select(Least(Seq(UnresolvedStar(None),
+        UnresolvedRegex(".*", None, false), UnresolvedRegex(".?", None, false)))),
+        "Invalid usage of '*' and regular expressions '.*', '.?' in" :: Nil)
+    }
   }
 }

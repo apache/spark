@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -60,9 +61,24 @@ object TypeUtils {
     }
   }
 
-  def getNumeric(t: DataType): Numeric[Any] =
-    t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+  def checkForAnsiIntervalOrNumericType(
+      dt: DataType, funcName: String): TypeCheckResult = dt match {
+    case _: AnsiIntervalType | NullType =>
+      TypeCheckResult.TypeCheckSuccess
+    case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
+    case other => TypeCheckResult.TypeCheckFailure(
+      s"function $funcName requires numeric or interval types, not ${other.catalogString}")
+  }
 
+  def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
+    if (exactNumericRequired) {
+      t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
+    } else {
+      t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+    }
+  }
+
+  @scala.annotation.tailrec
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
@@ -70,16 +86,6 @@ object TypeUtils {
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
     }
-  }
-
-  def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    for (i <- 0 until x.length; if i < y.length) {
-      val v1 = x(i) & 0xff
-      val v2 = y(i) & 0xff
-      val res = v1 - v2
-      if (res != 0) return res
-    }
-    x.length - y.length
   }
 
   /**
@@ -91,5 +97,20 @@ object TypeUtils {
     case BinaryType => false
     case _: AtomicType => true
     case _ => false
+  }
+
+  def failWithIntervalType(dataType: DataType): Unit = {
+    invokeOnceForInterval(dataType, forbidAnsiIntervals = false) {
+      throw QueryCompilationErrors.cannotUseIntervalTypeInTableSchemaError()
+    }
+  }
+
+  def invokeOnceForInterval(dataType: DataType, forbidAnsiIntervals: Boolean)(f: => Unit): Unit = {
+    def isInterval(dataType: DataType): Boolean = dataType match {
+      case _: AnsiIntervalType => forbidAnsiIntervals
+      case CalendarIntervalType => true
+      case _ => false
+    }
+    if (dataType.existsRecursively(isInterval)) f
   }
 }

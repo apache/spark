@@ -17,8 +17,15 @@
 package org.apache.spark.sql.catalyst.plans
 
 import java.io.File
+import java.time.ZoneId
+
+import scala.util.control.NonFatal
+
+import org.scalatest.Assertions.fail
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -39,7 +46,7 @@ trait SQLHelper {
       }
     }
     (keys, values).zipped.foreach { (k, v) =>
-      if (SQLConf.staticConfKeys.contains(k)) {
+      if (SQLConf.isStaticConfigKey(k)) {
         throw new AnalysisException(s"Cannot modify the value of a static config: $k")
       }
       conf.setConfString(k, v)
@@ -60,5 +67,29 @@ trait SQLHelper {
     val path = Utils.createTempDir()
     path.delete()
     try f(path) finally Utils.deleteRecursively(path)
+  }
+
+
+  def testSpecialDatetimeValues[T](test: ZoneId => T): Unit = {
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        val zoneId = getZoneId(timeZone)
+        // The test can fail around midnight if it gets the reference value
+        // before midnight but tested code resolves special value after midnight.
+        // Retry can guarantee that both values were taken on the same day.
+        try {
+          test(zoneId)
+        } catch {
+          case NonFatal(_) => test(zoneId)
+        }
+      }
+    }
+  }
+
+  protected lazy val sparkHome: String = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
   }
 }

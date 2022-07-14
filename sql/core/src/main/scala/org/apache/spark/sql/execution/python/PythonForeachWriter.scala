@@ -78,7 +78,7 @@ object PythonForeachWriter {
    *
    * Internally, it uses a [[HybridRowQueue]] to buffer the rows in a practically unlimited queue
    * across memory and local disk. However, HybridRowQueue is designed to be used only with
-   * EvalPythonExec where the reader is always behind the the writer, that is, the reader does not
+   * EvalPythonExec where the reader is always behind the writer, that is, the reader does not
    * try to read n+1 rows if the writer has only written n rows at any point of time. This
    * assumption is not true for PythonForeachWriter where rows may be added at a different rate as
    * they are consumed by the python worker. Hence, to maintain the invariant of the reader being

@@ -20,11 +20,13 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * This suite contains a couple of Hive window tests which fail in the typical setup due to tiny
  * numerical differences or due semantic differences between Hive and Spark.
  */
+@SlowHiveTest
 class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   override def beforeAll(): Unit = {
@@ -41,7 +43,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |  p_size INT,
         |  p_container STRING,
         |  p_retailprice DOUBLE,
-        |  p_comment STRING)
+        |  p_comment STRING) USING hive
       """.stripMargin)
     val testData1 = TestHive.getHiveFile("data/files/part_tiny.txt").toURI
     sql(
@@ -62,7 +64,6 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     // Moved because:
     // - Spark uses a different default stddev (sample instead of pop)
     // - Tiny numerical differences in stddev results.
-    // - Different StdDev behavior when n=1 (NaN instead of 0)
     checkAnswer(sql(s"""
       |select  p_mfgr,p_name, p_size,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
@@ -88,22 +89,22 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row("Manufacturer#1", "almond antique salmon chartreuse burlywood", 6, 4, 3, 0.6666666666666666, 0.6, 2, 4, 11.0, 15.448840301675292, 2, 6, 2),
         Row("Manufacturer#1", "almond aquamarine burnished black steel", 28, 5, 4, 0.8333333333333334, 0.8, 3, 5, 14.4, 15.388307249337076, 2, 28, 34),
         Row("Manufacturer#1", "almond aquamarine pink moccasin thistle", 42, 6, 5, 1.0, 1.0, 3, 6, 19.0, 17.787636155487327, 2, 42, 6),
-        Row("Manufacturer#2", "almond antique violet chocolate turquoise", 14, 1, 1, 0.2, 0.0, 1, 1, 14.0, Double.NaN, 4, 14, 14),
+        Row("Manufacturer#2", "almond antique violet chocolate turquoise", 14, 1, 1, 0.2, 0.0, 1, 1, 14.0, null, 4, 14, 14),
         Row("Manufacturer#2", "almond antique violet turquoise frosted", 40, 2, 2, 0.4, 0.25, 1, 2, 27.0, 18.384776310850235, 4, 40, 14),
         Row("Manufacturer#2", "almond aquamarine midnight light salmon", 2, 3, 3, 0.6, 0.5, 2, 3, 18.666666666666668, 19.42506971244462, 4, 2, 14),
         Row("Manufacturer#2", "almond aquamarine rose maroon antique", 25, 4, 4, 0.8, 0.75, 2, 4, 20.25, 16.17353805861084, 4, 25, 40),
         Row("Manufacturer#2", "almond aquamarine sandy cyan gainsboro", 18, 5, 5, 1.0, 1.0, 3, 5, 19.8, 14.042791745233567, 4, 18, 2),
-        Row("Manufacturer#3", "almond antique chartreuse khaki white", 17, 1, 1, 0.2, 0.0, 1, 1, 17.0,Double.NaN, 2, 17, 17),
+        Row("Manufacturer#3", "almond antique chartreuse khaki white", 17, 1, 1, 0.2, 0.0, 1, 1, 17.0, null, 2, 17, 17),
         Row("Manufacturer#3", "almond antique forest lavender goldenrod", 14, 2, 2, 0.4, 0.25, 1, 2, 15.5, 2.1213203435596424, 2, 14, 17),
         Row("Manufacturer#3", "almond antique metallic orange dim", 19, 3, 3, 0.6, 0.5, 2, 3, 16.666666666666668, 2.516611478423583, 2, 19, 17),
         Row("Manufacturer#3", "almond antique misty red olive", 1, 4, 4, 0.8, 0.75, 2, 4, 12.75, 8.098353742170895, 2, 1, 14),
         Row("Manufacturer#3", "almond antique olive coral navajo", 45, 5, 5, 1.0, 1.0, 3, 5, 19.2, 16.037456157383566, 2, 45, 19),
-        Row("Manufacturer#4", "almond antique gainsboro frosted violet", 10, 1, 1, 0.2, 0.0, 1, 1, 10.0, Double.NaN, 0, 10, 10),
+        Row("Manufacturer#4", "almond antique gainsboro frosted violet", 10, 1, 1, 0.2, 0.0, 1, 1, 10.0, null, 0, 10, 10),
         Row("Manufacturer#4", "almond antique violet mint lemon", 39, 2, 2, 0.4, 0.25, 1, 2, 24.5, 20.506096654409877, 0, 39, 10),
         Row("Manufacturer#4", "almond aquamarine floral ivory bisque", 27, 3, 3, 0.6, 0.5, 2, 3, 25.333333333333332, 14.571661996262929, 0, 27, 10),
         Row("Manufacturer#4", "almond aquamarine yellow dodger mint", 7, 4, 4, 0.8, 0.75, 2, 4, 20.75, 15.01943185787443, 0, 7, 39),
         Row("Manufacturer#4", "almond azure aquamarine papaya violet", 12, 5, 5, 1.0, 1.0, 3, 5, 19.0, 13.583077707206124, 0, 12, 27),
-        Row("Manufacturer#5", "almond antique blue firebrick mint", 31, 1, 1, 0.2, 0.0, 1, 1, 31.0, Double.NaN, 1, 31, 31),
+        Row("Manufacturer#5", "almond antique blue firebrick mint", 31, 1, 1, 0.2, 0.0, 1, 1, 31.0, null, 1, 31, 31),
         Row("Manufacturer#5", "almond antique medium spring khaki", 6, 2, 2, 0.4, 0.25, 1, 2, 18.5, 17.67766952966369, 1, 6, 31),
         Row("Manufacturer#5", "almond antique sky peru orange", 2, 3, 3, 0.6, 0.5, 2, 3, 13.0, 15.716233645501712, 1, 2, 31),
         Row("Manufacturer#5", "almond aquamarine dodger light gainsboro", 46, 4, 4, 0.8, 0.75, 2, 4, 21.25, 20.902551678363736, 1, 46, 6),

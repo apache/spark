@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.sort
 import java.lang.{Long => JLong}
 
 import org.mockito.Mockito.when
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
@@ -107,8 +107,12 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
     //     at org.apache.spark.memory.TaskMemoryManager.getPage(TaskMemoryManager.java:384)
     // - java.lang.UnsupportedOperationException: Cannot grow BufferHolder by size -536870912
     //     because the size after growing exceeds size limitation 2147483632
-    intercept[SparkOutOfMemoryError] {
+    val e = intercept[SparkOutOfMemoryError] {
       sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
     }
+    assert(e.getMessage ==
+      "[UNABLE_TO_ACQUIRE_MEMORY] Unable to acquire 800 bytes of memory, got 400")
+    assert(e.getErrorClass == "UNABLE_TO_ACQUIRE_MEMORY")
+    assert(e.getSqlState == null)
   }
 }

@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
 
 /**
  * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
@@ -39,11 +40,178 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parsePlan(sqlCommand))
-    messages.foreach { message =>
-      assert(e.message.contains(message))
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)()
+
+  private def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit =
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)(errorClass)
+
+  private def cte(
+      plan: LogicalPlan,
+      namedPlans: (String, (LogicalPlan, Seq[String]))*): UnresolvedWith = {
+    val ctes = namedPlans.map {
+      case (name, (cte, columnAliases)) =>
+        val subquery = if (columnAliases.isEmpty) {
+          cte
+        } else {
+          UnresolvedSubqueryColumnAliases(columnAliases, cte)
+        }
+        name -> SubqueryAlias(name, subquery)
     }
+    UnresolvedWith(plan, ctes)
+  }
+
+  test("single comment case one") {
+    val plan = table("a").select(star())
+    assertEqual("-- single comment\nSELECT * FROM a", plan)
+  }
+
+  test("single comment case two") {
+    val plan = table("a").select(star())
+    assertEqual("-- single comment\\\nwith line continuity\nSELECT * FROM a", plan)
+  }
+
+  test("bracketed comment case one") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/* This is an example of SQL which should not execute:
+        | * select 'multi-line';
+        | */
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("bracketed comment case two") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/*
+        |SELECT 'trailing' as x1; -- inside block comment
+        |*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case one") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/* This block comment surrounds a query which itself has a block comment...
+        |SELECT /* embedded single line */ 'embedded' AS x2;
+        |*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case two") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |SELECT -- continued after the following block comments...
+        |/* Deeply nested comment.
+        |   This includes a single apostrophe to make sure we aren't decoding this part as a string.
+        |SELECT 'deep nest' AS n1;
+        |/* Second level of nesting...
+        |SELECT 'deeper nest' as n2;
+        |/* Third level of nesting...
+        |SELECT 'deepest nest' as n3;
+        |*/
+        |Hoo boy. Still two deep...
+        |*/
+        |Now just one deep...
+        |*/
+        |* FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case three") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/* This block comment surrounds a query which itself has a block comment...
+        |//* I am a nested bracketed comment.
+        |*/
+        |*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case four") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/*/**/*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case five") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/*/*abc*/*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case six") {
+    val plan = table("a").select(star())
+    assertEqual(
+      """
+        |/*/*foo*//*bar*/*/
+        |SELECT * FROM a
+      """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case seven") {
+    val plan = OneRowRelation().select(Literal(1).as("a"))
+    assertEqual(
+      """
+        |/*abc*/
+        |select 1 as a
+        |/*
+        |
+        |2 as b
+        |/*abc */
+        |, 3 as c
+        |
+        |/**/
+        |*/
+      """.stripMargin, plan)
+  }
+
+  test("unclosed bracketed comment one") {
+    val query = """
+                  |/*abc*/
+                  |select 1 as a
+                  |/*
+                  |
+                  |2 as b
+                  |/*abc */
+                  |, 3 as c
+                  |
+                  |/**/
+                  |""".stripMargin
+    val e = intercept[ParseException](parsePlan(query))
+    assert(e.getMessage.contains(s"Unclosed bracketed comment"))
+  }
+
+  test("unclosed bracketed comment two") {
+    val query = """
+                  |/*abc*/
+                  |select 1 as a
+                  |/*
+                  |
+                  |2 as b
+                  |/*abc */
+                  |, 3 as c
+                  |
+                  |/**/
+                  |select 4 as d
+                  |""".stripMargin
+    val e = intercept[ParseException](parsePlan(query))
+    assert(e.getMessage.contains(s"Unclosed bracketed comment"))
   }
 
   test("case insensitive") {
@@ -78,69 +246,67 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("common table expressions") {
-    def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
-      val ctes = namedPlans.map {
-        case (name, cte) =>
-          name -> SubqueryAlias(name, cte)
-      }
-      With(plan, ctes)
-    }
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> table("a").select(star())))
+      cte(table("cte1").select(star()), "cte1" -> ((table("a").select(star()), Seq.empty))))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> OneRowRelation().select(1)))
+      cte(table("cte1").select(star()), "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
       cte(table("cte2").select(star()),
-        "cte1" -> OneRowRelation().select(1),
-        "cte2" -> table("cte1").select(star())))
+        "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
+        "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     intercept(
       "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1",
-      "Found duplicate keys 'cte1'")
+      "CTE definition can't have duplicate names: 'cte1'.")
   }
 
   test("simple select query") {
     assertEqual("select 1", OneRowRelation().select(1))
-    assertEqual("select a, b", OneRowRelation().select('a, 'b))
-    assertEqual("select a, b from db.c", table("db", "c").select('a, 'b))
-    assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select('a, 'b))
+    assertEqual("select a, b", OneRowRelation().select($"a", $"b"))
+    assertEqual("select a, b from db.c", table("db", "c").select($"a", $"b"))
+    assertEqual("select a, b from db.c where x < 1",
+      table("db", "c").where($"x" < 1).select($"a", $"b"))
     assertEqual(
       "select a, b from db.c having x < 1",
-      table("db", "c").groupBy()('a, 'b).where('x < 1))
-    assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
-    assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
-    assertEqual("select from tbl", OneRowRelation().select('from.as("tbl")))
-    assertEqual("select a from 1k.2m", table("1k", "2m").select('a))
+      table("db", "c").having()($"a", $"b")($"x" < 1))
+    assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select($"a", $"b")))
+    assertEqual("select all a, b from db.c", table("db", "c").select($"a", $"b"))
+    assertEqual("select from tbl", OneRowRelation().select($"from".as("tbl")))
+    assertEqual("select a from 1k.2m", table("1k", "2m").select($"a"))
   }
 
-  test("reverse select query") {
-    assertEqual("from a", table("a"))
-    assertEqual("from a select b, c", table("a").select('b, 'c))
+  test("hive-style single-FROM statement") {
+    assertEqual("from a select b, c", table("a").select($"b", $"c"))
     assertEqual(
-      "from db.a select b, c where d < 1", table("db", "a").where('d < 1).select('b, 'c))
-    assertEqual("from a select distinct b, c", Distinct(table("a").select('b, 'c)))
-    assertEqual(
-      "from (from a union all from b) c select *",
-      table("a").union(table("b")).as("c").select(star()))
+      "from db.a select b, c where d < 1", table("db", "a").where($"d" < 1).select($"b", $"c"))
+    assertEqual("from a select distinct b, c", Distinct(table("a").select($"b", $"c")))
+
+    // Weird "FROM table" queries, should be invalid anyway
+    intercept("from a", "Syntax error at or near end of input")
+    intercept("from (from a union all from b) c select *", "Syntax error at or near 'union'")
   }
 
   test("multi select query") {
     assertEqual(
       "from a select * select * where s < 10",
-      table("a").select(star()).union(table("a").where('s < 10).select(star())))
+      table("a").select(star()).union(table("a").where($"s" < 10).select(star())))
     intercept(
-      "from a select * select * from x where a.s < 10",
-      "Multi-select queries cannot have a FROM clause in their individual SELECT statements")
+      "from a select * select * from x where a.s < 10", Some("PARSE_SYNTAX_ERROR"),
+      "Syntax error at or near 'from'")
     intercept(
-      "from a select * from b",
-      "Individual select statement can not have FROM cause as its already specified in " +
-        "the outer query block")
+      "from a select * from b", Some("PARSE_SYNTAX_ERROR"),
+      "Syntax error at or near 'from'")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
       table("a").select(star()).insertInto("tbl1").union(
-        table("a").where('s < 10).select(star()).insertInto("tbl2")))
+        table("a").where($"s" < 10).select(star()).insertInto("tbl2")))
+    assertEqual(
+      "select * from (from a select * select *)",
+      table("a").select(star())
+        .union(table("a").select(star()))
+        .as("__auto_generated_subquery_name").select(star()))
   }
 
   test("query organization") {
@@ -158,8 +324,8 @@ class PlanParserSuite extends AnalysisTest {
 
     val orderSortDistrClusterClauses = Seq(
       ("", basePlan),
-      (" order by a, b desc", basePlan.orderBy('a.asc, 'b.desc)),
-      (" sort by a, b desc", basePlan.sortBy('a.asc, 'b.desc))
+      (" order by a, b desc", basePlan.orderBy($"a".asc, $"b".desc)),
+      (" sort by a, b desc", basePlan.sortBy($"a".asc, $"b".desc))
     )
 
     orderSortDistrClusterClauses.foreach {
@@ -178,13 +344,15 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("insert into") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    import org.apache.spark.sql.catalyst.dsl.plans._
     val sql = "select * from t"
     val plan = table("t").select(star())
     def insert(
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifPartitionNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(table("s"), partition, plan, overwrite, ifPartitionNotExists)
+      InsertIntoStatement(table("s"), partition, Nil, plan, overwrite, ifPartitionNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
@@ -197,44 +365,53 @@ class PlanParserSuite extends AnalysisTest {
       insert(Map("c" -> Option("d"), "e" -> Option("1"))))
 
     // Multi insert
-    val plan2 = table("t").where('x > 5).select(star())
+    val plan2 = table("t").where($"x" > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
-      InsertIntoTable(
-        table("s"), Map.empty, plan.limit(1), false, ifPartitionNotExists = false).union(
-        InsertIntoTable(
-          table("u"), Map.empty, plan2, false, ifPartitionNotExists = false)))
-  }
-
-  test ("insert with if not exists") {
-    val sql = "select * from t"
-    intercept(s"insert overwrite table s partition (e = 1, x) if not exists $sql",
-      "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [x]")
-    intercept[ParseException](parsePlan(s"insert overwrite table s if not exists $sql"))
+      plan.limit(1).insertInto("s").union(plan2.insertInto("u")))
   }
 
   test("aggregation") {
     val sql = "select a, b, sum(c) as c from d group by a, b"
+    val sqlWithoutGroupBy = "select a, b, sum(c) as c from d"
 
     // Normal
-    assertEqual(sql, table("d").groupBy('a, 'b)('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(sql, table("d").groupBy($"a", $"b")($"a", $"b", $"sum".function($"c").as("c")))
 
     // Cube
     assertEqual(s"$sql with cube",
-      table("d").groupBy(Cube(Seq('a, 'b)))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by cube(a, b)",
+      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by cube (a, b)",
+      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
 
     // Rollup
     assertEqual(s"$sql with rollup",
-      table("d").groupBy(Rollup(Seq('a, 'b)))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by rollup(a, b)",
+      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by rollup (a, b)",
+      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
 
     // Grouping Sets
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
-      GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
-        Seq('a, 'b, 'sum.function('c).as("c"))))
+      Aggregate(Seq(GroupingSets(Seq(Seq($"a", $"b"), Seq($"a"), Seq()), Seq($"a", $"b"))),
+        Seq($"a", $"b", $"sum".function($"c").as("c")), table("d")))
+
+    assertEqual(s"$sqlWithoutGroupBy group by grouping sets((a, b), (a), ())",
+      Aggregate(Seq(GroupingSets(Seq(Seq($"a", $"b"), Seq($"a"), Seq()))),
+        Seq($"a", $"b", $"sum".function($"c").as("c")), table("d")))
 
     val m = intercept[ParseException] {
       parsePlan("SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b")
     }.getMessage
-    assert(m.contains("extraneous input 'b'"))
+    assert(m.contains("Syntax error at or near 'b': extra input 'b'"))
 
   }
 
@@ -249,7 +426,7 @@ class PlanParserSuite extends AnalysisTest {
     // Note that WindowSpecs are testing in the ExpressionParserSuite
     val sql = "select * from t"
     val plan = table("t").select(star())
-    val spec = WindowSpecDefinition(Seq('a, 'b), Seq('c.asc),
+    val spec = WindowSpecDefinition(Seq($"a", $"b"), Seq($"c".asc),
       SpecifiedWindowFrame(RowFrame, -Literal(1), Literal(1)))
 
     // Test window resolution.
@@ -260,23 +437,11 @@ class PlanParserSuite extends AnalysisTest {
          |       w2 as w1,
          |       w3 as w1""".stripMargin,
       WithWindowDefinition(ws1, plan))
-
-    // Fail with no reference.
-    intercept(s"$sql window w2 as w1", "Cannot resolve window reference 'w1'")
-
-    // Fail when resolved reference is not a window spec.
-    intercept(
-      s"""$sql
-         |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
-         |       w2 as w1,
-         |       w3 as w2""".stripMargin,
-      "Window reference 'w2' is not a window specification"
-    )
   }
 
   test("lateral view") {
-    val explode = UnresolvedGenerator(FunctionIdentifier("explode"), Seq('x))
-    val jsonTuple = UnresolvedGenerator(FunctionIdentifier("json_tuple"), Seq('x, 'y))
+    val explode = UnresolvedGenerator(FunctionIdentifier("explode"), Seq($"x"))
+    val jsonTuple = UnresolvedGenerator(FunctionIdentifier("json_tuple"), Seq($"x", $"y"))
 
     // Single lateral view
     assertEqual(
@@ -312,12 +477,12 @@ class PlanParserSuite extends AnalysisTest {
         .generate(jsonTuple, alias = Some("jtup"), outputNames = Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
-        from.where('s < 10).select(star()).insertInto("t3")))
+        from.where($"s" < 10).select(star()).insertInto("t3")))
 
     // Unresolved generator.
     val expected = table("t")
       .generate(
-        UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
+        UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq($"x")),
         alias = Some("posexpl"),
         outputNames = Seq("x", "y"))
       .select(star())
@@ -346,7 +511,7 @@ class PlanParserSuite extends AnalysisTest {
     val testConditionalJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t $sql u as uu on a = b",
-        table("t").join(table("u").as("uu"), jt, Option('a === 'b)).select(star()))
+        table("t").join(table("u").as("uu"), jt, Option($"a" === $"b")).select(star()))
     }
     val testNaturalJoin = (sql: String, jt: JoinType) => {
       assertEqual(
@@ -358,21 +523,31 @@ class PlanParserSuite extends AnalysisTest {
         s"select * from t $sql u using(a, b)",
         table("t").join(table("u"), UsingJoin(jt, Seq("a", "b")), None).select(star()))
     }
-    val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
+    val testLateralJoin = (sql: String, jt: JoinType) => {
+      assertEqual(
+        s"select * from t $sql lateral (select * from u) uu",
+        LateralJoin(
+          table("t"),
+          LateralSubquery(table("u").select(star()).as("uu")),
+          jt, None).select(star()))
+    }
+    val testAllExceptLateral = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin,
+      testUsingJoin)
+    val testAll = testAllExceptLateral :+ testLateralJoin
     val testExistence = Seq(testUnconditionalJoin, testConditionalJoin, testUsingJoin)
     def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
       tests.foreach(_(sql, jt))
     }
-    test("cross join", Cross, Seq(testUnconditionalJoin))
-    test(",", Inner, Seq(testUnconditionalJoin))
+    test("cross join", Cross, Seq(testUnconditionalJoin, testLateralJoin))
+    test(",", Inner, Seq(testUnconditionalJoin, testLateralJoin))
     test("join", Inner, testAll)
     test("inner join", Inner, testAll)
     test("left join", LeftOuter, testAll)
     test("left outer join", LeftOuter, testAll)
-    test("right join", RightOuter, testAll)
-    test("right outer join", RightOuter, testAll)
-    test("full join", FullOuter, testAll)
-    test("full outer join", FullOuter, testAll)
+    test("right join", RightOuter, testAllExceptLateral)
+    test("right outer join", RightOuter, testAllExceptLateral)
+    test("full join", FullOuter, testAllExceptLateral)
+    test("full outer join", FullOuter, testAllExceptLateral)
     test("left semi join", LeftSemi, testExistence)
     test("semi join", LeftSemi, testExistence)
     test("left anti join", LeftAnti, testExistence)
@@ -394,8 +569,8 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t1 cross join t2 join t3 on t3.id = t1.id join t4 on t4.id = t1.id",
       table("t1")
         .join(table("t2"), Cross)
-        .join(table("t3"), Inner, Option(Symbol("t3.id") === Symbol("t1.id")))
-        .join(table("t4"), Inner, Option(Symbol("t4.id") === Symbol("t1.id")))
+        .join(table("t3"), Inner, Option($"t3.id" === $"t1.id"))
+        .join(table("t4"), Inner, Option($"t4.id" === $"t1.id"))
         .select(star()))
 
     // Test multiple on clauses.
@@ -406,17 +581,18 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t1 inner join (t2 inner join t3 on col3 = col2) on col3 = col1",
       table("t1")
         .join(table("t2")
-          .join(table("t3"), Inner, Option('col3 === 'col2)), Inner, Option('col3 === 'col1))
+          .join(table("t3"), Inner, Option($"col3" === $"col2")), Inner,
+            Option($"col3" === $"col1"))
         .select(star()))
     assertEqual(
       "select * from t1 inner join (t2 inner join t3) on col3 = col2",
       table("t1")
-        .join(table("t2").join(table("t3"), Inner, None), Inner, Option('col3 === 'col2))
+        .join(table("t2").join(table("t3"), Inner, None), Inner, Option($"col3" === $"col2"))
         .select(star()))
     assertEqual(
       "select * from t1 inner join (t2 inner join t3 on col3 = col2)",
       table("t1")
-        .join(table("t2").join(table("t3"), Inner, Option('col3 === 'col2)), Inner, None)
+        .join(table("t2").join(table("t3"), Inner, Option($"col3" === $"col2")), Inner, None)
         .select(star()))
 
     // Implicit joins.
@@ -424,8 +600,28 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t1, t3 join t2 on t1.col1 = t2.col2",
       table("t1")
         .join(table("t3"))
-        .join(table("t2"), Inner, Option(Symbol("t1.col1") === Symbol("t2.col2")))
+        .join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2"))
         .select(star()))
+
+    // Test lateral join with join conditions
+    assertEqual(
+      s"select * from t join lateral (select * from u) uu on true",
+      LateralJoin(
+        table("t"),
+        LateralSubquery(table("u").select(star()).as("uu")),
+        Inner, Option(true)).select(star()))
+
+    // Test multiple lateral joins
+    assertEqual(
+      "select * from a, lateral (select * from b) bb, lateral (select * from c) cc",
+      LateralJoin(
+        LateralJoin(
+          table("a"),
+          LateralSubquery(table("b").select(star()).as("bb")),
+          Inner, None),
+        LateralSubquery(table("c").select(star()).as("cc")),
+        Inner, None).select(star())
+    )
   }
 
   test("sampled relations") {
@@ -447,7 +643,7 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("sub-query") {
-    val plan = table("t0").select('id)
+    val plan = table("t0").select($"id")
     assertEqual("select id from (t0)", plan)
     assertEqual("select id from ((((((t0))))))", plan)
     assertEqual(
@@ -465,21 +661,20 @@ class PlanParserSuite extends AnalysisTest {
         |      union all
         |      (select id from t0)) as u_1
       """.stripMargin,
-      plan.union(plan).union(plan).as("u_1").select('id))
+      plan.union(plan).union(plan).as("u_1").select($"id"))
   }
 
   test("scalar sub-query") {
     assertEqual(
       "select (select max(b) from s) ss from t",
-      table("t").select(ScalarSubquery(table("s").select('max.function('b))).as("ss")))
+      table("t").select(ScalarSubquery(table("s").select($"max".function($"b"))).as("ss")))
     assertEqual(
       "select * from t where a = (select b from s)",
-      table("t").where('a === ScalarSubquery(table("s").select('b))).select(star()))
+      table("t").where($"a" === ScalarSubquery(table("s").select($"b"))).select(star()))
     assertEqual(
       "select g from t group by g having a > (select b from s)",
       table("t")
-        .groupBy('g)('g)
-        .where('a > ScalarSubquery(table("s").select('b))))
+        .having($"g")($"g")($"a" > ScalarSubquery(table("s").select($"b"))))
   }
 
   test("table reference") {
@@ -491,6 +686,12 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "select * from range(2)",
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
+    // SPARK-34627
+    intercept("select * from default.range(2)",
+      "table valued function cannot specify database name")
+    // SPARK-38957
+    intercept("select * from spark_catalog.default.range(2)",
+      "table valued function cannot specify database name")
   }
 
   test("SPARK-20311 range(N) as alias") {
@@ -507,20 +708,24 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-20841 Support table column aliases in FROM clause") {
     assertEqual(
       "SELECT * FROM testData AS t(col1, col2)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("col1", "col2"),
-        SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData")))
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("testData"))
+        )
       ).select(star()))
   }
 
   test("SPARK-20962 Support subquery column aliases in FROM clause") {
     assertEqual(
       "SELECT * FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("col1", "col2"),
-        SubqueryAlias(
-          "t",
-          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("t")).select($"a".as("x"), $"b".as("y"))
+        )
       ).select(star()))
   }
 
@@ -529,12 +734,25 @@ class PlanParserSuite extends AnalysisTest {
     val src2 = UnresolvedRelation(TableIdentifier("src2")).as("s2")
     assertEqual(
       "SELECT * FROM (src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id) dst(a, b, c, d)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("a", "b", "c", "d"),
-        SubqueryAlias(
-          "dst",
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+      SubqueryAlias(
+        "dst",
+        UnresolvedSubqueryColumnAliases(
+          Seq("a", "b", "c", "d"),
+          src1.join(src2, Inner, Option($"s1.id" === $"s2.id"))
+        )
       ).select(star()))
+  }
+
+  test("SPARK-34335 Support referencing subquery with column aliases by table alias") {
+    assertEqual(
+      "SELECT t.col1, t.col2 FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("t")).select($"a".as("x"), $"b".as("y")))
+      ).select($"t.col1", $"t.col2")
+    )
   }
 
   test("inline table") {
@@ -551,24 +769,20 @@ class PlanParserSuite extends AnalysisTest {
   test("simple select query with !> and !<") {
     // !< is equivalent to >=
     assertEqual("select a, b from db.c where x !< 1",
-      table("db", "c").where('x >= 1).select('a, 'b))
+      table("db", "c").where($"x" >= 1).select($"a", $"b"))
     // !> is equivalent to <=
     assertEqual("select a, b from db.c where x !> 1",
-      table("db", "c").where('x <= 1).select('a, 'b))
+      table("db", "c").where($"x" <= 1).select($"a", $"b"))
   }
 
   test("select hint syntax") {
     // Hive compatibility: Missing parameter raises ParseException.
-    val m = intercept[ParseException] {
-      parsePlan("SELECT /*+ HINT() */ * FROM t")
-    }.getMessage
-    assert(m.contains("mismatched input"))
+    intercept("SELECT /*+ HINT() */ * FROM t", Some("PARSE_SYNTAX_ERROR"),
+      "Syntax error at or near")
 
     // Disallow space as the delimiter.
-    val m3 = intercept[ParseException] {
-      parsePlan("SELECT /*+ INDEX(a b c) */ * from default.t")
-    }.getMessage
-    assert(m3.contains("mismatched input 'b' expecting"))
+    intercept("SELECT /*+ INDEX(a b c) */ * from default.t", Some("PARSE_SYNTAX_ERROR"),
+      "Syntax error at or near 'b'")
 
     comparePlans(
       parsePlan("SELECT /*+ HINT */ * FROM t"),
@@ -598,7 +812,7 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
       UnresolvedHint("MAPJOIN", Seq($"t"),
-        table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
+        table("t").where(Literal(true)).groupBy($"a")($"a")).orderBy($"a".asc))
 
     comparePlans(
       parsePlan("SELECT /*+ COALESCE(10) */ * FROM t"),
@@ -613,7 +827,7 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan(
         "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t"),
-      InsertIntoTable(table("s"), Map.empty,
+      InsertIntoStatement(table("s"), Map.empty, Nil,
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           UnresolvedHint("COALESCE", Seq(Literal(500)),
             UnresolvedHint("COALESCE", Seq(Literal(10)),
@@ -625,7 +839,54 @@ class PlanParserSuite extends AnalysisTest {
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           table("t").select(star()))))
 
-    intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", "mismatched input")
+    intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", Some("PARSE_SYNTAX_ERROR"),
+      "Syntax error at or near")
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(c) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("c")),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(100, c) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(100, c), COALESCE(50) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
+        UnresolvedHint("COALESCE", Seq(Literal(50)),
+          table("t").select(star()))))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
+        UnresolvedHint("BROADCASTJOIN", Seq($"u"),
+          UnresolvedHint("COALESCE", Seq(Literal(50)),
+            table("t").select(star())))))
+
+    comparePlans(
+      parsePlan(
+        """
+          |SELECT
+          |/*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50), REPARTITION(300, c) */
+          |* FROM t
+        """.stripMargin),
+      UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
+        UnresolvedHint("BROADCASTJOIN", Seq($"u"),
+          UnresolvedHint("COALESCE", Seq(Literal(50)),
+            UnresolvedHint("REPARTITION", Seq(Literal(300), UnresolvedAttribute("c")),
+              table("t").select(star()))))))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t"),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("c")),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION_BY_RANGE(100, c) */ * FROM t"),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(Literal(100), UnresolvedAttribute("c")),
+        table("t").select(star())))
   }
 
   test("SPARK-20854: select hint syntax with expressions") {
@@ -696,20 +957,76 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("TRIM function") {
-    intercept("select ltrim(both 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
-    intercept("select rtrim(trailing 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
+    def assertTrimPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
 
-    assertEqual(
+    intercept("select ltrim(both 'S' from 'SS abc S'", Some("PARSE_SYNTAX_ERROR"),
+      "Syntax error at or near 'from'") // expecting {')'
+    intercept("select rtrim(trailing 'S' from 'SS abc S'", Some("PARSE_SYNTAX_ERROR"),
+      "Syntax error at or near 'from'") //  expecting {')'
+
+    assertTrimPlans(
       "SELECT TRIM(BOTH '@$%&( )abc' FROM '@ $ % & ()abc ' )",
-        OneRowRelation().select('TRIM.function("@$%&( )abc", "@ $ % & ()abc "))
+      StringTrim(Literal("@ $ % & ()abc "), Some(Literal("@$%&( )abc")))
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(LEADING 'c []' FROM '[ ccccbcc ')",
-        OneRowRelation().select('ltrim.function("c []", "[ ccccbcc "))
+      StringTrimLeft(Literal("[ ccccbcc "), Some(Literal("c []")))
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
-      OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
+      StringTrimRight(Literal("bc...,,,&&&ccc"), Some(Literal("c&^,.")))
+    )
+
+    assertTrimPlans(
+      "SELECT TRIM(BOTH FROM '  bunch o blanks  ')",
+      StringTrim(Literal("  bunch o blanks  "), None)
+    )
+    assertTrimPlans(
+      "SELECT TRIM(LEADING FROM '  bunch o blanks  ')",
+      StringTrimLeft(Literal("  bunch o blanks  "), None)
+    )
+    assertTrimPlans(
+      "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
+      StringTrimRight(Literal("  bunch o blanks  "), None)
+    )
+
+    assertTrimPlans(
+      "SELECT TRIM('xyz' FROM 'yxTomxx')",
+      StringTrim(Literal("yxTomxx"), Some(Literal("xyz")))
+    )
+  }
+
+  test("OVERLAY function") {
+    def assertOverlayPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING '_' FROM 6)",
+      new Overlay(Literal("Spark SQL"), Literal("_"), Literal(6))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'CORE' FROM 7)",
+      new Overlay(Literal("Spark SQL"), Literal("CORE"), Literal(7))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0)",
+      Overlay(Literal("Spark SQL"), Literal("ANSI "), Literal(7), Literal(0))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'tructured' FROM 2 FOR 4)",
+      Overlay(Literal("Spark SQL"), Literal("tructured"), Literal(2), Literal(4))
     )
   }
 
@@ -763,7 +1080,7 @@ class PlanParserSuite extends AnalysisTest {
     val m1 = intercept[ParseException] {
       parsePlan("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)")
     }.getMessage
-    assert(m1.contains("mismatched input 'INSERT' expecting"))
+    assert(m1.contains("Syntax error at or near 'INSERT'"))
     // Multi insert query
     val m2 = intercept[ParseException] {
       parsePlan(
@@ -773,11 +1090,11 @@ class PlanParserSuite extends AnalysisTest {
           |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
         """.stripMargin)
     }.getMessage
-    assert(m2.contains("mismatched input 'INSERT' expecting"))
+    assert(m2.contains("Syntax error at or near 'INSERT'"))
     val m3 = intercept[ParseException] {
       parsePlan("ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)")
     }.getMessage
-    assert(m3.contains("mismatched input 'INSERT' expecting"))
+    assert(m3.contains("Syntax error at or near 'INSERT'"))
     // Multi insert query
     val m4 = intercept[ParseException] {
       parsePlan(
@@ -788,17 +1105,250 @@ class PlanParserSuite extends AnalysisTest {
         """.stripMargin
       )
     }.getMessage
-    assert(m4.contains("mismatched input 'INSERT' expecting"))
+    assert(m4.contains("Syntax error at or near 'INSERT'"))
   }
 
   test("Invalid insert constructs in the query") {
     val m1 = intercept[ParseException] {
       parsePlan("SELECT * FROM (INSERT INTO BAR VALUES (2))")
     }.getMessage
-    assert(m1.contains("mismatched input 'FROM' expecting"))
+    assert(m1.contains("Syntax error at or near 'BAR': missing ')'"))
     val m2 = intercept[ParseException] {
       parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))")
     }.getMessage
-    assert(m2.contains("mismatched input 'FROM' expecting"))
+    assert(m2.contains("Syntax error at or near 'IN'"))
+  }
+
+  test("relation in v2 catalog") {
+    assertEqual("TABLE testcat.db.tab", table("testcat", "db", "tab"))
+    assertEqual("SELECT * FROM testcat.db.tab", table("testcat", "db", "tab").select(star()))
+
+    assertEqual(
+      """
+        |WITH cte1 AS (SELECT * FROM testcat.db.tab)
+        |SELECT * FROM cte1
+      """.stripMargin,
+      cte(table("cte1").select(star()),
+        "cte1" -> ((table("testcat", "db", "tab").select(star()), Seq.empty))))
+
+    assertEqual(
+      "SELECT /*+ BROADCAST(tab) */ * FROM testcat.db.tab",
+      table("testcat", "db", "tab").select(star()).hint("BROADCAST", $"tab"))
+  }
+
+  test("CTE with column alias") {
+    assertEqual(
+      "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
+      cte(table("t").select(star()), "t" -> ((table("a").select($"c"), Seq("x")))))
+  }
+
+  test("statement containing terminal semicolons") {
+    assertEqual("select 1;", OneRowRelation().select(1))
+    assertEqual("select a, b;", OneRowRelation().select($"a", $"b"))
+    assertEqual("select a, b from db.c;;;", table("db", "c").select($"a", $"b"))
+    assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select($"a", $"b"))
+  }
+
+  test("SPARK-32106: TRANSFORM plan") {
+    // verify schema less
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |USING 'cat'
+        |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        "cat",
+        Seq(AttributeReference("key", StringType)(),
+          AttributeReference("value", StringType)()),
+        Project(Seq($"a", $"b", $"c"), UnresolvedRelation(TableIdentifier("testData"))),
+        ScriptInputOutputSchema(List.empty, List.empty, None, None,
+          List.empty, List.empty, None, None, true))
+    )
+
+    // verify without output schema
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |USING 'cat' AS (a, b, c)
+        |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        Project(Seq($"a", $"b", $"c"), UnresolvedRelation(TableIdentifier("testData"))),
+        ScriptInputOutputSchema(List.empty, List.empty, None, None,
+          List.empty, List.empty, None, None, false)))
+
+    // verify with output schema
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |USING 'cat' AS (a int, b string, c long)
+        |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        "cat",
+        Seq(AttributeReference("a", IntegerType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", LongType)()),
+        Project(Seq($"a", $"b", $"c"), UnresolvedRelation(TableIdentifier("testData"))),
+        ScriptInputOutputSchema(List.empty, List.empty, None, None,
+          List.empty, List.empty, None, None, false)))
+
+    // verify with ROW FORMAT DELIMETED
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY '\t'
+        |  COLLECTION ITEMS TERMINATED BY '\u0002'
+        |  MAP KEYS TERMINATED BY '\u0003'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'null'
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY '\t'
+        |  COLLECTION ITEMS TERMINATED BY '\u0004'
+        |  MAP KEYS TERMINATED BY '\u0005'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'NULL'
+        |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        Project(Seq($"a", $"b", $"c"), UnresolvedRelation(TableIdentifier("testData"))),
+        ScriptInputOutputSchema(
+          Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
+            ("TOK_TABLEROWFORMATCOLLITEMS", "\u0002"),
+            ("TOK_TABLEROWFORMATMAPKEYS", "\u0003"),
+            ("TOK_TABLEROWFORMATNULL", "null"),
+            ("TOK_TABLEROWFORMATLINES", "\n")),
+          Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
+            ("TOK_TABLEROWFORMATCOLLITEMS", "\u0004"),
+            ("TOK_TABLEROWFORMATMAPKEYS", "\u0005"),
+            ("TOK_TABLEROWFORMATNULL", "NULL"),
+            ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
+          List.empty, List.empty, None, None, false)))
+
+    // verify with ROW FORMAT SERDE
+    intercept(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        |  WITH SERDEPROPERTIES(
+        |    "separatorChar" = "\t",
+        |    "quoteChar" = "'",
+        |    "escapeChar" = "\\")
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        |  WITH SERDEPROPERTIES(
+        |    "separatorChar" = "\t",
+        |    "quoteChar" = "'",
+        |    "escapeChar" = "\\")
+        |FROM testData
+      """.stripMargin,
+      "TRANSFORM with SERDE is only supported in hive mode.")
+  }
+
+
+  test("as of syntax") {
+    def testVersion(version: String, plan: LogicalPlan): Unit = {
+      Seq("VERSION", "SYSTEM_VERSION").foreach { keyword =>
+        comparePlans(parsePlan(s"SELECT * FROM a.b.c $keyword AS OF $version"), plan)
+        comparePlans(parsePlan(s"SELECT * FROM a.b.c FOR $keyword AS OF $version"), plan)
+      }
+    }
+
+    testVersion("'Snapshot123456789'", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        None,
+        Some("Snapshot123456789"))))
+
+    testVersion("123456789", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        None,
+        Some("123456789"))))
+
+    def testTimestamp(timestamp: String, plan: LogicalPlan): Unit = {
+      Seq("TIMESTAMP", "SYSTEM_TIME").foreach { keyword =>
+        comparePlans(parsePlan(s"SELECT * FROM a.b.c $keyword AS OF $timestamp"), plan)
+        comparePlans(parsePlan(s"SELECT * FROM a.b.c FOR $keyword AS OF $timestamp"), plan)
+      }
+    }
+
+    testTimestamp("'2019-01-29 00:37:58'", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        Some(Literal("2019-01-29 00:37:58")),
+        None)))
+
+    testTimestamp("current_date()", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        Some(UnresolvedFunction(Seq("current_date"), Nil, isDistinct = false)),
+        None)))
+
+    testTimestamp("(SELECT current_date())", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        Some(ScalarSubquery(Project(UnresolvedAlias(UnresolvedFunction(
+          Seq("current_date"), Nil, isDistinct = false)) :: Nil, OneRowRelation()))),
+        None)))
+
+    intercept("SELECT * FROM a.b.c TIMESTAMP AS OF col",
+      "timestamp expression cannot refer to any columns")
+  }
+
+  test("PERCENTILE_CONT & PERCENTILE_DISC") {
+    def assertPercentilePlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
+
+    assertPercentilePlans(
+      "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col)",
+      PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+        .toAggregateExpression()
+    )
+
+    assertPercentilePlans(
+      "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col DESC)",
+      PercentileCont(UnresolvedAttribute("col"),
+        Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
+    )
+
+    assertPercentilePlans(
+      "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col) FILTER (WHERE id > 10)",
+      PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+        .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
+    )
+
+    assertPercentilePlans(
+      "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col)",
+      PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+        .toAggregateExpression()
+    )
+
+    assertPercentilePlans(
+      "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col DESC)",
+      PercentileDisc(UnresolvedAttribute("col"),
+        Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
+    )
+
+    assertPercentilePlans(
+      "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col) FILTER (WHERE id > 10)",
+      PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+        .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
+    )
   }
 }

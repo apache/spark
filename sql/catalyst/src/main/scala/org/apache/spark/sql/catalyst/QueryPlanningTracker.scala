@@ -28,7 +28,7 @@ import org.apache.spark.util.BoundedPriorityQueue
  * There are two separate concepts we track:
  *
  * 1. Phases: These are broad scope phases in query planning, as listed below, i.e. analysis,
- * optimizationm and physical planning (just planning).
+ * optimization and physical planning (just planning).
  *
  * 2. Rules: These are the individual Catalyst rules that we track. In addition to time, we also
  * track the number of invocations and effective invocations.

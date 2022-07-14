@@ -27,7 +27,7 @@ trait SharedSparkContext extends BeforeAndAfterAll with BeforeAndAfterEach { sel
 
   def sc: SparkContext = _sc
 
-  var conf = new SparkConf(false)
+  val conf = new SparkConf(false)
 
   /**
    * Initialize the [[SparkContext]].  Generally, this is just called from beforeAll; however, in
@@ -43,12 +43,12 @@ trait SharedSparkContext extends BeforeAndAfterAll with BeforeAndAfterEach { sel
     }
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     initializeContext()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       LocalSparkContext.stop(_sc)
       _sc = null

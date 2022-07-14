@@ -19,9 +19,9 @@
 
 DRY_RUN=${DRY_RUN:-0}
 GPG="gpg --no-tty --batch"
-ASF_REPO="https://gitbox.apache.org/repos/asf/spark.git"
-ASF_REPO_WEBUI="https://gitbox.apache.org/repos/asf?p=spark.git"
-ASF_GITHUB_REPO="https://github.com/apache/spark"
+ASF_REPO="https://github.com/apache/spark"
+ASF_REPO_WEBUI="https://raw.githubusercontent.com/apache/spark"
+ASF_SPARK_REPO="gitbox.apache.org/repos/asf/spark.git"
 
 function error {
   echo "$*"
@@ -74,7 +74,7 @@ function fcreate_secure {
 }
 
 function check_for_tag {
-  curl -s --head --fail "$ASF_GITHUB_REPO/releases/tag/$1" > /dev/null
+  curl -s --head --fail "$ASF_REPO/releases/tag/$1" > /dev/null
 }
 
 function get_release_info {
@@ -91,7 +91,7 @@ function get_release_info {
   export GIT_BRANCH=$(read_config "Branch" "$GIT_BRANCH")
 
   # Find the current version for the branch.
-  local VERSION=$(curl -s "$ASF_REPO_WEBUI;a=blob_plain;f=pom.xml;hb=refs/heads/$GIT_BRANCH" |
+  local VERSION=$(curl -s "$ASF_REPO_WEBUI/$GIT_BRANCH/pom.xml" |
     parse_version)
   echo "Current branch version is $VERSION."
 
@@ -102,7 +102,7 @@ function get_release_info {
   NEXT_VERSION="$VERSION"
   RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
   SHORT_VERSION=$(echo "$VERSION" | cut -d . -f 1-2)
-  local REV=$(echo "$VERSION" | cut -d . -f 3)
+  local REV=$(echo "$RELEASE_VERSION" | cut -d . -f 3)
 
   # Find out what rc is being prepared.
   # - If the current version is "x.y.0", then this is rc1 of the "x.y.0" release.
@@ -150,16 +150,23 @@ function get_release_info {
   GIT_REF="$RELEASE_TAG"
   if is_dry_run; then
     echo "This is a dry run. Please confirm the ref that will be built for testing."
+    if [[ $SKIP_TAG = 0 ]]; then
+      GIT_REF="$GIT_BRANCH"
+    fi
     GIT_REF=$(read_config "Ref" "$GIT_REF")
   fi
   export GIT_REF
   export SPARK_PACKAGE_VERSION="$RELEASE_TAG"
 
   # Gather some user information.
-  export ASF_USERNAME=$(read_config "ASF user" "$LOGNAME")
+  if [ -z "$ASF_USERNAME" ]; then
+    export ASF_USERNAME=$(read_config "ASF user" "$LOGNAME")
+  fi
 
-  GIT_NAME=$(git config user.name || echo "")
-  export GIT_NAME=$(read_config "Full name" "$GIT_NAME")
+  if [ -z "$GIT_NAME" ]; then
+    GIT_NAME=$(git config user.name || echo "")
+    export GIT_NAME=$(read_config "Full name" "$GIT_NAME")
+  fi
 
   export GIT_EMAIL="$ASF_USERNAME@apache.org"
   export GPG_KEY=$(read_config "GPG key" "$GIT_EMAIL")
@@ -219,11 +226,5 @@ function init_maven_sbt {
   MVN="build/mvn -B"
   MVN_EXTRA_OPTS=
   SBT_OPTS=
-  if [[ $JAVA_VERSION < "1.8." ]]; then
-    # Needed for maven central when using Java 7.
-    SBT_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
-    MVN_EXTRA_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
-    MVN="$MVN $MVN_EXTRA_OPTS"
-  fi
   export MVN MVN_EXTRA_OPTS SBT_OPTS
 }

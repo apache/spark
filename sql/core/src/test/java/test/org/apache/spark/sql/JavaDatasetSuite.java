@@ -21,10 +21,11 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
-import java.time.Instant;
-import java.time.LocalDate;
+import java.time.*;
 import java.util.*;
+import javax.annotation.Nonnull;
 
+import org.apache.spark.api.java.Optional;
 import org.apache.spark.sql.streaming.GroupStateTimeout;
 import org.apache.spark.sql.streaming.OutputMode;
 import scala.Tuple2;
@@ -33,8 +34,8 @@ import scala.Tuple4;
 import scala.Tuple5;
 
 import com.google.common.base.Objects;
+import org.apache.spark.sql.streaming.TestGroupState;
 import org.junit.*;
-import org.junit.rules.ExpectedException;
 
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -45,8 +46,8 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.LongAccumulator;
-import static org.apache.spark.sql.functions.col;
-import static org.apache.spark.sql.functions.expr;
+
+import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDatasetSuite implements Serializable {
@@ -160,6 +161,147 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testInitialStateFlatMapGroupsWithState() {
+    List<String> data = Arrays.asList("a", "foo", "bar");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    Dataset<Tuple2<Integer, Long>> initialStateDS = spark.createDataset(
+      Arrays.asList(new Tuple2<Integer, Long>(2, 2L)),
+      Encoders.tuple(Encoders.INT(), Encoders.LONG())
+    );
+
+    KeyValueGroupedDataset<Integer, Tuple2<Integer, Long>> kvInitStateDS =
+      initialStateDS.groupByKey(
+        (MapFunction<Tuple2<Integer, Long>, Integer>) f -> f._1, Encoders.INT());
+
+    KeyValueGroupedDataset<Integer, Long> kvInitStateMappedDS = kvInitStateDS.mapValues(
+      (MapFunction<Tuple2<Integer, Long>, Long>) f -> f._2,
+      Encoders.LONG()
+    );
+
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
+
+    Dataset<String> flatMapped2 = grouped.flatMapGroupsWithState(
+      (FlatMapGroupsWithStateFunction<Integer, String, Long, String>) (key, values, s) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return Collections.singletonList(sb.toString()).iterator();
+      },
+      OutputMode.Append(),
+      Encoders.LONG(),
+      Encoders.STRING(),
+      GroupStateTimeout.NoTimeout(),
+      kvInitStateMappedDS);
+
+    Assert.assertEquals(asSet("1a", "2", "3foobar"), toSet(flatMapped2.collectAsList()));
+    Dataset<String> mapped2 = grouped.mapGroupsWithState(
+      (MapGroupsWithStateFunction<Integer, String, Long, String>) (key, values, s) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return sb.toString();
+      },
+      Encoders.LONG(),
+      Encoders.STRING(),
+      GroupStateTimeout.NoTimeout(),
+      kvInitStateMappedDS);
+    Assert.assertEquals(asSet("1a", "2", "3foobar"), toSet(mapped2.collectAsList()));
+  }
+
+  @Test
+  public void testIllegalTestGroupStateCreations() {
+    // SPARK-35800: test code throws upon illegal TestGroupState create() calls
+    Assert.assertThrows(
+      "eventTimeWatermarkMs must be 0 or positive if present",
+      IllegalArgumentException.class,
+      () -> {
+        TestGroupState.create(
+          Optional.of(5), GroupStateTimeout.EventTimeTimeout(), 0L, Optional.of(-1000L), false);
+      });
+
+    Assert.assertThrows(
+      "batchProcessingTimeMs must be 0 or positive",
+      IllegalArgumentException.class,
+      () -> {
+        TestGroupState.create(
+          Optional.of(5), GroupStateTimeout.EventTimeTimeout(), -100L, Optional.of(1000L), false);
+      });
+
+    Assert.assertThrows(
+      "hasTimedOut is true however there's no timeout configured",
+      UnsupportedOperationException.class,
+      () -> {
+        TestGroupState.create(
+          Optional.of(5), GroupStateTimeout.NoTimeout(), 100L, Optional.empty(), true);
+      });
+  }
+
+  @Test
+  public void testMappingFunctionWithTestGroupState() throws Exception {
+    // SPARK-35800: test the mapping function with injected TestGroupState instance
+    MapGroupsWithStateFunction<Integer, Integer, Integer, Integer> mappingFunction =
+      (MapGroupsWithStateFunction<Integer, Integer, Integer, Integer>) (key, values, state) -> {
+        if (state.hasTimedOut()) {
+          state.remove();
+          return 0;
+        }
+
+        int existingState = 0;
+        if (state.exists()) {
+          existingState = state.get();
+        } else {
+          // Set state timeout timestamp upon initialization
+          state.setTimeoutTimestamp(1500L);
+        }
+
+        while (values.hasNext()) {
+          existingState += values.next();
+        }
+        state.update(existingState);
+
+        return state.get();
+    };
+
+    TestGroupState<Integer> prevState = TestGroupState.create(
+      Optional.empty(), GroupStateTimeout.EventTimeTimeout(), 0L, Optional.of(1000L), false);
+
+    Assert.assertFalse(prevState.isUpdated());
+    Assert.assertFalse(prevState.isRemoved());
+    Assert.assertFalse(prevState.exists());
+    Assert.assertEquals(Optional.empty(), prevState.getTimeoutTimestampMs());
+
+    Integer[] values = {1, 3, 5};
+    mappingFunction.call(1, Arrays.asList(values).iterator(), prevState);
+
+    Assert.assertTrue(prevState.isUpdated());
+    Assert.assertFalse(prevState.isRemoved());
+    Assert.assertTrue(prevState.exists());
+    Assert.assertEquals(Integer.valueOf(9), prevState.get());
+    Assert.assertEquals(0L, prevState.getCurrentProcessingTimeMs());
+    Assert.assertEquals(1000L, prevState.getCurrentWatermarkMs());
+    Assert.assertEquals(Optional.of(1500L), prevState.getTimeoutTimestampMs());
+
+    mappingFunction.call(1, Arrays.asList(values).iterator(), prevState);
+
+    Assert.assertTrue(prevState.isUpdated());
+    Assert.assertFalse(prevState.isRemoved());
+    Assert.assertTrue(prevState.exists());
+    Assert.assertEquals(Integer.valueOf(18), prevState.get());
+
+    prevState = TestGroupState.create(
+      Optional.of(9), GroupStateTimeout.EventTimeTimeout(), 0L, Optional.of(1000L), true);
+
+    mappingFunction.call(1, Arrays.asList(values).iterator(), prevState);
+
+    Assert.assertFalse(prevState.isUpdated());
+    Assert.assertTrue(prevState.isRemoved());
+    Assert.assertFalse(prevState.exists());
+  }
+
+  @Test
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
@@ -246,6 +388,60 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.STRING());
 
     Assert.assertEquals(asSet("1a#2", "3foobar#6", "5#10"), toSet(cogrouped.collectAsList()));
+  }
+
+  @Test
+  public void testObservation() {
+    // SPARK-34806: tests the Observation Java API and Dataset.observe(Observation, Column, Column*)
+    Observation namedObservation = new Observation("named");
+    Observation unnamedObservation = new Observation();
+
+    Dataset<Long> df = spark
+      .range(100)
+      .observe(
+        namedObservation,
+        min(col("id")).as("min_val"),
+        max(col("id")).as("max_val"),
+        sum(col("id")).as("sum_val"),
+        count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
+      )
+      .observe(
+        unnamedObservation,
+        avg(col("id")).cast("int").as("avg_val")
+      );
+
+    df.collect();
+    Map<String, Object> namedMetrics = null;
+    Map<String, Object> unnamedMetrics = null;
+
+    try {
+      namedMetrics = namedObservation.getAsJava();
+      unnamedMetrics = unnamedObservation.getAsJava();
+    } catch (InterruptedException e) {
+      Assert.fail();
+    }
+    Map<String, Object> expectedNamedMetrics = new HashMap<String, Object>() {{
+      put("min_val", 0L);
+      put("max_val", 99L);
+      put("sum_val", 4950L);
+      put("num_even", 50L);
+    }};
+    Assert.assertEquals(expectedNamedMetrics, namedMetrics);
+
+    Map<String, Object> expectedUnnamedMetrics = new HashMap<String, Object>() {{
+      put("avg_val", 49);
+    }};
+    Assert.assertEquals(expectedUnnamedMetrics, unnamedMetrics);
+
+    // we can get the result multiple times
+    try {
+      namedMetrics = namedObservation.getAsJava();
+      unnamedMetrics = unnamedObservation.getAsJava();
+    } catch (InterruptedException e) {
+      Assert.fail();
+    }
+    Assert.assertEquals(expectedNamedMetrics, namedMetrics);
+    Assert.assertEquals(expectedUnnamedMetrics, unnamedMetrics);
   }
 
   @Test
@@ -411,6 +607,30 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(data, ds.collectAsList());
   }
 
+  @Test
+  public void testLocalDateTimeEncoder() {
+    Encoder<LocalDateTime> encoder = Encoders.LOCALDATETIME();
+    List<LocalDateTime> data = Arrays.asList(LocalDateTime.of(1, 1, 1, 1, 1));
+    Dataset<LocalDateTime> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testDurationEncoder() {
+    Encoder<Duration> encoder = Encoders.DURATION();
+    List<Duration> data = Arrays.asList(Duration.ofDays(0));
+    Dataset<Duration> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testPeriodEncoder() {
+    Encoder<Period> encoder = Encoders.PERIOD();
+    List<Period> data = Arrays.asList(Period.ofYears(10));
+    Dataset<Period> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
   public static class KryoSerializable {
     String value;
 
@@ -487,14 +707,16 @@ public class JavaDatasetSuite implements Serializable {
    */
   private static class PrivateClassTest { }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testJavaEncoderErrorMessageForPrivateClass() {
-    Encoders.javaSerialization(PrivateClassTest.class);
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> Encoders.javaSerialization(PrivateClassTest.class));
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testKryoEncoderErrorMessageForPrivateClass() {
-    Encoders.kryo(PrivateClassTest.class);
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> Encoders.kryo(PrivateClassTest.class));
   }
 
   public static class SimpleJavaBean implements Serializable {
@@ -823,8 +1045,74 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  @Rule
-  public transient ExpectedException nullabilityCheck = ExpectedException.none();
+  public static class NestedSmallBeanWithNonNullField implements Serializable {
+    private SmallBean nonNull_f;
+    private SmallBean nullable_f;
+    private Map<String, SmallBean> childMap;
+
+    @Nonnull
+    public SmallBean getNonNull_f() {
+      return nonNull_f;
+    }
+
+    public void setNonNull_f(SmallBean f) {
+      this.nonNull_f = f;
+    }
+
+    public SmallBean getNullable_f() {
+      return nullable_f;
+    }
+
+    public void setNullable_f(SmallBean f) {
+      this.nullable_f = f;
+    }
+
+    @Nonnull
+    public Map<String, SmallBean> getChildMap() { return childMap; }
+    public void setChildMap(Map<String, SmallBean> childMap) {
+      this.childMap = childMap;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      NestedSmallBeanWithNonNullField that = (NestedSmallBeanWithNonNullField) o;
+      return Objects.equal(nullable_f, that.nullable_f) &&
+        Objects.equal(nonNull_f, that.nonNull_f) && Objects.equal(childMap, that.childMap);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(nullable_f, nonNull_f, childMap);
+    }
+  }
+
+  public static class NestedSmallBean2 implements Serializable {
+    private NestedSmallBeanWithNonNullField f;
+
+    @Nonnull
+    public NestedSmallBeanWithNonNullField getF() {
+      return f;
+    }
+
+    public void setF(NestedSmallBeanWithNonNullField f) {
+      this.f = f;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      NestedSmallBean2 that = (NestedSmallBean2) o;
+      return Objects.equal(f, that.f);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(f);
+    }
+  }
 
   @Test
   public void testRuntimeNullabilityCheck() {
@@ -853,7 +1141,7 @@ public class JavaDatasetSuite implements Serializable {
       NestedSmallBean nestedSmallBean = new NestedSmallBean();
       nestedSmallBean.setF(smallBean);
 
-      Assert.assertEquals(ds.collectAsList(), Collections.singletonList(nestedSmallBean));
+      Assert.assertEquals(Collections.singletonList(nestedSmallBean), ds.collectAsList());
     }
 
     // Shouldn't throw runtime exception when parent object (`ClassData`) is null
@@ -864,11 +1152,8 @@ public class JavaDatasetSuite implements Serializable {
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       NestedSmallBean nestedSmallBean = new NestedSmallBean();
-      Assert.assertEquals(ds.collectAsList(), Collections.singletonList(nestedSmallBean));
+      Assert.assertEquals(Collections.singletonList(nestedSmallBean), ds.collectAsList());
     }
-
-    nullabilityCheck.expect(RuntimeException.class);
-    nullabilityCheck.expectMessage("Null value appeared in non-nullable field");
 
     {
       Row row = new GenericRow(new Object[] {
@@ -880,7 +1165,8 @@ public class JavaDatasetSuite implements Serializable {
       Dataset<Row> df = spark.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
-      ds.collect();
+      Assert.assertThrows("Null value appeared in non-nullable field", RuntimeException.class,
+        ds::collect);
     }
   }
 
@@ -1317,7 +1603,7 @@ public class JavaDatasetSuite implements Serializable {
     A("www.elgoog.com"),
     B("www.google.com");
 
-    private String url;
+    private final String url;
 
     MyEnum(String url) {
       this.url = url;
@@ -1325,10 +1611,6 @@ public class JavaDatasetSuite implements Serializable {
 
     public String getUrl() {
       return url;
-    }
-
-    public void setUrl(String url) {
-      this.url = url;
     }
   }
 
@@ -1384,7 +1666,7 @@ public class JavaDatasetSuite implements Serializable {
             new BeanWithEnum(MyEnum.B, "flower boulevard"));
     Encoder<BeanWithEnum> encoder = Encoders.bean(BeanWithEnum.class);
     Dataset<BeanWithEnum> ds = spark.createDataset(data, encoder);
-    Assert.assertEquals(ds.collectAsList(), data);
+    Assert.assertEquals(data, ds.collectAsList());
   }
 
   public static class EmptyBean implements Serializable {}
@@ -1394,8 +1676,8 @@ public class JavaDatasetSuite implements Serializable {
     EmptyBean bean = new EmptyBean();
     List<EmptyBean> data = Arrays.asList(bean);
     Dataset<EmptyBean> df = spark.createDataset(data, Encoders.bean(EmptyBean.class));
-    Assert.assertEquals(df.schema().length(), 0);
-    Assert.assertEquals(df.collectAsList().size(), 1);
+    Assert.assertEquals(0, df.schema().length());
+    Assert.assertEquals(1, df.collectAsList().size());
   }
 
   public class CircularReference1Bean implements Serializable {
@@ -1422,7 +1704,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class CircularReference3Bean implements Serializable {
+  public static class CircularReference3Bean implements Serializable {
     private CircularReference3Bean[] child;
 
     public CircularReference3Bean[] getChild() {
@@ -1467,29 +1749,33 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testCircularReferenceBean1() {
     CircularReference1Bean bean = new CircularReference1Bean();
-    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class));
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class)));
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testCircularReferenceBean2() {
     CircularReference3Bean bean = new CircularReference3Bean();
-    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference3Bean.class));
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference3Bean.class)));
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testCircularReferenceBean3() {
     CircularReference4Bean bean = new CircularReference4Bean();
-    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class));
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class)));
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testNullInTopLevelBean() {
     NestedSmallBean bean = new NestedSmallBean();
     // We cannot set null in top-level bean
-    spark.createDataset(Arrays.asList(bean, null), Encoders.bean(NestedSmallBean.class));
+    Assert.assertThrows(RuntimeException.class,
+      () -> spark.createDataset(Arrays.asList(bean, null), Encoders.bean(NestedSmallBean.class)));
   }
 
   @Test
@@ -1502,6 +1788,54 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<NestedSmallBean> ds2 =
       ds1.map((MapFunction<NestedSmallBean, NestedSmallBean>) b -> b, encoder);
     Assert.assertEquals(beans, ds2.collectAsList());
+  }
+
+  @Test
+  public void testNonNullField() {
+    NestedSmallBeanWithNonNullField bean1 = new NestedSmallBeanWithNonNullField();
+    SmallBean smallBean = new SmallBean();
+    bean1.setNonNull_f(smallBean);
+    Map<String, SmallBean> map = new HashMap<>();
+    bean1.setChildMap(map);
+
+    Encoder<NestedSmallBeanWithNonNullField> encoder1 =
+            Encoders.bean(NestedSmallBeanWithNonNullField.class);
+    List<NestedSmallBeanWithNonNullField> beans1 = Arrays.asList(bean1);
+    Dataset<NestedSmallBeanWithNonNullField> ds1 = spark.createDataset(beans1, encoder1);
+
+    StructType schema = ds1.schema();
+    Assert.assertFalse(schema.apply("nonNull_f").nullable());
+    Assert.assertTrue(schema.apply("nullable_f").nullable());
+    Assert.assertFalse(schema.apply("childMap").nullable());
+
+    Assert.assertEquals(beans1, ds1.collectAsList());
+    Dataset<NestedSmallBeanWithNonNullField> ds2 = ds1.map(
+      (MapFunction<NestedSmallBeanWithNonNullField, NestedSmallBeanWithNonNullField>) b -> b,
+      encoder1);
+    Assert.assertEquals(beans1, ds2.collectAsList());
+
+    // Nonnull nested fields
+    NestedSmallBean2 bean2 = new NestedSmallBean2();
+    bean2.setF(bean1);
+
+    Encoder<NestedSmallBean2> encoder2 =
+            Encoders.bean(NestedSmallBean2.class);
+    List<NestedSmallBean2> beans2 = Arrays.asList(bean2);
+    Dataset<NestedSmallBean2> ds3 = spark.createDataset(beans2, encoder2);
+
+    StructType nestedSchema = (StructType) ds3.schema()
+      .fields()[ds3.schema().fieldIndex("f")]
+      .dataType();
+    Assert.assertFalse(nestedSchema.apply("nonNull_f").nullable());
+    Assert.assertTrue(nestedSchema.apply("nullable_f").nullable());
+    Assert.assertFalse(nestedSchema.apply("childMap").nullable());
+
+    Assert.assertEquals(beans2, ds3.collectAsList());
+
+    Dataset<NestedSmallBean2> ds4 = ds3.map(
+      (MapFunction<NestedSmallBean2, NestedSmallBean2>) b -> b,
+      encoder2);
+    Assert.assertEquals(beans2, ds4.collectAsList());
   }
 
   @Test

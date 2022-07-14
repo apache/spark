@@ -18,8 +18,8 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -40,7 +40,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   private val seed = 42
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     categoricalDataPointsRDD =
       sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints().map(_.asML))
@@ -52,6 +52,12 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
+
+  test("DecisionTreeRegressor validate input dataset") {
+    testInvalidRegressionLabels(new DecisionTreeRegressor().fit(_))
+    testInvalidWeights(new DecisionTreeRegressor().setWeightCol("weight").fit(_))
+    testInvalidVectors(new DecisionTreeRegressor().fit(_))
+  }
 
   test("Regression stump with 3-ary (ordered) categorical features") {
     val dt = new DecisionTreeRegressor()
@@ -158,6 +164,22 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     testPredictionModelSinglePrediction(model, df)
   }
 
+  test("model support predict leaf index") {
+    val model = new DecisionTreeRegressionModel("dtr", TreeTests.root0, 3)
+    model.setLeafCol("predictedLeafId")
+      .setPredictionCol("")
+
+    val data = TreeTests.getSingleTreeLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Double, predictedLeafId: Double) =>
+        assert(leafId === predictedLeafId)
+    }
+  }
+
   test("should support all NumericType labels and not support other types") {
     val dt = new DecisionTreeRegressor().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[DecisionTreeRegressionModel, DecisionTreeRegressor](
@@ -219,6 +241,20 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     testEstimatorAndModelReadWrite(dt, continuousData,
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0),
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
+  }
+
+  test("SPARK-33398: Load DecisionTreeRegressionModel prior to Spark 3.0") {
+    val path = testFile("ml-models/dtr-2.4.7")
+    val model = DecisionTreeRegressionModel.load(path)
+    assert(model.numFeatures === 692)
+    assert(model.numNodes === 5)
+    assert(model.featureImportances ~==
+      Vectors.sparse(692, Array(100, 434),
+        Array(0.03987240829346093, 0.960127591706539)) absTol 1e-4)
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
   }
 }
 

@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.memory.{MemoryMode, TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -33,7 +33,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
   test("in-memory queue") {
     val page = MemoryBlock.fromLongArray(new Array[Long](1<<10))
     val queue = new InMemoryRowQueue(page, 1) {
-      override def close() {}
+      override def close(): Unit = {}
     }
     val row = new UnsafeRow(1)
     row.pointTo(new Array[Byte](16), 16)
@@ -94,48 +94,54 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
     queue.close()
   }
 
-  encryptionTest("hybrid queue") { conf =>
-    val serManager = createSerializerManager(conf)
-    val mem = new TestMemoryManager(conf)
-    mem.limit(4<<10)
-    val taskM = new TaskMemoryManager(mem, 0)
-    val queue = HybridRowQueue(taskM, Utils.createTempDir().getCanonicalFile, 1, serManager)
-    val row = new UnsafeRow(1)
-    row.pointTo(new Array[Byte](16), 16)
-    val n = (4<<10) / 16 * 3
-    var i = 0
-    while (i < n) {
-      row.setLong(0, i)
-      assert(queue.add(row), "fail to add")
-      i += 1
-    }
-    assert(queue.numQueues() > 1, "should have more than one queue")
-    queue.spill(1<<20, null)
-    i = 0
-    while (i < n) {
-      val row = queue.remove()
-      assert(row != null, "fail to poll")
-      assert(row.getLong(0) == i, "does not match")
-      i += 1
-    }
+  Seq(true, false).foreach { isOffHeap =>
+    encryptionTest(s"hybrid queue (offHeap=$isOffHeap)") { conf =>
+      conf.set(MEMORY_OFFHEAP_ENABLED, isOffHeap)
+      if (isOffHeap) conf.set(MEMORY_OFFHEAP_SIZE, 1000L)
+      val serManager = createSerializerManager(conf)
+      val mem = new TestMemoryManager(conf)
+      mem.limit(4<<10)
+      val taskM = new TaskMemoryManager(mem, 0)
+      val queue = HybridRowQueue(taskM, Utils.createTempDir().getCanonicalFile, 1, serManager)
+      val mode = if (isOffHeap) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
+      assert(queue.getMode === mode)
+      val row = new UnsafeRow(1)
+      row.pointTo(new Array[Byte](16), 16)
+      val n = (4<<10) / 16 * 3
+      var i = 0
+      while (i < n) {
+        row.setLong(0, i)
+        assert(queue.add(row), "fail to add")
+        i += 1
+      }
+      assert(queue.numQueues() > 1, "should have more than one queue")
+      queue.spill(1<<20, null)
+      i = 0
+      while (i < n) {
+        val row = queue.remove()
+        assert(row != null, "fail to poll")
+        assert(row.getLong(0) == i, "does not match")
+        i += 1
+      }
 
-    // fill again and spill
-    i = 0
-    while (i < n) {
-      row.setLong(0, i)
-      assert(queue.add(row), "fail to add")
-      i += 1
+      // fill again and spill
+      i = 0
+      while (i < n) {
+        row.setLong(0, i)
+        assert(queue.add(row), "fail to add")
+        i += 1
+      }
+      assert(queue.numQueues() > 1, "should have more than one queue")
+      queue.spill(1<<20, null)
+      assert(queue.numQueues() > 1, "should have more than one queue")
+      i = 0
+      while (i < n) {
+        val row = queue.remove()
+        assert(row != null, "fail to poll")
+        assert(row.getLong(0) == i, "does not match")
+        i += 1
+      }
+      queue.close()
     }
-    assert(queue.numQueues() > 1, "should have more than one queue")
-    queue.spill(1<<20, null)
-    assert(queue.numQueues() > 1, "should have more than one queue")
-    i = 0
-    while (i < n) {
-      val row = queue.remove()
-      assert(row != null, "fail to poll")
-      assert(row.getLong(0) == i, "does not match")
-      i += 1
-    }
-    queue.close()
   }
 }

@@ -20,7 +20,6 @@ package org.apache.spark.deploy.history
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.commons.io.FileUtils
@@ -28,6 +27,8 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend.LEVELDB
+import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.util.{Clock, Utils}
 import org.apache.spark.util.kvstore.KVStore
@@ -55,6 +56,8 @@ private class HistoryServerDiskManager(
   if (!appStoreDir.isDirectory() && !appStoreDir.mkdir()) {
     throw new IllegalArgumentException(s"Failed to create app directory ($appStoreDir).")
   }
+  private val extension =
+    if (conf.get(HYBRID_STORE_DISK_BACKEND) == LEVELDB.toString) ".ldb" else ".rdb"
 
   private val tmpStoreDir = new File(path, "temp")
   if (!tmpStoreDir.isDirectory() && !tmpStoreDir.mkdir()) {
@@ -75,12 +78,25 @@ private class HistoryServerDiskManager(
 
     // Go through the recorded store directories and remove any that may have been removed by
     // external code.
-    val orphans = listing.view(classOf[ApplicationStoreInfo]).asScala.filter { info =>
-      !new File(info.path).exists()
-    }.toSeq
+    val (existences, orphans) = KVUtils.viewToSeq(listing
+      .view(classOf[ApplicationStoreInfo]))
+      .partition { info =>
+        new File(info.path).exists()
+      }
 
     orphans.foreach { info =>
       listing.delete(info.getClass(), info.path)
+    }
+
+    // Reading disk-based KVStore may trigger table file compaction, then it may cause size of
+    // directory changed. When service restarts, "currentUsage" is calculated from real directory
+    // size. Update "ApplicationStoreInfo.size" to ensure "currentUsage" equals
+    // sum of "ApplicationStoreInfo.size".
+    existences.foreach { info =>
+      val fileSize = sizeOf(new File(info.path))
+      if (fileSize != info.size) {
+        listing.write(info.copy(size = fileSize))
+      }
     }
 
     logInfo("Initialized disk manager: " +
@@ -122,10 +138,12 @@ private class HistoryServerDiskManager(
    * being used so that it's not evicted when running out of designated space.
    */
   def openStore(appId: String, attemptId: Option[String]): Option[File] = {
+    var newSize: Long = 0
     val storePath = active.synchronized {
       val path = appStorePath(appId, attemptId)
       if (path.isDirectory()) {
-        active(appId -> attemptId) = sizeOf(path)
+        newSize = sizeOf(path)
+        active(appId -> attemptId) = newSize
         Some(path)
       } else {
         None
@@ -133,7 +151,7 @@ private class HistoryServerDiskManager(
     }
 
     storePath.foreach { path =>
-      updateAccessTime(appId, attemptId)
+      updateApplicationStoreInfo(appId, attemptId, newSize)
     }
 
     storePath
@@ -145,8 +163,8 @@ private class HistoryServerDiskManager(
    * @param delete Whether to delete the store from disk.
    */
   def release(appId: String, attemptId: Option[String], delete: Boolean = false): Unit = {
-    // Because LevelDB may modify the structure of the store files even when just reading, update
-    // the accounting for this application when it's closed.
+    // Because disk-based stores may modify the structure of the store files even when just reading,
+    // update the accounting for this application when it's closed.
     val oldSizeOpt = active.synchronized {
       active.remove(appId -> attemptId)
     }
@@ -233,15 +251,16 @@ private class HistoryServerDiskManager(
     }
   }
 
-  private def appStorePath(appId: String, attemptId: Option[String]): File = {
-    val fileName = appId + attemptId.map("_" + _).getOrElse("") + ".ldb"
+  private[history] def appStorePath(appId: String, attemptId: Option[String]): File = {
+    val fileName = appId + attemptId.map("_" + _).getOrElse("") + extension
     new File(appStoreDir, fileName)
   }
 
-  private def updateAccessTime(appId: String, attemptId: Option[String]): Unit = {
+  private def updateApplicationStoreInfo(
+      appId: String, attemptId: Option[String], newSize: Long): Unit = {
     val path = appStorePath(appId, attemptId)
-    val info = ApplicationStoreInfo(path.getAbsolutePath(), clock.getTimeMillis(), appId, attemptId,
-      sizeOf(path))
+    val info = ApplicationStoreInfo(path.getAbsolutePath(), clock.getTimeMillis(), appId,
+      attemptId, newSize)
     listing.write(info)
   }
 
@@ -297,7 +316,7 @@ private class HistoryServerDiskManager(
           s"exceeded ($current > $max)")
       }
 
-      updateAccessTime(appId, attemptId)
+      updateApplicationStoreInfo(appId, attemptId, newSize)
 
       active.synchronized {
         active(appId -> attemptId) = newSize

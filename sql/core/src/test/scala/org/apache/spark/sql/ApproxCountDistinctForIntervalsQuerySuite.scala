@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql
 
+import java.time.{Duration, Period}
+
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproxCountDistinctForIntervals
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSQLContext {
+class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   // ApproxCountDistinctForIntervals is used in equi-height histogram generation. An equi-height
@@ -56,6 +58,32 @@ class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSQL
         val error = math.abs((ndv / expectedNdv.toDouble) - 1.0d)
         assert(error <= aggFunc.relativeSD * 3.0d, "Error should be within 3 std. errors.")
       }
+    }
+  }
+
+  test("SPARK-37138: Support Ansi Interval type in ApproxCountDistinctForIntervals") {
+    val table = "approx_count_distinct_for_ansi_intervals_tbl"
+    withTable(table) {
+      Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
+        (Period.ofMonths(200), Duration.ofSeconds(200L)),
+        (Period.ofMonths(300), Duration.ofSeconds(300L)))
+        .toDF("col1", "col2").createOrReplaceTempView(table)
+      val endpoints = (0 to 5).map(_ / 10)
+
+      val relation = spark.table(table).logicalPlan
+      val ymAttr = relation.output.find(_.name == "col1").get
+      val ymAggFunc =
+        ApproxCountDistinctForIntervals(ymAttr, CreateArray(endpoints.map(Literal(_))))
+      val ymAggExpr = ymAggFunc.toAggregateExpression()
+      val ymNamedExpr = Alias(ymAggExpr, ymAggExpr.toString)()
+
+      val dtAttr = relation.output.find(_.name == "col2").get
+      val dtAggFunc =
+        ApproxCountDistinctForIntervals(dtAttr, CreateArray(endpoints.map(Literal(_))))
+      val dtAggExpr = dtAggFunc.toAggregateExpression()
+      val dtNamedExpr = Alias(dtAggExpr, dtAggExpr.toString)()
+      val result = Dataset.ofRows(spark, Aggregate(Nil, Seq(ymNamedExpr, dtNamedExpr), relation))
+      checkAnswer(result, Row(Array(1, 1, 1, 1, 1), Array(1, 1, 1, 1, 1)))
     }
   }
 }

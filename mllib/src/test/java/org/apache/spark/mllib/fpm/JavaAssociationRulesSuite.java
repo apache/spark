@@ -29,7 +29,6 @@ public class JavaAssociationRulesSuite extends SharedSparkSession {
   @Test
   public void runAssociationRules() {
 
-    @SuppressWarnings("unchecked")
     JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = jsc.parallelize(Arrays.asList(
       new FreqItemset<>(new String[]{"a"}, 15L),
       new FreqItemset<>(new String[]{"b"}, 35L),

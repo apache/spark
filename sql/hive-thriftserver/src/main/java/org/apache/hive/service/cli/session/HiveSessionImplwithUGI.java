@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,8 +19,6 @@ package org.apache.hive.service.cli.session;
 
 import java.io.IOException;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.metadata.Hive;
@@ -30,7 +27,9 @@ import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.HiveSQLException;
-import org.apache.hive.service.cli.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -44,7 +43,7 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
   private String delegationTokenStr = null;
   private Hive sessionHive = null;
   private HiveSession proxySession = null;
-  static final Log LOG = LogFactory.getLog(HiveSessionImplwithUGI.class);
+  static final Logger LOG = LoggerFactory.getLogger(HiveSessionImplwithUGI.class);
 
   public HiveSessionImplwithUGI(TProtocolVersion protocol, String username, String password,
       HiveConf hiveConf, String ipAddress, String delegationToken) throws HiveSQLException {
@@ -164,7 +163,7 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
   @Override
   public String getDelegationToken(HiveAuthFactory authFactory, String owner,
       String renewer) throws HiveSQLException {
-    return authFactory.getDelegationToken(owner, renewer);
+    return authFactory.getDelegationToken(owner, renewer, getIpAddress());
   }
 
   @Override

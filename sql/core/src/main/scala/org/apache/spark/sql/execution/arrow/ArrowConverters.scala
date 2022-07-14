@@ -26,14 +26,17 @@ import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.ipc.{ArrowStreamWriter, ReadChannel, WriteChannel}
-import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
+import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, IpcOption, MessageSerializer}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.{ByteBufferOutputStream, Utils}
 
@@ -63,11 +66,11 @@ private[sql] class ArrowBatchStreamWriter(
    * End the Arrow stream, does not close output stream.
    */
   def end(): Unit = {
-    ArrowStreamWriter.writeEndOfStream(writeChannel)
+    ArrowStreamWriter.writeEndOfStream(writeChannel, new IpcOption)
   }
 }
 
-private[sql] object ArrowConverters {
+private[sql] object ArrowConverters extends Logging {
 
   /**
    * Maps Iterator from InternalRow to serialized ArrowRecordBatches. Limit ArrowRecordBatch size
@@ -142,7 +145,7 @@ private[sql] object ArrowConverters {
     new Iterator[InternalRow] {
       private var rowIter = if (arrowBatchIter.hasNext) nextBatch() else Iterator.empty
 
-      context.addTaskCompletionListener[Unit] { _ =>
+      if (context != null) context.addTaskCompletionListener[Unit] { _ =>
         root.close()
         allocator.close()
       }
@@ -189,32 +192,54 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Create a DataFrame from an RDD of serialized ArrowRecordBatches.
+   * Create a DataFrame from an iterator of serialized ArrowRecordBatches.
    */
-  private[sql] def toDataFrame(
-      arrowBatchRDD: JavaRDD[Array[Byte]],
+  /**
+   * Create a DataFrame from an iterator of serialized ArrowRecordBatches.
+   */
+  def toDataFrame(
+      arrowBatches: Iterator[Array[Byte]],
       schemaString: String,
-      sqlContext: SQLContext): DataFrame = {
+      session: SparkSession): DataFrame = {
     val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
-    val timeZoneId = sqlContext.sessionState.conf.sessionLocalTimeZone
-    val rdd = arrowBatchRDD.rdd.mapPartitions { iter =>
-      val context = TaskContext.get()
-      ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, context)
+    val attrs = schema.toAttributes
+    val batchesInDriver = arrowBatches.toArray
+    val shouldUseRDD = session.sessionState.conf
+      .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
+
+    if (shouldUseRDD) {
+      logDebug("Using RDD-based createDataFrame with Arrow optimization.")
+      val timezone = session.sessionState.conf.sessionLocalTimeZone
+      val rdd = session.sparkContext.parallelize(batchesInDriver, batchesInDriver.length)
+        .mapPartitions { batchesInExecutors =>
+          ArrowConverters.fromBatchIterator(
+            batchesInExecutors,
+            schema,
+            timezone,
+            TaskContext.get())
+        }
+      session.internalCreateDataFrame(rdd.setName("arrow"), schema)
+    } else {
+      logDebug("Using LocalRelation in createDataFrame with Arrow optimization.")
+      val data = ArrowConverters.fromBatchIterator(
+        batchesInDriver.toIterator,
+        schema,
+        session.sessionState.conf.sessionLocalTimeZone,
+        TaskContext.get())
+
+      // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.
+      val proj = UnsafeProjection.create(attrs, attrs)
+      Dataset.ofRows(session, LocalRelation(attrs, data.map(r => proj(r).copy()).toArray))
     }
-    sqlContext.internalCreateDataFrame(rdd.setName("arrow"), schema)
   }
 
   /**
-   * Read a file as an Arrow stream and parallelize as an RDD of serialized ArrowRecordBatches.
+   * Read a file as an Arrow stream and return an array of serialized ArrowRecordBatches.
    */
-  private[sql] def readArrowStreamFromFile(
-      sqlContext: SQLContext,
-      filename: String): JavaRDD[Array[Byte]] = {
+  private[sql] def readArrowStreamFromFile(filename: String): Array[Array[Byte]] = {
     Utils.tryWithResource(new FileInputStream(filename)) { fileStream =>
       // Create array to consume iterator so that we can safely close the file
-      val batches = getBatchesFromStream(fileStream.getChannel).toArray
-      // Parallelize the record batches to create an RDD
-      JavaRDD.fromRDD(sqlContext.sparkContext.parallelize(batches, batches.length))
+      getBatchesFromStream(fileStream.getChannel).toArray
     }
   }
 
@@ -238,6 +263,7 @@ private[sql] object ArrowConverters {
       // This gets the next serialized ArrowRecordBatch by reading message metadata to check if it
       // is a RecordBatch message and then returning the complete serialized message which consists
       // of a int32 length, serialized message metadata and a serialized RecordBatch message body
+      @scala.annotation.tailrec
       def readNextBatch(): Array[Byte] = {
         val msgMetadata = MessageSerializer.readMessage(new ReadChannel(in))
         if (msgMetadata == null) {
@@ -250,8 +276,8 @@ private[sql] object ArrowConverters {
         // Only care about RecordBatch messages, skip Schema and unsupported Dictionary messages
         if (msgMetadata.getMessage.headerType() == MessageHeader.RecordBatch) {
 
-          // Buffer backed output large enough to hold the complete serialized message
-          val bbout = new ByteBufferOutputStream(4 + msgMetadata.getMessageLength + bodyLength)
+          // Buffer backed output large enough to hold 8-byte length + complete serialized message
+          val bbout = new ByteBufferOutputStream(8 + msgMetadata.getMessageLength + bodyLength)
 
           // Write message metadata to ByteBuffer output stream
           MessageSerializer.writeMessageBuffer(

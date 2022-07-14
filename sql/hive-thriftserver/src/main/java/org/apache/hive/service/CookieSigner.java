@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,12 +17,12 @@
 
 package org.apache.hive.service;
 
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.logging.LogFactory;
-import org.apache.commons.logging.Log;
-
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+
+import org.apache.commons.codec.binary.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The cookie signer generates a signature based on SHA digest
@@ -32,9 +31,9 @@ import java.security.NoSuchAlgorithmException;
  */
 public class CookieSigner {
   private static final String SIGNATURE = "&s=";
-  private static final String SHA_STRING = "SHA";
+  private static final String SHA_STRING = "SHA-256";
   private byte[] secretBytes;
-  private static final Log LOG = LogFactory.getLog(CookieSigner.class);
+  private static final Logger LOG = LoggerFactory.getLogger(CookieSigner.class);
 
   /**
    * Constructor
@@ -81,7 +80,7 @@ public class CookieSigner {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Signature generated for " + rawValue + " inside verify is " + currentSignature);
     }
-    if (!originalSignature.equals(currentSignature)) {
+    if (!MessageDigest.isEqual(originalSignature.getBytes(), currentSignature.getBytes())) {
       throw new IllegalArgumentException("Invalid sign, original = " + originalSignature +
         " current = " + currentSignature);
     }

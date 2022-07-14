@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalDateTime
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFramePivotSuite extends QueryTest with SharedSQLContext {
+class DataFramePivotSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("pivot courses") {
@@ -46,7 +47,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
       courseSales.groupBy("course").pivot("year", Seq(2012, 2013)).agg(sum($"earnings")),
       expected)
     checkAnswer(
-      courseSales.groupBy('course).pivot('year, Seq(2012, 2013)).agg(sum('earnings)),
+      courseSales.groupBy($"course").pivot($"year", Seq(2012, 2013)).agg(sum($"earnings")),
       expected)
   }
 
@@ -206,7 +207,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
       complexData.groupBy().pivot("b", Seq(true, false)).agg(max("a")),
       expected)
     checkAnswer(
-      complexData.groupBy().pivot('b, Seq(true, false)).agg(max('a)),
+      complexData.groupBy().pivot($"b", Seq(true, false)).agg(max("a")),
       expected)
   }
 
@@ -258,7 +259,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     val ts = "2012-12-31 16:00:10.011"
     val tsWithZone = "2013-01-01 00:00:10.011"
 
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val df = Seq(java.sql.Timestamp.valueOf(ts)).toDF("a").groupBy("a").pivot("a").count()
       val expected = StructType(
         StructField("a", TimestampType) ::
@@ -323,17 +324,6 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df, expected)
   }
 
-  test("pivoting column list") {
-    val exception = intercept[RuntimeException] {
-      trainingSales
-        .groupBy($"sales.year")
-        .pivot(struct(lower($"sales.course"), $"training"))
-        .agg(sum($"sales.earnings"))
-        .collect()
-    }
-    assert(exception.getMessage.contains("Unsupported literal type"))
-  }
-
   test("SPARK-26403: pivoting by array column") {
     val df = Seq(
       (2, Seq.empty[String]),
@@ -343,5 +333,25 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     val expected = Seq((3, 1, 1), (2, 1, 1)).toDF
     val actual = df.groupBy("x").pivot("s").count()
     checkAnswer(actual, expected)
+  }
+
+  test("SPARK-35480: percentile_approx should work with pivot") {
+    val actual = Seq(
+      ("a", -1.0), ("a", 5.5), ("a", 2.5), ("b", 3.0), ("b", 5.2)).toDF("type", "value")
+      .groupBy().pivot("type", Seq("a", "b")).agg(
+        percentile_approx(col("value"), array(lit(0.5)), lit(10000)))
+    checkAnswer(actual, Row(Array(2.5), Array(3.0)))
+  }
+
+  test("SPARK-38133: Grouping by TIMESTAMP_NTZ should not corrupt results") {
+    checkAnswer(
+      courseSales.withColumn("ts", $"year".cast("string").cast("timestamp_ntz"))
+        .groupBy("ts")
+        .pivot("course", Seq("dotNET", "Java"))
+        .agg(sum($"earnings"))
+        .select("ts", "dotNET", "Java"),
+      Row(LocalDateTime.of(2012, 1, 1, 0, 0, 0, 0), 15000.0, 20000.0) ::
+        Row(LocalDateTime.of(2013, 1, 1, 0, 0, 0, 0), 48000.0, 30000.0) :: Nil
+    )
   }
 }

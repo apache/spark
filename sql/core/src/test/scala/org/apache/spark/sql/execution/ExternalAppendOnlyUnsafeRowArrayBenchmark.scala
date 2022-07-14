@@ -47,6 +47,9 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
     .set(config.SERIALIZER_OBJECT_STREAM_RESET, 1)
     .set(config.SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
+    // SPARK-34832: Add this configuration to allow `withFakeTaskContext` method
+    // to create `SparkContext` on the executor side.
+    .set(config.EXECUTOR_ALLOW_SPARK_CONTEXT, true)
 
   private def withFakeTaskContext(f: => Unit): Unit = {
     val sc = new SparkContext("local", "test", conf)
@@ -54,6 +57,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     TaskContext.setTaskContext(taskContext)
     f
     sc.stop()
+    TaskContext.unset()
   }
 
   private def testRows(numRows: Int): Seq[UnsafeRow] = {

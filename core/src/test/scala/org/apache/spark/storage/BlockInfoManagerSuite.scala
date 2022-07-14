@@ -19,18 +19,17 @@ package org.apache.spark.storage
 
 import java.util.Properties
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.ThreadUtils
 
-
-class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
+class BlockInfoManagerSuite extends SparkFunSuite {
 
   private implicit val ec = ExecutionContext.global
   private var blockInfoManager: BlockInfoManager = _
@@ -62,7 +61,8 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
   private def withTaskId[T](taskAttemptId: Long)(block: => T): T = {
     try {
       TaskContext.setTaskContext(
-        new TaskContextImpl(0, 0, 0, taskAttemptId, 0, null, new Properties, null))
+        new TaskContextImpl(0, 0, 0, taskAttemptId, 0,
+          1, null, new Properties, null, TaskMetrics.empty, 1))
       block
     } finally {
       TaskContext.unset()
@@ -297,9 +297,9 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(ThreadUtils.awaitResult(write2Future, 1.seconds).isDefined)
   }
 
-  test("removing a non-existent block throws IllegalArgumentException") {
+  test("removing a non-existent block throws SparkException") {
     withTaskId(0) {
-      intercept[IllegalArgumentException] {
+      intercept[SparkException] {
         blockInfoManager.removeBlock("non-existent-block")
       }
     }
@@ -350,11 +350,43 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("releaseAllLocksForTask releases write locks") {
     val initialNumMapEntries = blockInfoManager.getNumberOfMapEntries
+    assert(initialNumMapEntries == 12)
     withTaskId(0) {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
     }
-    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries + 3)
+    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries + 2)
     blockInfoManager.releaseAllLocksForTask(0)
-    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries)
+    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries - 1)
+  }
+
+  test("SPARK-38675 - concurrent unlock and releaseAllLocksForTask calls should not fail") {
+    // Create block
+    val blockId = TestBlockId("block")
+    assert(blockInfoManager.lockNewBlockForWriting(blockId, newBlockInfo()))
+    blockInfoManager.unlock(blockId)
+
+    // Without the fix the block below fails in 50% of the time. By executing it
+    // 10 times we increase the chance of failing to ~99.9%.
+    (0 to 10).foreach { task =>
+      withTaskId(task) {
+        blockInfoManager.registerTask(task)
+
+        // Acquire read locks
+        (0 to 50).foreach { _ =>
+          assert(blockInfoManager.lockForReading(blockId).isDefined)
+        }
+
+        // Asynchronously release read locks.
+        val futures = (0 to 50).map { _ =>
+          Future(blockInfoManager.unlock(blockId, Option(0L)))
+        }
+
+        // Remove all lock and hopefully don't hit an assertion error
+        blockInfoManager.releaseAllLocksForTask(task)
+
+        // Wait until all futures complete for the next iteration
+        futures.foreach(ThreadUtils.awaitReady(_, 100.millis))
+      }
+    }
   }
 }

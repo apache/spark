@@ -18,14 +18,18 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import scala.collection.mutable.ArrayBuffer
+import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -118,13 +122,28 @@ private[sql] object JDBCRelation extends Logging {
           s"Upper bound: ${boundValueToString(upperBound)}.")
         upperBound - lowerBound
       }
-    // Overflow and silliness can happen if you subtract then divide.
-    // Here we get a little roundoff, but that's (hopefully) OK.
-    val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
+
+    // Overflow can happen if you subtract then divide. For example:
+    // (Long.MaxValue - Long.MinValue) / (numPartitions - 2).
+    // Also, using fixed-point decimals here to avoid possible inaccuracy from floating point.
+    val upperStride = (upperBound / BigDecimal(numPartitions))
+      .setScale(18, RoundingMode.HALF_EVEN)
+    val lowerStride = (lowerBound / BigDecimal(numPartitions))
+      .setScale(18, RoundingMode.HALF_EVEN)
+
+    val preciseStride = upperStride - lowerStride
+    val stride = preciseStride.toLong
+
+    // Determine the number of strides the last partition will fall short of compared to the
+    // supplied upper bound. Take half of those strides, and then add them to the lower bound
+    // for better distribution of the first and last partitions.
+    val lostNumOfStrides = (preciseStride - stride) * numPartitions / stride
+    val lowerBoundWithStrideAlignment = lowerBound +
+      ((lostNumOfStrides / 2) * stride).setScale(0, RoundingMode.HALF_UP).toLong
 
     var i: Int = 0
     val column = partitioning.column
-    var currentValue = lowerBound
+    var currentValue = lowerBoundWithStrideAlignment
     val ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
       val lBoundValue = boundValueToString(currentValue)
@@ -160,16 +179,13 @@ private[sql] object JDBCRelation extends Logging {
       resolver(f.name, columnName) || resolver(dialect.quoteIdentifier(f.name), columnName)
     }.getOrElse {
       val maxNumToStringFields = SQLConf.get.maxToStringFields
-      throw new AnalysisException(s"User-defined partition column $columnName not " +
-        s"found in the JDBC relation: ${schema.simpleString(maxNumToStringFields)}")
+      throw QueryCompilationErrors.userDefinedPartitionNotFoundInJDBCRelationError(
+        columnName, schema.simpleString(maxNumToStringFields))
     }
     column.dataType match {
       case _: NumericType | DateType | TimestampType =>
       case _ =>
-        throw new AnalysisException(
-          s"Partition column type should be ${NumericType.simpleString}, " +
-            s"${DateType.catalogString}, or ${TimestampType.catalogString}, but " +
-            s"${column.dataType.catalogString} found.")
+        throw QueryCompilationErrors.invalidPartitionColumnTypeError(column)
     }
     (dialect.quoteIdentifier(column.name), column.dataType)
   }
@@ -197,11 +213,12 @@ private[sql] object JDBCRelation extends Logging {
       timeZoneId: String): String = {
     def dateTimeToString(): String = {
       val dateTimeStr = columnType match {
-        case DateType => DateFormatter().format(value.toInt)
+        case DateType =>
+          DateFormatter().format(value.toInt)
         case TimestampType =>
           val timestampFormatter = TimestampFormatter.getFractionFormatter(
             DateTimeUtils.getZoneId(timeZoneId))
-          DateTimeUtils.timestampToString(timestampFormatter, value)
+          timestampFormatter.format(value)
       }
       s"'$dateTimeStr'"
     }
@@ -253,24 +270,56 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  // Check if JDBCRDD.compileFilter can accept input filters
+  // Check if JdbcDialect can compile input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
-      filters.filter(JDBCRDD.compileFilter(_, JdbcDialects.get(jdbcOptions.url)).isEmpty)
+      val dialect = JdbcDialects.get(jdbcOptions.url)
+      filters.filter(f => dialect.compileExpression(f.toV2).isEmpty)
     } else {
       filters
     }
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
+    val pushedPredicates = if (jdbcOptions.pushDownPredicate) {
+      filters.map(_.toV2)
+    } else {
+      Array.empty[Predicate]
+    }
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
       schema,
       requiredColumns,
-      filters,
+      pushedPredicates,
       parts,
       jdbcOptions).asInstanceOf[RDD[Row]]
+  }
+
+  def buildScan(
+      requiredColumns: Array[String],
+      finalSchema: StructType,
+      predicates: Array[Predicate],
+      groupByColumns: Option[Array[String]],
+      tableSample: Option[TableSampleInfo],
+      limit: Int,
+      sortOrders: Array[String],
+      offset: Int): RDD[Row] = {
+    // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
+    JDBCRDD.scanTable(
+      sparkSession.sparkContext,
+      schema,
+      requiredColumns,
+      predicates,
+      parts,
+      jdbcOptions,
+      Some(finalSchema),
+      groupByColumns,
+      tableSample,
+      limit,
+      sortOrders,
+      offset).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
@@ -282,6 +331,6 @@ private[sql] case class JDBCRelation(
   override def toString: String = {
     val partitioningInfo = if (parts.nonEmpty) s" [numPartitions=${parts.length}]" else ""
     // credentials should not be included in the plan output, table information is sufficient.
-    s"JDBCRelation(${jdbcOptions.tableOrQuery})" + partitioningInfo
+    s"JDBCRelation(${jdbcOptions.prepareQuery}${jdbcOptions.tableOrQuery})$partitioningInfo"
   }
 }

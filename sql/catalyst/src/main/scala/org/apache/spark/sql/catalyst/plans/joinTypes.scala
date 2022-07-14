@@ -102,7 +102,7 @@ case class NaturalJoin(tpe: JoinType) extends JoinType {
 }
 
 case class UsingJoin(tpe: JoinType, usingColumns: Seq[String]) extends JoinType {
-  require(Seq(Inner, LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti).contains(tpe),
+  require(Seq(Inner, LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti, Cross).contains(tpe),
     "Unsupported using join type " + tpe)
   override def sql: String = "USING " + tpe.sql
 }
@@ -121,3 +121,24 @@ object LeftSemiOrAnti {
     case _ => None
   }
 }
+
+object AsOfJoinDirection {
+
+  def apply(direction: String): AsOfJoinDirection = {
+    direction.toLowerCase(Locale.ROOT) match {
+      case "forward" => Forward
+      case "backward" => Backward
+      case "nearest" => Nearest
+      case _ =>
+        val supported = Seq("forward", "backward", "nearest")
+        throw new IllegalArgumentException(s"Unsupported as-of join direction '$direction'. " +
+          "Supported as-of join direction include: " + supported.mkString("'", "', '", "'") + ".")
+    }
+  }
+}
+
+sealed abstract class AsOfJoinDirection
+
+case object Forward extends AsOfJoinDirection
+case object Backward extends AsOfJoinDirection
+case object Nearest extends AsOfJoinDirection

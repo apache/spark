@@ -26,9 +26,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, LongType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
@@ -110,7 +112,7 @@ trait FileFormat {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    throw new UnsupportedOperationException(s"buildReader is not supported for $this")
+    throw QueryExecutionErrors.buildReaderUnsupportedForFileFormatError(this.toString)
   }
 
   /**
@@ -162,6 +164,66 @@ trait FileFormat {
    * By default all data types are supported.
    */
   def supportDataType(dataType: DataType): Boolean = true
+
+  /**
+   * Returns whether this format supports the given filed name in read/write path.
+   * By default all field name is supported.
+   */
+  def supportFieldName(name: String): Boolean = true
+}
+
+object FileFormat {
+
+  val FILE_PATH = "file_path"
+
+  val FILE_NAME = "file_name"
+
+  val FILE_SIZE = "file_size"
+
+  val FILE_MODIFICATION_TIME = "file_modification_time"
+
+  val METADATA_NAME = "_metadata"
+
+  // supported metadata struct fields for hadoop fs relation
+  val METADATA_STRUCT: StructType = new StructType()
+    .add(StructField(FILE_PATH, StringType))
+    .add(StructField(FILE_NAME, StringType))
+    .add(StructField(FILE_SIZE, LongType))
+    .add(StructField(FILE_MODIFICATION_TIME, TimestampType))
+
+  // create a file metadata struct col
+  def createFileMetadataCol: AttributeReference =
+    FileSourceMetadataAttribute(METADATA_NAME, METADATA_STRUCT)
+
+  // create an internal row given required metadata fields and file information
+  def createMetadataInternalRow(
+      fieldNames: Seq[String],
+      filePath: Path,
+      fileSize: Long,
+      fileModificationTime: Long): InternalRow =
+    updateMetadataInternalRow(new GenericInternalRow(fieldNames.length), fieldNames,
+      filePath, fileSize, fileModificationTime)
+
+  // update an internal row given required metadata fields and file information
+  def updateMetadataInternalRow(
+      row: InternalRow,
+      fieldNames: Seq[String],
+      filePath: Path,
+      fileSize: Long,
+      fileModificationTime: Long): InternalRow = {
+    fieldNames.zipWithIndex.foreach { case (name, i) =>
+      name match {
+        case FILE_PATH => row.update(i, UTF8String.fromString(filePath.toString))
+        case FILE_NAME => row.update(i, UTF8String.fromString(filePath.getName))
+        case FILE_SIZE => row.update(i, fileSize)
+        case FILE_MODIFICATION_TIME =>
+          // the modificationTime from the file is in millisecond,
+          // while internally, the TimestampType `file_modification_time` is stored in microsecond
+          row.update(i, fileModificationTime * 1000L)
+      }
+    }
+    row
+  }
 }
 
 /**

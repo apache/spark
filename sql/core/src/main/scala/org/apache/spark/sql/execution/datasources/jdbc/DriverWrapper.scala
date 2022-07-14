@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverPropertyInfo, SQLFeatureNotSupportedException}
+import java.sql.{Connection, Driver, DriverPropertyInfo}
 import java.util.Properties
+
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * A wrapper for a JDBC Driver to work around SPARK-6913.
@@ -38,8 +40,7 @@ class DriverWrapper(val wrapped: Driver) extends Driver {
   override def getMinorVersion: Int = wrapped.getMinorVersion
 
   def getParentLogger: java.util.logging.Logger = {
-    throw new SQLFeatureNotSupportedException(
-      s"${this.getClass.getName}.getParentLogger is not yet implemented.")
+    throw QueryExecutionErrors.getParentLoggerNotImplementedError(this.getClass.getName)
   }
 
   override def connect(url: String, info: Properties): Connection = wrapped.connect(url, info)

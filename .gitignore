@@ -7,7 +7,11 @@
 *.pyo
 *.swp
 *~
+.java-version
 .DS_Store
+.ammonite
+.bloop
+.bsp/
 .cache
 .classpath
 .ensime
@@ -16,10 +20,12 @@
 .generated-mima*
 .idea/
 .idea_modules/
+.metals
 .project
 .pydevproject
 .scala_dependencies
 .settings
+.vscode
 /lib/
 R-unit-tests.log
 R/unit-tests.out
@@ -29,7 +35,6 @@ R/pkg/tests/fulltests/Rplots.pdf
 build/*.jar
 build/apache-maven*
 build/scala*
-build/zinc*
 cache
 checkpoint
 conf/*.cmd
@@ -45,14 +50,17 @@ dev/create-release/*final
 dev/create-release/*txt
 dev/pr-deps/
 dist/
-docs/_site
+docs/_site/
 docs/api
+docs/.local_ruby_bundle
 sql/docs
 sql/site
 lib_managed/
 lint-r-report.log
+lint-js-report.log
 log/
 logs/
+metals.sbt
 out/
 project/boot/
 project/build/target/
@@ -61,10 +69,16 @@ project/plugins/project/build.properties
 project/plugins/src_managed/
 project/plugins/target/
 python/lib/pyspark.zip
+python/.eggs/
+python/coverage.xml
 python/deps
+python/docs/_site/
+python/docs/source/reference/**/api/
+python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
+.mypy_cache/
 reports/
 scalastyle-on-compile.generated.xml
 scalastyle-output.xml
@@ -77,6 +91,7 @@ target/
 unit-tests.log
 work/
 docs/.jekyll-metadata
+docs/.jekyll-cache
 
 # For Hive
 TempStatsStore/
@@ -97,3 +112,11 @@ spark-warehouse/
 
 # For SBT
 .jvmopts
+
+# For Node.js
+node_modules
+
+# For Antlr
+sql/catalyst/gen/
+sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
+sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/

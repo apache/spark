@@ -22,17 +22,18 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.{implicitConversions, postfixOps}
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doThrow, reset, spy}
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.{AllocatedBlocks, _}
@@ -40,13 +41,12 @@ import org.apache.spark.streaming.util._
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
-class ReceivedBlockTrackerSuite
-  extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
+class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with Matchers {
 
   val hadoopConf = new Configuration()
   val streamId = 1
 
-  var allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()
+  val allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()
   var checkpointDirectory: File = null
   var conf: SparkConf = null
 
@@ -184,7 +184,7 @@ class ReceivedBlockTrackerSuite
     // Set the time increment level to twice the rotation interval so that every increment creates
     // a new log file
 
-    def incrementTime() {
+    def incrementTime(): Unit = {
       val timeIncrementMillis = 2000L
       manualClock.advance(timeIncrementMillis)
     }
@@ -197,7 +197,7 @@ class ReceivedBlockTrackerSuite
     }
 
     // Print the data present in the log ahead files in the log directory
-    def printLogFiles(message: String) {
+    def printLogFiles(message: String): Unit = {
       val fileContents = getWriteAheadLogFiles().map { file =>
         (s"\n>>>>> $file: <<<<<\n${getWrittenLogData(file).mkString("\n")}")
       }.mkString("\n")
@@ -276,7 +276,7 @@ class ReceivedBlockTrackerSuite
     getWrittenLogData(getWriteAheadLogFiles().last) should contain(createBatchCleanup(batchTime1))
 
     // Verify that at least one log file gets deleted
-    eventually(timeout(10 seconds), interval(10 millisecond)) {
+    eventually(timeout(10.seconds), interval(10.millisecond)) {
       getWriteAheadLogFiles() should not contain oldestLogFile
     }
     printLogFiles("After clean")
@@ -376,7 +376,7 @@ class ReceivedBlockTrackerSuite
       recoverFromWriteAheadLog: Boolean = false,
       clock: Clock = new SystemClock): ReceivedBlockTracker = {
     val cpDirOption = if (setCheckpointDir) Some(checkpointDirectory.toString) else None
-    var tracker = new ReceivedBlockTracker(
+    val tracker = new ReceivedBlockTracker(
       conf, hadoopConf, Seq(streamId), clock, recoverFromWriteAheadLog, cpDirOption)
     allReceivedBlockTrackers += tracker
     tracker

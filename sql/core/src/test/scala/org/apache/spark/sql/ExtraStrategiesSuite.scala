@@ -21,10 +21,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
+import org.apache.spark.sql.test.SharedSparkSession
 
-case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
+case class FastOperator(output: Seq[Attribute]) extends LeafExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
     val str = Literal("so fast").value
@@ -35,7 +35,6 @@ case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
   }
 
   override def producedAttributes: AttributeSet = outputSet
-  override def children: Seq[SparkPlan] = Nil
 }
 
 object TestStrategy extends Strategy {
@@ -46,7 +45,7 @@ object TestStrategy extends Strategy {
   }
 }
 
-class ExtraStrategiesSuite extends QueryTest with SharedSQLContext {
+class ExtraStrategiesSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("insert an extraStrategy") {

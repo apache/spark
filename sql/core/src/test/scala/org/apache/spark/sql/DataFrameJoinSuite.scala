@@ -17,14 +17,27 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.Join
+import scala.collection.JavaConverters._
+
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Filter, HintInfo, Join, JoinHint, LogicalPlan, Project}
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin.LogicalPlanWithDatasetId
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
 
-class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
+class DataFrameJoinSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("join - join using") {
@@ -45,20 +58,38 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(1, 2, "1", "2") :: Row(2, 3, "2", "3") :: Row(3, 4, "3", "4") :: Nil)
   }
 
+  test("join - join using multiple columns array") {
+    val df = Seq(1, 2, 3).map(i => (i, i + 1, i.toString)).toDF("int", "int2", "str")
+    val df2 = Seq(1, 2, 3).map(i => (i, i + 1, (i + 1).toString)).toDF("int", "int2", "str")
+
+    checkAnswer(
+      df.join(df2, Array("int", "int2")),
+      Row(1, 2, "1", "2") :: Row(2, 3, "2", "3") :: Row(3, 4, "3", "4") :: Nil)
+  }
+
   test("join - sorted columns not in join's outputSet") {
-    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str_sort").as('df1)
-    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as('df2)
-    val df3 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as('df3)
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str_sort").as("df1")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("df2")
+    val df3 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("df3")
 
     checkAnswer(
       df.join(df2, $"df1.int" === $"df2.int", "outer").select($"df1.int", $"df2.int2")
-        .orderBy('str_sort.asc, 'str.asc),
+        .orderBy($"str_sort".asc, $"str".asc),
       Row(null, 6) :: Row(1, 3) :: Row(3, null) :: Nil)
 
     checkAnswer(
       df2.join(df3, $"df2.int" === $"df3.int", "inner")
         .select($"df2.int", $"df3.int").orderBy($"df2.str".desc),
       Row(5, 5) :: Row(1, 1) :: Nil)
+  }
+
+  test("join - join using specifying join type") {
+    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
+    val df2 = Seq(1, 2, 3).map(i => (i, (i + 1).toString)).toDF("int", "str")
+
+    checkAnswer(
+      df.join(df2, "int", "inner"),
+      Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
   }
 
   test("join - join using multiple columns and specifying join type") {
@@ -98,23 +129,41 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(3, "3", 4) :: Nil)
   }
 
-  test("join - join using self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-
-    // self join
-    checkAnswer(
-      df.join(df, "int"),
-      Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
-  }
-
-  test("join - self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
+  test("join - join using multiple columns array and specifying join type") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str")
 
     checkAnswer(
-      df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key")
-        .collect().toSeq)
+      df.join(df2, Array("int", "str"), "inner"),
+      Row(1, "1", 2, 3) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "left"),
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "right"),
+      Row(1, "1", 2, 3) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "outer"),
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "left_semi"),
+      Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "semi"),
+      Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "left_anti"),
+      Row(3, "3", 4) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "anti"),
+      Row(3, "3", 4) :: Nil)
   }
 
   test("join - cross join") {
@@ -130,38 +179,16 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       df2.crossJoin(df1),
       Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
         Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
-  }
-
-  test("join - using aliases after self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
 
     checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-  }
-
-  test("[SPARK-6231] join - self join auto resolve ambiguity") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    checkAnswer(
-      df.join(df, df("key") === df("key")),
-      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
+      df1.join(df2, Nil, "cross"),
+      Row(1, "1", 2, "2") :: Row(1, "1", 4, "4") ::
+        Row(3, "3", 2, "2") :: Row(3, "3", 4, "4") :: Nil)
 
     checkAnswer(
-      df.join(df.filter($"value" === "2"), df("key") === df("key")),
-      Row(2, "2", 2, "2") :: Nil)
-
-    checkAnswer(
-      df.join(df, df("key") === df("key") && df("value") === 1),
-      Row(1, "1", 1, "1") :: Nil)
-
-    val left = df.groupBy("key").agg(count("*"))
-    val right = df.groupBy("key").agg(sum("key"))
-    checkAnswer(
-      left.join(right, left("key") === right("key")),
-      Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
+      df2.join(df1, Nil, "cross"),
+      Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
+        Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
   }
 
   test("broadcast join hint using broadcast function") {
@@ -200,7 +227,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       spark.range(10e10.toLong)
         .join(spark.range(10e10.toLong).hint("broadcast"), "id")
         .queryExecution.executedPlan
-    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size == 1)
+    assert(collect(plan2) { case p: BroadcastHashJoinExec => p }.size == 1)
   }
 
   test("join - outer join conversion") {
@@ -304,7 +331,251 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
       val df = spark.range(2)
       // this throws an exception before the fix
-      df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
+      val plan = df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
+
+      plan match {
+        // SPARK-34178: we can't match the plan before the fix due to
+        // the right side plan doesn't contains dataset id.
+        case Join(
+          LogicalPlanWithDatasetId(_, leftId),
+          LogicalPlanWithDatasetId(_, rightId), _, _, _) =>
+          assert(leftId === rightId)
+      }
+    }
+  }
+
+  def extractLeftDeepInnerJoins(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
+    case j @ Join(left, right, _: InnerLike, _, _) => right +: extractLeftDeepInnerJoins(left)
+    case Filter(_, child) => extractLeftDeepInnerJoins(child)
+    case Project(_, child) => extractLeftDeepInnerJoins(child)
+    case _ => Seq(plan)
+  }
+
+  test("SPARK-24690 enables star schema detection even if CBO disabled") {
+    withTable("r0", "r1", "r2", "r3") {
+      withTempDir { dir =>
+
+        withSQLConf(
+            SQLConf.STARSCHEMA_DETECTION.key -> "true",
+            SQLConf.CBO_ENABLED.key -> "false",
+            SQLConf.PLAN_STATS_ENABLED.key -> "true") {
+
+          val path = dir.getAbsolutePath
+
+          // Collects column statistics first
+          spark.range(300).selectExpr("id AS a", "id AS b", "id AS c")
+            .write.mode("overwrite").parquet(s"$path/r0")
+          spark.read.parquet(s"$path/r0").write.saveAsTable("r0")
+          spark.sql("ANALYZE TABLE r0 COMPUTE STATISTICS FOR COLUMNS a, b, c")
+
+          spark.range(10).selectExpr("id AS a", "id AS d")
+            .write.mode("overwrite").parquet(s"$path/r1")
+          spark.read.parquet(s"$path/r1").write.saveAsTable("r1")
+          spark.sql("ANALYZE TABLE r1 COMPUTE STATISTICS FOR COLUMNS a")
+
+          spark.range(50).selectExpr("id AS b", "id AS e")
+            .write.mode("overwrite").parquet(s"$path/r2")
+          spark.read.parquet(s"$path/r2").write.saveAsTable("r2")
+          spark.sql("ANALYZE TABLE r2 COMPUTE STATISTICS FOR COLUMNS b")
+
+          spark.range(1).selectExpr("id AS c", "id AS f")
+            .write.mode("overwrite").parquet(s"$path/r3")
+          spark.read.parquet(s"$path/r3").write.saveAsTable("r3")
+          spark.sql("ANALYZE TABLE r3 COMPUTE STATISTICS FOR COLUMNS c")
+
+          val resultDf = sql(
+            s"""SELECT * FROM r0, r1, r2, r3
+               |  WHERE
+               |    r0.a = r1.a AND
+               |    r1.d >= 3 AND
+               |    r0.b = r2.b AND
+               |    r2.e >= 5 AND
+               |    r0.c = r3.c AND
+               |    r3.f <= 100
+             """.stripMargin)
+
+          val optimized = resultDf.queryExecution.optimizedPlan
+          val optJoins = extractLeftDeepInnerJoins(optimized)
+          val joinOrder = optJoins
+            .flatMap(_.collect { case p: LogicalRelation => p.catalogTable }.head)
+            .map(_.identifier.identifier)
+
+          assert(joinOrder === Seq("r2", "r1", "r3", "r0"))
+        }
+      }
+    }
+  }
+
+  test("Supports multi-part names for broadcast hint resolution") {
+    val (table1Name, table2Name) = ("t1", "t2")
+
+    withTempDatabase { dbName =>
+      withTable(table1Name, table2Name) {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          spark.range(50).write.saveAsTable(s"$dbName.$table1Name")
+          spark.range(100).write.saveAsTable(s"$dbName.$table2Name")
+
+          def checkIfHintApplied(df: DataFrame): Unit = {
+            val sparkPlan = df.queryExecution.executedPlan
+            val broadcastHashJoins = collect(sparkPlan) { case p: BroadcastHashJoinExec => p }
+            assert(broadcastHashJoins.size == 1)
+            val broadcastExchanges = broadcastHashJoins.head.collect {
+              case p: BroadcastExchangeExec => p
+            }
+            assert(broadcastExchanges.size == 1)
+            val tables = broadcastExchanges.head.collect {
+              case FileSourceScanExec(_, _, _, _, _, _, _, Some(tableIdent), _) => tableIdent
+            }
+            assert(tables.size == 1)
+            assert(tables.head ===
+              TableIdentifier(table1Name, Some(dbName), Some(SESSION_CATALOG_NAME)))
+          }
+
+          def checkIfHintNotApplied(df: DataFrame): Unit = {
+            val sparkPlan = df.queryExecution.executedPlan
+            val broadcastHashJoins = collect(sparkPlan) { case p: BroadcastHashJoinExec => p }
+            assert(broadcastHashJoins.isEmpty)
+          }
+
+          def sqlTemplate(tableName: String, hintTableName: String): DataFrame = {
+            sql(s"SELECT /*+ BROADCASTJOIN($hintTableName) */ * " +
+              s"FROM $tableName, $dbName.$table2Name " +
+              s"WHERE $tableName.id = $table2Name.id")
+          }
+
+          def dfTemplate(tableName: String, hintTableName: String): DataFrame = {
+            spark.table(tableName).join(spark.table(s"$dbName.$table2Name"), "id")
+              .hint("broadcast", hintTableName)
+          }
+
+          sql(s"USE $dbName")
+
+          checkIfHintApplied(sqlTemplate(table1Name, table1Name))
+          checkIfHintApplied(sqlTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name"))
+          checkIfHintApplied(sqlTemplate(s"$dbName.$table1Name", table1Name))
+          checkIfHintNotApplied(sqlTemplate(table1Name, s"$dbName.$table1Name"))
+
+          checkIfHintApplied(dfTemplate(table1Name, table1Name))
+          checkIfHintApplied(dfTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name"))
+          checkIfHintApplied(dfTemplate(s"$dbName.$table1Name", table1Name))
+          checkIfHintApplied(dfTemplate(table1Name, s"$dbName.$table1Name"))
+          checkIfHintApplied(dfTemplate(table1Name,
+            s"${CatalogManager.SESSION_CATALOG_NAME}.$dbName.$table1Name"))
+
+          withView("tv") {
+            sql(s"CREATE VIEW tv AS SELECT * FROM $dbName.$table1Name")
+            checkIfHintApplied(sqlTemplate("tv", "tv"))
+            checkIfHintNotApplied(sqlTemplate("tv", s"$dbName.tv"))
+
+            checkIfHintApplied(dfTemplate("tv", "tv"))
+            checkIfHintApplied(dfTemplate("tv", s"$dbName.tv"))
+          }
+        }
+      }
+    }
+  }
+
+  test("The same table name exists in two databases for broadcast hint resolution") {
+    val (db1Name, db2Name) = ("db1", "db2")
+
+    withDatabase(db1Name, db2Name) {
+      withTable("t") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          sql(s"CREATE DATABASE $db1Name")
+          sql(s"CREATE DATABASE $db2Name")
+          spark.range(1).write.saveAsTable(s"$db1Name.t")
+          spark.range(1).write.saveAsTable(s"$db2Name.t")
+
+          // Checks if a broadcast hint applied in both sides
+          val statement = s"SELECT /*+ BROADCASTJOIN(t) */ * FROM $db1Name.t, $db2Name.t " +
+            s"WHERE $db1Name.t.id = $db2Name.t.id"
+          sql(statement).queryExecution.optimizedPlan match {
+            case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST))),
+              Some(HintInfo(Some(BROADCAST))))) =>
+            case _ => fail("broadcast hint not found in both tables")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-32693: Compare two dataframes with same schema except nullable property") {
+    val schema1 = StructType(
+      StructField("a", IntegerType, false) ::
+        StructField("b", IntegerType, false) ::
+        StructField("c", IntegerType, false) :: Nil)
+    val rowSeq1: List[Row] = List(Row(10, 1, 1), Row(10, 50, 2))
+    val df1 = spark.createDataFrame(rowSeq1.asJava, schema1)
+
+    val schema2 = StructType(
+      StructField("a", IntegerType) ::
+        StructField("b", IntegerType) ::
+        StructField("c", IntegerType) :: Nil)
+    val rowSeq2: List[Row] = List(Row(10, 1, 1))
+    val df2 = spark.createDataFrame(rowSeq2.asJava, schema2)
+
+    checkAnswer(df1.except(df2), Row(10, 50, 2))
+
+    val schema3 = StructType(
+      StructField("a", IntegerType, false) ::
+        StructField("b", IntegerType, false) ::
+        StructField("c", IntegerType, false) ::
+        StructField("d", schema1, false) :: Nil)
+    val rowSeq3: List[Row] = List(Row(10, 1, 1, Row(10, 1, 1)), Row(10, 50, 2, Row(10, 50, 2)))
+    val df3 = spark.createDataFrame(rowSeq3.asJava, schema3)
+
+    val schema4 = StructType(
+      StructField("a", IntegerType) ::
+        StructField("b", IntegerType) ::
+        StructField("b", IntegerType) ::
+        StructField("d", schema2) :: Nil)
+    val rowSeq4: List[Row] = List(Row(10, 1, 1, Row(10, 1, 1)))
+    val df4 = spark.createDataFrame(rowSeq4.asJava, schema4)
+
+    checkAnswer(df3.except(df4), Row(10, 50, 2, Row(10, 50, 2)))
+  }
+
+  test("SPARK-34527: Resolve common columns from USING JOIN") {
+    val joinDf = testData2.as("testData2").join(
+      testData3.as("testData3"), usingColumns = Seq("a"), joinType = "fullouter")
+    val dfQuery = joinDf.select(
+      $"a", $"testData2.a", $"testData2.b", $"testData3.a", $"testData3.b")
+    val dfQuery2 = joinDf.select(
+      $"a", testData2.col("a"), testData2.col("b"), testData3.col("a"), testData3.col("b"))
+
+    Seq(dfQuery, dfQuery2).map { query =>
+      checkAnswer(query,
+        Seq(
+          Row(1, 1, 1, 1, null),
+          Row(1, 1, 2, 1, null),
+          Row(2, 2, 1, 2, 2),
+          Row(2, 2, 2, 2, 2),
+          Row(3, 3, 1, null, null),
+          Row(3, 3, 2, null, null)
+        )
+      )
+    }
+  }
+
+  test("SPARK-39376: Hide duplicated columns in star expansion of subquery alias from USING JOIN") {
+    val joinDf = testData2.as("testData2").join(
+      testData3.as("testData3"), usingColumns = Seq("a"), joinType = "fullouter")
+    val equivalentQueries = Seq(
+      joinDf.select($"*"),
+      joinDf.as("r").select($"*"),
+      joinDf.as("r").select($"r.*")
+    )
+    equivalentQueries.foreach { query =>
+      checkAnswer(query,
+        Seq(
+          Row(1, 1, null),
+          Row(1, 2, null),
+          Row(2, 1, 2),
+          Row(2, 2, 2),
+          Row(3, 1, null),
+          Row(3, 2, null)
+        )
+      )
     }
   }
 }

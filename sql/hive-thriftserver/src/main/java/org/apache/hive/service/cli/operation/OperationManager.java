@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,8 +23,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
@@ -40,15 +37,18 @@ import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
-import org.apache.log4j.Appender;
-import org.apache.log4j.Logger;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
+import org.apache.logging.log4j.core.appender.AbstractWriterAppender;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * OperationManager.
  *
  */
 public class OperationManager extends AbstractService {
-  private final Log LOG = LogFactory.getLog(OperationManager.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(OperationManager.class);
 
   private final Map<OperationHandle, Operation> handleToOperation =
       new HashMap<OperationHandle, Operation>();
@@ -82,17 +82,15 @@ public class OperationManager extends AbstractService {
 
   private void initOperationLogCapture(String loggingMode) {
     // Register another Appender (with the same layout) that talks to us.
-    Appender ap = new LogDivertAppender(this, OperationLog.getLoggingLevel(loggingMode));
-    Logger.getRootLogger().addAppender(ap);
+    AbstractWriterAppender ap = new LogDivertAppender(this, OperationLog.getLoggingLevel(loggingMode));
+    ((org.apache.logging.log4j.core.Logger)org.apache.logging.log4j.LogManager.getRootLogger()).addAppender(ap);
+    ap.start();
   }
 
   public ExecuteStatementOperation newExecuteStatementOperation(HiveSession parentSession,
-      String statement, Map<String, String> confOverlay, boolean runAsync)
+      String statement, Map<String, String> confOverlay, boolean runAsync, long queryTimeout)
           throws HiveSQLException {
-    ExecuteStatementOperation executeStatementOperation = ExecuteStatementOperation
-        .newExecuteStatementOperation(parentSession, statement, confOverlay, runAsync);
-    addOperation(executeStatementOperation);
-    return executeStatementOperation;
+      throw new UnsupportedOperationException();
   }
 
   public GetTypeInfoOperation newGetTypeInfoOperation(HiveSession parentSession) {
@@ -145,6 +143,25 @@ public class OperationManager extends AbstractService {
     return operation;
   }
 
+  public GetPrimaryKeysOperation newGetPrimaryKeysOperation(HiveSession parentSession,
+      String catalogName, String schemaName, String tableName) {
+    GetPrimaryKeysOperation operation = new GetPrimaryKeysOperation(parentSession,
+      catalogName, schemaName, tableName);
+    addOperation(operation);
+    return operation;
+  }
+
+  public GetCrossReferenceOperation newGetCrossReferenceOperation(
+      HiveSession session, String primaryCatalog, String primarySchema,
+      String primaryTable, String foreignCatalog, String foreignSchema,
+      String foreignTable) {
+   GetCrossReferenceOperation operation = new GetCrossReferenceOperation(session,
+     primaryCatalog, primarySchema, primaryTable, foreignCatalog, foreignSchema,
+     foreignTable);
+   addOperation(operation);
+   return operation;
+  }
+
   public Operation getOperation(OperationHandle operationHandle) throws HiveSQLException {
     Operation operation = getOperationInternal(operationHandle);
     if (operation == null) {
@@ -183,6 +200,7 @@ public class OperationManager extends AbstractService {
     Operation operation = getOperation(opHandle);
     OperationState opState = operation.getStatus().getState();
     if (opState == OperationState.CANCELED ||
+        opState == OperationState.TIMEDOUT ||
         opState == OperationState.CLOSED ||
         opState == OperationState.FINISHED ||
         opState == OperationState.ERROR ||
@@ -204,23 +222,18 @@ public class OperationManager extends AbstractService {
     operation.close();
   }
 
-  public TableSchema getOperationResultSetSchema(OperationHandle opHandle)
+  public TTableSchema getOperationResultSetSchema(OperationHandle opHandle)
       throws HiveSQLException {
     return getOperation(opHandle).getResultSetSchema();
   }
 
-  public RowSet getOperationNextRowSet(OperationHandle opHandle)
-      throws HiveSQLException {
-    return getOperation(opHandle).getNextRowSet();
-  }
-
-  public RowSet getOperationNextRowSet(OperationHandle opHandle,
+  public TRowSet getOperationNextRowSet(OperationHandle opHandle,
       FetchOrientation orientation, long maxRows)
           throws HiveSQLException {
     return getOperation(opHandle).getNextRowSet(orientation, maxRows);
   }
 
-  public RowSet getOperationLogRowSet(OperationHandle opHandle,
+  public TRowSet getOperationLogRowSet(OperationHandle opHandle,
       FetchOrientation orientation, long maxRows)
           throws HiveSQLException {
     // get the OperationLog object from the operation
@@ -240,12 +253,13 @@ public class OperationManager extends AbstractService {
 
     // convert logs to RowSet
     TableSchema tableSchema = new TableSchema(getLogSchema());
-    RowSet rowSet = RowSetFactory.create(tableSchema, getOperation(opHandle).getProtocolVersion());
+    RowSet rowSet = RowSetFactory.create(tableSchema,
+        getOperation(opHandle).getProtocolVersion(), false);
     for (String log : logs) {
       rowSet.addRow(new String[] {log});
     }
 
-    return rowSet;
+    return rowSet.toTRowSet();
   }
 
   private boolean isFetchFirst(FetchOrientation fetchOrientation) {

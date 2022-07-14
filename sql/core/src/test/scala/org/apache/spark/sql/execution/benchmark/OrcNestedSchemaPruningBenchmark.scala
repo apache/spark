@@ -24,10 +24,11 @@ import org.apache.spark.sql.internal.SQLConf
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/OrcNestedSchemaPruningBenchmark-results.txt".
  * }}}
  */
@@ -36,8 +37,7 @@ object OrcNestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
   override val benchmarkName: String = "Nested Schema Pruning Benchmark For ORC v1"
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "orc",
-        SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "orc") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "orc") {
       super.runBenchmarkSuite(mainArgs)
     }
   }

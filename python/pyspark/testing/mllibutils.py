@@ -23,7 +23,7 @@ from pyspark.sql import SparkSession
 
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
-        self.sc = SparkContext('local[4]', "MLlib tests")
+        self.sc = SparkContext("local[4]", "MLlib tests")
         self.spark = SparkSession(self.sc)
 
     def tearDown(self):

@@ -45,10 +45,15 @@ case class LocalTableScanExec(
     }
   }
 
-  private lazy val numParallelism: Int = math.min(math.max(unsafeRows.length, 1),
-    sqlContext.sparkContext.defaultParallelism)
-
-  private lazy val rdd = sqlContext.sparkContext.parallelize(unsafeRows, numParallelism)
+  @transient private lazy val rdd: RDD[InternalRow] = {
+    if (rows.isEmpty) {
+      sparkContext.emptyRDD
+    } else {
+      val numSlices = math.min(
+        unsafeRows.length, session.leafNodeDefaultParallelism)
+      sparkContext.parallelize(unsafeRows, numSlices)
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -77,11 +82,14 @@ case class LocalTableScanExec(
     taken
   }
 
+  override def executeTail(limit: Int): Array[InternalRow] = {
+    val taken: Seq[InternalRow] = unsafeRows.takeRight(limit)
+    longMetric("numOutputRows").add(taken.size)
+    taken.toArray
+  }
+
   // Input is already UnsafeRows.
   override protected val createUnsafeProjection: Boolean = false
-
-  // Do not codegen when there is no parent - to support the fast driver-local collect/take paths.
-  override def supportCodegen: Boolean = (parent != null)
 
   override def inputRDD: RDD[InternalRow] = rdd
 }

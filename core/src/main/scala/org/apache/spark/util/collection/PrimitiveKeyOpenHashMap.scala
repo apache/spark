@@ -66,7 +66,7 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
   }
 
   /** Set the value for a key */
-  def update(k: K, v: V) {
+  def update(k: K, v: V): Unit = {
     val pos = _keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
     _values(pos) = v
     _keySet.rehashIfNeeded(k, grow, move)
@@ -117,17 +117,12 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
     }
   }
 
-  // The following member variables are declared as protected instead of private for the
-  // specialization to work (specialized class extends the unspecialized one and needs access
-  // to the "private" variables).
-  // They also should have been val's. We use var's because there is a Scala compiler bug that
-  // would throw illegal access error at runtime if they are declared as val's.
-  protected var grow = (newCapacity: Int) => {
+  private def grow(newCapacity: Int): Unit = {
     _oldValues = _values
     _values = new Array[V](newCapacity)
   }
 
-  protected var move = (oldPos: Int, newPos: Int) => {
+  private def move(oldPos: Int, newPos: Int): Unit = {
     _values(newPos) = _oldValues(oldPos)
   }
 }

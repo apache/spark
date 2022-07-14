@@ -175,7 +175,7 @@ final class MutableAny extends MutableValue {
   override def boxed: Any = if (isNull) null else value
   override def update(v: Any): Unit = {
     isNull = false
-    value = v.asInstanceOf[Any]
+    value = v
   }
   override def copy(): MutableAny = {
     val newCopy = new MutableAny
@@ -192,24 +192,45 @@ final class MutableAny extends MutableValue {
  */
 final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGenericInternalRow {
 
-  def this(dataTypes: Seq[DataType]) =
-    this(
-      dataTypes.map {
-        case BooleanType => new MutableBoolean
-        case ByteType => new MutableByte
-        case ShortType => new MutableShort
-        // We use INT for DATE internally
-        case IntegerType | DateType => new MutableInt
-        // We use Long for Timestamp internally
-        case LongType | TimestampType => new MutableLong
-        case FloatType => new MutableFloat
-        case DoubleType => new MutableDouble
-        case _ => new MutableAny
-      }.toArray)
+  private[this] def dataTypeToMutableValue(dataType: DataType): MutableValue = dataType match {
+    // We use INT for DATE and YearMonthIntervalType internally
+    case IntegerType | DateType | _: YearMonthIntervalType => new MutableInt
+    // We use Long for Timestamp, Timestamp without time zone and DayTimeInterval internally
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+      new MutableLong
+    case FloatType => new MutableFloat
+    case DoubleType => new MutableDouble
+    case BooleanType => new MutableBoolean
+    case ByteType => new MutableByte
+    case ShortType => new MutableShort
+    case _ => new MutableAny
+  }
+
+  def this(dataTypes: Seq[DataType]) = {
+    // SPARK-32550: use `dataTypes.foreach` instead of `while loop + dataTypes(i)` to ensure
+    // constant-time access of dataTypes `Seq` because it is not necessarily an `IndexSeq` that
+    // support constant-time access.
+    this(new Array[MutableValue](dataTypes.length))
+    var i = 0
+    dataTypes.foreach { dt =>
+      values(i) = dataTypeToMutableValue(dt)
+      i += 1
+    }
+  }
 
   def this() = this(Seq.empty)
 
-  def this(schema: StructType) = this(schema.fields.map(_.dataType))
+  def this(schema: StructType) = {
+    // SPARK-32550: use while loop instead of map
+    this(new Array[MutableValue](schema.fields.length))
+    val length = values.length
+    val fields = schema.fields
+    var i = 0
+    while (i < length) {
+      values(i) = dataTypeToMutableValue(fields(i).dataType)
+      i += 1
+    }
+  }
 
   override def numFields: Int = values.length
 
@@ -221,7 +242,7 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
 
   override protected def genericGet(i: Int): Any = values(i).boxed
 
-  override def update(ordinal: Int, value: Any) {
+  override def update(ordinal: Int, value: Any): Unit = {
     if (value == null) {
       setNullAt(ordinal)
     } else {

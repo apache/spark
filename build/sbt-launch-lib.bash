@@ -17,6 +17,7 @@ declare -a java_args
 declare -a scalac_args
 declare -a sbt_commands
 declare -a maven_profiles
+declare sbt_default_mem=4096
 
 if test -x "$JAVA_HOME/bin/java"; then
     echo -e "Using $JAVA_HOME as default JAVA_HOME."
@@ -38,7 +39,11 @@ dlog () {
 
 acquire_sbt_jar () {
   SBT_VERSION=`awk -F "=" '/sbt\.version/ {print $2}' ./project/build.properties`
-  URL1=https://dl.bintray.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch.jar
+  # DEFAULT_ARTIFACT_REPOSITORY env variable can be used to only fetch
+  # artifacts from internal repos only.
+  # Ex:
+  #   DEFAULT_ARTIFACT_REPOSITORY=https://artifacts.internal.com/libs-release/
+  URL1=${DEFAULT_ARTIFACT_REPOSITORY:-https://repo1.maven.org/maven2/}org/scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch-${SBT_VERSION}.jar
   JAR=build/sbt-launch-${SBT_VERSION}.jar
 
   sbt_jar=$JAR
@@ -56,13 +61,13 @@ acquire_sbt_jar () {
       wget --quiet ${URL1} -O "${JAR_DL}" &&\
         mv "${JAR_DL}" "${JAR}"
     else
-      printf "You do not have curl or wget installed, please install sbt manually from http://www.scala-sbt.org/\n"
+      printf "You do not have curl or wget installed, please install sbt manually from https://www.scala-sbt.org/\n"
       exit -1
     fi
     fi
     if [ ! -f "${JAR}" ]; then
     # We failed to download
-    printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
+    printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from https://www.scala-sbt.org/\n"
     exit -1
     fi
     printf "Launching sbt from ${JAR}\n"
@@ -111,11 +116,10 @@ addDebugger () {
 # a ham-fisted attempt to move some memory settings in concert
 # so they need not be dicked around with individually.
 get_mem_opts () {
-  local mem=${1:-2048}
-  local perm=$(( $mem / 4 ))
-  (( $perm > 256 )) || perm=256
-  (( $perm < 4096 )) || perm=4096
-  local codecache=$(( $perm / 2 ))
+  local mem=${1:-$sbt_default_mem}
+  local codecache=$(( $mem / 8 ))
+  (( $codecache > 128 )) || codecache=128
+  (( $codecache < 2048 )) || codecache=2048
 
   echo "-Xms${mem}m -Xmx${mem}m -XX:ReservedCodeCacheSize=${codecache}m"
 }

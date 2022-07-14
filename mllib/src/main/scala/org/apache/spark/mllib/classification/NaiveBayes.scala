@@ -75,10 +75,10 @@ class NaiveBayesModel private[spark] (
   private val (thetaMinusNegTheta, negThetaSum) = modelType match {
     case Multinomial => (None, None)
     case Bernoulli =>
-      val negTheta = thetaMatrix.map(value => math.log(1.0 - math.exp(value)))
-      val ones = new DenseVector(Array.fill(thetaMatrix.numCols) {1.0})
+      val negTheta = thetaMatrix.map(value => math.log1p(-math.exp(value)))
+      val ones = new DenseVector(Array.fill(thetaMatrix.numCols)(1.0))
       val thetaMinusNegTheta = thetaMatrix.map { value =>
-        value - math.log(1.0 - math.exp(value))
+        value - math.log1p(-math.exp(value))
       }
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
     case _ =>
@@ -145,8 +145,8 @@ class NaiveBayesModel private[spark] (
   }
 
   private def bernoulliCalculation(testData: Vector) = {
-    testData.foreachActive((_, value) =>
-      if (value != 0.0 && value != 1.0) {
+    testData.foreachNonZero((_, value) =>
+      if (value != 1.0) {
         throw new SparkException(
           s"Bernoulli naive Bayes requires 0 or 1 feature values but found $testData.")
       }
@@ -216,7 +216,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       val data = dataArray(0)
       val labels = data.getAs[Seq[Double]](0).toArray
       val pi = data.getAs[Seq[Double]](1).toArray
-      val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
+      val theta = data.getSeq[scala.collection.Seq[Double]](2).map(_.toArray).toArray
       val modelType = data.getString(3)
       new NaiveBayesModel(labels, pi, theta, modelType)
     }
@@ -260,7 +260,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       val data = dataArray(0)
       val labels = data.getAs[Seq[Double]](0).toArray
       val pi = data.getAs[Seq[Double]](1).toArray
-      val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
+      val theta = data.getSeq[scala.collection.Seq[Double]](2).map(_.toArray).toArray
       new NaiveBayesModel(labels, pi, theta)
     }
   }
@@ -367,11 +367,11 @@ class NaiveBayes private (
     val dataset = data.map { case LabeledPoint(label, features) => (label, features.asML) }
       .toDF("label", "features")
 
-    // mllib NaiveBayes allows input labels like {-1, +1}, so set `positiveLabel` as false.
-    val newModel = nb.trainWithLabelCheck(dataset, positiveLabel = false)
+    // mllib NaiveBayes allows input labels like {-1, +1}, so set `nonNegativeLabel` as false.
+    val newModel = nb.trainWithLabelCheck(dataset, nonNegativeLabel = false)
 
     val pi = newModel.pi.toArray
-    val theta = Array.fill[Double](newModel.numClasses, newModel.numFeatures)(0.0)
+    val theta = Array.ofDim[Double](newModel.numClasses, newModel.numFeatures)
     newModel.theta.foreachActive {
       case (i, j, v) =>
         theta(i)(j) = v

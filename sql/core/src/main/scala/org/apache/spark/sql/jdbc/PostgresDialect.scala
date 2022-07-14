@@ -17,15 +17,32 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Types}
+import java.sql.{Connection, SQLException, Types}
+import java.util
+import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private object PostgresDialect extends JdbcDialect {
+private object PostgresDialect extends JdbcDialect with SQLConfHelper {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
+
+  // See https://www.postgresql.org/docs/8.4/functions-aggregate.html
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR")
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -33,8 +50,12 @@ private object PostgresDialect extends JdbcDialect {
       Some(FloatType)
     } else if (sqlType == Types.SMALLINT) {
       Some(ShortType)
-    } else if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
+    } else if (sqlType == Types.BIT && typeName == "bit" && size != 1) {
       Some(BinaryType)
+    } else if (sqlType == Types.DOUBLE && typeName == "money") {
+      // money type seems to be broken but one workaround is to handle it as string.
+      // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
+      Some(StringType)
     } else if (sqlType == Types.OTHER) {
       Some(StringType)
     } else if (sqlType == Types.ARRAY) {
@@ -54,8 +75,11 @@ private object PostgresDialect extends JdbcDialect {
     case "int4" => Some(IntegerType)
     case "int8" | "oid" => Some(LongType)
     case "float4" => Some(FloatType)
-    case "money" | "float8" => Some(DoubleType)
-    case "text" | "varchar" | "char" | "cidr" | "inet" | "json" | "jsonb" | "uuid" =>
+    case "float8" => Some(DoubleType)
+    case "text" | "varchar" | "char" | "bpchar" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
+         "xml" | "tsvector" | "tsquery" | "macaddr" | "macaddr8" | "txid_snapshot" | "point" |
+         "line" | "lseg" | "box" | "path" | "polygon" | "circle" | "pg_lsn" | "varbit" |
+         "interval" | "pg_snapshot" =>
       Some(StringType)
     case "bytea" => Some(BinaryType)
     case "timestamp" | "timestamptz" | "time" | "timetz" => Some(TimestampType)
@@ -64,6 +88,11 @@ private object PostgresDialect extends JdbcDialect {
     case "numeric" | "decimal" =>
       // SPARK-26538: handle numeric without explicit precision and scale.
       Some(DecimalType. SYSTEM_DEFAULT)
+    case "money" =>
+      // money[] type seems to be broken and difficult to handle.
+      // So this method returns None for now.
+      // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/1405
+      None
     case _ => None
   }
 
@@ -73,14 +102,13 @@ private object PostgresDialect extends JdbcDialect {
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
-    case ShortType => Some(JdbcType("SMALLINT", Types.SMALLINT))
+    case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>
       getJDBCType(et).map(_.databaseTypeDefinition)
         .orElse(JdbcUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))
         .map(typeName => JdbcType(s"$typeName[]", java.sql.Types.ARRAY))
-    case ByteType => throw new IllegalArgumentException(s"Unsupported type in postgresql: $dt");
     case _ => None
   }
 
@@ -125,4 +153,82 @@ private object PostgresDialect extends JdbcDialect {
     }
   }
 
+  // See https://www.postgresql.org/docs/12/sql-altertable.html
+  override def getUpdateColumnTypeQuery(
+      tableName: String,
+      columnName: String,
+      newDataType: String): String = {
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} TYPE $newDataType"
+  }
+
+  // See https://www.postgresql.org/docs/12/sql-altertable.html
+  override def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    val nullable = if (isNullable) "DROP NOT NULL" else "SET NOT NULL"
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
+  }
+
+  override def supportsTableSample: Boolean = true
+
+  override def getTableSample(sample: TableSampleInfo): String = {
+    // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
+    // method name
+    s"TABLESAMPLE BERNOULLI" +
+      s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
+  }
+
+  // CREATE INDEX syntax
+  // https://www.postgresql.org/docs/14/sql-createindex.html
+  override def createIndex(
+      indexName: String,
+      tableIdent: Identifier,
+      columns: Array[NamedReference],
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): String = {
+    val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
+    var indexProperties = ""
+    val (indexType, indexPropertyList) = JdbcUtils.processIndexProperties(properties, "postgresql")
+
+    if (indexPropertyList.nonEmpty) {
+      indexProperties = "WITH (" + indexPropertyList.mkString(", ") + ")"
+    }
+
+    s"CREATE INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableIdent.name())}" +
+      s" $indexType (${columnList.mkString(", ")}) $indexProperties"
+  }
+
+  // SHOW INDEX syntax
+  // https://www.postgresql.org/docs/14/view-pg-indexes.html
+  override def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableIdent: Identifier,
+      options: JDBCOptions): Boolean = {
+    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '${tableIdent.name()}' AND" +
+      s" indexname = '$indexName'"
+    JdbcUtils.checkIfIndexExists(conn, sql, options)
+  }
+
+  // DROP INDEX syntax
+  // https://www.postgresql.org/docs/14/sql-dropindex.html
+  override def dropIndex(indexName: String, tableIdent: Identifier): String = {
+    s"DROP INDEX ${quoteIdentifier(indexName)}"
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getSQLState match {
+          // https://www.postgresql.org/docs/14/errcodes-appendix.html
+          case "42P07" => throw new IndexAlreadyExistsException(message, cause = Some(e))
+          case "42704" => throw new NoSuchIndexException(message, cause = Some(e))
+          case "2BP01" => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case unsupported: UnsupportedOperationException => throw unsupported
+      case _ => super.classifyException(message, e)
+    }
+  }
 }

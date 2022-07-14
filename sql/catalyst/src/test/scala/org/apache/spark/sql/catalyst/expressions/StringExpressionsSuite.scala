@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.{BigDecimal => JavaBigDecimal}
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -26,7 +31,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("concat") {
     def testConcat(inputs: String*): Unit = {
       val expected = if (inputs.contains(null)) null else inputs.mkString
-      checkEvaluation(Concat(inputs.map(Literal.create(_, StringType))), expected, EmptyRow)
+      checkEvaluation(Concat(inputs.map(Literal.create(_, StringType))), expected)
     }
 
     testConcat()
@@ -48,7 +53,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22498: Concat should not generate codes beyond 64KB") {
     val N = 5000
     val strs = (1 to N).map(x => s"s$x")
-    checkEvaluation(Concat(strs.map(Literal.create(_, StringType))), strs.mkString, EmptyRow)
+    checkEvaluation(Concat(strs.map(Literal.create(_, StringType))), strs.mkString)
   }
 
   test("SPARK-22771 Check Concat.checkInputDataTypes results") {
@@ -71,7 +76,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         case s: String => Literal.create(s, StringType)
       }
       val sepExpr = Literal.create(sep, StringType)
-      checkEvaluation(ConcatWs(sepExpr +: inputExprs), expected, EmptyRow)
+      checkEvaluation(ConcatWs(sepExpr +: inputExprs), expected)
     }
 
     // scalastyle:off
@@ -97,12 +102,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val sepExpr = Literal.create("#", StringType)
     val strings1 = (1 to N).map(x => s"s$x")
     val inputsExpr1 = strings1.map(Literal.create(_, StringType))
-    checkEvaluation(ConcatWs(sepExpr +: inputsExpr1), strings1.mkString("#"), EmptyRow)
+    checkEvaluation(ConcatWs(sepExpr +: inputsExpr1), strings1.mkString("#"))
 
     val strings2 = (1 to N).map(x => Seq(s"s$x"))
     val inputsExpr2 = strings2.map(Literal.create(_, ArrayType(StringType)))
     checkEvaluation(
-      ConcatWs(sepExpr +: inputsExpr2), strings2.map(s => s(0)).mkString("#"), EmptyRow)
+      ConcatWs(sepExpr +: inputsExpr2), strings2.map(s => s(0)).mkString("#"))
   }
 
   test("elt") {
@@ -116,10 +121,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testElt(null, 1, null, "world")
     testElt(null, null, "hello", "world")
 
-    // Invalid ranages
-    testElt(null, 3, "hello", "world")
-    testElt(null, 0, "hello", "world")
-    testElt(null, -1, "hello", "world")
+    // Invalid ranges
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      // ANSI will throw SparkArrayIndexOutOfBoundsException with invalid index
+      testElt(null, 3, "hello", "world")
+      testElt(null, 0, "hello", "world")
+      testElt(null, -1, "hello", "world")
+    }
 
     // type checking
     assert(Elt(Seq.empty).checkInputDataTypes().isFailure)
@@ -137,8 +145,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("StringComparison") {
     val row = create_row("abc", null)
-    val c1 = 'a.string.at(0)
-    val c2 = 'a.string.at(1)
+    val c1 = $"a".string.at(0)
+    val c2 = $"a".string.at(1)
 
     checkEvaluation(c1 contains "b", true, row)
     checkEvaluation(c1 contains "x", false, row)
@@ -154,12 +162,17 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(c1 endsWith "b", false, row)
     checkEvaluation(c2 endsWith "b", null, row)
     checkEvaluation(c1 endsWith Literal.create(null, StringType), null, row)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(Contains(Literal("\"quote"), Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(EndsWith(Literal("\"quote"), Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(StartsWith(Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
   test("Substring") {
     val row = create_row("example", "example".toArray.map(_.toByte))
 
-    val s = 'a.string.at(0)
+    val s = $"a".string.at(0)
 
     // substring from zero position with less-than-full length
     checkEvaluation(
@@ -229,7 +242,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "xample",
       row)
 
-    val s_notNull = 'a.string.notNull.at(0)
+    // Substring with from negative position with negative length
+    checkEvaluation(Substring(s, Literal.create(-1207959552, IntegerType),
+      Literal.create(-1207959552, IntegerType)), "", row)
+
+    val s_notNull = $"a".string.notNull.at(0)
 
     assert(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable)
     assert(
@@ -291,7 +308,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ascii for string") {
-    val a = 'a.string.at(0)
+    val a = $"a".string.at(0)
     checkEvaluation(Ascii(Literal("efg")), 101, create_row("abdef"))
     checkEvaluation(Ascii(a), 97, create_row("abdef"))
     checkEvaluation(Ascii(a), 0, create_row(""))
@@ -300,7 +317,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("string for ascii") {
-    val a = 'a.long.at(0)
+    val a = $"a".long.at(0)
     checkEvaluation(Chr(Literal(48L)), "0", create_row("abdef"))
     checkEvaluation(Chr(a), "a", create_row(97L))
     checkEvaluation(Chr(a), "a", create_row(97L + 256L))
@@ -313,8 +330,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("base64/unbase64 for string") {
-    val a = 'a.string.at(0)
-    val b = 'b.binary.at(0)
+    val a = $"a".string.at(0)
+    val b = $"b".binary.at(0)
     val bytes = Array[Byte](1, 2, 3, 4)
 
     checkEvaluation(Base64(Literal(bytes)), "AQIDBA==", create_row("abdef"))
@@ -333,24 +350,28 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("encode/decode for string") {
-    val a = 'a.string.at(0)
-    val b = 'b.binary.at(0)
+    val a = $"a".string.at(0)
+    val b = $"b".binary.at(0)
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(
-      Decode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
+      StringDecode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
     checkEvaluation(
-      Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
+      StringDecode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
     checkEvaluation(
-      Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "", create_row(""))
+      StringDecode(Encode(a, Literal("utf-8")), Literal("utf-8")), "", create_row(""))
     // scalastyle:on
     checkEvaluation(Encode(a, Literal("utf-8")), null, create_row(null))
     checkEvaluation(Encode(Literal.create(null, StringType), Literal("utf-8")), null)
     checkEvaluation(Encode(a, Literal.create(null, StringType)), null, create_row(""))
 
-    checkEvaluation(Decode(b, Literal("utf-8")), null, create_row(null))
-    checkEvaluation(Decode(Literal.create(null, BinaryType), Literal("utf-8")), null)
-    checkEvaluation(Decode(b, Literal.create(null, StringType)), null, create_row(null))
+    checkEvaluation(StringDecode(b, Literal("utf-8")), null, create_row(null))
+    checkEvaluation(StringDecode(Literal.create(null, BinaryType), Literal("utf-8")), null)
+    checkEvaluation(StringDecode(b, Literal.create(null, StringType)), null, create_row(null))
+
+    // Test escaping of charset
+    GenerateUnsafeProjection.generate(Encode(a, Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")) :: Nil)
   }
 
   test("initcap unit test") {
@@ -378,6 +399,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Levenshtein(Literal("千世"), Literal("fog")), 3)
     checkEvaluation(Levenshtein(Literal("世界千世"), Literal("大a界b")), 4)
     // scalastyle:on
+
+    // Test escaping of arguments:
+    GenerateUnsafeProjection.generate(Levenshtein(Literal("\"quotea"), Literal("\"quoteb")) :: Nil)
   }
 
   test("soundex unit test") {
@@ -428,6 +452,99 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("overlay for string") {
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(6, IntegerType)), "Spark_SQL")
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("CORE"),
+      Literal.create(7, IntegerType)), "Spark CORE")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("ANSI "),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), "Spark ANSI SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("tructured"),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), "Structured SQL")
+    checkEvaluation(new Overlay(Literal.create(null, StringType), Literal("_"),
+      Literal.create(6, IntegerType)), null)
+    checkEvaluation(new Overlay(Literal.create(null, StringType), Literal("CORE"),
+      Literal.create(7, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType), Literal("ANSI "),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType), Literal("tructured"),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), null)
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(new Overlay(Literal("Spark的SQL"), Literal("_"),
+      Literal.create(6, IntegerType)), "Spark_SQL")
+    // scalastyle:on
+    // position greater than the length of input string
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(10, IntegerType)), "Spark SQL_")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(10, IntegerType), Literal.create(4, IntegerType)), "Spark SQL_")
+    // position is zero
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("__"),
+      Literal.create(0, IntegerType)), "__park SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("__"),
+      Literal.create(0, IntegerType), Literal.create(4, IntegerType)), "__rk SQL")
+    // position is negative
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("__"),
+      Literal.create(-10, IntegerType)), "__park SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("__"),
+      Literal.create(-10, IntegerType), Literal.create(4, IntegerType)), "__rk SQL")
+  }
+
+  test("overlay for byte array") {
+    val input = Literal(Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9))
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(6, IntegerType)), Array[Byte](1, 2, 3, 4, 5, -1, 7, 8, 9))
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1, -1, -1, -1)),
+      Literal.create(7, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, -1, -1))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1)), Literal.create(7, IntegerType),
+      Literal.create(0, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, 7, 8, 9))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1, -1, -1, -1)),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)),
+      Array[Byte](1, -1, -1, -1, -1, -1, 6, 7, 8, 9))
+
+    val nullInput = Literal.create(null, BinaryType)
+    checkEvaluation(new Overlay(nullInput, Literal(Array[Byte](-1)),
+      Literal.create(6, IntegerType)), null)
+    checkEvaluation(new Overlay(nullInput, Literal(Array[Byte](-1, -1, -1, -1)),
+      Literal.create(7, IntegerType)), null)
+    checkEvaluation(Overlay(nullInput, Literal(Array[Byte](-1, -1)),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), null)
+    checkEvaluation(Overlay(nullInput, Literal(Array[Byte](-1, -1, -1, -1, -1)),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), null)
+    // position greater than the length of input byte array
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(10, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)), Literal.create(10, IntegerType),
+      Literal.create(4, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    // position is zero
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1, -1)),
+      Literal.create(0, IntegerType)), Array[Byte](-1, -1, 2, 3, 4, 5, 6, 7, 8, 9))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1)), Literal.create(0, IntegerType),
+      Literal.create(4, IntegerType)), Array[Byte](-1, -1, 4, 5, 6, 7, 8, 9))
+    // position is negative
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1, -1)),
+      Literal.create(-10, IntegerType)), Array[Byte](-1, -1, 2, 3, 4, 5, 6, 7, 8, 9))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1)), Literal.create(-10, IntegerType),
+      Literal.create(4, IntegerType)), Array[Byte](-1, -1, 4, 5, 6, 7, 8, 9))
+  }
+
+  test("Check Overlay.checkInputDataTypes results") {
+    assert(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(6, IntegerType)).checkInputDataTypes().isSuccess)
+    assert(Overlay(Literal("Spark SQL"), Literal("ANSI "), Literal.create(7, IntegerType),
+      Literal.create(0, IntegerType)).checkInputDataTypes().isSuccess)
+    assert(new Overlay(Literal.create("Spark SQL".getBytes), Literal.create("_".getBytes),
+      Literal.create(6, IntegerType)).checkInputDataTypes().isSuccess)
+    assert(Overlay(Literal.create("Spark SQL".getBytes), Literal.create("ANSI ".getBytes),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType))
+      .checkInputDataTypes().isSuccess)
+    assert(new Overlay(Literal.create(1), Literal.create(2), Literal.create(0, IntegerType))
+      .checkInputDataTypes().isFailure)
+    assert(Overlay(Literal("Spark SQL"), Literal.create(2), Literal.create(7, IntegerType),
+      Literal.create(0, IntegerType)).checkInputDataTypes().isFailure)
+  }
+
   test("translate") {
     checkEvaluation(
       StringTranslate(Literal("translate"), Literal("rnlt"), Literal("123")), "1a2s3ae")
@@ -439,11 +556,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
     checkEvaluation(StringTranslate(Literal("花花世界"), Literal("花界"), Literal("ab")), "aa世b")
+    // test for unicode characters whose code point >= 0x10000
+    checkEvaluation(
+      StringTranslate(
+        Literal("\uD840\uDC0Bxyza\uD867\uDE49c123b\uD842\uDFB7\uD867\uDE3D"),
+        Literal("\uD867\uDE3Da\uD842\uDFB7b\uD840\uDC0Bc\uD867\uDE49c"),
+        Literal("1\uD83C\uDF3B2\uD83C\uDF37\uD83D\uDC15\uD83D\uDC08\uD83C\uDF38")),
+      "\uD83D\uDC15xyz\uD83C\uDF3B\uD83C\uDF38\uD83D\uDC08123\uD83C\uDF3721")
     // scalastyle:on
   }
 
   test("TRIM") {
-    val s = 'a.string.at(0)
+    val s = $"a".string.at(0)
     checkEvaluation(StringTrim(Literal(" aa  ")), "aa", create_row(" abdef "))
     checkEvaluation(StringTrim("aa", "a"), "", create_row(" abdef "))
     checkEvaluation(StringTrim(Literal(" aabbtrimccc"), "ab cd"), "trim", create_row("bdef"))
@@ -465,10 +589,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrim(Literal("a"), Literal.create(null, StringType)), null)
     checkEvaluation(StringTrim(Literal.create(null, StringType), Literal("a")), null)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(StringTrim(Literal("\"quote"), Literal("\"quote")) :: Nil)
+
+    checkEvaluation(StringTrim(Literal("yxTomxx"), Literal("xyz")), "Tom")
+    checkEvaluation(StringTrim(Literal("xxxbarxxx"), Literal("x")), "bar")
   }
 
   test("LTRIM") {
-    val s = 'a.string.at(0)
+    val s = $"a".string.at(0)
     checkEvaluation(StringTrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
     checkEvaluation(StringTrimLeft(Literal("aa"), "a"), "", create_row(" abdef "))
     checkEvaluation(StringTrimLeft(Literal("aa "), "a "), "", create_row(" abdef "))
@@ -489,10 +619,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrimLeft(Literal.create(null, StringType), Literal("a")), null)
     checkEvaluation(StringTrimLeft(Literal("a"), Literal.create(null, StringType)), null)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      StringTrimLeft(Literal("\"quote"), Literal("\"quote")) :: Nil)
+
+    checkEvaluation(StringTrimLeft(Literal("zzzytest"), Literal("xyz")), "test")
+    checkEvaluation(StringTrimLeft(Literal("zzzytestxyz"), Literal("xyz")), "testxyz")
+    checkEvaluation(StringTrimLeft(Literal("xyxXxyLAST WORD"), Literal("xy")), "XxyLAST WORD")
   }
 
   test("RTRIM") {
-    val s = 'a.string.at(0)
+    val s = $"a".string.at(0)
     checkEvaluation(StringTrimRight(Literal(" aa  ")), " aa", create_row(" abdef "))
     checkEvaluation(StringTrimRight(Literal("a"), "a"), "", create_row(" abdef "))
     checkEvaluation(StringTrimRight(Literal("ab"), "ab"), "", create_row(" abdef "))
@@ -514,6 +652,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrimRight(Literal("a"), Literal.create(null, StringType)), null)
     checkEvaluation(StringTrimRight(Literal.create(null, StringType), Literal("a")), null)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      StringTrimRight(Literal("\"quote"), Literal("\"quote")) :: Nil)
+
+    checkEvaluation(StringTrimRight(Literal("testxxzx"), Literal("xyz")), "test")
+    checkEvaluation(StringTrimRight(Literal("xyztestxxzx"), Literal("xyz")), "xyztest")
+    checkEvaluation(StringTrimRight(Literal("TURNERyxXxy"), Literal("xy")), "TURNERyxX")
   }
 
   test("FORMAT") {
@@ -527,6 +673,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       FormatString(Literal("aa%d%s"), Literal.create(null, IntegerType), "cc"), "aanullcc")
     checkEvaluation(
       FormatString(Literal("aa%d%s"), 12, Literal.create(null, StringType)), "aa12null")
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(FormatString(Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
   test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
@@ -538,9 +687,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("INSTR") {
-    val s1 = 'a.string.at(0)
-    val s2 = 'b.string.at(1)
-    val s3 = 'c.string.at(2)
+    val s1 = $"a".string.at(0)
+    val s2 = $"b".string.at(1)
+    val s3 = $"c".string.at(2)
     val row1 = create_row("aaads", "aa", "zz")
 
     checkEvaluation(StringInstr(Literal("aaads"), Literal("aa")), 1, row1)
@@ -557,13 +706,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringInstr(s1, s2), 1, create_row("花花世界", "花"))
     checkEvaluation(StringInstr(s1, s2), 0, create_row("花花世界", "小"))
     // scalastyle:on
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(StringInstr(Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
   test("LOCATE") {
-    val s1 = 'a.string.at(0)
-    val s2 = 'b.string.at(1)
-    val s3 = 'c.string.at(2)
-    val s4 = 'd.int.at(3)
+    val s1 = $"a".string.at(0)
+    val s2 = $"b".string.at(1)
+    val s3 = $"c".string.at(2)
+    val s4 = $"d".int.at(3)
     val row1 = create_row("aaads", "aa", "zz", 2)
     val row2 = create_row(null, "aa", "zz", 1)
     val row3 = create_row("aaads", null, "zz", 1)
@@ -587,9 +739,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("LPAD/RPAD") {
-    val s1 = 'a.string.at(0)
-    val s2 = 'b.int.at(1)
-    val s3 = 'c.string.at(2)
+    val s1 = $"a".string.at(0)
+    val s2 = $"b".int.at(1)
+    val s3 = $"c".string.at(2)
     val row1 = create_row("hi", 5, "??")
     val row2 = create_row("hi", 1, "?")
     val row3 = create_row(null, 1, "?")
@@ -603,6 +755,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringLPad(s1, s2, s3), null, row3)
     checkEvaluation(StringLPad(s1, s2, s3), null, row4)
     checkEvaluation(StringLPad(s1, s2, s3), null, row5)
+    checkEvaluation(StringLPad(Literal("hi"), Literal(5), Literal(" ")), "   hi")
+    checkEvaluation(StringLPad(Literal("hi"), Literal(1), Literal(" ")), "h")
 
     checkEvaluation(StringRPad(Literal("hi"), Literal(5), Literal("??")), "hi???", row1)
     checkEvaluation(StringRPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
@@ -611,11 +765,72 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringRPad(s1, s2, s3), null, row3)
     checkEvaluation(StringRPad(s1, s2, s3), null, row4)
     checkEvaluation(StringRPad(s1, s2, s3), null, row5)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(StringLPad(Literal("\"quote"), s2, Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(StringRPad(Literal("\"quote"), s2, Literal("\"quote")) :: Nil)
+    checkEvaluation(StringRPad(Literal("hi"), Literal(5)), "hi   ")
+    checkEvaluation(StringRPad(Literal("hi"), Literal(1)), "h")
+  }
+
+  test("PadExpressionBuilderBase") {
+    // test if the correct lpad/rpad expression is created given different parameter types
+    Seq(true, false).foreach { confVal =>
+      SQLConf.get.setConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING, confVal)
+
+      val lpadExp1 = LPadExpressionBuilder.build("lpad", Seq(Literal("hi"), Literal(5)))
+      val lpadExp2 = LPadExpressionBuilder.build("lpad", Seq(Literal(Array[Byte]()), Literal(5)))
+      val lpadExp3 = LPadExpressionBuilder.build("lpad",
+        Seq(Literal("hi"), Literal(5), Literal("somepadding")))
+      val lpadExp4 = LPadExpressionBuilder.build("lpad",
+        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+      val lpadExp5 = LPadExpressionBuilder.build("lpad",
+        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+
+      val rpadExp1 = RPadExpressionBuilder.build("rpad", Seq(Literal("hi"), Literal(5)))
+      val rpadExp2 = RPadExpressionBuilder.build("rpad", Seq(Literal(Array[Byte]()), Literal(5)))
+      val rpadExp3 = RPadExpressionBuilder.build("rpad",
+        Seq(Literal("hi"), Literal(5), Literal("somepadding")))
+      val rpadExp4 = RPadExpressionBuilder.build("rpad",
+        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+      val rpadExp5 = RPadExpressionBuilder.build("rpad",
+        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+
+      assert(lpadExp1 == StringLPad(Literal("hi"), Literal(5), Literal(" ")))
+      assert(lpadExp3 == StringLPad(Literal("hi"), Literal(5), Literal("somepadding")))
+      assert(lpadExp4 == StringLPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+
+      assert(rpadExp1 == StringRPad(Literal("hi"), Literal(5), Literal(" ")))
+      assert(rpadExp3 == StringRPad(Literal("hi"), Literal(5), Literal("somepadding")))
+      assert(rpadExp4 == StringRPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+
+      if (!SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)) {
+        assert(lpadExp2 ==
+          BinaryPad("lpad", Literal(Array[Byte]()), Literal(5), Literal(Array[Byte](0))))
+        assert(lpadExp5 ==
+          BinaryPad("lpad", Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+
+        assert(rpadExp2 ==
+          BinaryPad("rpad", Literal(Array[Byte]()), Literal(5), Literal(Array[Byte](0))))
+        assert(rpadExp5 ==
+          BinaryPad("rpad", Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+      } else {
+        assert(lpadExp2 ==
+          StringLPad(Literal(Array[Byte]()), Literal(5), Literal(" ")))
+        assert(lpadExp5 ==
+          StringLPad(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+
+        assert(rpadExp2 ==
+          StringRPad(Literal(Array[Byte]()), Literal(5), Literal(" ")))
+        assert(rpadExp5 ==
+          StringRPad(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+      }
+    }
   }
 
   test("REPEAT") {
-    val s1 = 'a.string.at(0)
-    val s2 = 'b.int.at(1)
+    val s1 = $"a".string.at(0)
+    val s2 = $"b".int.at(1)
     val row1 = create_row("hi", 2)
     val row2 = create_row(null, 1)
 
@@ -623,10 +838,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringRepeat(Literal("hi"), Literal(-1)), "", row1)
     checkEvaluation(StringRepeat(s1, s2), "hihi", row1)
     checkEvaluation(StringRepeat(s1, s2), null, row2)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(StringRepeat(Literal("\"quote"), Literal(2)) :: Nil)
   }
 
   test("REVERSE") {
-    val s = 'a.string.at(0)
+    val s = $"a".string.at(0)
     val row1 = create_row("abccc")
     checkEvaluation(Reverse(Literal("abccc")), "cccba", row1)
     checkEvaluation(Reverse(s), "cccba", row1)
@@ -634,7 +852,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPACE") {
-    val s1 = 'b.int.at(0)
+    val s1 = $"b".int.at(0)
     val row1 = create_row(2)
     val row2 = create_row(null)
 
@@ -646,8 +864,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("length for string / binary") {
-    val a = 'a.string.at(0)
-    val b = 'b.binary.at(0)
+    val a = $"a".string.at(0)
+    val b = $"b".binary.at(0)
     val bytes = Array[Byte](1, 2, 3, 1, 2)
     val string = "abdef"
 
@@ -731,6 +949,489 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
   }
 
+  test("ToNumber: positive tests") {
+    Seq(
+      ("$345", "S$999,099.99") -> Decimal(345),
+      ("-$12,345.67", "S$999,099.99") -> Decimal(-12345.67),
+      ("454,123", "999,099") -> Decimal(454123),
+      ("$045", "S$999,099.99") -> Decimal(45),
+      ("454", "099") -> Decimal(454),
+      ("454.", "099.99") -> Decimal(454.0),
+      ("454.6", "099D99") -> Decimal(454.6),
+      ("454.67", "099.00") -> Decimal(454.67),
+      ("454", "000") -> Decimal(454),
+      ("  454 ", "9099") -> Decimal(454),
+      ("454", "099") -> Decimal(454),
+      ("454.67", "099.99") -> Decimal(454.67),
+      ("$454", "$999") -> Decimal(454),
+      ("  454,123 ", "999G099") -> Decimal(454123),
+      ("$454,123", "$999G099") -> Decimal(454123),
+      ("+$89,1,2,3,45.123", "S$999,0,0,0,999.00000") -> Decimal(8912345.123),
+      ("-454", "S999") -> Decimal(-454),
+      ("+454", "S999") -> Decimal(454),
+      ("454", "999PR") -> Decimal(454),
+      (" 454 ", "999PR") -> Decimal(454),
+      ("454-", "999MI") -> Decimal(-454),
+      ("-$54", "MI$99") -> Decimal(-54),
+      // The input string contains more digits than fit in a long integer.
+      ("123,456,789,123,456,789,123", "999,999,999,999,999,999,999") ->
+        Decimal(new JavaBigDecimal("123456789123456789123"))
+    ).foreach { case ((str: String, format: String), expected: Decimal) =>
+      val toNumberExpr = ToNumber(Literal(str), Literal(format))
+      assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(toNumberExpr, expected)
+
+      val tryToNumberExpr = TryToNumber(Literal(str), Literal(format))
+      assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(tryToNumberExpr, expected)
+    }
+
+    for (i <- 0 to 2) {
+      for (j <- 3 to 5) {
+        for (k <- 6 to 9) {
+          Seq(
+            (s"$i$j$k", "999") -> Decimal(s"$i$j$k".toInt),
+            (s"$i$j$k", "S099.") -> Decimal(s"$i$j$k".toInt),
+            (s"$i$j.$k", "99.9") -> Decimal(s"$i$j.$k".toDouble),
+            (s"$i,$j,$k", "999,999,0") -> Decimal(s"$i$j$k".toInt)
+          ).foreach { case ((str: String, format: String), expected: Decimal) =>
+            val toNumberExpr = ToNumber(Literal(str), Literal(format))
+            assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+            checkEvaluation(toNumberExpr, expected)
+
+            val tryToNumberExpr = TryToNumber(Literal(str), Literal(format))
+            assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+            checkEvaluation(tryToNumberExpr, expected)
+          }
+        }
+      }
+    }
+  }
+
+  test("ToNumber and ToCharacter: negative tests (the format string is invalid)") {
+    val unexpectedCharacter = "the structure of the format string must match: " +
+      "[MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
+    val thousandsSeparatorDigitsBetween =
+      "Thousands separators (, or G) must have digits in between them"
+    val mustBeAtEnd = "must be at the end of the number format"
+    val atMostOne = "At most one"
+    Seq(
+      // The format string must not be empty.
+      ("454", "") -> "The format string cannot be empty",
+      // Make sure the format string does not contain any unrecognized characters.
+      ("454", "999@") -> unexpectedCharacter,
+      ("454", "999M") -> unexpectedCharacter,
+      ("454", "999P") -> unexpectedCharacter,
+      // Make sure the format string contains at least one digit.
+      ("454", "$") -> "The format string requires at least one number digit",
+      // Make sure the format string contains at most one decimal point.
+      ("454", "99.99.99") -> atMostOne,
+      // Make sure the format string contains at most one dollar sign.
+      ("454", "$$99") -> atMostOne,
+      // Make sure the format string contains at most one minus sign at the beginning or end.
+      ("$4-4", "$9MI9") -> unexpectedCharacter,
+      ("--4", "SMI9") -> unexpectedCharacter,
+      ("--$54", "SS$99") -> atMostOne,
+      ("-$54", "MI$99MI") -> atMostOne,
+      ("$4-4", "$9MI9MI") -> atMostOne,
+      // Make sure the format string contains at most one closing angle bracket at the end.
+      ("<$45>", "PR$99") -> unexpectedCharacter,
+      ("$4<4>", "$9PR9") -> unexpectedCharacter,
+      ("<<454>>", "999PRPR") -> atMostOne,
+      // Make sure that any dollar sign in the format string occurs before any digits.
+      ("4$54", "9$99") -> "Currency characters must appear before digits",
+      // Make sure that any dollar sign in the format string occurs before any decimal point.
+      (".$99", ".$99") -> "Currency characters must appear before any decimal point",
+      // Thousands separators must have digits in between them.
+      (",123", ",099") -> thousandsSeparatorDigitsBetween,
+      (",123,456", ",999,099") -> thousandsSeparatorDigitsBetween,
+      (",,345", "9,,09.99") -> thousandsSeparatorDigitsBetween,
+      (",,345", "9,99,.99") -> thousandsSeparatorDigitsBetween,
+      (",,345", "9,99,") -> thousandsSeparatorDigitsBetween,
+      (",,345", ",,999,099.99") -> thousandsSeparatorDigitsBetween,
+      // Thousands separators must not appear after the decimal point.
+      ("123.45,6", "099.99,9") ->
+        "Thousands separators (, or G) may not appear after the decimal point"
+    ).foreach { case ((str: String, format: String), expectedErrMsg: String) =>
+      val toNumberResult = ToNumber(Literal(str), Literal(format)).checkInputDataTypes()
+      assert(toNumberResult != TypeCheckResult.TypeCheckSuccess,
+        s"The format string should have been invalid: $format")
+      toNumberResult match {
+        case TypeCheckResult.TypeCheckFailure(message) =>
+          assert(message.contains(expectedErrMsg))
+      }
+
+      val tryToNumberResult = TryToNumber(Literal(str), Literal(format)).checkInputDataTypes()
+      assert(tryToNumberResult != TypeCheckResult.TypeCheckSuccess,
+        s"The format string should have been invalid: $format")
+      tryToNumberResult match {
+        case TypeCheckResult.TypeCheckFailure(message) =>
+          assert(message.contains(expectedErrMsg))
+      }
+
+      val toCharResult = ToCharacter(Decimal(456), Literal(format)).checkInputDataTypes()
+      assert(toCharResult != TypeCheckResult.TypeCheckSuccess,
+        s"The format string should have been invalid: $format")
+      toCharResult match {
+        case TypeCheckResult.TypeCheckFailure(message) =>
+          assert(message.contains(expectedErrMsg))
+      }
+    }
+  }
+
+  test("ToNumber: negative tests (the input string does not match the format string)") {
+    Seq(
+      // The input contained more thousands separators than the format string.
+      ("45", "0,9"),
+      // The input contained more or fewer digits than required.
+      ("4", "09"),
+      ("454", "09"),
+      // The input contained more digits than allowed.
+      ("454", "99"),
+      // The input string did not contain an expected dollar sign.
+      ("45", "$99"),
+      // The input string did not contain an expected opening angle bracket.
+      ("45>", "99PR"),
+      // The input string did not contain an expected closing angle bracket.
+      ("<45", "99PR"),
+      // The trailing MI did not match against any trailing +.
+      ("454+", "999MI"),
+      // The trailing PR required exactly one leading < and trailing >.
+      ("<454", "999PR"),
+      ("454>", "999PR"),
+      ("<454 ", "999PR"),
+      (" 454>", "999PR"),
+      ("<<454>>", "999PR"),
+      // At least three digits were required.
+      ("45", "S$999,099.99"),
+      // Groups of digits with leading zeros are not optional.
+      ("$345", "S$099,099.99"),
+      // The letter 'D' is allowed in the format string, but not the input string.
+      ("4D5", "0D9")
+    ).foreach { case (str: String, format: String) =>
+      val toNumberExpr = ToNumber(Literal(str), Literal(format))
+      assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkExceptionInExpression[IllegalArgumentException](
+        toNumberExpr, "does not match the given number format")
+
+      val tryToNumberExpr = TryToNumber(Literal(str), Literal(format))
+      assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(tryToNumberExpr, null)
+    }
+  }
+
+  test("ToCharacter: positive tests") {
+    // Test '0' and '9'
+    Seq(
+      (Decimal(454),
+        "9999") ->
+        " 454",
+      (Decimal(454),
+        "99999") ->
+        "  454",
+      (Decimal(4),
+        "0") ->
+        "4",
+      (Decimal(45),
+        "00") ->
+        "45",
+      (Decimal(454),
+        "000") ->
+        "454",
+      (Decimal(454),
+        "0000") ->
+        "0454",
+      (Decimal(454),
+        "00000") ->
+        "00454"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test '.' and 'D'
+    Seq(
+      (Decimal(0.4542),
+        ".00000") ->
+        ".45420",
+      (Decimal(454.2),
+        "000.0") ->
+        "454.2",
+      (Decimal(454),
+        "000.0") ->
+        "454.0",
+      (Decimal(454.2),
+        "000.00") ->
+        "454.20",
+      (Decimal(454),
+        "000.00") ->
+        "454.00",
+      (Decimal(0.4542),
+        ".0000") ->
+        ".4542",
+      (Decimal(4542),
+        "0000.") ->
+        "4542 "
+    ).foreach { case ((decimal, format), expected) =>
+      val format2 = format.replace('.', 'D')
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = ToCharacter(Literal(decimal), Literal(format2))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    Seq(
+      (Decimal(454.2),
+        "0000.00") ->
+        "0454.20",
+      (Decimal(454),
+        "0000.00") ->
+        "0454.00",
+      (Decimal(4542),
+        "00000.") ->
+        "04542 ",
+      (Decimal(454.2),
+        "9999.99") ->
+        " 454.20",
+      (Decimal(454),
+        "9999.99") ->
+        " 454.00",
+      // There are no digits after the decimal point.
+      (Decimal(4542),
+        "99999.") ->
+        " 4542 "
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test ',' and 'G'
+    Seq(
+      (Decimal(12454),
+        "0,0000") ->
+        "1,2454",
+      (Decimal(12454),
+        "00,000") ->
+        "12,454",
+      (Decimal(124543),
+        "000,000") ->
+        "124,543",
+      (Decimal(12),
+        "000,000") ->
+        "000,012",
+      (Decimal(1245436),
+        "0,000,000") ->
+        "1,245,436",
+      (Decimal(12454367),
+        "00,000,000") ->
+        "12,454,367"
+    ).foreach { case ((decimal, format), expected) =>
+      val format2 = format.replace(',', 'G')
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = ToCharacter(Literal(decimal), Literal(format2))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    Seq(
+      (Decimal(12454),
+        "000,000") ->
+        "012,454",
+      (Decimal(12454),
+        "00,0000") ->
+        "01,2454",
+      (Decimal(12454),
+        "000,0000") ->
+        "001,2454",
+      (Decimal(12454),
+        "0000,0000") ->
+        "0001,2454",
+      (Decimal(12454),
+        "00,0000") ->
+        "01,2454",
+      (Decimal(12454),
+        "000,0000") ->
+        "001,2454",
+      (Decimal(12454),
+        "0000,0000") ->
+        "0001,2454",
+      (Decimal(12454367),
+        "000,000,000") ->
+        "012,454,367",
+      (Decimal(12454),
+        "999,999") ->
+        " 12,454",
+      (Decimal(12454),
+        "9,9999") ->
+        "1,2454",
+      (Decimal(12454),
+        "99,9999") ->
+        " 1,2454",
+      (Decimal(12454),
+        "999,9999") ->
+        "  1,2454",
+      (Decimal(12454),
+        "9999,9999") ->
+        "   1,2454",
+      (Decimal(12454367),
+        "999,999,999") ->
+        " 12,454,367",
+      (Decimal(12454),
+        "999,999") ->
+        " 12,454"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test '$'
+    Seq(
+      (Decimal(78.12),
+        "$99.99") ->
+        "$78.12",
+      (Decimal(78.12),
+        "$00.00") ->
+        "$78.12"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test 'S'
+    Seq(
+      (Decimal(83028485),
+        "S99999999999.9999999") ->
+        "   +83028485.0000000",
+      (Decimal(0),
+        "9999999999999999.999999999999999S") ->
+        "               0.000000000000000+",
+      (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
+        "9999999999999999.999999999999999S") ->
+        "               4.310000000000000+",
+      (Decimal(-454.8),
+        "99G999.9S") ->
+        "   454.8-",
+      (Decimal(-454.8),
+        "00G000.0S") ->
+        "00,454.8-",
+      (Decimal(-454),
+        "S999") ->
+        "-454",
+      (Decimal(-454),
+        "999S") ->
+        "454-",
+      (Decimal(-12454.8),
+        "99G999D9S") ->
+        "12,454.8-",
+      (Decimal(-83028485),
+        "99999999999.9999999S") ->
+        "   83028485.0000000-"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test 'MI'
+    Seq(
+      (Decimal(4.31),
+        "9999999999999999.999999999999999MI") ->
+        "               4.310000000000000 ",
+      (Decimal(0),
+        "9999999999999999.999999999999999MI") ->
+        "               0.000000000000000 ",
+      (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
+        "9999999999999999.999999999999999MI") ->
+        "               4.310000000000000 ",
+      (Decimal(-454.8),
+        "99G999.9MI") ->
+        "   454.8-",
+      (Decimal(-454.8),
+        "00G000.0MI") ->
+        "00,454.8-",
+      (Decimal(-454),
+        "999MI") ->
+        "454-",
+      (Decimal(-12454.8),
+        "99G999D9MI") ->
+        "12,454.8-",
+      (Decimal(-4.31),
+        "MI9999999999999999.999999999999999") ->
+        "               -4.310000000000000"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test 'PR'
+    Seq(
+      (Decimal(4.31),
+        "9999999999999999.999999999999999PR") ->
+        "               4.310000000000000  ",
+      (Decimal(0),
+        "9999999999999999.999999999999999PR") ->
+        "               0.000000000000000  ",
+      (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
+        "9999999999999999.999999999999999PR") ->
+        "               4.310000000000000  ",
+      (Decimal(-123),
+        "9999999999999999.999PR") ->
+        "             <123.000>",
+      (Decimal(-123.4),
+        "9999999999999999.999PR") ->
+        "             <123.400>",
+      (Decimal(-454.8),
+        "99G999.9PR") ->
+        "   <454.8>",
+      (Decimal(-454.8),
+        "00G000.0PR") ->
+        "<00,454.8>",
+      (Decimal(-454),
+        "999PR") ->
+        "<454>",
+      (Decimal(-12454.8),
+        "99G999D9PR") ->
+        "<12,454.8>"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test overflows
+    Seq(
+      // If there were more digits in the provided input string (before or after the decimal point)
+      // than specified in the format string, an overflow takes place.
+      (Decimal(454),
+        "0") ->
+        "#",
+      (Decimal(454),
+        "00") ->
+        "##",
+      (Decimal(4.67),
+        "9.9") ->
+        "#.#",
+      (Decimal(4.67),
+        "99.9") ->
+        "##.#"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+  }
+
   test("find in set") {
     checkEvaluation(
       FindInSet(Literal.create(null, StringType), Literal.create(null, StringType)), null)
@@ -788,6 +1489,23 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes().isFailure)
     assert(ParseUrl(Seq(Literal(1), Literal("2"))).checkInputDataTypes().isFailure)
     assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal(3))).checkInputDataTypes().isFailure)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))) :: Nil)
+  }
+
+  test("SPARK-33468: ParseUrl in ANSI mode should fail if input string is not a valid url") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val msg = intercept[IllegalArgumentException] {
+        evaluateWithoutCodegen(
+          ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")))
+      }.getMessage
+      assert(msg.contains("Find an invalid url string"))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(
+        ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")), null)
+    }
   }
 
   test("Sentences") {
@@ -810,5 +1528,48 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       answer)
     checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "XXX", "YYY"),
       answer)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      Sentences(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("SPARK-33386: elt ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        var expr: Expression = Elt(Seq(Literal(4), Literal("123"), Literal("456")))
+        if (ansiEnabled) {
+          val errMsg = "The index 4 is out of bounds. The array has 2 elements."
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        expr = Elt(Seq(Literal(0), Literal("123"), Literal("456")))
+        if (ansiEnabled) {
+          val errMsg = "The index 0 is out of bounds. The array has 2 elements."
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        expr = Elt(Seq(Literal(-1), Literal("123"), Literal("456")))
+        if (ansiEnabled) {
+          val errMsg = "The index -1 is out of bounds. The array has 2 elements."
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+      }
+    }
+  }
+
+  test("SPARK-37508: Support contains string expression") {
+    checkEvaluation(Contains(Literal("aa"), Literal.create(null, StringType)), null)
+    checkEvaluation(Contains(Literal.create(null, StringType), Literal("aa")), null)
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("Spark")), true)
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("SPARK")), false)
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("SQL")), true)
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("k S")), true)
   }
 }

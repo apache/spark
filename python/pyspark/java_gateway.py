@@ -17,7 +17,6 @@
 
 import atexit
 import os
-import sys
 import signal
 import shlex
 import shutil
@@ -27,24 +26,29 @@ import tempfile
 import time
 from subprocess import Popen, PIPE
 
-if sys.version >= '3':
-    xrange = range
-
 from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
+from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
-from pyspark.util import _exception_message
 
 
 def launch_gateway(conf=None, popen_kwargs=None):
     """
     launch jvm gateway
-    :param conf: spark configuration passed to spark-submit
-    :param popen_kwargs: Dictionary of kwargs to pass to Popen when spawning
+
+    Parameters
+    ----------
+    conf : :py:class:`pyspark.SparkConf`
+        spark configuration passed to spark-submit
+    popen_kwargs : dict
+        Dictionary of kwargs to pass to Popen when spawning
         the py4j JVM. This is a developer feature intended for use in
         customizing how pyspark interacts with the py4j JVM (e.g., capturing
         stdout/stderr).
-    :return:
+
+    Returns
+    -------
+    ClientServer or JavaGateway
     """
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
@@ -60,13 +64,10 @@ def launch_gateway(conf=None, popen_kwargs=None):
         command = [os.path.join(SPARK_HOME, script)]
         if conf:
             for k, v in conf.getAll():
-                command += ['--conf', '%s=%s' % (k, v)]
+                command += ["--conf", "%s=%s" % (k, v)]
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         if os.environ.get("SPARK_TESTING"):
-            submit_args = ' '.join([
-                "--conf spark.ui.enabled=false",
-                submit_args
-            ])
+            submit_args = " ".join(["--conf spark.ui.enabled=false", submit_args])
         command = command + shlex.split(submit_args)
 
         # Create a temporary directory where the gateway server should write the connection
@@ -83,14 +84,15 @@ def launch_gateway(conf=None, popen_kwargs=None):
             # Launch the Java gateway.
             popen_kwargs = {} if popen_kwargs is None else popen_kwargs
             # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
-            popen_kwargs['stdin'] = PIPE
+            popen_kwargs["stdin"] = PIPE
             # We always set the necessary environment variables.
-            popen_kwargs['env'] = env
+            popen_kwargs["env"] = env
             if not on_windows:
                 # Don't send ctrl-c / SIGINT to the Java gateway:
                 def preexec_func():
                     signal.signal(signal.SIGINT, signal.SIG_IGN)
-                popen_kwargs['preexec_fn'] = preexec_func
+
+                popen_kwargs["preexec_fn"] = preexec_func
                 proc = Popen(command, **popen_kwargs)
             else:
                 # preexec_fn not supported on Windows
@@ -101,7 +103,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 time.sleep(0.1)
 
             if not os.path.isfile(conn_info_file):
-                raise Exception("Java gateway process exited before sending its port number")
+                raise RuntimeError("Java gateway process exited before sending its port number")
 
             with open(conn_info_file, "rb") as info:
                 gateway_port = read_int(info)
@@ -123,12 +125,24 @@ def launch_gateway(conf=None, popen_kwargs=None):
             # child processes in the tree (http://technet.microsoft.com/en-us/library/bb491009.aspx)
             def killChild():
                 Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
+
             atexit.register(killChild)
 
-    # Connect to the gateway
-    gateway = JavaGateway(
-        gateway_parameters=GatewayParameters(port=gateway_port, auth_token=gateway_secret,
-                                             auto_convert=True))
+    # Connect to the gateway (or client server to pin the thread between JVM and Python)
+    if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
+        gateway = ClientServer(
+            java_parameters=JavaParameters(
+                port=gateway_port, auth_token=gateway_secret, auto_convert=True
+            ),
+            python_parameters=PythonParameters(port=0, eager_load=False),
+        )
+    else:
+        gateway = JavaGateway(
+            gateway_parameters=GatewayParameters(
+                port=gateway_port, auth_token=gateway_secret, auto_convert=True
+            )
+        )
+
     # Store a reference to the Popen object for use by the caller (e.g., in reading stdout/stderr)
     gateway.proc = proc
 
@@ -138,6 +152,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.ml.python.*")
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
+    java_import(gateway.jvm, "org.apache.spark.resource.*")
     # TODO(davies): move into sql
     java_import(gateway.jvm, "org.apache.spark.sql.*")
     java_import(gateway.jvm, "org.apache.spark.sql.api.python.*")
@@ -157,36 +172,45 @@ def _do_server_auth(conn, auth_secret):
     reply = UTF8Deserializer().loads(conn)
     if reply != "ok":
         conn.close()
-        raise Exception("Unexpected reply from iterator server.")
+        raise RuntimeError("Unexpected reply from iterator server.")
 
 
 def local_connect_and_auth(port, auth_secret):
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
     Handles IPV4 & IPV6, does some error handling.
-    :param port
-    :param auth_secret
-    :return: a tuple with (sockfile, sock)
+
+    Parameters
+    ----------
+    port : str or int or None
+    auth_secret : str
+
+    Returns
+    -------
+    tuple
+        with (sockfile, sock)
     """
     sock = None
     errors = []
     # Support for both IPv4 and IPv6.
-    # On most of IPv6-ready systems, IPv6 will take precedence.
-    for res in socket.getaddrinfo("127.0.0.1", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+    addr = "127.0.0.1"
+    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+        addr = "::1"
+    for res in socket.getaddrinfo(addr, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
         af, socktype, proto, _, sa = res
         try:
             sock = socket.socket(af, socktype, proto)
-            sock.settimeout(15)
+            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
             sock.connect(sa)
-            sockfile = sock.makefile("rwb", 65536)
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:
-            emsg = _exception_message(e)
-            errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
+            emsg = str(e)
+            errors.append("tried to connect to %s, but an error occurred: %s" % (sa, emsg))
             sock.close()
             sock = None
-    raise Exception("could not open socket: %s" % errors)
+    raise RuntimeError("could not open socket: %s" % errors)
 
 
 def ensure_callback_server_started(gw):

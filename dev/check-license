@@ -20,7 +20,7 @@
 
 acquire_rat_jar () {
 
-  URL="https://repo.maven.apache.org/maven2/org/apache/rat/apache-rat/${RAT_VERSION}/apache-rat-${RAT_VERSION}.jar"
+  URL="${DEFAULT_ARTIFACT_REPOSITORY:-https://repo1.maven.org/maven2/}org/apache/rat/apache-rat/${RAT_VERSION}/apache-rat-${RAT_VERSION}.jar"
 
   JAR="$rat_jar"
 
@@ -67,7 +67,7 @@ mkdir -p "$FWDIR"/lib
     exit 1
 }
 
-mkdir target
+mkdir -p target
 $java_cmd -jar "$rat_jar" -E "$FWDIR"/dev/.rat-excludes -d "$FWDIR" > target/rat-results.txt
 
 if [ $? -ne 0 ]; then

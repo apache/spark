@@ -26,11 +26,11 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 
@@ -154,6 +154,8 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
       val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterSuite.Close]
       assert(errorEvent.error.get.isInstanceOf[RuntimeException])
       assert(errorEvent.error.get.getMessage === "ForeachSinkSuite error")
+      // 'close' shouldn't be called with abort message if close with error has been called
+      assert(allEvents(0).size == 3)
     }
   }
 
@@ -161,10 +163,10 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"count".as[Long])
       .map(_.toInt)
       .repartition(1)
@@ -195,10 +197,10 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"count".as[Long])
       .map(_.toInt)
       .repartition(1)
@@ -258,6 +260,34 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
       query.stop()
     }
   }
+
+  testQuietly("foreach with error not caused by ForeachWriter") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[Int]
+      val query = input.toDS().repartition(1).map(_ / 0).writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .foreach(new TestForeachWriter)
+        .start()
+      input.addData(1, 2, 3, 4)
+
+      val e = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+
+      assert(e.getCause.isInstanceOf[SparkException])
+      assert(e.getCause.getCause.getCause.getMessage === "/ by zero")
+      assert(query.isActive === false)
+
+      val allEvents = ForeachWriterSuite.allEvents()
+      assert(allEvents.size === 1)
+      assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
+      // `close` should be called with the error
+      val errorEvent = allEvents(0)(1).asInstanceOf[ForeachWriterSuite.Close]
+      assert(errorEvent.error.get.isInstanceOf[SparkException])
+      assert(errorEvent.error.get.getMessage ===
+        "Foreach writer has been aborted due to a task failure")
+    }
+  }
 }
 
 /** A global object to collect events in the executor */
@@ -303,6 +333,6 @@ class TestForeachWriter extends ForeachWriter[Int] {
 
   override def close(errorOrNull: Throwable): Unit = {
     events += ForeachWriterSuite.Close(error = Option(errorOrNull))
-    ForeachWriterSuite.addEvents(events)
+    ForeachWriterSuite.addEvents(events.toSeq)
   }
 }

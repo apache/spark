@@ -44,21 +44,23 @@ private[spark] class HistoryAppStatusStore(
 
   override def executorList(activeOnly: Boolean): Seq[v1.ExecutorSummary] = {
     val execList = super.executorList(activeOnly)
-    logUrlPattern match {
-      case Some(pattern) => execList.map(replaceLogUrls(_, pattern))
-      case None => execList
+    if (logUrlPattern.nonEmpty) {
+      execList.map(replaceLogUrls)
+    } else {
+      execList
     }
   }
 
   override def executorSummary(executorId: String): v1.ExecutorSummary = {
     val execSummary = super.executorSummary(executorId)
-    logUrlPattern match {
-      case Some(pattern) => replaceLogUrls(execSummary, pattern)
-      case None => execSummary
+    if (logUrlPattern.nonEmpty) {
+      replaceLogUrls(execSummary)
+    } else {
+      execSummary
     }
   }
 
-  private def replaceLogUrls(exec: v1.ExecutorSummary, urlPattern: String): v1.ExecutorSummary = {
+  private def replaceLogUrls(exec: v1.ExecutorSummary): v1.ExecutorSummary = {
     val newLogUrlMap = logUrlHandler.applyPattern(exec.executorLogs, exec.attributes)
     replaceExecutorLogs(exec, newLogUrlMap)
   }
@@ -72,7 +74,8 @@ private[spark] class HistoryAppStatusStore(
       source.totalGCTime, source.totalInputBytes, source.totalShuffleRead,
       source.totalShuffleWrite, source.isBlacklisted, source.maxMemory, source.addTime,
       source.removeTime, source.removeReason, newExecutorLogs, source.memoryMetrics,
-      source.blacklistedInStages, source.peakMemoryMetrics, source.attributes)
+      source.blacklistedInStages, source.peakMemoryMetrics, source.attributes, source.resources,
+      source.resourceProfileId, source.isExcluded, source.excludedInStages)
   }
 
 }

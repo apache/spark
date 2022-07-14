@@ -19,7 +19,7 @@ package org.apache.spark.deploy.rest.mesos
 
 import javax.servlet.http.HttpServletResponse
 
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.TestPrematureExit
@@ -35,8 +35,14 @@ class MesosRestServerSuite extends SparkFunSuite
     testOverheadMemory(new SparkConf(), "2000M", 2384)
   }
 
-  test("test driver overhead memory with overhead factor") {
+  test("test driver overhead memory with default overhead factor") {
     testOverheadMemory(new SparkConf(), "5000M", 5500)
+  }
+
+  test("test driver overhead memory with overhead factor") {
+    val conf = new SparkConf()
+    conf.set(config.DRIVER_MEMORY_OVERHEAD_FACTOR.key, "0.2")
+    testOverheadMemory(conf, "5000M", 6000)
   }
 
   test("test configured driver overhead memory") {
@@ -45,7 +51,7 @@ class MesosRestServerSuite extends SparkFunSuite
     testOverheadMemory(conf, "2000M", 3000)
   }
 
-  def testOverheadMemory(conf: SparkConf, driverMemory: String, expectedResult: Int) {
+  def testOverheadMemory(conf: SparkConf, driverMemory: String, expectedResult: Int): Unit = {
     conf.set("spark.master", "testmaster")
     conf.set("spark.app.name", "testapp")
     conf.set(config.DRIVER_MEMORY.key, driverMemory)

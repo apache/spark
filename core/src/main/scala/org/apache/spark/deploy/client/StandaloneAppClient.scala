@@ -30,7 +30,9 @@ import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.Logging
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
@@ -120,7 +122,7 @@ private[spark] class StandaloneAppClient(
      *
      * nthRetry means this is the nth attempt to register with master.
      */
-    private def registerWithMaster(nthRetry: Int) {
+    private def registerWithMaster(nthRetry: Int): Unit = {
       registerMasterFutures.set(tryRegisterAllMasters())
       registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
@@ -174,12 +176,15 @@ private[spark] class StandaloneAppClient(
           cores))
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
-      case ExecutorUpdated(id, state, message, exitStatus, workerLost) =>
+      case ExecutorUpdated(id, state, message, exitStatus, workerHost) =>
         val fullId = appId + "/" + id
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {
-          listener.executorRemoved(fullId, message.getOrElse(""), exitStatus, workerLost)
+          listener.executorRemoved(fullId, message.getOrElse(""), exitStatus, workerHost)
+        } else if (state == ExecutorState.DECOMMISSIONED) {
+          listener.executorDecommissioned(fullId,
+            ExecutorDecommissionInfo(message.getOrElse(""), workerHost))
         }
 
       case WorkerRemoved(id, host, message) =>
@@ -246,14 +251,14 @@ private[spark] class StandaloneAppClient(
     /**
      * Notify the listener that we disconnected, if we hadn't already done so before.
      */
-    def markDisconnected() {
+    def markDisconnected(): Unit = {
       if (!alreadyDisconnected) {
         listener.disconnected()
         alreadyDisconnected = true
       }
     }
 
-    def markDead(reason: String) {
+    def markDead(reason: String): Unit = {
       if (!alreadyDead.get) {
         listener.dead(reason)
         alreadyDead.set(true)
@@ -271,12 +276,12 @@ private[spark] class StandaloneAppClient(
 
   }
 
-  def start() {
+  def start(): Unit = {
     // Just launch an rpcEndpoint; it will call back into the listener.
     endpoint.set(rpcEnv.setupEndpoint("AppClient", new ClientEndpoint(rpcEnv)))
   }
 
-  def stop() {
+  def stop(): Unit = {
     if (endpoint.get != null) {
       try {
         val timeout = RpcUtils.askRpcTimeout(conf)
@@ -290,14 +295,25 @@ private[spark] class StandaloneAppClient(
   }
 
   /**
-   * Request executors from the Master by specifying the total number desired,
-   * including existing pending and running executors.
+   * Request executors for default resource profile from the Master by specifying the
+   * total number desired, including existing pending and running executors.
    *
    * @return whether the request is acknowledged.
    */
   def requestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+    requestTotalExecutors(Map(appDescription.defaultProfile -> requestedTotal))
+  }
+
+  /**
+   * Request executors from the Master by specifying the total number desired for each
+   * resource profile, including existing pending and running executors.
+   *
+   * @return whether the request is acknowledged.
+   */
+  def requestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
     if (endpoint.get != null && appId.get != null) {
-      endpoint.get.ask[Boolean](RequestExecutors(appId.get, requestedTotal))
+      endpoint.get.ask[Boolean](RequestExecutors(appId.get, resourceProfileToTotalExecs))
     } else {
       logWarning("Attempted to request executors before driver fully initialized.")
       Future.successful(false)

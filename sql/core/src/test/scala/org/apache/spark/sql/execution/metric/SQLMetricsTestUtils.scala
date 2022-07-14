@@ -25,8 +25,9 @@ import org.apache.spark.TestUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.SparkPlanInfo
+import org.apache.spark.sql.execution.{SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
+import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
 
 
@@ -40,16 +41,28 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
 
-  // Pattern of size SQLMetric value, e.g. "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB)"
+  // Pattern of size SQLMetric value, e.g. "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB (stage 0.0:
+  // task 4))" OR "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB)"
   protected val sizeMetricPattern = {
     val bytes = "([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)"
-    s"\\n$bytes \\($bytes, $bytes, $bytes\\)"
+    val maxMetrics = "\\(stage ([0-9])+\\.([0-9])+\\: task ([0-9])+\\)"
+    s"(.*\\n$bytes \\($bytes, $bytes, $bytes( $maxMetrics)?\\))|($bytes)"
   }
 
-  // Pattern of timing SQLMetric value, e.g. "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)"
+  // Pattern of timing SQLMetric value, e.g. "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms (stage 3.0):
+  // task 217))" OR "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)" OR "1.0 ms"
   protected val timingMetricPattern = {
     val duration = "([0-9]+(\\.[0-9]+)?) (ms|s|m|h)"
-    s"\\n$duration \\($duration, $duration, $duration\\)"
+    val maxMetrics = "\\(stage ([0-9])+\\.([0-9])+\\: task ([0-9])+\\)"
+    s"(.*\\n$duration \\($duration, $duration, $duration( $maxMetrics)?\\))|($duration)"
+  }
+
+  // Pattern of size SQLMetric value for Aggregate tests.
+  // e.g "\n(1, 1, 0.9 (stage 1.0: task 8)) OR "\n(1, 1, 0.9 )" OR "1"
+  protected val aggregateMetricsPattern = {
+    val iters = "([0-9]+(\\.[0-9]+)?)"
+    val maxMetrics = "\\(stage ([0-9])+\\.([0-9])+\\: task ([0-9])+\\)"
+    s"(.*\\n\\($iters, $iters, $iters( $maxMetrics)?\\))|($iters)"
   }
 
   /**
@@ -85,7 +98,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     }
 
     val totalNumBytesMetric = executedNode.metrics.find(
-      _.name == "written output total (min, med, max)").get
+      _.name == "written output").get
     val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "")
       .split(" ").head.trim.toDouble
     assert(totalNumBytes > 0)
@@ -114,29 +127,31 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       provider: String,
       dataFormat: String,
       tableName: String): Unit = {
-    withTempPath { dir =>
-      spark.sql(
-        s"""
-           |CREATE TABLE $tableName(a int, b int)
-           |USING $provider
-           |PARTITIONED BY(a)
-           |LOCATION '${dir.toURI}'
-         """.stripMargin)
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-      assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+    withTable(tableName) {
+      withTempPath { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE $tableName(a int, b int)
+             |USING $provider
+             |PARTITIONED BY(a)
+             |LOCATION '${dir.toURI}'
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-      val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
-        .selectExpr("id a", "id b")
+        val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
+          .selectExpr("id a", "id b")
 
-      // 40 files, 80 rows, 40 dynamic partitions.
-      verifyWriteDataMetrics(Seq(40, 40, 80)) {
-        df.union(df).repartition(2, $"a")
-          .write
-          .format(dataFormat)
-          .mode("overwrite")
-          .insertInto(tableName)
+        // 40 files, 80 rows, 40 dynamic partitions.
+        verifyWriteDataMetrics(Seq(40, 40, 80)) {
+          df.union(df).repartition(2, $"a")
+            .write
+            .format(dataFormat)
+            .mode("overwrite")
+            .insertInto(tableName)
+        }
+        assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
       }
-      assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
     }
   }
 
@@ -154,7 +169,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
        expectedNodeIds: Set[Long],
        enableWholeStage: Boolean = false): Option[Map[Long, (String, Map[String, Any])]] = {
     val previousExecutionIds = currentExecutionIds()
-    withSQLConf("spark.sql.codegen.wholeStage" -> enableWholeStage.toString) {
+    withSQLConf(WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
       df.collect()
     }
     sparkContext.listenerBus.waitUntilEmpty(10000)
@@ -199,12 +214,16 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   protected def testSparkPlanMetrics(
       df: DataFrame,
       expectedNumOfJobs: Int,
-      expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
+      expectedMetrics: Map[Long, (String, Map[String, Any])],
+      enableWholeStage: Boolean = false): Unit = {
     val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
       (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
-        (actualMetricValue: Any) => expectedMetricValue.toString === actualMetricValue))
+        (actualMetricValue: Any) => {
+          actualMetricValue.toString.matches(expectedMetricValue.toString)
+        }).toMap)
     }
-    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates)
+    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates.toMap,
+      enableWholeStage)
   }
 
   /**
@@ -229,9 +248,28 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
         val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
         assert(expectedNodeName === actualNodeName)
         for ((metricName, metricPredicate) <- expectedMetricsPredicatesMap) {
-          assert(metricPredicate(actualMetricsMap(metricName)))
+          assert(metricPredicate(actualMetricsMap(metricName)),
+            s"$nodeId / '$metricName' (= ${actualMetricsMap(metricName)}) did not match predicate.")
         }
       }
+    }
+  }
+
+  /**
+   * Verify if the metrics in `SparkPlan` operator are same as expected metrics.
+   *
+   * @param plan `SparkPlan` operator to check metrics
+   * @param expectedMetrics the expected metrics. The format is `metric name -> metric value`.
+   */
+  protected def testMetricsInSparkPlanOperator(
+      plan: SparkPlan,
+      expectedMetrics: Map[String, Long]): Unit = {
+    expectedMetrics.foreach { case (metricName: String, metricValue: Long) =>
+      assert(plan.metrics.contains(metricName), s"The query plan should have metric $metricName")
+      val actualMetric = plan.metrics(metricName)
+      assert(actualMetric.value == metricValue,
+        s"The query plan metric $metricName did not match, " +
+          s"expected:$metricValue, actual:${actualMetric.value}")
     }
   }
 }

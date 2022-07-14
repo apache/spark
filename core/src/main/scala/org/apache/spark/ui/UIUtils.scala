@@ -17,12 +17,16 @@
 
 package org.apache.spark.ui
 
+import java.{util => ju}
+import java.lang.{Long => JLong}
 import java.net.URLDecoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, Response}
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
@@ -32,7 +36,7 @@ import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
+  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-sm"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
@@ -109,12 +113,65 @@ private[spark] object UIUtils extends Logging {
         }
       }
       // if time is more than a year
-      return s"$yearString $weekString $dayString"
+      s"$yearString $weekString $dayString"
     } catch {
       case e: Exception =>
         logError("Error converting time to string", e)
         // if there is some error, return blank string
-        return ""
+        ""
+    }
+  }
+
+  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
+  private val batchTimeFormat = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
+  }
+
+  private val batchTimeFormatWithMilliseconds = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
+  }
+
+  /**
+   * If `batchInterval` is less than 1 second, format `batchTime` with milliseconds. Otherwise,
+   * format `batchTime` without milliseconds.
+   *
+   * @param batchTime the batch time to be formatted
+   * @param batchInterval the batch interval
+   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value wll be
+   *                     only `HH:mm:ss` or `HH:mm:ss.SSS` depending on `batchInterval`
+   * @param timezone only for test
+   */
+  def formatBatchTime(
+      batchTime: Long,
+      batchInterval: Long,
+      showYYYYMMSS: Boolean = true,
+      timezone: TimeZone = null): String = {
+    val oldTimezones =
+      (batchTimeFormat.get.getTimeZone, batchTimeFormatWithMilliseconds.get.getTimeZone)
+    if (timezone != null) {
+      batchTimeFormat.get.setTimeZone(timezone)
+      batchTimeFormatWithMilliseconds.get.setTimeZone(timezone)
+    }
+    try {
+      val formattedBatchTime =
+        if (batchInterval < 1000) {
+          batchTimeFormatWithMilliseconds.get.format(batchTime)
+        } else {
+          // If batchInterval >= 1 second, don't show milliseconds
+          batchTimeFormat.get.format(batchTime)
+        }
+      if (showYYYYMMSS) {
+        formattedBatchTime
+      } else {
+        formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
+      }
+    } finally {
+      if (timezone != null) {
+        batchTimeFormat.get.setTimeZone(oldTimezones._1)
+        batchTimeFormatWithMilliseconds.get.setTimeZone(oldTimezones._2)
+      }
     }
   }
 
@@ -165,19 +222,20 @@ private[spark] object UIUtils extends Logging {
 
   def commonHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/bootstrap.min.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri(request, "/static/vis.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/vis-timeline-graph2d.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri(request, "/static/webui.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
-    <script src={prependBaseUri(request, "/static/jquery-1.12.4.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/vis.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/bootstrap-tooltip.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery-3.5.1.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/bootstrap.bundle.min.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
-    <script src={prependBaseUri(request, "/static/additional-metrics.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
@@ -195,17 +253,18 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet" href={prependBaseUri(request,
-      "/static/jquery.dataTables.1.10.18.min.css")} type="text/css"/>
+      "/static/jquery.dataTables.1.10.25.min.css")} type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap.css")} type="text/css"/>
+          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.25.min.css")}
+          type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.18.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.25.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.25.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jsonFormatter.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
@@ -223,15 +282,17 @@ private[spark] object UIUtils extends Logging {
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
     val header = activeTab.headerTabs.map { tab =>
-      <li class={if (tab == activeTab) "active" else ""}>
-        <a href={prependBaseUri(request, activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
+      <li class={if (tab == activeTab) "nav-item active" else "nav-item"}>
+        <a class="nav-link"
+           href={prependBaseUri(request, activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
-    val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
+    val helpButton: Seq[Node] = helpText.map(tooltip(_, "top")).getOrElse(Seq.empty)
 
     <html>
       <head>
         {commonHeaderNodes(request)}
+        <script>setAppBasePath('{activeTab.basePath}')</script>
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
@@ -239,30 +300,43 @@ private[spark] object UIUtils extends Logging {
         <title>{appName} - {title}</title>
       </head>
       <body>
-        <div class="navbar navbar-static-top">
-          <div class="navbar-inner">
-            <div class="brand">
-              <a href={prependBaseUri(request, "/")} class="brand">
+        <nav class="navbar navbar-expand-md navbar-light bg-light mb-4">
+          <div class="navbar-header">
+            <div class="navbar-brand">
+              <a href={prependBaseUri(request, "/")}>
                 <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
                 <span class="version">{activeTab.appSparkVersion}</span>
               </a>
             </div>
-            <p class="navbar-text pull-right">
-              <strong title={appName}>{shortAppName}</strong> application UI
-            </p>
-            <ul class="nav">{header}</ul>
           </div>
-        </div>
+          <button class="navbar-toggler" type="button" data-toggle="collapse"
+                  data-target="#navbarCollapse" aria-controls="navbarCollapse"
+                  aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav mr-auto">{header}</ul>
+            <span class="navbar-text navbar-right d-none d-md-block">
+              <strong title={appName} class="text-nowrap">{shortAppName}</strong>
+              <span class="text-nowrap">application UI</span>
+            </span>
+          </div>
+        </nav>
         <div class="container-fluid">
-          <div class="row-fluid">
-            <div class="span12">
-              <h3 style="vertical-align: bottom; display: inline-block;">
+          <div class="row">
+            <div class="col-12">
+              <h3 style="vertical-align: bottom; white-space: nowrap; overflow: hidden;
+                text-overflow: ellipsis;">
                 {title}
                 {helpButton}
               </h3>
             </div>
           </div>
-          {content}
+          <div class="row">
+            <div class="col-12">
+              {content}
+            </div>
+          </div>
         </div>
       </body>
     </html>
@@ -284,8 +358,8 @@ private[spark] object UIUtils extends Logging {
       </head>
       <body>
         <div class="container-fluid">
-          <div class="row-fluid">
-            <div class="span12">
+          <div class="row">
+            <div class="col-12">
               <h3 style="vertical-align: middle; display: inline-block;">
                 <a style="text-decoration: none" href={prependBaseUri(request, "/")}>
                   <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
@@ -296,7 +370,11 @@ private[spark] object UIUtils extends Logging {
               </h3>
             </div>
           </div>
-          {content}
+          <div class="row">
+            <div class="col-12">
+              {content}
+            </div>
+          </div>
         </div>
       </body>
     </html>
@@ -309,9 +387,13 @@ private[spark] object UIUtils extends Logging {
       data: Iterable[T],
       fixedWidth: Boolean = false,
       id: Option[String] = None,
+      // When headerClasses is not empty, it should have the same length as headers parameter
       headerClasses: Seq[String] = Seq.empty,
       stripeRowsWithCss: Boolean = true,
-      sortable: Boolean = true): Seq[Node] = {
+      sortable: Boolean = true,
+      // The tooltip information could be None, which indicates header does not have a tooltip.
+      // When tooltipHeaders is not empty, it should have the same length as headers parameter
+      tooltipHeaders: Seq[Option[String]] = Seq.empty): Seq[Node] = {
 
     val listingTableClass = {
       val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
@@ -332,11 +414,19 @@ private[spark] object UIUtils extends Logging {
       }
     }
 
+    def getTooltip(index: Int): Option[String] = {
+      if (index < tooltipHeaders.size) {
+        tooltipHeaders(index)
+      } else {
+        None
+      }
+    }
+
     val newlinesInHeader = headers.exists(_.contains("\n"))
     def getHeaderContent(header: String): Seq[Node] = {
       if (newlinesInHeader) {
-        <ul class="unstyled">
-          { header.split("\n").map { case t => <li> {t} </li> } }
+        <ul class="list-unstyled">
+          { header.split("\n").map(t => <li> {t} </li>) }
         </ul>
       } else {
         Text(header)
@@ -345,8 +435,16 @@ private[spark] object UIUtils extends Logging {
 
     val headerRow: Seq[Node] = {
       headers.view.zipWithIndex.map { x =>
-        <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
-      }
+        getTooltip(x._2) match {
+          case Some(tooltip) =>
+            <th width={colWidthAttr} class={getClass(x._2)}>
+              <span data-toggle="tooltip" title={tooltip}>
+                {getHeaderContent(x._1)}
+              </span>
+            </th>
+          case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        }
+      }.toSeq
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
@@ -363,14 +461,15 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       reasonToNumKilled: Map[String, Int],
       total: Int): Seq[Node] = {
-    val ratio = if (total == 0) 100.0 else (completed.toDouble/total)*100
+    val ratio = if (total == 0) 100.0 else (completed.toDouble / total) * 100
     val completeWidth = "width: %s%%".format(ratio)
     // started + completed can be > total when there are speculative tasks
     val boundedStarted = math.min(started, total - completed)
-    val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)
+    val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
+    val startWidth = "width: %s%%".format(startRatio)
 
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%; left:0;">
+      <span style="text-align:center; position:absolute; width:100%;">
         {completed}/{total}
         { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
         { if (failed > 0) s"($failed failed)" }
@@ -380,8 +479,8 @@ private[spark] object UIUtils extends Logging {
           }
         }
       </span>
-      <div class="bar bar-completed" style={completeWidth}></div>
-      <div class="bar bar-running" style={startWidth}></div>
+      <div class="progress-bar progress-completed" style={completeWidth}></div>
+      <div class="progress-bar progress-started" style={startWidth}></div>
     </div>
   }
 
@@ -408,7 +507,7 @@ private[spark] object UIUtils extends Logging {
             class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
         <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
-           data-placement="right">
+           data-placement="top">
           DAG Visualization
         </a>
       </span>
@@ -425,6 +524,12 @@ private[spark] object UIUtils extends Logging {
               {
                 g.rootCluster.getCachedNodes.map { n =>
                   <div class="cached-rdd">{n.id}</div>
+                } ++
+                g.rootCluster.getBarrierClusters.map { c =>
+                  <div class="barrier-rdd">{c.id}</div>
+                } ++
+                g.rootCluster.getIndeterminateNodes.map { n =>
+                  <div class="indeterminate-rdd">{n.id}</div>
                 }
               }
             </div>
@@ -446,7 +551,7 @@ private[spark] object UIUtils extends Logging {
    * the whole string will rendered as a simple escaped text.
    *
    * Note: In terms of security, only anchor tags with root relative links are supported. So any
-   * attempts to embed links outside Spark UI, or other tags like {@code <script>} will cause in
+   * attempts to embed links outside Spark UI, or other tags like &lt;script&gt; will cause in
    * the whole description to be treated as plain text.
    *
    * @param desc        the original job or stage description string, which may contain html tags.
@@ -458,7 +563,6 @@ private[spark] object UIUtils extends Logging {
    *         is true, and an Elem otherwise.
    */
   def makeDescription(desc: String, basePathUri: String, plainText: Boolean = false): NodeSeq = {
-    import scala.language.postfixOps
 
     // If the description can be parsed as HTML and has only relative links, then render
     // as HTML, otherwise render as escaped string
@@ -468,9 +572,7 @@ private[spark] object UIUtils extends Logging {
 
       // Verify that this has only anchors and span (we are wrapping in span)
       val allowedNodeLabels = Set("a", "span", "br")
-      val illegalNodes = xml \\ "_"  filterNot { case node: Node =>
-        allowedNodeLabels.contains(node.label)
-      }
+      val illegalNodes = (xml \\ "_").filterNot(node => allowedNodeLabels.contains(node.label))
       if (illegalNodes.nonEmpty) {
         throw new IllegalArgumentException(
           "Only HTML anchors allowed in job descriptions\n" +
@@ -491,8 +593,8 @@ private[spark] object UIUtils extends Logging {
           new RewriteRule() {
             override def transform(n: Node): Seq[Node] = {
               n match {
-                case e: Elem if e.child isEmpty => Text(e.text)
-                case e: Elem if e.child nonEmpty => Text(e.child.flatMap(transform).text)
+                case e: Elem if e.child.isEmpty => Text(e.text)
+                case e: Elem => Text(e.child.flatMap(transform).text)
                 case _ => n
               }
             }
@@ -503,7 +605,7 @@ private[spark] object UIUtils extends Logging {
           new RewriteRule() {
             override def transform(n: Node): Seq[Node] = {
               n match {
-                case e: Elem if e \ "@href" nonEmpty =>
+                case e: Elem if (e \ "@href").nonEmpty =>
                   val relativePath = e.attribute("href").get.toString
                   val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
                   e % Attribute(null, "href", fullUri, Null)
@@ -526,10 +628,10 @@ private[spark] object UIUtils extends Logging {
    */
   def decodeURLParameter(urlParam: String): String = {
     var param = urlParam
-    var decodedParam = URLDecoder.decode(param, "UTF-8")
+    var decodedParam = URLDecoder.decode(param, UTF_8.name())
     while (param != decodedParam) {
       param = decodedParam
-      decodedParam = URLDecoder.decode(param, "UTF-8")
+      decodedParam = URLDecoder.decode(param, UTF_8.name())
     }
     param
   }
@@ -543,7 +645,8 @@ private[spark] object UIUtils extends Logging {
   */
   def makeHref(proxy: Boolean, id: String, origHref: String): String = {
     if (proxy) {
-      s"/proxy/$id"
+      val proxyPrefix = sys.props.getOrElse("spark.ui.proxyBase", "")
+      proxyPrefix + "/proxy/" + id
     } else {
       origHref
     }
@@ -551,5 +654,40 @@ private[spark] object UIUtils extends Logging {
 
   def buildErrorResponse(status: Response.Status, msg: String): Response = {
     Response.status(status).entity(msg).`type`(MediaType.TEXT_PLAIN).build()
+  }
+
+  /**
+   * There may be different duration labels in each batch. So we need to
+   * mark those missing duration label as '0d' to avoid UI rending error.
+   */
+  def durationDataPadding(
+      values: Array[(Long, ju.Map[String, JLong])]): Array[(Long, Map[String, Double])] = {
+    val operationLabels = values.flatMap(_._2.keySet().asScala).toSet
+    values.map { case (xValue, yValue) =>
+      val dataPadding = operationLabels.map { opLabel =>
+        if (yValue.containsKey(opLabel)) {
+          (opLabel, yValue.get(opLabel).toDouble)
+        } else {
+          (opLabel, 0d)
+        }
+      }
+      (xValue, dataPadding.toMap)
+    }
+  }
+
+  def detailsUINode(isMultiline: Boolean, message: String): Seq[Node] = {
+    if (isMultiline) {
+      // scalastyle:off
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stacktrace-details collapsed">
+          <pre>{message}</pre>
+        </div>
+      // scalastyle:on
+    } else {
+      Seq.empty[Node]
+    }
   }
 }

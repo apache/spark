@@ -27,6 +27,7 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilde
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
 
 private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
@@ -41,7 +42,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX")
   private val maybeMountedCaCertFile = kubernetesConf.getOption(
     s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX")
-  private val driverServiceAccount = kubernetesConf.get(KUBERNETES_SERVICE_ACCOUNT_NAME)
+  private val driverServiceAccount = kubernetesConf.get(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME)
 
   private val oauthTokenBase64 = kubernetesConf
     .getOption(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$OAUTH_TOKEN_CONF_SUFFIX")
@@ -70,15 +71,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
 
   override def configurePod(pod: SparkPod): SparkPod = {
     if (!shouldMountSecret) {
-      pod.copy(
-        pod = driverServiceAccount.map { account =>
-          new PodBuilder(pod.pod)
-            .editOrNewSpec()
-              .withServiceAccount(account)
-              .withServiceAccountName(account)
-              .endSpec()
-            .build()
-        }.getOrElse(pod.pod))
+      pod.copy(pod = buildPodWithServiceAccount(driverServiceAccount, pod).getOrElse(pod.pod))
     } else {
       val driverPodWithMountedKubernetesCredentials =
         new PodBuilder(pod.pod)
@@ -209,6 +202,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
       .withNewMetadata()
         .withName(driverCredentialsSecretName)
         .endMetadata()
+      .withImmutable(true)
       .withData(allSecretData.asJava)
       .build()
   }

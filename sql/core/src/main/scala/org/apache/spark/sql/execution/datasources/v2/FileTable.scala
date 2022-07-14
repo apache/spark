@@ -16,14 +16,19 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util
+
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.sources.v2.TableCapability._
+import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
@@ -35,40 +40,54 @@ abstract class FileTable(
     userSpecifiedSchema: Option[StructType])
   extends Table with SupportsRead with SupportsWrite {
 
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
   lazy val fileIndex: PartitioningAwareFileIndex = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
-      checkEmptyGlobPath = true, checkFilesExist = true)
-    val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-    new InMemoryFileIndex(
-      sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
+    if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
+      // We are reading from the results of a streaming query. We will load files from
+      // the metadata log instead of listing them using HDFS APIs.
+      new MetadataLogFileIndex(sparkSession, new Path(paths.head),
+        options.asScala.toMap, userSpecifiedSchema)
+    } else {
+      // This is a non-streaming file based datasource.
+      val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
+        checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths)
+      val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+      new InMemoryFileIndex(
+        sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
+    }
   }
 
-  lazy val dataSchema: StructType = userSpecifiedSchema.map { schema =>
-    val partitionSchema = fileIndex.partitionSchema
-    val resolver = sparkSession.sessionState.conf.resolver
-    StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
-  }.orElse {
-    inferSchema(fileIndex.allFiles())
-  }.getOrElse {
-    throw new AnalysisException(
-      s"Unable to infer schema for $name. It must be specified manually.")
-  }.asNullable
+  lazy val dataSchema: StructType = {
+    val schema = userSpecifiedSchema.map { schema =>
+      val partitionSchema = fileIndex.partitionSchema
+      val resolver = sparkSession.sessionState.conf.resolver
+      StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
+    }.orElse {
+      inferSchema(fileIndex.allFiles())
+    }.getOrElse {
+      throw QueryCompilationErrors.dataSchemaNotSpecifiedError(formatName)
+    }
+    fileIndex match {
+      case _: MetadataLogFileIndex => schema
+      case _ => schema.asNullable
+    }
+  }
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
+    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema,
       "in the data schema", caseSensitive)
     dataSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
-        throw new AnalysisException(
-          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
     }
     val partitionSchema = fileIndex.partitionSchema
-    SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
+    SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema,
       "in the partition schema", caseSensitive)
     val partitionNameSet: Set[String] =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
@@ -82,7 +101,11 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def capabilities(): java.util.Set[TableCapability] = FileTable.CAPABILITIES
+  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
+
+  override def properties: util.Map[String, String] = options.asCaseSensitiveMap
+
+  override def capabilities: java.util.Set[TableCapability] = FileTable.CAPABILITIES
 
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
@@ -115,8 +138,16 @@ abstract class FileTable(
    * 2. Catalog support is required, which is still under development for data source V2.
    */
   def fallbackFileFormat: Class[_ <: FileFormat]
+
+  /**
+   * Whether or not paths should be globbed before being used to access files.
+   */
+  private def globPaths: Boolean = {
+    val entry = options.get(DataSource.GLOB_PATHS_KEY)
+    Option(entry).map(_ == "true").getOrElse(true)
+  }
 }
 
 object FileTable {
-  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
+  private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE)
 }

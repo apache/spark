@@ -18,22 +18,30 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
-import java.util.TimeZone;
+import java.util.Set;
+import scala.collection.JavaConverters;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.schema.GroupType;
+import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
-import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -42,7 +50,7 @@ import org.apache.spark.sql.types.StructType;
  * A specialized RecordReader that reads into InternalRows or ColumnarBatches directly using the
  * Parquet column APIs. This is somewhat based on parquet-mr's ColumnReader.
  *
- * TODO: handle complex types, decimal requiring more than 8 bytes, INT96. Schema mismatch.
+ * TODO: decimal requiring more than 8 bytes, INT96. Schema mismatch.
  * All of these can be handled efficiently and easily with codegen.
  *
  * This class can either return InternalRows or ColumnarBatches. With whole stage codegen
@@ -62,10 +70,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private int numBatched = 0;
 
   /**
-   * For each request column, the reader to read this column. This is NULL if this column
-   * is missing from the file, in which case we populate the attribute with NULL.
+   * Encapsulate writable column vectors with other Parquet related info such as
+   * repetition / definition levels.
    */
-  private VectorizedColumnReader[] columnReaders;
+  private ParquetColumnVector[] columnVectors;
 
   /**
    * The number of rows that have been returned.
@@ -78,15 +86,30 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private long totalCountLoadedSoFar = 0;
 
   /**
-   * For each column, true if the column is missing in the file and we'll instead return NULLs.
+   * For each leaf column, if it is in the set, it means the column is missing in the file and
+   * we'll instead return NULLs.
    */
-  private boolean[] missingColumns;
+  private Set<ParquetColumn> missingColumns;
 
   /**
    * The timezone that timestamp INT96 values should be converted to. Null if no conversion. Here to
    * workaround incompatibilities between different engines when writing timestamp values.
    */
-  private TimeZone convertTz = null;
+  private final ZoneId convertTz;
+
+  /**
+   * The mode of rebasing date/timestamp from Julian to Proleptic Gregorian calendar.
+   */
+  private final String datetimeRebaseMode;
+  // The time zone Id in which rebasing of date/timestamp is performed
+  private final String datetimeRebaseTz;
+
+  /**
+   * The mode of rebasing INT96 timestamp from Julian to Proleptic Gregorian calendar.
+   */
+  private final String int96RebaseMode;
+  // The time zone Id in which rebasing of INT96 is performed
+  private final String int96RebaseTz;
 
   /**
    * columnBatch object that is used for batch decoding. This is created on first use and triggers
@@ -104,8 +127,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private ColumnarBatch columnarBatch;
 
-  private WritableColumnVector[] columnVectors;
-
   /**
    * If true, this class returns batches instead of rows.
    */
@@ -116,10 +137,33 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final MemoryMode MEMORY_MODE;
 
-  public VectorizedParquetRecordReader(TimeZone convertTz, boolean useOffHeap, int capacity) {
+  public VectorizedParquetRecordReader(
+      ZoneId convertTz,
+      String datetimeRebaseMode,
+      String datetimeRebaseTz,
+      String int96RebaseMode,
+      String int96RebaseTz,
+      boolean useOffHeap,
+      int capacity) {
     this.convertTz = convertTz;
+    this.datetimeRebaseMode = datetimeRebaseMode;
+    this.datetimeRebaseTz = datetimeRebaseTz;
+    this.int96RebaseMode = int96RebaseMode;
+    this.int96RebaseTz = int96RebaseTz;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
+  }
+
+  // For test only.
+  public VectorizedParquetRecordReader(boolean useOffHeap, int capacity) {
+    this(
+      null,
+      "CORRECTED",
+      "UTC",
+      "LEGACY",
+      ZoneId.systemDefault().getId(),
+      useOffHeap,
+      capacity);
   }
 
   /**
@@ -140,6 +184,17 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public void initialize(String path, List<String> columns) throws IOException,
       UnsupportedOperationException {
     super.initialize(path, columns);
+    initializeInternal();
+  }
+
+  @VisibleForTesting
+  @Override
+  public void initialize(
+      MessageType fileSchema,
+      MessageType requestedSchema,
+      ParquetRowGroupReader rowGroupReader,
+      int totalRowCount) throws IOException {
+    super.initialize(fileSchema, requestedSchema, rowGroupReader, totalRowCount);
     initializeInternal();
   }
 
@@ -190,31 +245,34 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (StructField f: sparkSchema.fields()) {
       batchSchema = batchSchema.add(f);
     }
+    int constantColumnLength = 0;
     if (partitionColumns != null) {
       for (StructField f : partitionColumns.fields()) {
         batchSchema = batchSchema.add(f);
       }
+      constantColumnLength = partitionColumns.fields().length;
     }
 
-    if (memMode == MemoryMode.OFF_HEAP) {
-      columnVectors = OffHeapColumnVector.allocateColumns(capacity, batchSchema);
-    } else {
-      columnVectors = OnHeapColumnVector.allocateColumns(capacity, batchSchema);
+    ColumnVector[] vectors = allocateColumns(
+      capacity, batchSchema, memMode == MemoryMode.OFF_HEAP, constantColumnLength);
+
+    columnarBatch = new ColumnarBatch(vectors);
+
+    columnVectors = new ParquetColumnVector[sparkSchema.fields().length];
+    for (int i = 0; i < columnVectors.length; i++) {
+      Object defaultValue = null;
+      if (sparkRequestedSchema != null) {
+        defaultValue = sparkRequestedSchema.existenceDefaultValues()[i];
+      }
+      columnVectors[i] = new ParquetColumnVector(parquetColumn.children().apply(i),
+        (WritableColumnVector) vectors[i], capacity, memMode, missingColumns, true, defaultValue);
     }
-    columnarBatch = new ColumnarBatch(columnVectors);
+
     if (partitionColumns != null) {
       int partitionIdx = sparkSchema.fields().length;
       for (int i = 0; i < partitionColumns.fields().length; i++) {
-        ColumnVectorUtils.populate(columnVectors[i + partitionIdx], partitionValues, i);
-        columnVectors[i + partitionIdx].setIsConstant();
-      }
-    }
-
-    // Initialize missing columns with nulls.
-    for (int i = 0; i < missingColumns.length; i++) {
-      if (missingColumns[i]) {
-        columnVectors[i].putNulls(0, capacity);
-        columnVectors[i].setIsConstant();
+        ColumnVectorUtils.populate(
+          (ConstantColumnVector) vectors[i + partitionIdx], partitionValues, i);
       }
     }
   }
@@ -248,18 +306,25 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * Advances to the next batch of rows. Returns false if there are no more.
    */
   public boolean nextBatch() throws IOException {
-    for (WritableColumnVector vector : columnVectors) {
+    for (ParquetColumnVector vector : columnVectors) {
       vector.reset();
     }
     columnarBatch.setNumRows(0);
     if (rowsReturned >= totalRowCount) return false;
     checkEndOfRowGroup();
 
-    int num = (int) Math.min((long) capacity, totalCountLoadedSoFar - rowsReturned);
-    for (int i = 0; i < columnReaders.length; ++i) {
-      if (columnReaders[i] == null) continue;
-      columnReaders[i].readBatch(num, columnVectors[i]);
+    int num = (int) Math.min(capacity, totalCountLoadedSoFar - rowsReturned);
+    for (ParquetColumnVector cv : columnVectors) {
+      for (ParquetColumnVector leafCv : cv.getLeaves()) {
+        VectorizedColumnReader columnReader = leafCv.getColumnReader();
+        if (columnReader != null) {
+          columnReader.readBatch(num, leafCv.getValueVector(),
+            leafCv.getRepetitionLevelVector(), leafCv.getDefinitionLevelVector());
+        }
+      }
+      cv.assemble();
     }
+
     rowsReturned += num;
     columnarBatch.setNumRows(num);
     numBatched = num;
@@ -268,32 +333,59 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   private void initializeInternal() throws IOException, UnsupportedOperationException {
-    // Check that the requested schema is supported.
-    missingColumns = new boolean[requestedSchema.getFieldCount()];
-    List<ColumnDescriptor> columns = requestedSchema.getColumns();
-    List<String[]> paths = requestedSchema.getPaths();
-    for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
-      Type t = requestedSchema.getFields().get(i);
-      if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
-        throw new UnsupportedOperationException("Complex types not supported.");
-      }
+    missingColumns = new HashSet<>();
+    for (ParquetColumn column : JavaConverters.seqAsJavaList(parquetColumn.children())) {
+      checkColumn(column);
+    }
+  }
 
-      String[] colPath = paths.get(i);
-      if (fileSchema.containsPath(colPath)) {
-        ColumnDescriptor fd = fileSchema.getColumnDescription(colPath);
-        if (!fd.equals(columns.get(i))) {
+  /**
+   * Check whether a column from requested schema is missing from the file schema, or whether it
+   * conforms to the type of the file schema.
+   */
+  private void checkColumn(ParquetColumn column) throws IOException {
+    String[] path = JavaConverters.seqAsJavaList(column.path()).toArray(new String[0]);
+    if (containsPath(fileSchema, path)) {
+      if (column.isPrimitive()) {
+        ColumnDescriptor desc = column.descriptor().get();
+        ColumnDescriptor fd = fileSchema.getColumnDescription(desc.getPath());
+        if (!fd.equals(desc)) {
           throw new UnsupportedOperationException("Schema evolution not supported.");
         }
-        missingColumns[i] = false;
       } else {
-        if (columns.get(i).getMaxDefinitionLevel() == 0) {
-          // Column is missing in data but the required data is non-nullable. This file is invalid.
-          throw new IOException("Required column is missing in data file. Col: " +
-            Arrays.toString(colPath));
+        for (ParquetColumn childColumn : JavaConverters.seqAsJavaList(column.children())) {
+          checkColumn(childColumn);
         }
-        missingColumns[i] = true;
+      }
+    } else { // A missing column which is either primitive or complex
+      if (column.required()) {
+        // Column is missing in data but the required data is non-nullable. This file is invalid.
+        throw new IOException("Required column is missing in data file. Col: " +
+          Arrays.toString(path));
+      }
+      missingColumns.add(column);
+    }
+  }
+
+  /**
+   * Checks whether the given 'path' exists in 'parquetType'. The difference between this and
+   * {@link MessageType#containsPath(String[])} is that the latter only support paths to leaf
+   * nodes, while this support paths both to leaf and non-leaf nodes.
+   */
+  private boolean containsPath(Type parquetType, String[] path) {
+    return containsPath(parquetType, path, 0);
+  }
+
+  private boolean containsPath(Type parquetType, String[] path, int depth) {
+    if (path.length == depth) return true;
+    if (parquetType instanceof GroupType) {
+      String fieldName = path[depth];
+      GroupType parquetGroupType = (GroupType) parquetType;
+      if (parquetGroupType.containsField(fieldName)) {
+        return containsPath(parquetGroupType.getType(fieldName), path, depth + 1);
       }
     }
+    return false;
   }
 
   private void checkEndOfRowGroup() throws IOException {
@@ -303,14 +395,58 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       throw new IOException("expecting more rows but reached last block. Read "
           + rowsReturned + " out of " + totalRowCount);
     }
-    List<ColumnDescriptor> columns = requestedSchema.getColumns();
-    List<Type> types = requestedSchema.asGroupType().getFields();
-    columnReaders = new VectorizedColumnReader[columns.size()];
-    for (int i = 0; i < columns.size(); ++i) {
-      if (missingColumns[i]) continue;
-      columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
-        pages.getPageReader(columns.get(i)), convertTz);
+    for (ParquetColumnVector cv : columnVectors) {
+      initColumnReader(pages, cv);
     }
     totalCountLoadedSoFar += pages.getRowCount();
+  }
+
+  private void initColumnReader(PageReadStore pages, ParquetColumnVector cv) throws IOException {
+    if (!missingColumns.contains(cv.getColumn())) {
+      if (cv.getColumn().isPrimitive()) {
+        ParquetColumn column = cv.getColumn();
+        VectorizedColumnReader reader = new VectorizedColumnReader(
+          column.descriptor().get(), column.required(), pages, convertTz, datetimeRebaseMode,
+          datetimeRebaseTz, int96RebaseMode, int96RebaseTz, writerVersion);
+        cv.setColumnReader(reader);
+      } else {
+        // Not in missing columns and is a complex type: this must be a struct
+        for (ParquetColumnVector childCv : cv.getChildren()) {
+          initColumnReader(pages, childCv);
+        }
+      }
+    }
+  }
+
+  /**
+   * <b>This method assumes that all constant column are at the end of schema
+   * and `constantColumnLength` represents the number of constant column.<b/>
+   *
+   * This method allocates columns to store elements of each field of the schema,
+   * the data columns use `OffHeapColumnVector` when `useOffHeap` is true and
+   * use `OnHeapColumnVector` when `useOffHeap` is false, the constant columns
+   * always use `ConstantColumnVector`.
+   *
+   * Capacity is the initial capacity of the vector, and it will grow as necessary.
+   * Capacity is in number of elements, not number of bytes.
+   */
+  private ColumnVector[] allocateColumns(
+      int capacity, StructType schema, boolean useOffHeap, int constantColumnLength) {
+    StructField[] fields = schema.fields();
+    int fieldsLength = fields.length;
+    ColumnVector[] vectors = new ColumnVector[fieldsLength];
+    if (useOffHeap) {
+      for (int i = 0; i < fieldsLength - constantColumnLength; i++) {
+        vectors[i] = new OffHeapColumnVector(capacity, fields[i].dataType());
+      }
+    } else {
+      for (int i = 0; i < fieldsLength - constantColumnLength; i++) {
+        vectors[i] = new OnHeapColumnVector(capacity, fields[i].dataType());
+      }
+    }
+    for (int i = fieldsLength - constantColumnLength; i < fieldsLength; i++) {
+      vectors[i] = new ConstantColumnVector(capacity, fields[i].dataType());
+    }
+    return vectors;
   }
 }

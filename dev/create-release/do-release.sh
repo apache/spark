@@ -20,11 +20,11 @@
 SELF=$(cd $(dirname $0) && pwd)
 . "$SELF/release-util.sh"
 
-while getopts "bn" opt; do
+while getopts ":b:n" opt; do
   case $opt in
     b) GIT_BRANCH=$OPTARG ;;
     n) DRY_RUN=1 ;;
-    ?) error "Invalid option: $OPTARG" ;;
+    \?) error "Invalid option: $OPTARG" ;;
   esac
 done
 
@@ -78,4 +78,9 @@ if should_build "publish"; then
     "$SELF/release-build.sh" publish-release
 else
   echo "Skipping publish step."
+fi
+
+if [ ! -z "$RELEASE_STEP" ] && [ "$RELEASE_STEP" = "finalize" ]; then
+  run_silent "Finalizing release" "finalize.log" \
+    "$SELF/release-build.sh" finalize
 fi

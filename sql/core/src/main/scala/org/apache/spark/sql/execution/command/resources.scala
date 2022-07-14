@@ -18,26 +18,18 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
-import java.net.URI
-
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.util.Utils
 
 /**
  * Adds a jar to the current session so it can be used (for UDFs or serdes).
  */
-case class AddJarCommand(path: String) extends RunnableCommand {
-  override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("result", IntegerType, nullable = false) :: Nil)
-    schema.toAttributes
-  }
-
+case class AddJarsCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.resourceLoader.addJar(path)
+    paths.foreach(sparkSession.sessionState.resourceLoader.addJar(_))
     Seq.empty[Row]
   }
 }
@@ -45,9 +37,20 @@ case class AddJarCommand(path: String) extends RunnableCommand {
 /**
  * Adds a file to the current session so it can be used.
  */
-case class AddFileCommand(path: String) extends RunnableCommand {
+case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sparkContext.addFile(path)
+    val recursive = !sparkSession.sessionState.conf.addSingleFileInAddFile
+    paths.foreach(sparkSession.sparkContext.addFile(_, recursive))
+    Seq.empty[Row]
+  }
+}
+
+/**
+ * Adds an archive to the current session so it can be used.
+ */
+case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    paths.foreach(sparkSession.sparkContext.addArchive(_))
     Seq.empty[Row]
   }
 }
@@ -56,7 +59,7 @@ case class AddFileCommand(path: String) extends RunnableCommand {
  * Returns a list of file paths that are added to resources.
  * If file paths are provided, return the ones that are added to resources.
  */
-case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends RunnableCommand {
+case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends LeafRunnableCommand {
   override val output: Seq[Attribute] = {
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
@@ -64,12 +67,11 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Runn
     val fileList = sparkSession.sparkContext.listFiles()
     if (files.size > 0) {
       files.map { f =>
-        val uri = new URI(f)
-        val schemeCorrectedPath = uri.getScheme match {
-          case null | "local" => new File(f).getCanonicalFile.toURI.toString
+        val uri = Utils.resolveURI(f)
+        uri.getScheme match {
+          case null | "local" | "file" => new File(uri).getCanonicalFile.toURI.toString
           case _ => f
         }
-        new Path(schemeCorrectedPath).toUri.toString
       }.collect {
         case f if fileList.contains(f) => f
       }.map(Row(_))
@@ -83,7 +85,7 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Runn
  * Returns a list of jar files that are added to resources.
  * If jar files are provided, return the ones that are added to resources.
  */
-case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends RunnableCommand {
+case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRunnableCommand {
   override val output: Seq[Attribute] = {
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
@@ -91,11 +93,33 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends Runnab
     val jarList = sparkSession.sparkContext.listJars()
     if (jars.nonEmpty) {
       for {
-        jarName <- jars.map(f => new Path(f).getName)
+        jarName <- jars.map(f => Utils.resolveURI(f).toString.split("/").last)
         jarPath <- jarList if jarPath.contains(jarName)
       } yield Row(jarPath)
     } else {
       jarList.map(Row(_))
+    }
+  }
+}
+
+/**
+ * Returns a list of archive paths that are added to resources.
+ * If archive paths are provided, return the ones that are added to resources.
+ */
+case class ListArchivesCommand(archives: Seq[String] = Seq.empty[String])
+  extends LeafRunnableCommand {
+  override val output: Seq[Attribute] = {
+    AttributeReference("Results", StringType, nullable = false)() :: Nil
+  }
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val archiveList = sparkSession.sparkContext.listArchives()
+    if (archives.nonEmpty) {
+      for {
+        archiveName <- archives.map(f => Utils.resolveURI(f).toString.split("/").last)
+        archivePath <- archiveList if archivePath.contains(archiveName)
+      } yield Row(archivePath)
+    } else {
+      archiveList.map(Row(_))
     }
   }
 }

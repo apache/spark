@@ -68,7 +68,7 @@ case class GenerateExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override def producedAttributes: AttributeSet = AttributeSet(output)
+  override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -96,7 +96,7 @@ case class GenerateExec(
           if (outer && outputRows.isEmpty) {
             joinedRow.withRight(generatorNullRow) :: Nil
           } else {
-            outputRows.map(joinedRow.withRight)
+            outputRows.toIterator.map(joinedRow.withRight)
           }
         } ++ LazyIterator(() => boundGenerator.terminate()).map { row =>
           // we leave the left side as the last element of its child output
@@ -124,7 +124,7 @@ case class GenerateExec(
     }
   }
 
-  override def supportCodegen: Boolean = false
+  override def supportCodegen: Boolean = generator.supportCodegen
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
@@ -137,16 +137,13 @@ case class GenerateExec(
   override def needCopyResult: Boolean = true
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    // Add input rows to the values when we are joining
-    val values = if (requiredChildOutput.nonEmpty) {
-      input
-    } else {
-      Seq.empty
-    }
-
+    val requiredAttrSet = AttributeSet(requiredChildOutput)
+    val requiredInput = child.output.zip(input).filter {
+      case (attr, _) => requiredAttrSet.contains(attr)
+    }.map(_._2)
     boundGenerator match {
-      case e: CollectionGenerator => codeGenCollection(ctx, e, values, row)
-      case g => codeGenTraversableOnce(ctx, g, values, row)
+      case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput)
+      case g => codeGenTraversableOnce(ctx, g, requiredInput)
     }
   }
 
@@ -156,8 +153,7 @@ case class GenerateExec(
   private def codeGenCollection(
       ctx: CodegenContext,
       e: CollectionGenerator,
-      input: Seq[ExprCode],
-      row: ExprCode): String = {
+      input: Seq[ExprCode]): String = {
 
     // Generate code for the generator.
     val data = e.genCode(ctx)
@@ -244,8 +240,7 @@ case class GenerateExec(
   private def codeGenTraversableOnce(
       ctx: CodegenContext,
       e: Expression,
-      input: Seq[ExprCode],
-      row: ExprCode): String = {
+      requiredInput: Seq[ExprCode]): String = {
 
     // Generate the code for the generator
     val data = e.genCode(ctx)
@@ -280,7 +275,7 @@ case class GenerateExec(
          |  boolean $hasNext = $iterator.hasNext();
          |  InternalRow $current = (InternalRow)($hasNext? $iterator.next() : null);
          |  $outerVal = false;
-         |  ${consume(ctx, input ++ values)}
+         |  ${consume(ctx, requiredInput ++ values)}
          |}
       """.stripMargin
     } else {
@@ -290,7 +285,7 @@ case class GenerateExec(
          |while ($iterator.hasNext()) {
          |  $numOutput.add(1);
          |  InternalRow $current = (InternalRow)($iterator.next());
-         |  ${consume(ctx, input ++ values)}
+         |  ${consume(ctx, requiredInput ++ values)}
          |}
       """.stripMargin
     }
@@ -328,4 +323,7 @@ case class GenerateExec(
     if (condition) Seq(code)
     else Seq.empty
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): GenerateExec =
+    copy(child = newChild)
 }

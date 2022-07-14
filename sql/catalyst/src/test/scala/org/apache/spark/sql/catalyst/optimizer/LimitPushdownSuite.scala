@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Add
-import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
@@ -33,15 +34,19 @@ class LimitPushdownSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Limit pushdown", FixedPoint(100),
         LimitPushDown,
-        CombineLimits,
+        EliminateLimits,
         ConstantFolding,
         BooleanSimplification) :: Nil
   }
 
-  private val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  private val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-  private val x = testRelation.subquery('x)
-  private val y = testRelation.subquery('y)
+  private val testRelation = LocalRelation.fromExternalRows(
+    Seq("a".attr.int, "b".attr.int, "c".attr.int),
+    1.to(6).map(_ => Row(1, 2, 3)))
+  private val testRelation2 = LocalRelation.fromExternalRows(
+    Seq("d".attr.int, "e".attr.int, "f".attr.int),
+    1.to(6).map(_ => Row(1, 2, 3)))
+  private val x = testRelation.subquery("x")
+  private val y = testRelation.subquery("y")
 
   // Union ---------------------------------------------------------------------------------------
 
@@ -71,20 +76,20 @@ class LimitPushdownSuite extends PlanTest {
 
   test("Union: no limit to both sides if children having smaller limit values") {
     val unionQuery =
-      Union(testRelation.limit(1), testRelation2.select('d, 'e, 'f).limit(1)).limit(2)
+      Union(testRelation.limit(1), testRelation2.select($"d", $"e", $"f").limit(1)).limit(2)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Limit(2, Union(testRelation.limit(1), testRelation2.select('d, 'e, 'f).limit(1))).analyze
+      Union(testRelation.limit(1), testRelation2.select($"d", $"e", $"f").limit(1)).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
   test("Union: limit to each sides if children having larger limit values") {
     val unionQuery =
-      Union(testRelation.limit(3), testRelation2.select('d, 'e, 'f).limit(4)).limit(2)
+      Union(testRelation.limit(3), testRelation2.select($"d", $"e", $"f").limit(4)).limit(2)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
       Limit(2, Union(
-        LocalLimit(2, testRelation), LocalLimit(2, testRelation2.select('d, 'e, 'f)))).analyze
+        LocalLimit(2, testRelation), LocalLimit(2, testRelation2.select($"d", $"e", $"f")))).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
@@ -148,7 +153,7 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("full outer join where neither side is limited and left side has larger statistics") {
-    val xBig = testRelation.copy(data = Seq.fill(2)(null)).subquery('x)
+    val xBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("x")
     assert(xBig.stats.sizeInBytes > y.stats.sizeInBytes)
     val originalQuery = xBig.join(y, FullOuter).limit(1).analyze
     val optimized = Optimize.execute(originalQuery)
@@ -157,7 +162,7 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("full outer join where neither side is limited and right side has larger statistics") {
-    val yBig = testRelation.copy(data = Seq.fill(2)(null)).subquery('y)
+    val yBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("y")
     assert(x.stats.sizeInBytes < yBig.stats.sizeInBytes)
     val originalQuery = x.join(yBig, FullOuter).limit(1).analyze
     val optimized = Optimize.execute(originalQuery)
@@ -170,5 +175,127 @@ class LimitPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     // No pushdown for FULL OUTER JOINS.
     comparePlans(optimized, originalQuery)
+  }
+
+  test("SPARK-33433: Change Aggregate max rows to 1 if grouping is empty") {
+    val analyzed1 = Limit(1, Union(
+      x.groupBy()(count(1)),
+      y.groupBy()(count(1)))).analyze
+    val optimized1 = Optimize.execute(analyzed1)
+    comparePlans(analyzed1, optimized1)
+
+    // test push down
+    val analyzed2 = Limit(1, Union(
+      x.groupBy($"a")(count(1)),
+      y.groupBy($"b")(count(1)))).analyze
+    val optimized2 = Optimize.execute(analyzed2)
+    val expected2 = Limit(1, Union(
+      LocalLimit(1, x.groupBy($"a")(count(1))),
+      LocalLimit(1, y.groupBy($"b")(count(1))))).analyze
+    comparePlans(expected2, optimized2)
+  }
+
+  test("SPARK-26138: pushdown limit through InnerLike when condition is empty") {
+    Seq(Cross, Inner).foreach { joinType =>
+      val originalQuery = x.join(y, joinType).limit(1)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = Limit(1, LocalLimit(1, x).join(LocalLimit(1, y), joinType)).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-26138: Should not pushdown limit through InnerLike when condition is not empty") {
+    Seq(Cross, Inner).foreach { joinType =>
+      val originalQuery = x.join(y, joinType, Some("x.a".attr === "y.b".attr)).limit(1)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = Limit(1, x.join(y, joinType, Some("x.a".attr === "y.b".attr))).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-34514: Push down limit through LEFT SEMI and LEFT ANTI join") {
+    // Push down when condition is empty
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.join(y, joinType).limit(5)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = Limit(5, LocalLimit(5, x).join(LocalLimit(1, y), joinType)).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+
+    // No push down when condition is not empty
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.join(y, joinType, Some("x.a".attr === "y.b".attr)).limit(1)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = Limit(1, x.join(y, joinType, Some("x.a".attr === "y.b".attr))).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-34622: Fix Push down limit through join if its output is not match the LocalLimit") {
+    val joinCondition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)
+    val originalQuery = x.join(y, LeftOuter, joinCondition).select("x.a".attr).limit(5)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      Limit(5, LocalLimit(5, x).join(y, LeftOuter, joinCondition).select("x.a".attr)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-36183: Push down limit 1 through Aggregate if it is group only") {
+    // Push down when it is group only and limit 1.
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(1).analyze),
+      LocalLimit(1, x).select("x.a".attr).limit(1).analyze)
+
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).select("x.a".attr).limit(1).analyze),
+      LocalLimit(1, x).select("x.a".attr).select("x.a".attr).limit(1).analyze)
+
+    comparePlans(
+      Optimize.execute(x.union(y).groupBy("x.a".attr)("x.a".attr).limit(1).analyze),
+      LocalLimit(1, LocalLimit(1, x).union(LocalLimit(1, y))).select("x.a".attr).limit(1).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        x.groupBy("x.a".attr)("x.a".attr)
+          .select("x.a".attr.as("a1"), "x.a".attr.as("a2")).limit(1).analyze),
+      LocalLimit(1, x).select("x.a".attr)
+        .select("x.a".attr.as("a1"), "x.a".attr.as("a2")).limit(1).analyze)
+
+    // No push down
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(2).analyze),
+      x.groupBy("x.a".attr)("x.a".attr).limit(2).analyze)
+
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze),
+      x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze)
+  }
+
+  test("Push down limit 1 through Offset") {
+    comparePlans(
+      Optimize.execute(testRelation.offset(2).limit(1).analyze),
+      GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
+  }
+
+  test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      comparePlans(
+        Optimize.execute(x.join(y, joinType).analyze),
+        x.join(LocalLimit(1, y), joinType).analyze)
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      comparePlans(
+        Optimize.execute(x.join(y.limit(2), joinType).analyze),
+        x.join(LocalLimit(1, y), joinType).analyze)
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery1 = x.join(LocalLimit(1, y), joinType).analyze
+      val originalQuery2 = x.join(y.limit(1), joinType).analyze
+
+      comparePlans(Optimize.execute(originalQuery1), originalQuery1)
+      comparePlans(Optimize.execute(originalQuery2), originalQuery2)
+    }
   }
 }

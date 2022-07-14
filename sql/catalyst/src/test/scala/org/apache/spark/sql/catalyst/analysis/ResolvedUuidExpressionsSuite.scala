@@ -28,15 +28,15 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
  */
 class ResolvedUuidExpressionsSuite extends AnalysisTest {
 
-  private lazy val a = 'a.int
+  private lazy val a = $"a".int
   private lazy val r = LocalRelation(a)
-  private lazy val uuid1 = Uuid().as('_uuid1)
-  private lazy val uuid2 = Uuid().as('_uuid2)
-  private lazy val uuid3 = Uuid().as('_uuid3)
+  private lazy val uuid1 = Uuid().as("_uuid1")
+  private lazy val uuid2 = Uuid().as("_uuid2")
+  private lazy val uuid3 = Uuid().as("_uuid3")
   private lazy val uuid1Ref = uuid1.toAttribute
 
   private val tracker = new QueryPlanningTracker
-  private val analyzer = getAnalyzer(caseSensitive = true)
+  private val analyzer = getAnalyzer
 
   private def getUuidExpressions(plan: LogicalPlan): Seq[Uuid] = {
     plan.flatMap {

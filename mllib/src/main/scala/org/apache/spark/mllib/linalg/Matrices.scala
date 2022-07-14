@@ -23,7 +23,6 @@ import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, Has
 import scala.language.implicitConversions
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{linalg => newlinalg}
@@ -155,7 +154,7 @@ sealed trait Matrix extends Serializable {
    *          and column indices respectively with the type `Int`, and the final parameter is the
    *          corresponding value in the matrix with type `Double`.
    */
-  private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
+  private[spark] def foreachActive(f: (Int, Int, Double) => Unit): Unit
 
   /**
    * Find the number of non-zero active values.
@@ -427,7 +426,7 @@ class DenseMatrix @Since("1.3.0") (
     if (isTransposed) {
       Iterator.tabulate(numCols) { j =>
         val col = new Array[Double](numRows)
-        blas.dcopy(numRows, values, j, numCols, col, 0, 1)
+        BLAS.nativeBLAS.dcopy(numRows, values, j, numCols, col, 0, 1)
         new DenseVector(col)
       }
     } else {
@@ -1055,7 +1054,7 @@ object Matrices {
     DenseMatrix.rand(numRows, numCols, rng)
 
   /**
-   * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
+   * Generate a `SparseMatrix` consisting of `i.i.d.` uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -1108,7 +1107,7 @@ object Matrices {
   @Since("1.3.0")
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array.empty)
+      return new DenseMatrix(0, 0, Array.emptyDoubleArray)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1130,7 +1129,7 @@ object Matrices {
       new DenseMatrix(numRows, numCols, matrices.flatMap(_.toArray))
     } else {
       var startCol = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
         val nCols = mat.numCols
         mat match {
           case spMat: SparseMatrix =>
@@ -1141,7 +1140,7 @@ object Matrices {
               cnt += 1
             }
             startCol += nCols
-            data
+            data.toSeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1150,7 +1149,7 @@ object Matrices {
               }
             }
             startCol += nCols
-            data
+            data.toSeq
         }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
@@ -1167,7 +1166,7 @@ object Matrices {
   @Since("1.3.0")
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array.empty[Double])
+      return new DenseMatrix(0, 0, Array.emptyDoubleArray)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1175,7 +1174,7 @@ object Matrices {
     var hasSparse = false
     var numRows = 0
     matrices.foreach { mat =>
-      require(numCols == mat.numCols, "The number of rows of the matrices in this sequence, " +
+      require(numCols == mat.numCols, "The number of columns of the matrices in this sequence, " +
         "don't match!")
       mat match {
         case sparse: SparseMatrix => hasSparse = true
@@ -1189,7 +1188,6 @@ object Matrices {
       val allValues = new Array[Double](numRows * numCols)
       var startRow = 0
       matrices.foreach { mat =>
-        var j = 0
         val nRows = mat.numRows
         mat.foreachActive { (i, j, v) =>
           val indStart = j * numRows + startRow
@@ -1200,7 +1198,7 @@ object Matrices {
       new DenseMatrix(numRows, numCols, allValues)
     } else {
       var startRow = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
         val nRows = mat.numRows
         mat match {
           case spMat: SparseMatrix =>
@@ -1211,7 +1209,7 @@ object Matrices {
               cnt += 1
             }
             startRow += nRows
-            data
+            data.toSeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1220,7 +1218,7 @@ object Matrices {
               }
             }
             startRow += nRows
-            data
+            data.toSeq
         }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)

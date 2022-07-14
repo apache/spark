@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +17,7 @@
 
 package org.apache.hive.service.cli;
 
-import org.apache.hive.service.cli.thrift.TGetInfoType;
+import org.apache.hive.service.rpc.thrift.TGetInfoType;
 
 /**
  * GetInfoType.
@@ -72,7 +71,8 @@ public enum GetInfoType {
   CLI_DESCRIBE_PARAMETER(TGetInfoType.CLI_DESCRIBE_PARAMETER),
   CLI_CATALOG_NAME(TGetInfoType.CLI_CATALOG_NAME),
   CLI_COLLATION_SEQ(TGetInfoType.CLI_COLLATION_SEQ),
-  CLI_MAX_IDENTIFIER_LEN(TGetInfoType.CLI_MAX_IDENTIFIER_LEN);
+  CLI_MAX_IDENTIFIER_LEN(TGetInfoType.CLI_MAX_IDENTIFIER_LEN),
+  CLI_ODBC_KEYWORDS(TGetInfoType.CLI_ODBC_KEYWORDS);
 
   private final TGetInfoType tInfoType;
 

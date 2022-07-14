@@ -24,12 +24,12 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{Future, Promise}
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.sys.process._
 
-import org.json4s._
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -79,7 +79,7 @@ private object FaultToleranceTest extends App with Logging {
 
   System.setProperty(config.DRIVER_HOST_ADDRESS.key, "172.17.42.1") // default docker host ip
 
-  private def afterEach() {
+  private def afterEach(): Unit = {
     if (sc != null) {
       sc.stop()
       sc = null
@@ -112,7 +112,7 @@ private object FaultToleranceTest extends App with Logging {
     assertValidClusterState()
 
     killLeader()
-    delay(30 seconds)
+    delay(30.seconds)
     assertValidClusterState()
     createClient()
     assertValidClusterState()
@@ -126,12 +126,12 @@ private object FaultToleranceTest extends App with Logging {
 
     killLeader()
     addMasters(1)
-    delay(30 seconds)
+    delay(30.seconds)
     assertValidClusterState()
 
     killLeader()
     addMasters(1)
-    delay(30 seconds)
+    delay(30.seconds)
     assertValidClusterState()
   }
 
@@ -156,7 +156,7 @@ private object FaultToleranceTest extends App with Logging {
     killLeader()
     workers.foreach(_.kill())
     workers.clear()
-    delay(30 seconds)
+    delay(30.seconds)
     addWorkers(2)
     assertValidClusterState()
   }
@@ -174,14 +174,14 @@ private object FaultToleranceTest extends App with Logging {
 
     (1 to 3).foreach { _ =>
       killLeader()
-      delay(30 seconds)
+      delay(30.seconds)
       assertValidClusterState()
       assertTrue(getLeader == masters.head)
       addMasters(1)
     }
   }
 
-  private def test(name: String)(fn: => Unit) {
+  private def test(name: String)(fn: => Unit): Unit = {
     try {
       fn
       numPassed += 1
@@ -199,14 +199,14 @@ private object FaultToleranceTest extends App with Logging {
     afterEach()
   }
 
-  private def addMasters(num: Int) {
+  private def addMasters(num: Int): Unit = {
     logInfo(s">>>>> ADD MASTERS $num <<<<<")
     (1 to num).foreach { _ => masters += SparkDocker.startMaster(dockerMountDir) }
   }
 
-  private def addWorkers(num: Int) {
+  private def addWorkers(num: Int): Unit = {
     logInfo(s">>>>> ADD WORKERS $num <<<<<")
-    val masterUrls = getMasterUrls(masters)
+    val masterUrls = getMasterUrls(masters.toSeq)
     (1 to num).foreach { _ => workers += SparkDocker.startWorker(dockerMountDir, masterUrls) }
   }
 
@@ -217,7 +217,7 @@ private object FaultToleranceTest extends App with Logging {
     // Counter-hack: Because of a hack in SparkEnv#create() that changes this
     // property, we need to reset it.
     System.setProperty(config.DRIVER_PORT.key, "0")
-    sc = new SparkContext(getMasterUrls(masters), "fault-tolerance", containerSparkHome)
+    sc = new SparkContext(getMasterUrls(masters.toSeq), "fault-tolerance", containerSparkHome)
   }
 
   private def getMasterUrls(masters: Seq[TestMasterInfo]): String = {
@@ -240,7 +240,7 @@ private object FaultToleranceTest extends App with Logging {
 
   private def delay(secs: Duration = 5.seconds) = Thread.sleep(secs.toMillis)
 
-  private def terminateCluster() {
+  private def terminateCluster(): Unit = {
     logInfo(">>>>> TERMINATE CLUSTER <<<<<")
     masters.foreach(_.kill())
     workers.foreach(_.kill())
@@ -264,7 +264,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     // Avoid waiting indefinitely (e.g., we could register but get no executors).
-    assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
+    assertTrue(ThreadUtils.awaitResult(f, 2.minutes))
   }
 
   /**
@@ -280,7 +280,7 @@ private object FaultToleranceTest extends App with Logging {
     var liveWorkerIPs: Seq[String] = List()
 
     def stateValid(): Boolean = {
-      (workers.map(_.ip) -- liveWorkerIPs).isEmpty &&
+      workers.map(_.ip).forall(liveWorkerIPs.contains) &&
         numAlive == 1 && numStandby == masters.size - 1 && numLiveApps >= 1
     }
 
@@ -317,7 +317,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     try {
-      assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
+      assertTrue(ThreadUtils.awaitResult(f, 2.minutes))
     } catch {
       case e: TimeoutException =>
         logError("Master states: " + masters.map(_.state))
@@ -327,7 +327,7 @@ private object FaultToleranceTest extends App with Logging {
     }
   }
 
-  private def assertTrue(bool: Boolean, message: String = "") {
+  private def assertTrue(bool: Boolean, message: String = ""): Unit = {
     if (!bool) {
       throw new IllegalStateException("Assertion failed: " + message)
     }
@@ -347,7 +347,7 @@ private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile
 
   logDebug("Created master: " + this)
 
-  def readState() {
+  def readState(): Unit = {
     try {
       val masterStream = new InputStreamReader(
         new URL("http://%s:8080/json".format(ip)).openStream, StandardCharsets.UTF_8)
@@ -373,7 +373,7 @@ private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile
     }
   }
 
-  def kill() { Docker.kill(dockerId) }
+  def kill(): Unit = { Docker.kill(dockerId) }
 
   override def toString: String =
     "[ip=%s, id=%s, logFile=%s, state=%s]".
@@ -387,7 +387,7 @@ private class TestWorkerInfo(val ip: String, val dockerId: DockerId, val logFile
 
   logDebug("Created worker: " + this)
 
-  def kill() { Docker.kill(dockerId) }
+  def kill(): Unit = { Docker.kill(dockerId) }
 
   override def toString: String =
     "[ip=%s, id=%s, logFile=%s]".format(ip, dockerId, logFile.getAbsolutePath)
@@ -421,7 +421,7 @@ private object SparkDocker {
     }
 
     dockerCmd.run(ProcessLogger(findIpAndLog _))
-    val ip = ThreadUtils.awaitResult(ipPromise.future, 30 seconds)
+    val ip = ThreadUtils.awaitResult(ipPromise.future, 30.seconds)
     val dockerId = Docker.getLastProcessId
     (ip, dockerId, outFile)
   }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
@@ -31,11 +31,13 @@ import org.apache.hadoop.hive.ql.exec.TaskRunner
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
-import org.apache.spark.sql.execution.datasources.FileFormatWriter
+import org.apache.spark.sql.execution.datasources.{BucketingUtils, FileFormatWriter}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveVersion
@@ -52,7 +54,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
-      partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
+      partitionAttributes: Seq[Attribute] = Nil,
+      bucketSpec: Option[BucketSpec] = None): Set[String] = {
 
     val isCompressed =
       fileSinkConf.getTableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
@@ -83,6 +86,10 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputLocation)
 
+    val options = bucketSpec
+      .map(_ => Map(BucketingUtils.optionForHiveCompatibleBucketWrite -> "true"))
+      .getOrElse(Map.empty)
+
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,
@@ -92,9 +99,9 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
-      bucketSpec = None,
+      bucketSpec = bucketSpec,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-      options = Map.empty)
+      options = options)
   }
 
   protected def getExternalTmpPath(
@@ -114,7 +121,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // be removed by Hive when Hive is trying to empty the table directory.
     val hiveVersionsUsingOldExternalTempPath: Set[HiveVersion] = Set(v12, v13, v14, v1_0)
     val hiveVersionsUsingNewExternalTempPath: Set[HiveVersion] =
-      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_1)
+      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
 
     // Ensure all the supported versions are considered here.
     assert(hiveVersionsUsingNewExternalTempPath ++ hiveVersionsUsingOldExternalTempPath ==
@@ -175,7 +182,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fs.deleteOnExit(dirPath)
     } catch {
       case e: IOException =>
-        throw new RuntimeException("Cannot create staging directory: " + dirPath.toString, e)
+        throw QueryExecutionErrors.cannotCreateStagingDirError(dirPath.toString, e)
     }
     dirPath
   }
@@ -187,7 +194,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       stagingDir: String): Path = {
     val extURI: URI = path.toUri
     if (extURI.getScheme == "viewfs") {
-      getExtTmpPathRelTo(path.getParent, hadoopConf, stagingDir)
+      getExtTmpPathRelTo(path, hadoopConf, stagingDir)
     } else {
       new Path(getExternalScratchDir(extURI, hadoopConf, stagingDir), "-ext-10000")
     }
@@ -210,12 +217,11 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       stagingDir)
   }
 
-  private def getStagingDir(
+  private[hive] def getStagingDir(
       inputPath: Path,
       hadoopConf: Configuration,
       stagingDir: String): Path = {
-    val inputPathUri: URI = inputPath.toUri
-    val inputPathName: String = inputPathUri.getPath
+    val inputPathName: String = inputPath.toString
     val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
     var stagingPathName: String =
       if (inputPathName.indexOf(stagingDir) == -1) {
@@ -228,7 +234,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
     // under the table directory.
     if (isSubDir(new Path(stagingPathName), inputPath, fs) &&
-      !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
+      !stagingPathName.stripPrefix(inputPathName).stripPrefix("/").startsWith(".")) {
       logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
         "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
         "directory.")
@@ -247,8 +253,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fs.deleteOnExit(dir)
     } catch {
       case e: IOException =>
-        throw new RuntimeException(
-          "Cannot create staging directory '" + dir.toString + "': " + e.getMessage, e)
+        throw QueryExecutionErrors.cannotCreateStagingDirError(
+          s"'${dir.toString}': ${e.getMessage}", e)
     }
     dir
   }

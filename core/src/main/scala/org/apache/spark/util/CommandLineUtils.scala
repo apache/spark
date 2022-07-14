@@ -19,8 +19,6 @@ package org.apache.spark.util
 
 import java.io.PrintStream
 
-import org.apache.spark.SparkException
-
 /**
  * Contains basic command line parsing functionality and methods to parse some common Spark CLI
  * options.

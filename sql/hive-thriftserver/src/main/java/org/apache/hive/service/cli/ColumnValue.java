@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,18 +22,20 @@ import java.sql.Date;
 import java.sql.Timestamp;
 
 import org.apache.hadoop.hive.common.type.HiveChar;
-import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.common.type.HiveIntervalYearMonth;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
-import org.apache.hive.service.cli.thrift.TBoolValue;
-import org.apache.hive.service.cli.thrift.TByteValue;
-import org.apache.hive.service.cli.thrift.TColumnValue;
-import org.apache.hive.service.cli.thrift.TDoubleValue;
-import org.apache.hive.service.cli.thrift.TI16Value;
-import org.apache.hive.service.cli.thrift.TI32Value;
-import org.apache.hive.service.cli.thrift.TI64Value;
-import org.apache.hive.service.cli.thrift.TStringValue;
+import org.apache.hadoop.hive.serde2.thrift.Type;
+import org.apache.hive.service.rpc.thrift.TBoolValue;
+import org.apache.hive.service.rpc.thrift.TByteValue;
+import org.apache.hive.service.rpc.thrift.TColumnValue;
+import org.apache.hive.service.rpc.thrift.TDoubleValue;
+import org.apache.hive.service.rpc.thrift.TI16Value;
+import org.apache.hive.service.rpc.thrift.TI32Value;
+import org.apache.hive.service.rpc.thrift.TI64Value;
+import org.apache.hive.service.rpc.thrift.TStringValue;
+
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Protocols before HIVE_CLI_SERVICE_PROTOCOL_V6 (used by RowBasedSet)
@@ -122,30 +123,6 @@ public class ColumnValue {
     return TColumnValue.stringVal(tStringValue);
   }
 
-  private static TColumnValue dateValue(Date value) {
-    TStringValue tStringValue = new TStringValue();
-    if (value != null) {
-      tStringValue.setValue(value.toString());
-    }
-    return new TColumnValue(TColumnValue.stringVal(tStringValue));
-  }
-
-  private static TColumnValue timestampValue(Timestamp value) {
-    TStringValue tStringValue = new TStringValue();
-    if (value != null) {
-      tStringValue.setValue(value.toString());
-    }
-    return TColumnValue.stringVal(tStringValue);
-  }
-
-  private static TColumnValue stringValue(HiveDecimal value) {
-    TStringValue tStrValue = new TStringValue();
-    if (value != null) {
-      tStrValue.setValue(value.toString());
-    }
-    return TColumnValue.stringVal(tStrValue);
-  }
-
   private static TColumnValue stringValue(HiveIntervalYearMonth value) {
     TStringValue tStrValue = new TStringValue();
     if (value != null) {
@@ -162,7 +139,9 @@ public class ColumnValue {
     return TColumnValue.stringVal(tStrValue);
   }
 
-  public static TColumnValue toTColumnValue(Type type, Object value) {
+  public static TColumnValue toTColumnValue(TypeDescriptor typeDescriptor, Object value) {
+    Type type = typeDescriptor.getType();
+
     switch (type) {
     case BOOLEAN_TYPE:
       return booleanValue((Boolean)value);
@@ -185,22 +164,24 @@ public class ColumnValue {
     case VARCHAR_TYPE:
       return stringValue((HiveVarchar)value);
     case DATE_TYPE:
-      return dateValue((Date)value);
     case TIMESTAMP_TYPE:
-      return timestampValue((Timestamp)value);
-    case INTERVAL_YEAR_MONTH_TYPE:
-      return stringValue((HiveIntervalYearMonth) value);
-    case INTERVAL_DAY_TIME_TYPE:
-      return stringValue((HiveIntervalDayTime) value);
-    case DECIMAL_TYPE:
-      return stringValue(((HiveDecimal)value));
-    case BINARY_TYPE:
+      // SPARK-31859, SPARK-31861: converted to string already in SparkExecuteStatementOperation
       return stringValue((String)value);
+    case DECIMAL_TYPE:
+      String plainStr = value == null ? null : ((BigDecimal)value).toPlainString();
+      return stringValue(plainStr);
+    case BINARY_TYPE:
+      String strVal = value == null ? null : UTF8String.fromBytes((byte[])value).toString();
+      return stringValue(strVal);
     case ARRAY_TYPE:
     case MAP_TYPE:
     case STRUCT_TYPE:
     case UNION_TYPE:
     case USER_DEFINED_TYPE:
+    case INTERVAL_YEAR_MONTH_TYPE:
+    case INTERVAL_DAY_TIME_TYPE:
+      return stringValue((String)value);
+    case NULL_TYPE:
       return stringValue((String)value);
     default:
       return null;

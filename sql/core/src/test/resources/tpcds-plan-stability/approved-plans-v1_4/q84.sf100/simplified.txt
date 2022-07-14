@@ -1,0 +1,54 @@
+TakeOrderedAndProject [c_customer_id,customer_id,customername]
+  WholeStageCodegen (6)
+    Project [c_customer_id,c_last_name,c_first_name]
+      BroadcastHashJoin [cd_demo_sk,sr_cdemo_sk]
+        InputAdapter
+          BroadcastExchange #1
+            WholeStageCodegen (5)
+              Project [c_customer_id,c_first_name,c_last_name,cd_demo_sk]
+                BroadcastHashJoin [c_current_cdemo_sk,cd_demo_sk]
+                  InputAdapter
+                    BroadcastExchange #2
+                      WholeStageCodegen (4)
+                        Project [c_customer_id,c_current_cdemo_sk,c_first_name,c_last_name]
+                          BroadcastHashJoin [c_current_hdemo_sk,hd_demo_sk]
+                            Project [c_customer_id,c_current_cdemo_sk,c_current_hdemo_sk,c_first_name,c_last_name]
+                              BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
+                                Filter [c_current_addr_sk,c_current_cdemo_sk,c_current_hdemo_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.customer [c_customer_id,c_current_cdemo_sk,c_current_hdemo_sk,c_current_addr_sk,c_first_name,c_last_name]
+                                InputAdapter
+                                  BroadcastExchange #3
+                                    WholeStageCodegen (1)
+                                      Project [ca_address_sk]
+                                        Filter [ca_city,ca_address_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_city]
+                            InputAdapter
+                              BroadcastExchange #4
+                                WholeStageCodegen (3)
+                                  Project [hd_demo_sk]
+                                    BroadcastHashJoin [hd_income_band_sk,ib_income_band_sk]
+                                      Filter [hd_demo_sk,hd_income_band_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_income_band_sk]
+                                      InputAdapter
+                                        BroadcastExchange #5
+                                          WholeStageCodegen (2)
+                                            Project [ib_income_band_sk]
+                                              Filter [ib_lower_bound,ib_upper_bound,ib_income_band_sk]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet spark_catalog.default.income_band [ib_income_band_sk,ib_lower_bound,ib_upper_bound]
+                  Filter [cd_demo_sk]
+                    ColumnarToRow
+                      InputAdapter
+                        Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk]
+        Project [sr_cdemo_sk]
+          Filter [sr_cdemo_sk]
+            ColumnarToRow
+              InputAdapter
+                Scan parquet spark_catalog.default.store_returns [sr_cdemo_sk,sr_returned_date_sk]

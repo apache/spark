@@ -19,37 +19,39 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.text.SimpleDateFormat
 import java.util
-import java.util.{Collections, Locale}
+import java.util.Locale
 
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousStream
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TextSocketSourceProvider extends TableProvider with DataSourceRegister with Logging {
+class TextSocketSourceProvider extends SimpleTableProvider with DataSourceRegister with Logging {
 
   private def checkParameters(params: CaseInsensitiveStringMap): Unit = {
     logWarning("The socket source should not be used for production applications! " +
       "It does not support recovery.")
     if (!params.containsKey("host")) {
-      throw new AnalysisException("Set a host to read from with option(\"host\", ...).")
+      throw QueryCompilationErrors.hostOptionNotSetError()
     }
     if (!params.containsKey("port")) {
-      throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
+      throw QueryCompilationErrors.portOptionNotSetError()
     }
     Try {
       params.getBoolean("includeTimestamp", false)
     } match {
       case Success(_) =>
       case Failure(_) =>
-        throw new AnalysisException("includeTimestamp must be set to either \"true\" or \"false\"")
+        throw QueryCompilationErrors.invalidIncludeTimestampValueError()
     }
   }
 
@@ -67,7 +69,7 @@ class TextSocketSourceProvider extends TableProvider with DataSourceRegister wit
 }
 
 class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimestamp: Boolean)
-  extends Table with SupportsMicroBatchRead with SupportsContinuousRead {
+  extends Table with SupportsRead {
 
   override def name(): String = s"Socket[$host:$port]"
 
@@ -79,7 +81,9 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
     }
   }
 
-  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
+  override def capabilities(): util.Set[TableCapability] = {
+    util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ)
+  }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
     override def readSchema(): StructType = schema()

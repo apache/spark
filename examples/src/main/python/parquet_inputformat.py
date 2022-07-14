@@ -29,10 +29,10 @@ $ ./bin/spark-submit --driver-class-path /path/to/example/jar \\
 {u'favorite_color': u'red', u'name': u'Ben', u'favorite_numbers': []}
 <...more log output...>
 """
-from __future__ import print_function
-
 import sys
+from typing import Any, Tuple
 
+from pyspark.rdd import RDD
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     sc = spark.sparkContext
 
-    parquet_rdd = sc.newAPIHadoopFile(
+    parquet_rdd: RDD[Tuple[None, Any]] = sc.newAPIHadoopFile(
         path,
         'org.apache.parquet.avro.AvroParquetInputFormat',
         'java.lang.Void',

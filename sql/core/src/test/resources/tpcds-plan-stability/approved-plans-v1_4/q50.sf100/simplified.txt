@@ -1,0 +1,59 @@
+TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip,30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 days ]
+  WholeStageCodegen (9)
+    HashAggregate [s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip,sum,sum,sum,sum,sum] [sum(CASE WHEN ((sr_returned_date_sk - ss_sold_date_sk) <= 30) THEN 1 ELSE 0 END),sum(CASE WHEN (((sr_returned_date_sk - ss_sold_date_sk) > 30) AND ((sr_returned_date_sk - ss_sold_date_sk) <= 60)) THEN 1 ELSE 0 END),sum(CASE WHEN (((sr_returned_date_sk - ss_sold_date_sk) > 60) AND ((sr_returned_date_sk - ss_sold_date_sk) <= 90)) THEN 1 ELSE 0 END),sum(CASE WHEN (((sr_returned_date_sk - ss_sold_date_sk) > 90) AND ((sr_returned_date_sk - ss_sold_date_sk) <= 120)) THEN 1 ELSE 0 END),sum(CASE WHEN ((sr_returned_date_sk - ss_sold_date_sk) > 120) THEN 1 ELSE 0 END),30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 days ,sum,sum,sum,sum,sum]
+      InputAdapter
+        Exchange [s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip] #1
+          WholeStageCodegen (8)
+            HashAggregate [s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip,sr_returned_date_sk,ss_sold_date_sk] [sum,sum,sum,sum,sum,sum,sum,sum,sum,sum]
+              Project [ss_sold_date_sk,sr_returned_date_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
+                BroadcastHashJoin [ss_store_sk,s_store_sk]
+                  Project [sr_returned_date_sk,ss_store_sk,ss_sold_date_sk]
+                    BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                      Project [sr_returned_date_sk,ss_store_sk,ss_sold_date_sk]
+                        SortMergeJoin [sr_ticket_number,sr_item_sk,sr_customer_sk,ss_ticket_number,ss_item_sk,ss_customer_sk]
+                          InputAdapter
+                            WholeStageCodegen (3)
+                              Sort [sr_ticket_number,sr_item_sk,sr_customer_sk]
+                                InputAdapter
+                                  Exchange [sr_ticket_number,sr_item_sk,sr_customer_sk] #2
+                                    WholeStageCodegen (2)
+                                      Project [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk]
+                                        BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                                          Filter [sr_ticket_number,sr_item_sk,sr_customer_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet spark_catalog.default.store_returns [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk]
+                                                  SubqueryBroadcast [d_date_sk] #1
+                                                    BroadcastExchange #3
+                                                      WholeStageCodegen (1)
+                                                        Project [d_date_sk]
+                                                          Filter [d_year,d_moy,d_date_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
+                                          InputAdapter
+                                            ReusedExchange [d_date_sk] #3
+                          InputAdapter
+                            WholeStageCodegen (5)
+                              Sort [ss_ticket_number,ss_item_sk,ss_customer_sk]
+                                InputAdapter
+                                  Exchange [ss_ticket_number,ss_item_sk,ss_customer_sk] #4
+                                    WholeStageCodegen (4)
+                                      Filter [ss_ticket_number,ss_item_sk,ss_customer_sk,ss_store_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]
+                      InputAdapter
+                        BroadcastExchange #5
+                          WholeStageCodegen (6)
+                            Filter [d_date_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet spark_catalog.default.date_dim [d_date_sk]
+                  InputAdapter
+                    BroadcastExchange #6
+                      WholeStageCodegen (7)
+                        Filter [s_store_sk]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet spark_catalog.default.store [s_store_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]

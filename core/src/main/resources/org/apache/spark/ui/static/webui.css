@@ -15,32 +15,86 @@
  * limitations under the License.
  */
 
-.navbar {
-  font-size: 15px;
-  margin-bottom: 15px;
-  min-width: 600px;
+html {
+  font-size: 14px;
 }
 
-.navbar .brand {
-  margin-right: 20px;
-  margin-bottom: 0;
-  margin-top: 0;
-  margin-left: 10px;
+.h1, .h2, .h3, .h4, .h5, .h6,
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  margin: 0.75rem 0;
+}
+
+h4 {
+  font-size: 1.25rem;
+}
+
+a,
+a:not([href]) {
+  color: #0088cc;
+  text-decoration: none;
+}
+
+a:hover,
+a:not([href]):hover {
+  color: #005580;
+  text-decoration:underline
+}
+
+.btn-spark {
+  color:#333333;
+  background-color:#ffffff;
+  background-image:linear-gradient(to bottom, #ffffff, #e6e6e6);
+  background-repeat:repeat-x;
+  border: 1px solid #ced4da;
+  border-bottom-color: #b3b3b3;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05);
+}
+
+.btn-spark:hover {
+  background-color: #e6e6e6;
+  background-position:0 -15px;
+  transition:background-position 0.1s linear;
+}
+
+.form-inline label {
+  margin-left: 0.25rem;
+  margin-right: 0.25rem;
+}
+
+.navbar {
+  background-color: #fafafa;
+  background-image: linear-gradient(to bottom, #ffffff, #f2f2f2);
+  background-repeat: repeat-x;
+  box-shadow: 0 1px 10px rgba(0,0,0,.1);
+  border-bottom-color: #d4d4d4;
+  border-bottom-style: solid;
+  border-bottom-width: 1px;
+  font-size: 15px;
+  line-height: 1;
+  margin-bottom: 15px;
+  padding: 0 1rem;
+}
+
+.navbar .navbar-brand {
   padding: 0;
 }
 
-.navbar .nav > li {
-  height: 50px;
+.navbar-brand a:hover {
+  text-decoration: none;
 }
 
-.navbar .nav > li a {
-  height: 30px;
+.navbar .navbar-nav .nav-link {
+  height: 50px;
+  padding: 10px 15px 10px;
   line-height: 2;
+  white-space: nowrap;
 }
 
-.navbar-text {
-  height: 50px;
-  line-height: 3.3;
+.navbar .navbar-nav .nav-item.active .nav-link {
+  background-color: #e5e5e5;
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.125);
+  color: #555555;
   white-space: nowrap;
 }
 
@@ -54,23 +108,14 @@ table.sortable td {
 }
 
 .progress {
-  margin-bottom: 0px; position: relative
+  font-size: 1rem;
+  height: 1.42rem;
+  margin-bottom: 0px;
+  position: relative;
+  box-shadow: inset 1px 0 0 rgba(0,0,0,.15), inset 0 -1px 0 rgba(0,0,0,.15);
 }
 
-.progress-completed .bar,
-.progress .bar-completed {
-  background-color: #3EC0FF;
-  background-image: -moz-linear-gradient(top, #44CBFF, #34B0EE);
-  background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#44CBFF), to(#34B0EE));
-  background-image: -webkit-linear-gradient(top, #44CBFF, #34B0EE);
-  background-image: -o-linear-gradient(top, #44CBFF, #34B0EE);
-  background-image: linear-gradient(to bottom, #64CBFF, #54B0EE);
-  background-repeat: repeat-x;
-  filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FF44CBFF', endColorstr='#FF34B0EE', GradientType=0);
-}
-
-.progress-running .bar,
-.progress .bar-running {
+.progress .progress-bar.progress-started {
   background-color: #A0DFFF;
   background-image: -moz-linear-gradient(top, #A4EDFF, #94DDFF);
   background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#A4EDFF), to(#94DDFF));
@@ -79,6 +124,17 @@ table.sortable td {
   background-image: linear-gradient(to bottom, #A4EDFF, #94DDFF);
   background-repeat: repeat-x;
   filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FFA4EDFF', endColorstr='#FF94DDFF', GradientType=0);
+}
+
+.progress .progress-bar.progress-completed {
+  background-color: #3EC0FF;
+  background-image: -moz-linear-gradient(top, #44CBFF, #34B0EE);
+  background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#44CBFF), to(#34B0EE));
+  background-image: -webkit-linear-gradient(top, #44CBFF, #34B0EE);
+  background-image: -o-linear-gradient(top, #44CBFF, #34B0EE);
+  background-image: linear-gradient(to bottom, #64CBFF, #54B0EE);
+  background-repeat: repeat-x;
+  filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FF44CBFF', endColorstr='#FF34B0EE', GradientType=0);
 }
 
 a.kill-link {
@@ -106,12 +162,15 @@ span.rest-uri {
 }
 
 pre {
+  background-color: rgba(0, 0, 0, .05);
   font-size: 12px;
   line-height: 18px;
   padding: 6px;
   margin: 0;
   word-break: break-word;
+  border: 1px solid rgba(0, 0, 0, 0.15);
   border-radius: 3px;
+  white-space: pre-wrap;
 }
 
 .stage-details {
@@ -159,19 +218,16 @@ pre {
   display: none;
 }
 
-span.expand-additional-metrics, span.expand-dag-viz, span.collapse-table {
+span.expand-dag-viz, .collapse-table {
   cursor: pointer;
 }
 
-span.additional-metric-title {
-  cursor: pointer;
-}
-
-.additional-metrics.collapsed, .collapsible-table.collapsed {
+.collapsible-table.collapsed {
   display: none;
 }
 
 .tooltip {
+  font-size: 0.786rem;
   font-weight: normal;
 }
 
@@ -204,14 +260,6 @@ span.additional-metric-title {
   margin: 0;
   font-weight: bold;
   color: #777;
-}
-
-/* Hide all additional metrics by default. This is done here rather than using JavaScript to
- * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
-.scheduler_delay, .deserialization_time, .fetch_wait_time, .shuffle_read_remote,
-.serialization_time, .getting_result_time, .peak_execution_memory,
-.on_heap_memory, .off_heap_memory {
-  display: none;
 }
 
 .accordion-inner {
@@ -257,9 +305,13 @@ a.expandbutton {
   max-width: 600px;
 }
 
-.paginate_button.active > a {
-    color: #999999;
-    text-decoration: underline;
+.page-link {
+  color: #0088cc;
+}
+
+.page-item.active .page-link {
+  background-color: #0088cc;
+  border-color: #0088cc;
 }
 
 .title-table {
@@ -271,36 +323,36 @@ a.expandbutton {
   width: 100%;
 }
 
-.container-fluid-div {
-  width: 200px;
+.select-all-div-checkbox-div {
+  width: 90px;
 }
 
 .scheduler-delay-checkbox-div {
-  width: 120px;
+  width: 130px;
 }
 
 .task-deserialization-time-checkbox-div {
-  width: 175px;
+  width: 190px;
 }
 
-.shuffle-read-blocked-time-checkbox-div {
-  width: 187px;
+.shuffle-read-fetch-wait-time-checkbox-div {
+  width: 215px;
 }
 
 .shuffle-remote-reads-checkbox-div {
-  width: 157px;
+  width: 170px;
 }
 
 .result-serialization-time-checkbox-div {
-  width: 171px;
+  width: 185px;
 }
 
 .getting-result-time-checkbox-div {
-  width: 141px;
+  width: 155px;
 }
 
 .peak-execution-memory-checkbox-div {
-  width: 170px;
+  width: 180px;
 }
 
 #active-tasks-table th {
@@ -330,6 +382,16 @@ a.expandbutton {
 }
 
 #summary-executor-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#speculation-metrics-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#speculation-metrics-table th:first-child {
   border-left: 1px solid #dddddd;
 }
 

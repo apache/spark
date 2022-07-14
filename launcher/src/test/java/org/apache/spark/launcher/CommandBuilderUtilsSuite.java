@@ -37,7 +37,7 @@ public class CommandBuilderUtilsSuite {
     testOpt(" a b c \\\\ ", Arrays.asList("a", "b", "c", "\\"));
 
     // Following tests ported from UtilsSuite.scala.
-    testOpt("", new ArrayList<String>());
+    testOpt("", new ArrayList<>());
     testOpt("a", Arrays.asList("a"));
     testOpt("aaa", Arrays.asList("aaa"));
     testOpt("a b c", Arrays.asList("a", "b", "c"));
@@ -105,12 +105,7 @@ public class CommandBuilderUtilsSuite {
   }
 
   private static void testInvalidOpt(String opts) {
-    try {
-      parseOptionString(opts);
-      fail("Expected exception for invalid option string.");
-    } catch (IllegalArgumentException e) {
-      // pass.
-    }
+    assertThrows(IllegalArgumentException.class, () -> parseOptionString(opts));
   }
 
 }

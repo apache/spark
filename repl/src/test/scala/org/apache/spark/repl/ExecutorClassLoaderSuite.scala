@@ -17,9 +17,10 @@
 
 package org.apache.spark.repl
 
-import java.io.File
+import java.io.{File, IOException}
+import java.lang.reflect.InvocationTargetException
 import java.net.{URI, URL, URLClassLoader}
-import java.nio.channels.FileChannel
+import java.nio.channels.{FileChannel, ReadableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Paths, StandardOpenOption}
 import java.util
@@ -27,16 +28,17 @@ import java.util.Collections
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.io.Source
-import scala.language.implicitConversions
 
 import com.google.common.io.Files
-import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
@@ -55,7 +57,7 @@ class ExecutorClassLoaderSuite
   var url1: String = _
   var urls2: Array[URL] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     tempDir1 = Utils.createTempDir()
     tempDir2 = Utils.createTempDir()
@@ -68,7 +70,7 @@ class ExecutorClassLoaderSuite
     parentClassNames.foreach(TestUtils.createCompiledClass(_, tempDir2, "2"))
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       Utils.deleteRecursively(tempDir1)
       Utils.deleteRecursively(tempDir2)
@@ -111,10 +113,9 @@ class ExecutorClassLoaderSuite
     val classLoader = new ExecutorClassLoader(
       new SparkConf(), null, url1, parentLoader, true)
 
-    // load 'scala.Option', using ClassforName to do the exact same behavior as
-    // what JavaDeserializationStream does
-
     // scalastyle:off classforname
+    // load 'scala.Option', using Class.forName to do the exact same behavior as
+    // what JavaDeserializationStream does
     val optionClass = Class.forName("scala.Option", false, classLoader)
     // scalastyle:on classforname
 
@@ -161,7 +162,7 @@ class ExecutorClassLoaderSuite
     val is = classLoader.getResourceAsStream(resourceName)
     assert(is != null, s"Resource $resourceName not found")
 
-    val bufferedSource = Source.fromInputStream(is, "UTF-8")
+    val bufferedSource = Source.fromInputStream(is, StandardCharsets.UTF_8.name())
     Utils.tryWithSafeFinally {
       val content = bufferedSource.getLines().next()
       assert(content.contains("resource"), "File doesn't contain 'resource'")
@@ -193,7 +194,14 @@ class ExecutorClassLoaderSuite
     when(rpcEnv.openChannel(anyString())).thenAnswer((invocation: InvocationOnMock) => {
       val uri = new URI(invocation.getArguments()(0).asInstanceOf[String])
       val path = Paths.get(tempDir1.getAbsolutePath(), uri.getPath().stripPrefix("/"))
-      FileChannel.open(path, StandardOpenOption.READ)
+      if (path.toFile.exists()) {
+        FileChannel.open(path, StandardOpenOption.READ)
+      } else {
+        val channel = mock[ReadableByteChannel]
+        when(channel.read(any()))
+          .thenThrow(new RuntimeException(s"Stream '${uri.getPath}' was not found."))
+        channel
+      }
     })
 
     val classLoader = new ExecutorClassLoader(new SparkConf(), env, "spark://localhost:1234",
@@ -218,4 +226,133 @@ class ExecutorClassLoaderSuite
     }
   }
 
+  test("nonexistent class and transient errors should cause different errors") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("executor-class-loader-test")
+      .set("spark.network.timeout", "11s")
+      .set("spark.network.timeoutInterval", "11s")
+      .set("spark.repl.class.outputDir", tempDir1.getAbsolutePath)
+    val sc = new SparkContext(conf)
+    try {
+      val replClassUri = sc.conf.get("spark.repl.class.uri")
+
+      // Create an RpcEnv for executor
+      val rpcEnv = RpcEnv.create(
+        SparkEnv.executorSystemName,
+        "localhost",
+        "localhost",
+        0,
+        sc.conf,
+        new SecurityManager(conf), 0, clientMode = true)
+
+      try {
+        val env = mock[SparkEnv]
+        when(env.rpcEnv).thenReturn(rpcEnv)
+
+        val classLoader = new ExecutorClassLoader(
+          conf,
+          env,
+          replClassUri,
+          getClass().getClassLoader(),
+          false)
+
+        // Test loading a nonexistent class
+        intercept[java.lang.ClassNotFoundException] {
+          classLoader.loadClass("NonexistentClass")
+        }
+
+        // Stop SparkContext to simulate transient errors in executors
+        sc.stop()
+
+        val e = intercept[RemoteClassLoaderError] {
+          classLoader.loadClass("ThisIsAClassName")
+        }
+        assert(e.getMessage.contains("ThisIsAClassName"))
+        // RemoteClassLoaderError must not be LinkageError nor ClassNotFoundException. Otherwise,
+        // JVM will cache it and doesn't retry to load a class.
+        assert(!(classOf[LinkageError].isAssignableFrom(e.getClass)))
+        assert(!(classOf[ClassNotFoundException].isAssignableFrom(e.getClass)))
+      } finally {
+        rpcEnv.shutdown()
+        rpcEnv.awaitTermination()
+      }
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("SPARK-20547 ExecutorClassLoader should not throw ClassNotFoundException without " +
+    "acknowledgment from driver") {
+    val tempDir = Utils.createTempDir()
+    try {
+      // Create two classes, "TestClassB" calls "TestClassA", so when calling "TestClassB.foo", JVM
+      // will try to load "TestClassA".
+      val sourceCodeOfClassA =
+        """public class TestClassA implements java.io.Serializable {
+          |  @Override public String toString() { return "TestClassA"; }
+          |}""".stripMargin
+      val sourceFileA = new JavaSourceFromString("TestClassA", sourceCodeOfClassA)
+      TestUtils.createCompiledClass(
+        sourceFileA.name, tempDir, sourceFileA, Seq(tempDir.toURI.toURL))
+
+      val sourceCodeOfClassB =
+        """public class TestClassB implements java.io.Serializable {
+        |  public String foo() { return new TestClassA().toString(); }
+        |  @Override public String toString() { return "TestClassB"; }
+        |}""".stripMargin
+      val sourceFileB = new JavaSourceFromString("TestClassB", sourceCodeOfClassB)
+      TestUtils.createCompiledClass(
+        sourceFileB.name, tempDir, sourceFileB, Seq(tempDir.toURI.toURL))
+
+      val env = mock[SparkEnv]
+      val rpcEnv = mock[RpcEnv]
+      when(env.rpcEnv).thenReturn(rpcEnv)
+      when(rpcEnv.openChannel(anyString())).thenAnswer(new Answer[ReadableByteChannel]() {
+        private var count = 0
+
+        override def answer(invocation: InvocationOnMock): ReadableByteChannel = {
+          val uri = new URI(invocation.getArguments()(0).asInstanceOf[String])
+          val classFileName = uri.getPath().stripPrefix("/")
+          if (count == 0 && classFileName == "TestClassA.class") {
+            count += 1
+            // Let the first attempt to load TestClassA fail with an IOException
+            val channel = mock[ReadableByteChannel]
+            when(channel.read(any())).thenThrow(new IOException("broken pipe"))
+            channel
+          }
+          else {
+            val path = Paths.get(tempDir.getAbsolutePath(), classFileName)
+            FileChannel.open(path, StandardOpenOption.READ)
+          }
+        }
+      })
+
+      val classLoader = new ExecutorClassLoader(new SparkConf(), env, "spark://localhost:1234",
+        getClass().getClassLoader(), false)
+
+      def callClassBFoo(): String = {
+        // scalastyle:off classforname
+        val classB = Class.forName("TestClassB", true, classLoader)
+        // scalastyle:on classforname
+        val instanceOfTestClassB = classB.newInstance()
+        assert(instanceOfTestClassB.toString === "TestClassB")
+        classB.getMethod("foo").invoke(instanceOfTestClassB).asInstanceOf[String]
+      }
+
+      // Reflection will wrap the exception with InvocationTargetException
+      val e = intercept[InvocationTargetException] {
+        callClassBFoo()
+      }
+      // "TestClassA" cannot be loaded because of IOException
+      assert(e.getCause.isInstanceOf[RemoteClassLoaderError])
+      assert(e.getCause.getCause.isInstanceOf[IOException])
+      assert(e.getCause.getMessage.contains("TestClassA"))
+
+      // We should be able to re-load TestClassA for IOException
+      assert(callClassBFoo() === "TestClassA")
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
 }

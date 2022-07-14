@@ -21,7 +21,10 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * A field inside a StructType.
@@ -43,9 +46,15 @@ case class StructField(
   /** No-arg constructor for kryo. */
   protected def this() = this(null, null)
 
-  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
-    DataType.buildFormattedString(dataType, s"$prefix    |", builder)
+  private[sql] def buildFormattedString(
+      prefix: String,
+      stringConcat: StringConcat,
+      maxDepth: Int): Unit = {
+    if (maxDepth > 0) {
+      stringConcat.append(s"$prefix-- ${SchemaUtils.escapeMetaCharacters(name)}: " +
+        s"${dataType.typeName} (nullable = $nullable)\n")
+      DataType.buildFormattedString(dataType, s"$prefix    |", stringConcat, maxDepth)
+    }
   }
 
   // override the default toString to be compatible with legacy parquet files.
@@ -77,16 +86,79 @@ case class StructField(
   }
 
   /**
+   * Updates the StructField with a new current default value.
+   */
+  def withCurrentDefaultValue(value: String): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Clears the StructField of its current default value, if any.
+   */
+  def clearCurrentDefaultValue(): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Return the current default value of this StructField.
+   */
+  def getCurrentDefaultValue(): Option[String] = {
+    if (metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+      Option(metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Updates the StructField with a new existence default value.
+   */
+  def withExistenceDefaultValue(value: String): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, value)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Return the existence default value of this StructField.
+   */
+  private[sql] def getExistenceDefaultValue(): Option[String] = {
+    if (metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)) {
+      Option(metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+    } else {
+      None
+    }
+  }
+
+  private def getDDLComment = getComment()
+    .map(escapeSingleQuotedString)
+    .map(" COMMENT '" + _ + "'")
+    .getOrElse("")
+
+  /**
+   * Returns a string containing a schema in SQL format. For example the following value:
+   * `StructField("eventId", IntegerType)` will be converted to `eventId`: INT.
+   */
+  private[sql] def sql = s"${quoteIfNeeded(name)}: ${dataType.sql}$getDDLComment"
+
+  /**
    * Returns a string containing a schema in DDL format. For example, the following value:
-   * `StructField("eventId", IntegerType)` will be converted to `eventId` INT.
-   *
+   * `StructField("eventId", IntegerType, false)` will be converted to `eventId` INT NOT NULL.
+   * `StructField("eventId", IntegerType, true)` will be converted to `eventId` INT.
    * @since 2.4.0
    */
   def toDDL: String = {
-    val comment = getComment()
-      .map(escapeSingleQuotedString)
-      .map(" COMMENT '" + _ + "'")
-
-    s"${quoteIdentifier(name)} ${dataType.sql}${comment.getOrElse("")}"
+    val nullString = if (nullable) "" else " NOT NULL"
+    s"${quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLComment"
   }
 }

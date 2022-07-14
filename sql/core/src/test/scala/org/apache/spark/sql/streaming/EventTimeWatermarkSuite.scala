@@ -24,13 +24,18 @@ import java.util.{Calendar, Date, Locale}
 import java.util.concurrent.TimeUnit._
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.execution.streaming.sources.MemorySink
+import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.util.Utils
@@ -127,9 +132,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // No event time metrics when there is no watermarking
     val inputData1 = MemoryStream[Int]
     val aggWithoutWatermark = inputData1.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     testStream(aggWithoutWatermark, outputMode = Complete)(
@@ -144,10 +149,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // All event time metrics where watermarking is set
     val inputData2 = MemoryStream[Int]
     val aggWithWatermark = inputData2.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
+        .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+        .agg(count("*") as Symbol("count"))
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     testStream(aggWithWatermark)(
@@ -167,10 +172,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // All event time metrics where watermarking is set
     val inputData = MemoryStream[Int]
     val aggWithWatermark = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
+        .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+        .agg(count("*") as Symbol("count"))
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     // Unlike the ProcessingTime trigger, Trigger.Once only runs one trigger every time
@@ -222,10 +227,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // All event time metrics where watermarking is set
     val inputData = MemoryStream[Int]
     val aggWithWatermark = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
+        .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+        .agg(count("*") as Symbol("count"))
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
 
@@ -284,10 +289,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     testStream(windowedAggregation)(
@@ -296,21 +301,23 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),   // Advance watermark to 15 seconds
       CheckNewAnswer((10, 5)),
       assertNumStateRows(2),
+      assertNumRowsDroppedByWatermark(0),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
-      assertNumStateRows(2)
+      assertNumStateRows(2),
+      assertNumRowsDroppedByWatermark(1)
     )
   }
 
   test("update mode") {
     val inputData = MemoryStream[Int]
-    spark.conf.set("spark.sql.shuffle.partitions", "10")
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "10")
 
     val windowedAggregation = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     testStream(windowedAggregation, OutputMode.Update)(
@@ -319,12 +326,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),     // Advance watermark to 15 seconds
       CheckNewAnswer((25, 1)),
       assertNumStateRows(2),
+      assertNumRowsDroppedByWatermark(0),
       AddData(inputData, 10, 25), // Ignore 10 as its less than watermark
       CheckNewAnswer((25, 2)),
       assertNumStateRows(2),
+      assertNumRowsDroppedByWatermark(1),
       AddData(inputData, 10),     // Should not emit anything as data less than watermark
       CheckNewAnswer(),
-      assertNumStateRows(2)
+      assertNumStateRows(2),
+      assertNumRowsDroppedByWatermark(1)
     )
   }
 
@@ -334,10 +344,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     val input = MemoryStream[Long]
     val aggWithWatermark = input.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "2 years 5 months")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     def monthsSinceEpoch(date: Date): Int = {
@@ -366,10 +376,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   test("recovery") {
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     testStream(df)(
@@ -401,19 +411,19 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val first = MemoryStream[Int]
 
     val firstDf = first.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .select('value)
+      .select($"value")
 
     val second = MemoryStream[Int]
 
     val secondDf = second.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "5 seconds")
-      .select('value)
+      .select($"value")
 
     withTempDir { checkpointDir =>
-      val unionWriter = firstDf.union(secondDf).agg(sum('value))
+      val unionWriter = firstDf.union(secondDf).agg(sum($"value"))
         .writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .format("memory")
@@ -478,10 +488,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
+        .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+        .agg(count("*") as Symbol("count"))
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     // No eviction when asked to compute complete results.
@@ -503,10 +513,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "10 seconds")
         .groupBy($"eventTime")
-        .agg(count("*") as 'count)
+        .agg(count("*") as Symbol("count"))
         .select($"eventTime".cast("long").as[Long], $"count".as[Long])
 
     testStream(windowedAggregation)(
@@ -542,8 +552,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   test("the new watermark should override the old one") {
     val df = MemoryStream[(Long, Long)].toDF()
-      .withColumn("first", $"_1".cast("timestamp"))
-      .withColumn("second", $"_2".cast("timestamp"))
+      .withColumn("first", timestamp_seconds($"_1"))
+      .withColumn("second", timestamp_seconds($"_2"))
       .withWatermark("first", "1 minute")
       .withWatermark("second", "2 minutes")
 
@@ -555,7 +565,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   test("EventTime watermark should be ignored in batch query.") {
     val df = testData
-      .withColumn("eventTime", $"key".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"key"))
       .withWatermark("eventTime", "1 minute")
       .select("eventTime")
       .as[Long]
@@ -577,7 +587,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       val groupEvents = input
         .withWatermark("eventTime", "2 seconds")
         .groupBy("symbol", "eventTime")
-        .agg(count("price") as 'count)
+        .agg(count("price") as Symbol("count"))
         .select("symbol", "eventTime", "count")
       val q = groupEvents.writeStream
         .outputMode("append")
@@ -591,16 +601,43 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  test("SPARK-27340 Alias on TimeWindow expression cause watermark metadata lost") {
+    val inputData = MemoryStream[Int]
+    val aliasWindow = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .select(window($"eventTime", "5 seconds") as Symbol("aliasWindow"))
+    // Check the eventTime metadata is kept in the top level alias.
+    assert(aliasWindow.logicalPlan.output.exists(
+      _.metadata.contains(EventTimeWatermark.delayKey)))
+
+    val windowedAggregation = aliasWindow
+      .groupBy($"aliasWindow")
+      .agg(count("*") as Symbol("count"))
+      .select($"aliasWindow".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11, 12, 13, 14, 15),
+      CheckNewAnswer(),
+      AddData(inputData, 25), // Advance watermark to 15 seconds
+      CheckNewAnswer((10, 5)),
+      assertNumStateRows(2),
+      AddData(inputData, 10), // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      assertNumStateRows(2)
+    )
+  }
+
   test("test no-data flag") {
     val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 
     def testWithFlag(flag: Boolean): Unit = withClue(s"with $flagKey = $flag") {
       val inputData = MemoryStream[Int]
       val windowedAggregation = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
+        .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+        .agg(count("*") as Symbol("count"))
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
       testStream(windowedAggregation)(
@@ -729,14 +766,74 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  Seq("true", "false").foreach { legacyIntervalEnabled =>
+    test("SPARK-35815: Support ANSI intervals for delay threshold " +
+      s"(${SQLConf.LEGACY_INTERVAL_ENABLED.key}=$legacyIntervalEnabled)") {
+      withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyIntervalEnabled) {
+        val DAYS_PER_MONTH = 31
+        Seq(
+          // Conventional form and some variants
+          (Seq("3 days", "Interval 3 day", "inTerval '3' day"), 3 * MILLIS_PER_DAY),
+          (Seq(" 5 hours", "INTERVAL 5 hour", "interval '5' hour"), 5 * MILLIS_PER_HOUR),
+          (Seq("\t8 minutes", "interval 8 minute", "interval '8' minute"), 8 * MILLIS_PER_MINUTE),
+          (Seq("10 seconds", "interval 10 second", "interval '10' second"),
+            10 * MILLIS_PER_SECOND),
+          (Seq("1 years", "interval 1 year", "interval '1' year"),
+            MONTHS_PER_YEAR * DAYS_PER_MONTH * MILLIS_PER_DAY),
+          (Seq("1 months", "interval 1 month", "interval '1' month"),
+            DAYS_PER_MONTH * MILLIS_PER_DAY),
+          (Seq(
+            "1 day 2 hours 3 minutes 4 seconds",
+            " interval 1 day 2 hours 3 minutes 4 seconds",
+            "\tinterval '1' day '2' hours '3' minutes '4' seconds",
+            "interval '1 2:3:4' day to second"),
+            MILLIS_PER_DAY + 2 * MILLIS_PER_HOUR + 3 * MILLIS_PER_MINUTE + 4 * MILLIS_PER_SECOND),
+          (Seq(
+            " 1 year 2 months",
+            "interval 1 year 2 month",
+            "interval '1' year '2' month",
+            "\tinterval '1-2' year to month"),
+            (MONTHS_PER_YEAR * DAYS_PER_MONTH + 2 * DAYS_PER_MONTH) * MILLIS_PER_DAY)
+        ).foreach { case (delayThresholdVariants, expectedMs) =>
+          delayThresholdVariants.foreach { case delayThreshold =>
+            val df = MemoryStream[Int].toDF
+              .withColumn("eventTime", timestamp_seconds($"value"))
+              .withWatermark("eventTime", delayThreshold)
+            val eventTimeAttr = df.queryExecution.analyzed.output.find(a => a.name == "eventTime")
+            assert(eventTimeAttr.isDefined)
+            val metadata = eventTimeAttr.get.metadata
+            assert(metadata.contains(EventTimeWatermark.delayKey))
+            assert(metadata.getLong(EventTimeWatermark.delayKey) === expectedMs)
+          }
+        }
+
+        // Invalid interval patterns
+        Seq(
+          "1 foo",
+          "interva 2 day",
+          "intrval '3' day",
+          "interval 4 foo",
+          "interval '5' foo",
+          "interval '1 2:3:4' day to hour",
+          "interval '1 2' year to month").foreach { delayThreshold =>
+          intercept[AnalysisException] {
+            val df = MemoryStream[Int].toDF
+              .withColumn("eventTime", timestamp_seconds($"value"))
+              .withWatermark("eventTime", delayThreshold)
+          }
+        }
+      }
+    }
+  }
+
   private def dfWithMultipleWatermarks(
       input1: MemoryStream[Int],
       input2: MemoryStream[Int]): Dataset[_] = {
     val df1 = input1.toDF
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
     val df2 = input2.toDF
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "15 seconds")
     df1.union(df2).select($"eventTime".cast("int"))
   }
@@ -751,6 +848,20 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     q.processAllAvailable()
     val progressWithData = q.recentProgress.lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
+    true
+  }
+
+  private def assertNumRowsDroppedByWatermark(
+      numRowsDroppedByWatermark: Long): AssertOnQuery = AssertOnQuery { q =>
+    q.processAllAvailable()
+    val progressWithData = q.recentProgress.filterNot { p =>
+      // filter out batches which are falling into one of types:
+      // 1) doesn't execute the batch run
+      // 2) empty input batch
+      p.inputRowsPerSecond == 0
+    }.lastOption.get
+    assert(progressWithData.stateOperators(0).numRowsDroppedByWatermark
+      === numRowsDroppedByWatermark)
     true
   }
 
@@ -772,7 +883,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   }
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(ju.TimeZone.getTimeZone("UTC"))
+  timestampFormat.setTimeZone(ju.TimeZone.getTimeZone(UTC))
 
   private def formatTimestamp(sec: Long): String = {
     timestampFormat.format(new ju.Date(sec * 1000))

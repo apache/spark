@@ -24,7 +24,9 @@ import org.apache.arrow.vector.complex._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 
 object ArrowWriter {
 
@@ -58,25 +60,32 @@ object ArrowWriter {
       case (BinaryType, vector: VarBinaryVector) => new BinaryWriter(vector)
       case (DateType, vector: DateDayVector) => new DateWriter(vector)
       case (TimestampType, vector: TimeStampMicroTZVector) => new TimestampWriter(vector)
+      case (TimestampNTZType, vector: TimeStampMicroVector) => new TimestampNTZWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
+      case (MapType(_, _, _), vector: MapVector) =>
+        val structVector = vector.getDataVector.asInstanceOf[StructVector]
+        val keyWriter = createFieldWriter(structVector.getChild(MapVector.KEY_NAME))
+        val valueWriter = createFieldWriter(structVector.getChild(MapVector.VALUE_NAME))
+        new MapWriter(vector, structVector, keyWriter, valueWriter)
       case (StructType(_), vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new StructWriter(vector, children.toArray)
+      case (NullType, vector: NullVector) => new NullWriter(vector)
+      case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
+      case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
       case (dt, _) =>
-        throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+        throw QueryExecutionErrors.unsupportedDataTypeError(dt.catalogString)
     }
   }
 }
 
 class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
 
-  def schema: StructType = StructType(fields.map { f =>
-    StructField(f.name, f.dataType, f.nullable)
-  })
+  def schema: StructType = ArrowUtils.fromArrowSchema(root.getSchema())
 
   private var count: Int = 0
 
@@ -279,6 +288,18 @@ private[arrow] class TimestampWriter(
   }
 }
 
+private[arrow] class TimestampNTZWriter(
+    val valueVector: TimeStampMicroVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setSafe(count, input.getLong(ordinal))
+  }
+}
+
 private[arrow] class ArrayWriter(
     val valueVector: ListVector,
     val elementWriter: ArrowFieldWriter) extends ArrowFieldWriter {
@@ -325,11 +346,11 @@ private[arrow] class StructWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val struct = input.getStruct(ordinal, children.length)
     var i = 0
+    valueVector.setIndexDefined(count)
     while (i < struct.numFields) {
       children(i).write(struct, i)
       i += 1
     }
-    valueVector.setIndexDefined(count)
   }
 
   override def finish(): Unit = {
@@ -340,5 +361,73 @@ private[arrow] class StructWriter(
   override def reset(): Unit = {
     super.reset()
     children.foreach(_.reset())
+  }
+}
+
+private[arrow] class MapWriter(
+    val valueVector: MapVector,
+    val structVector: StructVector,
+    val keyWriter: ArrowFieldWriter,
+    val valueWriter: ArrowFieldWriter) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {}
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val map = input.getMap(ordinal)
+    valueVector.startNewValue(count)
+    val keys = map.keyArray()
+    val values = map.valueArray()
+    var i = 0
+    while (i <  map.numElements()) {
+      structVector.setIndexDefined(keyWriter.count)
+      keyWriter.write(keys, i)
+      valueWriter.write(values, i)
+      i += 1
+    }
+
+    valueVector.endValue(count, map.numElements())
+  }
+
+  override def finish(): Unit = {
+    super.finish()
+    keyWriter.finish()
+    valueWriter.finish()
+  }
+
+  override def reset(): Unit = {
+    super.reset()
+    keyWriter.reset()
+    valueWriter.reset()
+  }
+}
+
+private[arrow] class NullWriter(val valueVector: NullVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+  }
+}
+
+private[arrow] class IntervalYearWriter(val valueVector: IntervalYearVector)
+  extends ArrowFieldWriter {
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setSafe(count, input.getInt(ordinal));
+  }
+}
+
+private[arrow] class DurationWriter(val valueVector: DurationVector)
+  extends ArrowFieldWriter {
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.set(count, input.getLong(ordinal))
   }
 }

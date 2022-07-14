@@ -29,11 +29,11 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.scheduler.{JobFailed, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.kvstore.InMemoryStore
 
-class AllExecutionsPageSuite extends SharedSQLContext with BeforeAndAfter {
+class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 
@@ -57,7 +57,7 @@ class AllExecutionsPageSuite extends SharedSQLContext with BeforeAndAfter {
 
     val html = renderSQLPage(request, tab, statusStore).toString().toLowerCase(Locale.ROOT)
     assert(html.contains("failed queries"))
-    assert(!html.contains("1970"))
+    assert(!html.contains("1970/01/01"))
   }
 
   test("sorting should be successful") {
@@ -73,7 +73,7 @@ class AllExecutionsPageSuite extends SharedSQLContext with BeforeAndAfter {
     map.put("failed.sort", Array("duration"))
     when(request.getParameterMap()).thenReturn(map)
     val html = renderSQLPage(request, tab, statusStore).toString().toLowerCase(Locale.ROOT)
-    assert(!html.contains("IllegalArgumentException"))
+    assert(!html.contains("illegalargumentexception"))
     assert(html.contains("duration"))
   }
 
@@ -112,7 +112,8 @@ class AllExecutionsPageSuite extends SharedSQLContext with BeforeAndAfter {
         "test",
         df.queryExecution.toString,
         SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-        System.currentTimeMillis()))
+        System.currentTimeMillis(),
+        Map.empty))
       listener.onOtherEvent(SparkListenerSQLExecutionEnd(
         executionId, System.currentTimeMillis()))
       listener.onJobStart(SparkListenerJobStart(

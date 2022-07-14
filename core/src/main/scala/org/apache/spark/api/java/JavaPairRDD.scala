@@ -19,7 +19,7 @@ package org.apache.spark.api.java
 
 import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
-import java.util.{Comparator, Iterator => JIterator, List => JList}
+import java.util.{Comparator, List => JList}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -32,6 +32,7 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.Partitioner._
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
 import org.apache.spark.api.java.function.{FlatMapFunction, Function => JFunction,
@@ -791,7 +792,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: JobConf) {
+      conf: JobConf): Unit = {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
   }
 
@@ -800,7 +801,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass)
   }
 
@@ -810,7 +811,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      codec: Class[_ <: CompressionCodec]) {
+      codec: Class[_ <: CompressionCodec]): Unit = {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, codec)
   }
 
@@ -820,7 +821,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: Configuration) {
+      conf: Configuration): Unit = {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
   }
 
@@ -828,7 +829,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported storage system, using
    * a Configuration object for that storage system.
    */
-  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+  def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = {
     rdd.saveAsNewAPIHadoopDataset(conf)
   }
 
@@ -837,7 +838,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass)
   }
 
@@ -847,7 +848,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
    * MapReduce job.
    */
-  def saveAsHadoopDataset(conf: JobConf) {
+  def saveAsHadoopDataset(conf: JobConf): Unit = {
     rdd.saveAsHadoopDataset(conf)
   }
 
@@ -935,6 +936,34 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def sortByKey(comp: Comparator[K], ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
     implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
     fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
+  }
+
+  /**
+   * Return a RDD containing only the elements in the inclusive range `lower` to `upper`.
+   * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
+   * performed efficiently by only scanning the partitions that might contain matching elements.
+   * Otherwise, a standard `filter` is applied to all partitions.
+   *
+   * @since 3.1.0
+   */
+  @Since("3.1.0")
+  def filterByRange(lower: K, upper: K): JavaPairRDD[K, V] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    filterByRange(comp, lower, upper)
+  }
+
+  /**
+   * Return a RDD containing only the elements in the inclusive range `lower` to `upper`.
+   * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
+   * performed efficiently by only scanning the partitions that might contain matching elements.
+   * Otherwise, a standard `filter` is applied to all partitions.
+   *
+   * @since 3.1.0
+   */
+  @Since("3.1.0")
+  def filterByRange(comp: Comparator[K], lower: K, upper: K): JavaPairRDD[K, V] = {
+    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
+    fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).filterByRange(lower, upper))
   }
 
   /**

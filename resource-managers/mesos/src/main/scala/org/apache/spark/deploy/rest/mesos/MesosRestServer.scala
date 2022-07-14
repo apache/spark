@@ -28,6 +28,7 @@ import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest._
 import org.apache.spark.internal.config
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
 import org.apache.spark.util.Utils
 
@@ -97,12 +98,14 @@ private[mesos] class MesosSubmitRequestServlet(
 
     // Optional fields
     val sparkProperties = request.sparkProperties
+    val driverDefaultJavaOptions = sparkProperties.get(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
     val driverExtraJavaOptions = sparkProperties.get(config.DRIVER_JAVA_OPTIONS.key)
     val driverExtraClassPath = sparkProperties.get(config.DRIVER_CLASS_PATH.key)
     val driverExtraLibraryPath = sparkProperties.get(config.DRIVER_LIBRARY_PATH.key)
     val superviseDriver = sparkProperties.get(config.DRIVER_SUPERVISE.key)
     val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
     val driverMemoryOverhead = sparkProperties.get(config.DRIVER_MEMORY_OVERHEAD.key)
+    val driverMemoryOverheadFactor = sparkProperties.get(config.DRIVER_MEMORY_OVERHEAD_FACTOR.key)
     val driverCores = sparkProperties.get(config.DRIVER_CORES.key)
     val name = request.sparkProperties.getOrElse("spark.app.name", mainClass)
 
@@ -110,15 +113,19 @@ private[mesos] class MesosSubmitRequestServlet(
     val conf = new SparkConf(false).setAll(sparkProperties)
     val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
+    val defaultJavaOpts = driverDefaultJavaOptions.map(Utils.splitCommandString)
+      .getOrElse(Seq.empty)
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
     val sparkJavaOpts = Utils.sparkJavaOpts(conf)
-    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    val javaOpts = sparkJavaOpts ++ defaultJavaOpts ++ extraJavaOpts
     val command = new Command(
       mainClass, appArgs, environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
+    val actualDriverMemoryFactor = driverMemoryOverheadFactor.map(_.toDouble).getOrElse(
+      MEMORY_OVERHEAD_FACTOR)
     val actualDriverMemoryOverhead = driverMemoryOverhead.map(_.toInt).getOrElse(
-      math.max((MEMORY_OVERHEAD_FACTOR * actualDriverMemory).toInt, MEMORY_OVERHEAD_MIN))
+      math.max((actualDriverMemoryFactor * actualDriverMemory).toInt, MEMORY_OVERHEAD_MIN))
     val actualDriverCores = driverCores.map(_.toDouble).getOrElse(DEFAULT_CORES)
     val submitDate = new Date()
     val submissionId = newDriverId(submitDate)

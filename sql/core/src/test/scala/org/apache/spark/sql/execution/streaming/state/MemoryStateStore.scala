@@ -46,4 +46,8 @@ class MemoryStateStore extends StateStore() {
   override def metrics: StateStoreMetrics = new StateStoreMetrics(map.size, 0, Map.empty)
 
   override def hasCommitted: Boolean = true
+
+  override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    throw new UnsupportedOperationException("Doesn't support prefix scan!")
+  }
 }

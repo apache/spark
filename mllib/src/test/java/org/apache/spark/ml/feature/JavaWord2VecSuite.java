@@ -53,7 +53,7 @@ public class JavaWord2VecSuite extends SharedSparkSession {
 
     for (Row r : result.select("result").collectAsList()) {
       double[] polyFeatures = ((Vector) r.get(0)).toArray();
-      Assert.assertEquals(polyFeatures.length, 3);
+      Assert.assertEquals(3, polyFeatures.length);
     }
   }
 }

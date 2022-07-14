@@ -25,7 +25,7 @@ import traceback
 import time
 import gc
 from errno import EINTR, EAGAIN
-from socket import AF_INET, SOCK_STREAM, SOMAXCONN
+from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.worker import main as worker_main
@@ -54,8 +54,9 @@ def worker(sock, authenticated):
     # Read the socket using fdopen instead of socket.makefile() because the latter
     # seems to be very slow; note that we need to dup() the file descriptor because
     # otherwise writes also cause a seek that makes us miss data on the read side.
-    infile = os.fdopen(os.dup(sock.fileno()), "rb", 65536)
-    outfile = os.fdopen(os.dup(sock.fileno()), "wb", 65536)
+    buffer_size = int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
+    infile = os.fdopen(os.dup(sock.fileno()), "rb", buffer_size)
+    outfile = os.fdopen(os.dup(sock.fileno()), "wb", buffer_size)
 
     if not authenticated:
         client_secret = UTF8Deserializer().loads(infile)
@@ -85,15 +86,21 @@ def manager():
     # Create a new process group to corral our children
     os.setpgid(0, 0)
 
-    # Create a listening socket on the AF_INET loopback interface
-    listen_sock = socket.socket(AF_INET, SOCK_STREAM)
-    listen_sock.bind(('127.0.0.1', 0))
-    listen_sock.listen(max(1024, SOMAXCONN))
-    listen_host, listen_port = listen_sock.getsockname()
+    # Create a listening socket on the loopback interface
+    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+        listen_sock = socket.socket(AF_INET6, SOCK_STREAM)
+        listen_sock.bind(("::1", 0, 0, 0))
+        listen_sock.listen(max(1024, SOMAXCONN))
+        listen_host, listen_port, _, _ = listen_sock.getsockname()
+    else:
+        listen_sock = socket.socket(AF_INET, SOCK_STREAM)
+        listen_sock.bind(("127.0.0.1", 0))
+        listen_sock.listen(max(1024, SOMAXCONN))
+        listen_host, listen_port = listen_sock.getsockname()
 
     # re-open stdin/stdout in 'wb' mode
-    stdin_bin = os.fdopen(sys.stdin.fileno(), 'rb', 4)
-    stdout_bin = os.fdopen(sys.stdout.fileno(), 'wb', 4)
+    stdin_bin = os.fdopen(sys.stdin.fileno(), "rb", 4)
+    stdout_bin = os.fdopen(sys.stdout.fileno(), "wb", 4)
     write_int(listen_port, stdout_bin)
     stdout_bin.flush()
 
@@ -105,6 +112,7 @@ def manager():
 
     def handle_sigterm(*args):
         shutdown(1)
+
     signal.signal(SIGTERM, handle_sigterm)  # Gracefully exit on SIGTERM
     signal.signal(SIGHUP, SIG_IGN)  # Don't die on SIGHUP
     signal.signal(SIGCHLD, SIG_IGN)
@@ -149,7 +157,7 @@ def manager():
                         time.sleep(1)
                         pid = os.fork()  # error here will shutdown daemon
                     else:
-                        outfile = sock.makefile(mode='wb')
+                        outfile = sock.makefile(mode="wb")
                         write_int(e.errno, outfile)  # Signal that the fork failed
                         outfile.flush()
                         outfile.close()
@@ -159,6 +167,21 @@ def manager():
                 if pid == 0:
                     # in child process
                     listen_sock.close()
+
+                    # It should close the standard input in the child process so that
+                    # Python native function executions stay intact.
+                    #
+                    # Note that if we just close the standard input (file descriptor 0),
+                    # the lowest file descriptor (file descriptor 0) will be allocated,
+                    # later when other file descriptors should happen to open.
+                    #
+                    # Therefore, here we redirects it to '/dev/null' by duplicating
+                    # another file descriptor for '/dev/null' to the standard input (0).
+                    # See SPARK-26175.
+                    devnull = open(os.devnull, "r")
+                    os.dup2(devnull.fileno(), 0)
+                    devnull.close()
+
                     try:
                         # Acknowledge that the fork was successful
                         outfile = sock.makefile(mode="wb")
@@ -179,7 +202,7 @@ def manager():
                                     pass
                                 break
                             gc.collect()
-                    except:
+                    except BaseException:
                         traceback.print_exc()
                         os._exit(1)
                     else:
@@ -191,5 +214,5 @@ def manager():
         shutdown(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     manager()

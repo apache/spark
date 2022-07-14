@@ -18,24 +18,40 @@
 package org.apache.spark
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
-import java.net.{HttpURLConnection, URI, URL}
+import java.net.{HttpURLConnection, InetSocketAddress, URI, URL}
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files => JavaFiles, Paths}
+import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, Properties}
+import java.util.{Arrays, EnumSet, Locale}
 import java.util.concurrent.{TimeoutException, TimeUnit}
-import java.util.jar.{JarEntry, JarOutputStream}
+import java.util.jar.{JarEntry, JarOutputStream, Manifest}
+import java.util.regex.Pattern
 import javax.net.ssl._
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.io.Source
+import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.log4j.PropertyConfigurator
+import org.apache.commons.lang3.StringUtils
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.LoggerContext
+import org.apache.logging.log4j.core.appender.ConsoleAppender
+import org.apache.logging.log4j.core.config.builder.api.ConfigurationBuilderFactory
+import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.handler.DefaultHandler
+import org.eclipse.jetty.server.handler.HandlerList
+import org.eclipse.jetty.server.handler.ResourceHandler
+import org.json4s.JsonAST.JValue
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
@@ -93,9 +109,23 @@ private[spark] object TestUtils {
    * Create a jar file that contains this set of files. All files will be located in the specified
    * directory or at the root of the jar.
    */
-  def createJar(files: Seq[File], jarFile: File, directoryPrefix: Option[String] = None): URL = {
+  def createJar(
+      files: Seq[File],
+      jarFile: File,
+      directoryPrefix: Option[String] = None,
+      mainClass: Option[String] = None): URL = {
+    val manifest = mainClass match {
+      case Some(mc) =>
+        val m = new Manifest()
+        m.getMainAttributes.putValue("Manifest-Version", "1.0")
+        m.getMainAttributes.putValue("Main-Class", mc)
+        m
+      case None =>
+        new Manifest()
+    }
+
     val jarFileStream = new FileOutputStream(jarFile)
-    val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
+    val jarStream = new JarOutputStream(jarFileStream, manifest)
 
     for (file <- files) {
       // The `name` for the argument in `JarEntry` should use / for its separator. This is
@@ -161,11 +191,20 @@ private[spark] object TestUtils {
       destDir: File,
       toStringValue: String = "",
       baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq.empty): File = {
+      classpathUrls: Seq[URL] = Seq.empty,
+      implementsClasses: Seq[String] = Seq.empty,
+      extraCodeBody: String = ""): File = {
     val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
+    val implementsText =
+      "implements " + (implementsClasses :+ "java.io.Serializable").mkString(", ")
     val sourceFile = new JavaSourceFromString(className,
-      "public class " + className + extendsText + " implements java.io.Serializable {" +
-      "  @Override public String toString() { return \"" + toStringValue + "\"; }}")
+      s"""
+         |public class $className $extendsText $implementsText {
+         |  @Override public String toString() { return "$toStringValue"; }
+         |
+         |  $extraCodeBody
+         |}
+        """.stripMargin)
     createCompiledClass(className, destDir, sourceFile, classpathUrls)
   }
 
@@ -193,11 +232,77 @@ private[spark] object TestUtils {
   }
 
   /**
+   * Asserts that exception message contains the message. Please note this checks all
+   * exceptions in the tree. If a type parameter `E` is supplied, this will additionally confirm
+   * that the exception is a subtype of the exception provided in the type parameter.
+   */
+  def assertExceptionMsg[E <: Throwable : ClassTag](
+      exception: Throwable,
+      msg: String,
+      ignoreCase: Boolean = false): Unit = {
+
+    val (typeMsg, typeCheck) = if (classTag[E] == classTag[Nothing]) {
+      ("", (_: Throwable) => true)
+    } else {
+      val clazz = classTag[E].runtimeClass
+      (s"of type ${clazz.getName} ", (e: Throwable) => clazz.isAssignableFrom(e.getClass))
+    }
+
+    def contain(e: Throwable, msg: String): Boolean = {
+      if (ignoreCase) {
+        e.getMessage.toLowerCase(Locale.ROOT).contains(msg.toLowerCase(Locale.ROOT))
+      } else {
+        e.getMessage.contains(msg)
+      } && typeCheck(e)
+    }
+
+    var e = exception
+    var contains = contain(e, msg)
+    while (e.getCause != null && !contains) {
+      e = e.getCause
+      contains = contain(e, msg)
+    }
+    assert(contains,
+      s"Exception tree doesn't contain the expected exception ${typeMsg}with message: $msg\n" +
+        Utils.exceptionString(e))
+  }
+
+  /**
    * Test if a command is available.
    */
   def testCommandAvailable(command: String): Boolean = {
-    val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq(
+        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
+    } else {
+      Try(Process(Seq(
+        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
+    }
     attempt.isSuccess && attempt.get == 0
+  }
+
+  def isPythonVersionAtLeast38(): Boolean = {
+    val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
+    val pythonSnippet = "import sys; sys.exit(sys.version_info < (3, 8, 0))"
+    Try(Process(cmdSeq :+ s"python3 -c '$pythonSnippet'").! == 0).getOrElse(false)
+  }
+
+  /**
+   * Get the absolute path from the executable. This implementation was borrowed from
+   * `spark/dev/sparktestsupport/shellutils.py`.
+   */
+  def getAbsolutePathFromExecutable(executable: String): Option[String] = {
+    val command = if (Utils.isWindows) s"$executable.exe" else executable
+    if (command.split(File.separator, 2).length == 1 &&
+        JavaFiles.isRegularFile(Paths.get(command)) &&
+        JavaFiles.isExecutable(Paths.get(command))) {
+      Some(Paths.get(command).toAbsolutePath.toString)
+    } else {
+      sys.env("PATH").split(Pattern.quote(File.pathSeparator))
+        .map(path => Paths.get(s"${StringUtils.strip(path, "\"")}${File.separator}$command"))
+        .find(p => JavaFiles.isRegularFile(p) && JavaFiles.isExecutable(p))
+        .map(_.toString)
+    }
   }
 
   /**
@@ -207,29 +312,57 @@ private[spark] object TestUtils {
       url: URL,
       method: String = "GET",
       headers: Seq[(String, String)] = Nil): Int = {
+    withHttpConnection(url, method, headers = headers) { connection =>
+      connection.getResponseCode()
+    }
+  }
+
+  /**
+   * Returns the response message from an HTTP(S) URL.
+   */
+  def httpResponseMessage(
+    url: URL,
+    method: String = "GET",
+    headers: Seq[(String, String)] = Nil): String = {
+    withHttpConnection(url, method, headers = headers) { connection =>
+      Source.fromInputStream(connection.getInputStream, "utf-8").getLines().mkString("\n")
+    }
+  }
+
+  def withHttpConnection[T](
+      url: URL,
+      method: String = "GET",
+      headers: Seq[(String, String)] = Nil)
+      (fn: HttpURLConnection => T): T = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod(method)
     headers.foreach { case (k, v) => connection.setRequestProperty(k, v) }
 
-    // Disable cert and host name validation for HTTPS tests.
-    if (connection.isInstanceOf[HttpsURLConnection]) {
-      val sslCtx = SSLContext.getInstance("SSL")
-      val trustManager = new X509TrustManager {
-        override def getAcceptedIssuers(): Array[X509Certificate] = null
-        override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String) {}
-        override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String) {}
-      }
-      val verifier = new HostnameVerifier() {
-        override def verify(hostname: String, session: SSLSession): Boolean = true
-      }
-      sslCtx.init(null, Array(trustManager), new SecureRandom())
-      connection.asInstanceOf[HttpsURLConnection].setSSLSocketFactory(sslCtx.getSocketFactory())
-      connection.asInstanceOf[HttpsURLConnection].setHostnameVerifier(verifier)
+    connection match {
+      // Disable cert and host name validation for HTTPS tests.
+      case httpConnection: HttpsURLConnection =>
+        val sslCtx = SSLContext.getInstance("SSL")
+        val trustManager = new X509TrustManager {
+          override def getAcceptedIssuers: Array[X509Certificate] = null
+
+          override def checkClientTrusted(x509Certificates: Array[X509Certificate],
+              s: String): Unit = {}
+
+          override def checkServerTrusted(x509Certificates: Array[X509Certificate],
+              s: String): Unit = {}
+        }
+        val verifier = new HostnameVerifier() {
+          override def verify(hostname: String, session: SSLSession): Boolean = true
+        }
+        sslCtx.init(null, Array(trustManager), new SecureRandom())
+        httpConnection.setSSLSocketFactory(sslCtx.getSocketFactory)
+        httpConnection.setHostnameVerifier(verifier)
+      case _ => // do nothing
     }
 
     try {
       connection.connect()
-      connection.getResponseCode()
+      fn(connection)
     } finally {
       connection.disconnect()
     }
@@ -245,8 +378,24 @@ private[spark] object TestUtils {
     try {
       body(listener)
     } finally {
-      sc.listenerBus.waitUntilEmpty(TimeUnit.SECONDS.toMillis(10))
+      sc.listenerBus.waitUntilEmpty()
       sc.listenerBus.removeListener(listener)
+    }
+  }
+
+  def withHttpServer(resBaseDir: String = ".")(body: URL => Unit): Unit = {
+    // 0 as port means choosing randomly from the available ports
+    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName, 0))
+    val resHandler = new ResourceHandler()
+    resHandler.setResourceBase(resBaseDir)
+    val handlers = new HandlerList()
+    handlers.setHandlers(Array[Handler](resHandler, new DefaultHandler()))
+    server.setHandler(handlers)
+    server.start()
+    try {
+      body(server.getURI.toURL)
+    } finally {
+      server.stop()
     }
   }
 
@@ -275,17 +424,18 @@ private[spark] object TestUtils {
   }
 
   /**
-   * config a log4j properties used for testsuite
+   * config a log4j2 properties used for testsuite
    */
-  def configTestLog4j(level: String): Unit = {
-    val pro = new Properties()
-    pro.put("log4j.rootLogger", s"$level, console")
-    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
-    pro.put("log4j.appender.console.target", "System.err")
-    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
-    pro.put("log4j.appender.console.layout.ConversionPattern",
-      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
-    PropertyConfigurator.configure(pro)
+  def configTestLog4j2(level: String): Unit = {
+    val builder = ConfigurationBuilderFactory.newConfigurationBuilder()
+    val appenderBuilder = builder.newAppender("console", "CONSOLE")
+      .addAttribute("target", ConsoleAppender.Target.SYSTEM_ERR)
+    appenderBuilder.add(builder.newLayout("PatternLayout")
+      .addAttribute("pattern", "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex"))
+    builder.add(appenderBuilder)
+    builder.add(builder.newRootLogger(level).add(builder.newAppenderRef("console")))
+    val configuration = builder.build()
+    LogManager.getContext(false).asInstanceOf[LoggerContext].reconfigure(configuration)
   }
 
   /**
@@ -297,6 +447,37 @@ private[spark] object TestUtils {
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
   }
 
+  /**
+   * Returns the list of files at 'path' recursively. This skips files that are ignored normally
+   * by MapReduce.
+   */
+  def listDirectory(path: File): Array[String] = {
+    val result = ArrayBuffer.empty[String]
+    if (path.isDirectory) {
+      path.listFiles.foreach(f => result.appendAll(listDirectory(f)))
+    } else {
+      val c = path.getName.charAt(0)
+      if (c != '.' && c != '_') result.append(path.getAbsolutePath)
+    }
+    result.toArray
+  }
+
+  /** Creates a temp JSON file that contains the input JSON record. */
+  def createTempJsonFile(dir: File, prefix: String, jsonValue: JValue): String = {
+    val file = File.createTempFile(prefix, ".json", dir)
+    JavaFiles.write(file.toPath, compact(render(jsonValue)).getBytes())
+    file.getPath
+  }
+
+  /** Creates a temp bash script that prints the given output. */
+  def createTempScriptWithExpectedOutput(dir: File, prefix: String, output: String): String = {
+    val file = File.createTempFile(prefix, ".sh", dir)
+    val script = s"cat <<EOF\n$output\nEOF\n"
+    Files.write(script, file, StandardCharsets.UTF_8)
+    JavaFiles.setPosixFilePermissions(file.toPath,
+      EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+    file.getPath
+  }
 }
 
 

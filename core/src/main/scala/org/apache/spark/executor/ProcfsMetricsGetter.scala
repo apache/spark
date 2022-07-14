@@ -18,7 +18,7 @@
 package org.apache.spark.executor
 
 import java.io._
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
 import java.util.Locale
 
@@ -58,11 +58,9 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
           logWarning("Exception checking for procfs dir", ioe)
           false
       }
-      val shouldLogStageExecutorMetrics =
-        SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
-      val shouldLogStageExecutorProcessTreeMetrics =
-        SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
-      procDirExists.get && shouldLogStageExecutorProcessTreeMetrics && shouldLogStageExecutorMetrics
+      val shouldPollProcessTreeMetrics =
+        SparkEnv.get.conf.get(config.EXECUTOR_PROCESS_TREE_METRICS_ENABLED)
+      procDirExists.get && shouldPollProcessTreeMetrics
     }
   }
 
@@ -79,7 +77,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     }
     catch {
       case e: SparkException =>
-        logWarning("Exception when trying to compute process tree." +
+        logDebug("Exception when trying to compute process tree." +
           " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         -1
@@ -96,14 +94,15 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       Integer.parseInt(out.split("\n")(0))
     } catch {
       case e: Exception =>
-        logWarning("Exception when trying to compute pagesize, as a" +
+        logDebug("Exception when trying to compute pagesize, as a" +
           " result reporting of ProcessTree metrics is stopped")
         isAvailable = false
         0
     }
   }
 
-  private def computeProcessTree(): Set[Int] = {
+  // Exposed for testing
+  private[executor] def computeProcessTree(): Set[Int] = {
     if (!isAvailable || testing) {
       return Set()
     }
@@ -154,14 +153,15 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       childPidsInInt
     } catch {
       case e: Exception =>
-        logWarning("Exception when trying to compute process tree." +
+        logDebug("Exception when trying to compute process tree." +
           " As a result reporting of ProcessTree metrics is stopped.", e)
         isAvailable = false
         mutable.ArrayBuffer.empty[Int]
     }
   }
 
-  def addProcfsMetricsFromOneProcess(
+  // Exposed for testing
+  private[executor] def addProcfsMetricsFromOneProcess(
       allMetrics: ProcfsMetrics,
       pid: Int): ProcfsMetrics = {
 
@@ -171,7 +171,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       val pidDir = new File(procfsDir, pid.toString)
       def openReader(): BufferedReader = {
         val f = new File(new File(procfsDir, pid.toString), procfsStatFile)
-        new BufferedReader(new InputStreamReader(new FileInputStream(f), Charset.forName("UTF-8")))
+        new BufferedReader(new InputStreamReader(new FileInputStream(f), UTF_8))
       }
       Utils.tryWithResource(openReader) { in =>
         val procInfo = in.readLine
@@ -199,9 +199,9 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       }
     } catch {
       case f: IOException =>
-        logWarning("There was a problem with reading" +
+        logDebug("There was a problem with reading" +
           " the stat file of the process. ", f)
-        ProcfsMetrics(0, 0, 0, 0, 0, 0)
+        throw f
     }
   }
 
@@ -212,11 +212,16 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     val pids = computeProcessTree
     var allMetrics = ProcfsMetrics(0, 0, 0, 0, 0, 0)
     for (p <- pids) {
-      allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
-      // if we had an error getting any of the metrics, we don't want to report partial metrics, as
-      // that would be misleading.
-      if (!isAvailable) {
-        return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+      try {
+        allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
+        // if we had an error getting any of the metrics, we don't want to
+        // report partial metrics, as that would be misleading.
+        if (!isAvailable) {
+          return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+        }
+      } catch {
+        case _: IOException =>
+          return ProcfsMetrics(0, 0, 0, 0, 0, 0)
       }
     }
     allMetrics

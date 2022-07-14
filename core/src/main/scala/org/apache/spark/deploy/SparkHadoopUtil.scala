@@ -57,7 +57,7 @@ private[spark] class SparkHadoopUtil extends Logging {
    * you need to look https://issues.apache.org/jira/browse/HDFS-3545 and possibly
    * do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
    */
-  def runAsSparkUser(func: () => Unit) {
+  def runAsSparkUser(func: () => Unit): Unit = {
     createSparkUser().doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
@@ -71,7 +71,7 @@ private[spark] class SparkHadoopUtil extends Logging {
     ugi
   }
 
-  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
+  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation): Unit = {
     dest.addCredentials(source.getCredentials())
   }
 
@@ -79,8 +79,10 @@ private[spark] class SparkHadoopUtil extends Logging {
    * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
    * configuration.
    */
-  def appendS3AndSparkHadoopConfigurations(conf: SparkConf, hadoopConf: Configuration): Unit = {
-    SparkHadoopUtil.appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
+  def appendS3AndSparkHadoopHiveConfigurations(
+      conf: SparkConf,
+      hadoopConf: Configuration): Unit = {
+    SparkHadoopUtil.appendS3AndSparkHadoopHiveConfigurations(conf, hadoopConf)
   }
 
   /**
@@ -100,6 +102,15 @@ private[spark] class SparkHadoopUtil extends Logging {
     // Copy any "spark.hadoop.foo=bar" system properties into destMap as "foo=bar"
     for ((key, value) <- srcMap if key.startsWith("spark.hadoop.")) {
       destMap.put(key.substring("spark.hadoop.".length), value)
+    }
+  }
+
+  def appendSparkHiveConfigs(
+      srcMap: Map[String, String],
+      destMap: HashMap[String, String]): Unit = {
+    // Copy any "spark.hive.foo=bar" system properties into destMap as "hive.foo=bar"
+    for ((key, value) <- srcMap if key.startsWith("spark.hive.")) {
+      destMap.put(key.substring("spark.".length), value)
     }
   }
 
@@ -140,7 +151,7 @@ private[spark] class SparkHadoopUtil extends Logging {
    * Add or overwrite current user's credentials with serialized delegation tokens,
    * also confirms correct hadoop configuration is set.
    */
-  private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
+  private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf): Unit = {
     UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
     val creds = deserialize(tokens)
     logInfo("Updating delegation tokens for current user.")
@@ -381,7 +392,7 @@ private[spark] class SparkHadoopUtil extends Logging {
 
 }
 
-private[spark] object SparkHadoopUtil {
+private[spark] object SparkHadoopUtil extends Logging {
 
   private lazy val instance = new SparkHadoopUtil
 
@@ -410,14 +421,17 @@ private[spark] object SparkHadoopUtil {
    * Returns a Configuration object with Spark configuration applied on top. Unlike
    * the instance method, this will always return a Configuration instance, and not a
    * cluster manager-specific type.
+   * The configuration will load all default values set in core-default.xml,
+   * and if found on the classpath, those of core-site.xml.
+   * This is done before the spark overrides are applied.
    */
   private[spark] def newConfiguration(conf: SparkConf): Configuration = {
     val hadoopConf = new Configuration()
-    appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
+    appendS3AndSparkHadoopHiveConfigurations(conf, hadoopConf)
     hadoopConf
   }
 
-  private def appendS3AndSparkHadoopConfigurations(
+  private def appendS3AndSparkHadoopHiveConfigurations(
       conf: SparkConf,
       hadoopConf: Configuration): Unit = {
     // Note: this null check is around more than just access to the "conf" object to maintain
@@ -439,9 +453,28 @@ private[spark] object SparkHadoopUtil {
           hadoopConf.set("fs.s3a.session.token", sessionToken)
         }
       }
+      appendHiveConfigs(hadoopConf)
       appendSparkHadoopConfigs(conf, hadoopConf)
+      appendSparkHiveConfigs(conf, hadoopConf)
       val bufferSize = conf.get(BUFFER_SIZE).toString
       hadoopConf.set("io.file.buffer.size", bufferSize)
+    }
+  }
+
+  private lazy val hiveConfKeys = {
+    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    if (configFile != null) {
+      val conf = new Configuration(false)
+      conf.addResource(configFile)
+      conf.iterator().asScala.toSeq
+    } else {
+      Nil
+    }
+  }
+
+  private def appendHiveConfigs(hadoopConf: Configuration): Unit = {
+    hiveConfKeys.foreach { kv =>
+      hadoopConf.set(kv.getKey, kv.getValue)
     }
   }
 
@@ -450,39 +483,69 @@ private[spark] object SparkHadoopUtil {
     for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
       hadoopConf.set(key.substring("spark.hadoop.".length), value)
     }
+    if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
+      hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1")
+    }
+    // Since Hadoop 3.3.1, HADOOP-17597 starts to throw exceptions by default
+    if (conf.getOption("spark.hadoop.fs.s3a.downgrade.syncable.exceptions").isEmpty) {
+      hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true")
+    }
+    // In Hadoop 3.3.1, AWS region handling with the default "" endpoint only works
+    // in EC2 deployments or when the AWS CLI is installed.
+    // The workaround is to set the name of the S3 endpoint explicitly,
+    // if not already set. See HADOOP-17771.
+    // This change is harmless on older versions and compatible with
+    // later Hadoop releases
+    if (hadoopConf.get("fs.s3a.endpoint", "").isEmpty &&
+      hadoopConf.get("fs.s3a.endpoint.region") == null) {
+      // set to US central endpoint which can also connect to buckets
+      // in other regions at the expense of a HEAD request during fs creation
+      hadoopConf.set("fs.s3a.endpoint", "s3.amazonaws.com")
+    }
+  }
+
+  private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    // Copy any "spark.hive.foo=bar" spark properties into conf as "hive.foo=bar"
+    for ((key, value) <- conf.getAll if key.startsWith("spark.hive.")) {
+      hadoopConf.set(key.substring("spark.".length), value)
+    }
   }
 
   // scalastyle:off line.size.limit
   /**
-   * Create a path that uses replication instead of erasure coding (ec), regardless of the default
-   * configuration in hdfs for the given path.  This can be helpful as hdfs ec doesn't support
-   * hflush(), hsync(), or append()
+   * Create a file on the given file system, optionally making sure erasure coding is disabled.
+   *
+   * Disabling EC can be helpful as HDFS EC doesn't support hflush(), hsync(), or append().
    * https://hadoop.apache.org/docs/r3.0.0/hadoop-project-dist/hadoop-hdfs/HDFSErasureCoding.html#Limitations
    */
   // scalastyle:on line.size.limit
-  def createNonECFile(fs: FileSystem, path: Path): FSDataOutputStream = {
-    try {
-      // Use reflection as this uses APIs only available in Hadoop 3
-      val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
-      // the builder api does not resolve relative paths, nor does it create parent dirs, while
-      // the old api does.
-      if (!fs.mkdirs(path.getParent())) {
-        throw new IOException(s"Failed to create parents of $path")
+  def createFile(fs: FileSystem, path: Path, allowEC: Boolean): FSDataOutputStream = {
+    if (allowEC) {
+      fs.create(path)
+    } else {
+      try {
+        // Use reflection as this uses APIs only available in Hadoop 3
+        val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
+        // the builder api does not resolve relative paths, nor does it create parent dirs, while
+        // the old api does.
+        if (!fs.mkdirs(path.getParent())) {
+          throw new IOException(s"Failed to create parents of $path")
+        }
+        val qualifiedPath = fs.makeQualified(path)
+        val builder = builderMethod.invoke(fs, qualifiedPath)
+        val builderCls = builder.getClass()
+        // this may throw a NoSuchMethodException if the path is not on hdfs
+        val replicateMethod = builderCls.getMethod("replicate")
+        val buildMethod = builderCls.getMethod("build")
+        val b2 = replicateMethod.invoke(builder)
+        buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
+      } catch {
+        case  _: NoSuchMethodException =>
+          // No createFile() method, we're using an older hdfs client, which doesn't give us control
+          // over EC vs. replication.  Older hdfs doesn't have EC anyway, so just create a file with
+          // old apis.
+          fs.create(path)
       }
-      val qualifiedPath = fs.makeQualified(path)
-      val builder = builderMethod.invoke(fs, qualifiedPath)
-      val builderCls = builder.getClass()
-      // this may throw a NoSuchMethodException if the path is not on hdfs
-      val replicateMethod = builderCls.getMethod("replicate")
-      val buildMethod = builderCls.getMethod("build")
-      val b2 = replicateMethod.invoke(builder)
-      buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
-    } catch {
-      case  _: NoSuchMethodException =>
-        // No createFile() method, we're using an older hdfs client, which doesn't give us control
-        // over EC vs. replication.  Older hdfs doesn't have EC anyway, so just create a file with
-        // old apis.
-        fs.create(path)
     }
   }
 

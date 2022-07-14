@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.statsEstimation
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.internal.SQLConf
@@ -26,17 +27,20 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 
 trait StatsEstimationTestBase extends SparkFunSuite {
 
-  var originalValue: Boolean = false
+  var originalCBOValue: Boolean = false
+  var originalPlanStatsValue: Boolean = false
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     // Enable stats estimation based on CBO.
-    originalValue = SQLConf.get.getConf(SQLConf.CBO_ENABLED)
+    originalCBOValue = SQLConf.get.getConf(SQLConf.CBO_ENABLED)
+    originalPlanStatsValue = SQLConf.get.getConf(SQLConf.PLAN_STATS_ENABLED)
     SQLConf.get.setConf(SQLConf.CBO_ENABLED, true)
   }
 
   override def afterAll(): Unit = {
-    SQLConf.get.setConf(SQLConf.CBO_ENABLED, originalValue)
+    SQLConf.get.setConf(SQLConf.CBO_ENABLED, originalCBOValue)
+    SQLConf.get.setConf(SQLConf.PLAN_STATS_ENABLED, originalPlanStatsValue)
     super.afterAll()
   }
 
@@ -69,11 +73,12 @@ case class StatsTestPlan(
     outputList: Seq[Attribute],
     rowCount: BigInt,
     attributeStats: AttributeMap[ColumnStat],
-    size: Option[BigInt] = None) extends LeafNode {
+    size: Option[BigInt] = None) extends LeafNode with MultiInstanceRelation {
   override def output: Seq[Attribute] = outputList
   override def computeStats(): Statistics = Statistics(
     // If sizeInBytes is useless in testing, we just use a fake value
     sizeInBytes = size.getOrElse(Int.MaxValue),
     rowCount = Some(rowCount),
     attributeStats = attributeStats)
+  override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
 }

@@ -112,7 +112,7 @@ public class ServerSocketUtil {
    * The ports are all closed afterwards,
    * so other network services started may grab those same ports.
    *
-   * @param numPorts number of required port nubmers
+   * @param numPorts number of required port numbers
    * @return array of available port numbers
    * @throws IOException
    */

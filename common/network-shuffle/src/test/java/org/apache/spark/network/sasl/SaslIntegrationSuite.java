@@ -21,8 +21,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.After;
 import org.junit.AfterClass;
@@ -34,8 +32,6 @@ import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
-import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
@@ -44,15 +40,6 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
-import org.apache.spark.network.shuffle.BlockFetchingListener;
-import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
-import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver;
-import org.apache.spark.network.shuffle.OneForOneBlockFetcher;
-import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.shuffle.protocol.OpenBlocks;
-import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
-import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -121,13 +108,10 @@ public class SaslIntegrationSuite {
     clientFactory = context.createClientFactory(
         Arrays.asList(new SaslClientBootstrap(conf, "unknown-app", badKeyHolder)));
 
-    try {
-      // Bootstrap should fail on startup.
-      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
-      fail("Connection should have failed.");
-    } catch (Exception e) {
-      assertTrue(e.getMessage(), e.getMessage().contains("Mismatched response"));
-    }
+    // Bootstrap should fail on startup.
+    Exception e = assertThrows(Exception.class,
+      () -> clientFactory.createClient(TestUtils.getLocalHost(), server.getPort()));
+    assertTrue(e.getMessage(), e.getMessage().contains("Mismatched response"));
   }
 
   @Test
@@ -135,20 +119,14 @@ public class SaslIntegrationSuite {
     clientFactory = context.createClientFactory(new ArrayList<>());
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
-    try {
-      client.sendRpcSync(ByteBuffer.allocate(13), TIMEOUT_MS);
-      fail("Should have failed");
-    } catch (Exception e) {
-      assertTrue(e.getMessage(), e.getMessage().contains("Expected SaslMessage"));
-    }
+    Exception e1 = assertThrows(Exception.class,
+      () -> client.sendRpcSync(ByteBuffer.allocate(13), TIMEOUT_MS));
+    assertTrue(e1.getMessage(), e1.getMessage().contains("Expected SaslMessage"));
 
-    try {
-      // Guessing the right tag byte doesn't magically get you in...
-      client.sendRpcSync(ByteBuffer.wrap(new byte[] { (byte) 0xEA }), TIMEOUT_MS);
-      fail("Should have failed");
-    } catch (Exception e) {
-      assertTrue(e.getMessage(), e.getMessage().contains("java.lang.IndexOutOfBoundsException"));
-    }
+    // Guessing the right tag byte doesn't magically get you in...
+    Exception e2 = assertThrows(Exception.class,
+      () -> client.sendRpcSync(ByteBuffer.wrap(new byte[] { (byte) 0xEA }), TIMEOUT_MS));
+    assertTrue(e2.getMessage(), e2.getMessage().contains("java.lang.IndexOutOfBoundsException"));
   }
 
   @Test
@@ -158,96 +136,9 @@ public class SaslIntegrationSuite {
       clientFactory = context.createClientFactory(
           Arrays.asList(new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
       try (TransportServer server = context.createServer()) {
-        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
-      } catch (Exception e) {
+        Exception e = assertThrows(Exception.class,
+          () -> clientFactory.createClient(TestUtils.getLocalHost(), server.getPort()));
         assertTrue(e.getMessage(), e.getMessage().contains("Digest-challenge format violation"));
-      }
-    }
-  }
-
-  /**
-   * This test is not actually testing SASL behavior, but testing that the shuffle service
-   * performs correct authorization checks based on the SASL authentication data.
-   */
-  @Test
-  public void testAppIsolation() throws Exception {
-    // Start a new server with the correct RPC handler to serve block data.
-    ExternalShuffleBlockResolver blockResolver = mock(ExternalShuffleBlockResolver.class);
-    ExternalShuffleBlockHandler blockHandler = new ExternalShuffleBlockHandler(
-      new OneForOneStreamManager(), blockResolver);
-    TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf, secretKeyHolder);
-
-    try (
-      TransportContext blockServerContext = new TransportContext(conf, blockHandler);
-      TransportServer blockServer = blockServerContext.createServer(Arrays.asList(bootstrap));
-      // Create a client, and make a request to fetch blocks from a different app.
-      TransportClientFactory clientFactory1 = blockServerContext.createClientFactory(
-          Arrays.asList(new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
-      TransportClient client1 = clientFactory1.createClient(
-          TestUtils.getLocalHost(), blockServer.getPort())) {
-
-      AtomicReference<Throwable> exception = new AtomicReference<>();
-
-      CountDownLatch blockFetchLatch = new CountDownLatch(1);
-      BlockFetchingListener listener = new BlockFetchingListener() {
-        @Override
-        public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
-          blockFetchLatch.countDown();
-        }
-        @Override
-        public void onBlockFetchFailure(String blockId, Throwable t) {
-          exception.set(t);
-          blockFetchLatch.countDown();
-        }
-      };
-
-      String[] blockIds = { "shuffle_0_1_2", "shuffle_0_3_4" };
-      OneForOneBlockFetcher fetcher =
-          new OneForOneBlockFetcher(client1, "app-2", "0", blockIds, listener, conf);
-      fetcher.start();
-      blockFetchLatch.await();
-      checkSecurityException(exception.get());
-
-      // Register an executor so that the next steps work.
-      ExecutorShuffleInfo executorInfo = new ExecutorShuffleInfo(
-        new String[] { System.getProperty("java.io.tmpdir") }, 1,
-          "org.apache.spark.shuffle.sort.SortShuffleManager");
-      RegisterExecutor regmsg = new RegisterExecutor("app-1", "0", executorInfo);
-      client1.sendRpcSync(regmsg.toByteBuffer(), TIMEOUT_MS);
-
-      // Make a successful request to fetch blocks, which creates a new stream. But do not actually
-      // fetch any blocks, to keep the stream open.
-      OpenBlocks openMessage = new OpenBlocks("app-1", "0", blockIds);
-      ByteBuffer response = client1.sendRpcSync(openMessage.toByteBuffer(), TIMEOUT_MS);
-      StreamHandle stream = (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response);
-      long streamId = stream.streamId;
-
-      try (
-        // Create a second client, authenticated with a different app ID, and try to read from
-        // the stream created for the previous app.
-        TransportClientFactory clientFactory2 = blockServerContext.createClientFactory(
-            Arrays.asList(new SaslClientBootstrap(conf, "app-2", secretKeyHolder)));
-        TransportClient client2 = clientFactory2.createClient(
-            TestUtils.getLocalHost(), blockServer.getPort())
-      ) {
-        CountDownLatch chunkReceivedLatch = new CountDownLatch(1);
-        ChunkReceivedCallback callback = new ChunkReceivedCallback() {
-          @Override
-          public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
-            chunkReceivedLatch.countDown();
-          }
-
-          @Override
-          public void onFailure(int chunkIndex, Throwable t) {
-            exception.set(t);
-            chunkReceivedLatch.countDown();
-          }
-        };
-
-        exception.set(null);
-        client2.fetchChunk(streamId, 0, callback);
-        chunkReceivedLatch.await();
-        checkSecurityException(exception.get());
       }
     }
   }
@@ -263,11 +154,5 @@ public class SaslIntegrationSuite {
     public StreamManager getStreamManager() {
       return new OneForOneStreamManager();
     }
-  }
-
-  private static void checkSecurityException(Throwable t) {
-    assertNotNull("No exception was caught.", t);
-    assertTrue("Expected SecurityException.",
-      t.getMessage().contains(SecurityException.class.getName()));
   }
 }

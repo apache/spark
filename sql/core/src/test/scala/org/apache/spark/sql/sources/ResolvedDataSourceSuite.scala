@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.SparkFunSuite
+import java.time.ZoneId
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ResolvedDataSourceSuite extends SparkFunSuite with SharedSQLContext {
+class ResolvedDataSourceSuite extends SharedSparkSession {
   private def getProvidingClass(name: String): Class[_] =
     DataSource(
       sparkSession = spark,
       className = name,
-      options = Map(DateTimeUtils.TIMEZONE_OPTION -> DateTimeUtils.defaultTimeZone().getID)
+      options = Map(DateTimeUtils.TIMEZONE_OPTION -> ZoneId.systemDefault().getId)
     ).providingClass
 
   test("jdbc") {

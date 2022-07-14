@@ -21,7 +21,6 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.HashPartitioner
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.util.BytecodeUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -103,15 +102,16 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       (part, (e.srcId, e.dstId, e.attr))
     }
       .partitionBy(new HashPartitioner(numPartitions))
-      .mapPartitionsWithIndex( { (pid, iter) =>
-        val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
-        iter.foreach { message =>
-          val data = message._2
-          builder.add(data._1, data._2, data._3)
-        }
-        val edgePartition = builder.toEdgePartition
-        Iterator((pid, edgePartition))
-      }, preservesPartitioning = true)).cache()
+      .mapPartitionsWithIndex(
+        { (pid: Int, iter: Iterator[(PartitionID, (VertexId, VertexId, ED))]) =>
+          val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
+          iter.foreach { message =>
+            val data = message._2
+            builder.add(data._1, data._2, data._3)
+          }
+          val edgePartition = builder.toEdgePartition
+          Iterator((pid, edgePartition))
+        }, preservesPartitioning = true)).cache()
     GraphImpl.fromExistingRDDs(vertices.withEdges(newEdges), newEdges)
   }
 
@@ -264,14 +264,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     }
   }
 
-  /** Test whether the closure accesses the attribute with name `attrName`. */
-  private def accessesVertexAttr(closure: AnyRef, attrName: String): Boolean = {
-    try {
-      BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
-    } catch {
-      case _: ClassNotFoundException => true // if we don't know, be conservative
-    }
-  }
 } // end of class GraphImpl
 
 

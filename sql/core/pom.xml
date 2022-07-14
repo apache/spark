@@ -22,23 +22,26 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.4.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>spark-sql_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project SQL</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>sql</sbt.project.name>
   </properties>
 
   <dependencies>
     <dependency>
+      <groupId>org.rocksdb</groupId>
+      <artifactId>rocksdbjni</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.univocity</groupId>
       <artifactId>univocity-parsers</artifactId>
-      <version>2.7.3</version>
       <type>jar</type>
     </dependency>
     <dependency>
@@ -86,19 +89,45 @@
       <scope>test</scope>
     </dependency>
 
+    <!-- #if scala-2.13 --><!--
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+    </dependency>
+    --><!-- #endif scala-2.13 -->
     <dependency>
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-core</artifactId>
-      <classifier>${orc.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-mapreduce</artifactId>
-      <classifier>${orc.classifier}</classifier>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-storage-api</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-column</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-encoding</artifactId>
+      <scope>test</scope>
+      <classifier>tests</classifier>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-common</artifactId>
+      <scope>test</scope>
+      <classifier>tests</classifier>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-column</artifactId>
+      <scope>test</scope>
+      <classifier>tests</classifier>
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
@@ -113,12 +142,8 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-vector</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-asm7-shaded</artifactId>
+      <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -128,17 +153,32 @@
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
-      <version>1.4.195</version>
+      <version>2.1.210</version>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>mysql</groupId>
-      <artifactId>mysql-connector-java</artifactId>
+      <groupId>org.mariadb.jdbc</groupId>
+      <artifactId>mariadb-java-client</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.ibm.db2</groupId>
+      <artifactId>jcc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.microsoft.sqlserver</groupId>
+      <artifactId>mssql-jdbc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.oracle.database.jdbc</groupId>
+      <artifactId>ojdbc8</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -149,6 +189,16 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>selenium-java</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -182,7 +232,7 @@
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
-          <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
       <plugin>
@@ -197,8 +247,7 @@
             </goals>
             <configuration>
               <sources>
-                <source>v${hive.version.short}/src/main/scala</source>
-                <source>v${hive.version.short}/src/main/java</source>
+                <source>src/main/scala-${scala.binary.version}</source>
               </sources>
             </configuration>
           </execution>
@@ -210,7 +259,6 @@
             </goals>
             <configuration>
               <sources>
-                <source>v${hive.version.short}/src/test/scala</source>
                 <source>src/test/gen-java</source>
               </sources>
             </configuration>
@@ -219,4 +267,22 @@
       </plugin>
     </plugins>
   </build>
+  
+  <profiles>
+    <profile>
+      <id>hadoop-2</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-core-asl</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-mapper-asl</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 </project>

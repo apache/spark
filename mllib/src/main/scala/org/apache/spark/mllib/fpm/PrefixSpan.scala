@@ -220,7 +220,7 @@ object PrefixSpan extends Logging {
     data.flatMap { itemsets =>
       val uniqItems = mutable.Set.empty[Item]
       itemsets.foreach(set => uniqItems ++= set)
-      uniqItems.toIterator.map((_, 1L))
+      uniqItems.iterator.map((_, 1L))
     }.reduceByKey(_ + _).filter { case (_, count) =>
       count >= minCount
     }.sortBy(-_._2).map(_._1).collect()
@@ -316,9 +316,9 @@ object PrefixSpan extends Logging {
               ((prefix.id, item), (1L, postfixSize))
             }
           }
-        }.reduceByKey { case ((c0, s0), (c1, s1)) =>
-          (c0 + c1, s0 + s1)
-        }.filter { case (_, (c, _)) => c >= minCount }
+        }.reduceByKey { (cs0, cs1) =>
+          (cs0._1 + cs1._1, cs0._2 + cs1._2)
+        }.filter { case (_, cs) => cs._1 >= minCount }
         .collect()
       val newLargePrefixes = mutable.Map.empty[Int, Prefix]
       freqPrefixes.foreach { case ((id, item), (count, projDBSize)) =>
@@ -335,7 +335,7 @@ object PrefixSpan extends Logging {
       largePrefixes = newLargePrefixes
     }
 
-    var freqPatterns = sc.parallelize(localFreqPatterns, 1)
+    var freqPatterns = sc.parallelize(localFreqPatterns.toSeq, 1)
 
     val numSmallPrefixes = smallPrefixes.size
     logInfo(s"number of small prefixes for local processing: $numSmallPrefixes")
@@ -478,7 +478,7 @@ object PrefixSpan extends Logging {
         }
         i += 1
       }
-      prefixes.toIterator
+      prefixes.iterator
     }
 
     /** Tests whether this postfix is non-empty. */
@@ -683,7 +683,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
 
     def loadImpl[Item: ClassTag](freqSequences: DataFrame, sample: Item): PrefixSpanModel[Item] = {
       val freqSequencesRDD = freqSequences.select("sequence", "freq").rdd.map { x =>
-        val sequence = x.getAs[Seq[Seq[Item]]](0).map(_.toArray).toArray
+        val sequence = x.getSeq[scala.collection.Seq[Item]](0).map(_.toArray).toArray
         val freq = x.getLong(1)
         new PrefixSpan.FreqSequence(sequence, freq)
       }

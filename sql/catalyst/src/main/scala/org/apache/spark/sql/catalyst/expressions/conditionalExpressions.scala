@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TernaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
@@ -30,18 +32,31 @@ import org.apache.spark.sql.types._
     Examples:
       > SELECT _FUNC_(1 < 2, 'a', 'b');
        a
-  """)
+  """,
+  since = "1.0.0",
+  group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
-  extends ComplexTypeMergingExpression {
+  extends ComplexTypeMergingExpression with ConditionalExpression with TernaryLike[Expression] {
 
   @transient
   override lazy val inputTypesForMerging: Seq[DataType] = {
     Seq(trueValue.dataType, falseValue.dataType)
   }
 
-  override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
+  override def first: Expression = predicate
+  override def second: Expression = trueValue
+  override def third: Expression = falseValue
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
+
+  /**
+   * Only the condition expression will always be evaluated.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = predicate :: Nil
+
+  override def branchGroups: Seq[Seq[Expression]] = Seq(Seq(trueValue, falseValue))
+
+  final override val nodePatterns : Seq[TreePattern] = Seq(IF)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
@@ -90,6 +105,13 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
 
   override def sql: String = s"(IF(${predicate.sql}, ${trueValue.sql}, ${falseValue.sql}))"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = copy(
+    predicate = newFirst,
+    trueValue = newSecond,
+    falseValue = newThird
+  )
 }
 
 /**
@@ -111,19 +133,26 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   examples = """
     Examples:
       > SELECT CASE WHEN 1 > 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END;
-       1
+       1.0
       > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END;
-       2
+       2.0
       > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 < 0 THEN 2.0 END;
        NULL
-  """)
+  """,
+  since = "1.0.1",
+  group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class CaseWhen(
     branches: Seq[(Expression, Expression)],
     elseValue: Option[Expression] = None)
-  extends ComplexTypeMergingExpression with Serializable {
+  extends ComplexTypeMergingExpression with ConditionalExpression {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
+
+  final override val nodePatterns : Seq[TreePattern] = Seq(CASE_WHEN)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 
   // both then and else expressions should be considered.
   @transient
@@ -148,9 +177,43 @@ case class CaseWhen(
             s"but the ${index + 1}th when expression's type is ${branches(index)._1}")
       }
     } else {
+      val branchesStr = branches.map(_._2.dataType).map(dt => s"WHEN ... THEN ${dt.catalogString}")
+        .mkString(" ")
+      val elseStr = elseValue.map(expr => s" ELSE ${expr.dataType.catalogString}").getOrElse("")
       TypeCheckResult.TypeCheckFailure(
-        "THEN and ELSE expressions should all be same type or coercible to a common type")
+        "THEN and ELSE expressions should all be same type or coercible to a common type," +
+          s" got CASE $branchesStr$elseStr END")
     }
+  }
+
+  /**
+   * Like `If`, the children of `CaseWhen` only get accessed in a certain condition.
+   * We should only return the first condition expression as it will always get accessed.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
+
+  override def branchGroups: Seq[Seq[Expression]] = {
+    // We look at subexpressions in conditions and values of `CaseWhen` separately. It is
+    // because a subexpression in conditions will be run no matter which condition is matched
+    // if it is shared among conditions, but it doesn't need to be shared in values. Similarly,
+    // a subexpression among values doesn't need to be in conditions because no matter which
+    // condition is true, it will be evaluated.
+    val conditions = if (branches.length > 1) {
+      branches.map(_._1)
+    } else {
+      // If there is only one branch, the first condition is already covered by
+      // `alwaysEvaluatedInputs` and we should exclude it here.
+      Nil
+    }
+    // For an expression to be in all branch values of a CaseWhen statement, it must also be in
+    // the elseValue.
+    val values = if (elseValue.nonEmpty) {
+      branches.map(_._2) ++ elseValue
+    } else {
+      Nil
+    }
+
+    Seq(conditions, values)
   }
 
   override def eval(input: InternalRow): Any = {
@@ -163,9 +226,9 @@ case class CaseWhen(
       i += 1
     }
     if (elseValue.isDefined) {
-      return elseValue.get.eval(input)
+      elseValue.get.eval(input)
     } else {
-      return null
+      null
     }
   }
 
@@ -181,7 +244,7 @@ case class CaseWhen(
     "CASE" + cases + elseCase + " END"
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  private def multiBranchesCodegen(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // This variable holds the state of the result:
     // -1 means the condition is not met yet and the result is unknown.
     val NOT_MATCHED = -1
@@ -274,6 +337,18 @@ case class CaseWhen(
          |// TRUE if any condition is met and the result is null, or no any condition is met.
          |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
        """.stripMargin)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (branches.length == 1) {
+      // If we have only single branch we can use If expression and its codeGen
+      If(
+        branches(0)._1,
+        branches(0)._2,
+        elseValue.getOrElse(Literal.create(null, branches(0)._2.dataType))).doGenCode(ctx, ev)
+    } else {
+      multiBranchesCodegen(ctx, ev)
+    }
   }
 }
 

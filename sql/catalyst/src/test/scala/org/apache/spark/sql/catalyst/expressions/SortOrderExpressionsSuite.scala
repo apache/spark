@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.util.TimeZone
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
@@ -35,15 +34,7 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val l1 = Literal.create(20132983L, LongType)
     val l2 = Literal.create(-20132983L, LongType)
     val millis = 1524954911000L
-    // Explicitly choose a time zone, since Date objects can create different values depending on
-    // local time zone of the machine on which the test is running
-    val oldDefaultTZ = TimeZone.getDefault
-    val d1 = try {
-      TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-      Literal.create(new java.sql.Date(millis), DateType)
-    } finally {
-      TimeZone.setDefault(oldDefaultTZ)
-    }
+    val d1 = Literal.create(new java.sql.Date(millis), DateType)
     val t1 = Literal.create(new Timestamp(millis), TimestampType)
     val f1 = Literal.create(0.7788229f, FloatType)
     val f2 = Literal.create(-0.7788229f, FloatType)

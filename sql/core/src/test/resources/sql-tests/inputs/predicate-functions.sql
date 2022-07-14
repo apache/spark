@@ -46,3 +46,23 @@ select to_timestamp('2017-03-01 00:00:01') > to_date('2017-03-01');
 select to_timestamp('2017-03-01 00:00:01') >= to_date('2017-03-01');
 select to_date('2017-03-01') < to_timestamp('2017-03-01 00:00:01');
 select to_date('2017-03-01') <= to_timestamp('2017-03-01 00:00:01');
+
+-- In
+select 1 in (1, 2, 3);
+select 1 in (1, 2, 3, null);
+select 1 in (1.0, 2.0, 3.0);
+select 1 in (1.0, 2.0, 3.0, null);
+select 1 in ('2', '3', '4');
+select 1 in ('2', '3', '4', null);
+select null in (1, 2, 3);
+select null in (1, 2, null);
+
+-- Not(In)
+select 1 not in (1, 2, 3);
+select 1 not in (1, 2, 3, null);
+select 1 not in (1.0, 2.0, 3.0);
+select 1 not in (1.0, 2.0, 3.0, null);
+select 1 not in ('2', '3', '4');
+select 1 not in ('2', '3', '4', null);
+select null not in (1, 2, 3);
+select null not in (1, 2, null);

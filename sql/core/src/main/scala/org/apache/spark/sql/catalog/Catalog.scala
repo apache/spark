@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalog
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Evolving, Experimental, Stable}
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -223,7 +223,6 @@ abstract class Catalog {
   }
 
   /**
-   * :: Experimental ::
    * Creates a table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    *
@@ -232,8 +231,6 @@ abstract class Catalog {
    *                  the current database.
    * @since 2.2.0
    */
-  @Experimental
-  @Evolving
   def createTable(tableName: String, path: String): DataFrame
 
   /**
@@ -251,7 +248,6 @@ abstract class Catalog {
   }
 
   /**
-   * :: Experimental ::
    * Creates a table from the given path based on a data source and returns the corresponding
    * DataFrame.
    *
@@ -260,8 +256,6 @@ abstract class Catalog {
    *                  the current database.
    * @since 2.2.0
    */
-  @Experimental
-  @Evolving
   def createTable(tableName: String, path: String, source: String): DataFrame
 
   /**
@@ -282,7 +276,6 @@ abstract class Catalog {
   }
 
   /**
-   * :: Experimental ::
    * Creates a table based on the dataset in a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
@@ -291,8 +284,6 @@ abstract class Catalog {
    *                  the current database.
    * @since 2.2.0
    */
-  @Experimental
-  @Evolving
   def createTable(
       tableName: String,
       source: String,
@@ -319,7 +310,6 @@ abstract class Catalog {
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Creates a table based on the dataset in a data source and a set of options.
    * Then, returns the corresponding DataFrame.
@@ -329,15 +319,12 @@ abstract class Catalog {
    *                  the current database.
    * @since 2.2.0
    */
-  @Experimental
-  @Evolving
   def createTable(
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame
 
   /**
-   * :: Experimental ::
    * Create a table from the given path based on a data source, a schema and a set of options.
    * Then, returns the corresponding DataFrame.
    *
@@ -356,7 +343,44 @@ abstract class Catalog {
   }
 
   /**
-   * :: Experimental ::
+   * Creates a table based on the dataset in a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 3.1.0
+   */
+  def createTable(
+      tableName: String,
+      source: String,
+      description: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(
+      tableName,
+      source = source,
+      description = description,
+      options = options.asScala.toMap
+    )
+  }
+
+  /**
+   * (Scala-specific)
+   * Creates a table based on the dataset in a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 3.1.0
+   */
+  def createTable(
+      tableName: String,
+      source: String,
+      description: String,
+      options: Map[String, String]): DataFrame
+
+  /**
    * Create a table based on the dataset in a data source, a schema and a set of options.
    * Then, returns the corresponding DataFrame.
    *
@@ -365,8 +389,6 @@ abstract class Catalog {
    *                  the current database.
    * @since 2.2.0
    */
-  @Experimental
-  @Evolving
   def createTable(
       tableName: String,
       source: String,
@@ -395,7 +417,6 @@ abstract class Catalog {
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Create a table based on the dataset in a data source, a schema and a set of options.
    * Then, returns the corresponding DataFrame.
@@ -405,12 +426,51 @@ abstract class Catalog {
    *                  the current database.
    * @since 2.2.0
    */
-  @Experimental
-  @Evolving
   def createTable(
       tableName: String,
       source: String,
       schema: StructType,
+      options: Map[String, String]): DataFrame
+
+  /**
+   * Create a table based on the dataset in a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 3.1.0
+   */
+  def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      description: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(
+      tableName,
+      source = source,
+      schema = schema,
+      description = description,
+      options = options.asScala.toMap
+    )
+  }
+
+  /**
+   * (Scala-specific)
+   * Create a table based on the dataset in a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 3.1.0
+   */
+  def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      description: String,
       options: Map[String, String]): DataFrame
 
   /**
@@ -529,4 +589,25 @@ abstract class Catalog {
    * @since 2.0.0
    */
   def refreshByPath(path: String): Unit
+
+  /**
+   * Returns the current catalog in this session.
+   *
+   * @since 3.4.0
+   */
+  def currentCatalog(): String
+
+  /**
+   * Sets the current catalog in this session.
+   *
+   * @since 3.4.0
+   */
+  def setCurrentCatalog(catalogName: String): Unit
+
+  /**
+   * Returns a list of catalogs available in this session.
+   *
+   * @since 3.4.0
+   */
+  def listCatalogs(): Dataset[CatalogMetadata]
 }

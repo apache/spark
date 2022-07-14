@@ -24,15 +24,18 @@ import java.util.Locale
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     val columnPruning: Boolean,
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
-  extends Logging with Serializable {
+  extends FileSourceOptions(parameters) with Logging {
 
   def this(
     parameters: Map[String, String],
@@ -64,7 +67,7 @@ class CSVOptions(
       case Some(null) => default
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
-      case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
+      case _ => throw QueryExecutionErrors.paramExceedOneCharError(paramName)
     }
   }
 
@@ -77,7 +80,7 @@ class CSVOptions(
         value.toInt
       } catch {
         case e: NumberFormatException =>
-          throw new RuntimeException(s"$paramName should be an integer. Found $value")
+          throw QueryExecutionErrors.paramIsNotIntegerError(paramName, value)
       }
     }
   }
@@ -91,11 +94,11 @@ class CSVOptions(
     } else if (param.toLowerCase(Locale.ROOT) == "false") {
       false
     } else {
-      throw new Exception(s"$paramName flag can be true or false")
+      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
     }
   }
 
-  val delimiter = CSVExprUtils.toChar(
+  val delimiter = CSVExprUtils.toDelimiterStr(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
@@ -109,8 +112,7 @@ class CSVOptions(
     case Some(null) => None
     case Some(value) if value.length == 0 => None
     case Some(value) if value.length == 1 => Some(value.charAt(0))
-    case _ =>
-      throw new RuntimeException("charToEscapeQuoteEscaping cannot be more than one character")
+    case _ => throw QueryExecutionErrors.paramExceedOneCharError("charToEscapeQuoteEscaping")
   }
   val comment = getChar("comment", '\u0000')
 
@@ -146,10 +148,26 @@ class CSVOptions(
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
-  val dateFormat: String = parameters.getOrElse("dateFormat", "yyyy-MM-dd")
+  val dateFormatInRead: Option[String] = parameters.get("dateFormat")
+  val dateFormatInWrite: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
-  val timestampFormat: String =
-    parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+  val timestampFormatInRead: Option[String] =
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      Some(parameters.getOrElse("timestampFormat",
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
+    } else {
+      parameters.get("timestampFormat")
+    }
+  val timestampFormatInWrite: String = parameters.getOrElse("timestampFormat",
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
+    } else {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
+    })
+
+  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
+  val timestampNTZFormatInWrite: String = parameters.getOrElse("timestampNTZFormat",
+    s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -161,7 +179,10 @@ class CSVOptions(
 
   val quoteAll = getBool("quoteAll", false)
 
-  val inputBufferSize = 128
+  /**
+   * The max error content length in CSV parser/writer exception message.
+   */
+  val maxErrorContentLength = 1000
 
   val isCommentSet = this.comment != '\u0000'
 
@@ -194,7 +215,11 @@ class CSVOptions(
    */
   val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
     require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
-    require(sep.length == 1, "'lineSep' can contain only 1 character.")
+    // Intentionally allow it up to 2 for Window's CRLF although multiple
+    // characters have an issue with quotes. This is intentionally undocumented.
+    require(sep.length <= 2, "'lineSep' can contain only 1 character.")
+    if (sep.length == 2) logWarning("It is not recommended to set 'lineSep' " +
+      "with 2 characters due to the limitation of supporting multi-char 'lineSep' within quotes.")
     sep
   }
 
@@ -203,6 +228,15 @@ class CSVOptions(
   }
   val lineSeparatorInWrite: Option[String] = lineSeparator
 
+  val inputBufferSize: Option[Int] = parameters.get("inputBufferSize").map(_.toInt)
+    .orElse(SQLConf.get.getConf(SQLConf.CSV_INPUT_BUFFER_SIZE))
+
+  /**
+   * The handling method to be used when unescaped quotes are found in the input.
+   */
+  val unescapedQuoteHandling: UnescapedQuoteHandling = UnescapedQuoteHandling.valueOf(parameters
+    .getOrElse("unescapedQuoteHandling", "STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -210,7 +244,9 @@ class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
-    format.setComment(comment)
+    if (isCommentSet) {
+      format.setComment(comment)
+    }
     lineSeparatorInWrite.foreach(format.setLineSeparator)
 
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
@@ -220,6 +256,7 @@ class CSVOptions(
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings.setErrorContentLength(maxErrorContentLength)
     writerSettings
   }
 
@@ -231,21 +268,26 @@ class CSVOptions(
     format.setQuoteEscape(escape)
     lineSeparator.foreach(format.setLineSeparator)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
-    format.setComment(comment)
+    if (isCommentSet) {
+      format.setComment(comment)
+    } else {
+      settings.setCommentProcessingEnabled(false)
+    }
 
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
-    settings.setInputBufferSize(inputBufferSize)
+    inputBufferSize.foreach(settings.setInputBufferSize)
     settings.setMaxColumns(maxColumns)
     settings.setNullValue(nullValue)
     settings.setEmptyValue(emptyValueInRead)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
-    settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
+    settings.setUnescapedQuoteHandling(unescapedQuoteHandling)
     settings.setLineSeparatorDetectionEnabled(lineSeparatorInRead.isEmpty && multiLine)
     lineSeparatorInRead.foreach { _ =>
       settings.setNormalizeLineEndingsWithinQuotes(!multiLine)
     }
+    settings.setErrorContentLength(maxErrorContentLength)
 
     settings
   }

@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -27,14 +27,14 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.6.0 and Java 8.
-Spark requires Scala 2.12; support for Scala 2.11 was removed in Spark 3.0.0.
+Building Spark using Maven requires Maven 3.8.6 and Java 8.
+Spark requires Scala 2.12/2.13; support for Scala 2.11 was removed in Spark 3.0.0.
 
 ### Setting up Maven's Memory Usage
 
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
-    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
+    export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g"
 
 (The `ReservedCodeCacheSize` setting is optional but recommended.)
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
@@ -51,7 +51,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 
 ### build/mvn
 
-Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](http://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
+Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](https://www.scala-lang.org/)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
 
     ./build/mvn -DskipTests clean package
 
@@ -70,22 +70,26 @@ This will build Spark distribution along with Python pip and R packages. For mor
 
 ## Specifying the Hadoop Version and Enabling YARN
 
-You can specify the exact version of Hadoop to compile against through the `hadoop.version` property. 
+You can specify the exact version of Hadoop to compile against through the `hadoop.version` property.
 
-You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different 
+You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different
 from `hadoop.version`.
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.3.0 -DskipTests clean package
+
+If you want to build with Hadoop 2.x, enable `hadoop-2` profile:
+
+    ./build/mvn -Phadoop-2 -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
-add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 1.2.1 bindings.
+add the `-Phive` and `-Phive-thriftserver` profiles to your existing build options.
+By default Spark will build with Hive 2.3.9.
 
-    # With Hive 1.2.1 support
+    # With Hive 2.3.9 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN
@@ -125,7 +129,7 @@ should run continuous compilation (i.e. wait for changes). However, this has not
 extensively. A couple of gotchas to note:
 
 * it only scans the paths `src/main` and `src/test` (see
-[docs](http://davidb.github.io/scala-maven-plugin/example_cc.html)), so it will only work
+[docs](https://davidb.github.io/scala-maven-plugin/example_cc.html)), so it will only work
 from within certain submodules that have that structure.
 
 * you'll typically need to run `mvn install` from the project root for compilation within
@@ -157,15 +161,14 @@ prompt.
 Configure the JVM options for SBT in `.jvmopts` at the project root, for example:
 
     -Xmx2g
-    -XX:ReservedCodeCacheSize=512m
+    -XX:ReservedCodeCacheSize=1g
 
-For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](http://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
+For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](https://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
 
 ## Speeding up Compilation
 
-Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
-(for developers who build with Maven) or by avoiding re-compilation of the assembly JAR (for
-developers who build with SBT).  For more information about how to do this, refer to the
+Developers who compile Spark frequently may want to speed up compilation; e.g., by avoiding re-compilation of the
+assembly JAR (for developers who build with SBT).  For more information about how to do this, refer to the
 [Useful Developer Tools page](https://spark.apache.org/developer-tools.html#reducing-build-times).
 
 ## Encrypted Filesystems
@@ -238,8 +241,7 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
 
-    R -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
-    R -e "devtools::install_version('testthat', version = '1.0.2', repos='http://cran.us.r-project.org')"
+    Rscript -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'testthat', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
 
 You can run just the SparkR tests using the command:
 
@@ -266,17 +268,15 @@ Change the major Scala version using (e.g. 2.13):
 
     ./dev/change-scala-version.sh 2.13
 
-For Maven, please enable the profile (e.g. 2.13):
+Enable the profile (e.g. 2.13):
 
+    # For Maven
     ./build/mvn -Pscala-2.13 compile
 
-For SBT, specify a complete scala version using (e.g. 2.13.0):
+    # For sbt
+    ./build/sbt -Pscala-2.13 compile
 
-    ./build/sbt -Dscala.version=2.13.0
-
-Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.
-
-## Running Jenkins tests with Github Enterprise
+## Running Jenkins tests with GitHub Enterprise
 
 To run tests with Jenkins:
 
@@ -303,3 +303,17 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
   </td>
 </tr>
 </table>
+
+### Building and testing on IPv6-only environment
+
+Use Apache Spark GitBox URL because GitHub doesn't support IPv6 yet.
+
+    https://gitbox.apache.org/repos/asf/spark.git
+
+To build and run tests on IPv6-only environment, the following configurations are required.
+
+    export SPARK_LOCAL_HOSTNAME="your-IPv6-address" # e.g. '[2600:1700:232e:3de0:...]'
+    export DEFAULT_ARTIFACT_REPOSITORY=https://ipv6.repo1.maven.org/maven2/
+    export MAVEN_OPTS="-Djava.net.preferIPv6Addresses=true"
+    export SBT_OPTS="-Djava.net.preferIPv6Addresses=true"
+    export SERIAL_SBT_TESTS=1

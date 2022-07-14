@@ -27,10 +27,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 
-class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventually {
+class DataFrameRangeSuite extends QueryTest with SharedSparkSession with Eventually {
 
   test("SPARK-7150 range api") {
     // numSlice is greater than length
@@ -63,13 +63,15 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     val res7 = spark.range(-10, -9, -20, 1).select("id")
     assert(res7.count == 0)
 
-    val res8 = spark.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
-    assert(res8.count == 3)
-    assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
+    if (!conf.ansiEnabled) {
+      val res8 = spark.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
+      assert(res8.count == 3)
+      assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
 
-    val res9 = spark.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
-    assert(res9.count == 2)
-    assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
+      val res9 = spark.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
+      assert(res9.count == 2)
+      assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
+    }
 
     // only end provided as argument
     val res10 = spark.range(10).select("id")
@@ -113,11 +115,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     val random = new Random(seed)
 
     def randomBound(): Long = {
-      val n = if (random.nextBoolean()) {
-        random.nextLong() % (Long.MaxValue / (100 * MAX_NUM_STEPS))
-      } else {
-        random.nextLong() / 2
-      }
+      val n = random.nextLong() % (Long.MaxValue / (100 * MAX_NUM_STEPS))
       if (random.nextBoolean()) n else -n
     }
 

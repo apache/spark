@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,40 +17,73 @@
 #
 
 from pyspark.sql.functions import sha2
-from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
+from pyspark.sql.utils import (
+    AnalysisException,
+    ParseException,
+    IllegalArgumentException,
+    SparkUpgradeException,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 
 
 class UtilsTests(ReusedSQLTestCase):
-
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
+
+    def test_capture_user_friendly_exception(self):
+        try:
+            self.spark.sql("select `中文字段`")
+        except AnalysisException as e:
+            self.assertRegex(str(e), ".*UNRESOLVED_COLUMN.*`中文字段`.*")
+
+    def test_spark_upgrade_exception(self):
+        # SPARK-32161 : Test case to Handle SparkUpgradeException in pythonic way
+        df = self.spark.createDataFrame([("2014-31-12",)], ["date_str"])
+        df2 = df.select(
+            "date_str", to_date(from_unixtime(unix_timestamp("date_str", "yyyy-dd-aa")))
+        )
+        self.assertRaises(SparkUpgradeException, df2.collect)
 
     def test_capture_parse_exception(self):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))
 
     def test_capture_illegalargument_exception(self):
-        self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapred.reduce.tasks",
-                                lambda: self.spark.sql("SET mapred.reduce.tasks=-1"))
+        self.assertRaisesRegex(
+            IllegalArgumentException,
+            "Setting negative mapred.reduce.tasks",
+            lambda: self.spark.sql("SET mapred.reduce.tasks=-1"),
+        )
         df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
-        self.assertRaisesRegexp(IllegalArgumentException, "1024 is not in the permitted values",
-                                lambda: df.select(sha2(df.a, 1024)).collect())
+        self.assertRaisesRegex(
+            IllegalArgumentException,
+            "1024 is not in the permitted values",
+            lambda: df.select(sha2(df.a, 1024)).collect(),
+        )
         try:
             df.select(sha2(df.a, 1024)).collect()
         except IllegalArgumentException as e:
-            self.assertRegexpMatches(e.desc, "1024 is not in the permitted values")
-            self.assertRegexpMatches(e.stackTrace,
-                                     "org.apache.spark.sql.functions")
+            self.assertRegex(e.desc, "1024 is not in the permitted values")
+            self.assertRegex(e.stackTrace, "org.apache.spark.sql.functions")
+
+    def test_get_error_class_state(self):
+        # SPARK-36953: test CapturedException.getErrorClass and getSqlState (from SparkThrowable)
+        try:
+            self.spark.sql("""SELECT a""")
+        except AnalysisException as e:
+            self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN")
+            self.assertEquals(e.getSqlState(), "42000")
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_utils import *
+    from pyspark.sql.tests.test_utils import *  # noqa: F401
 
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

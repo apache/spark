@@ -17,22 +17,19 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.language.existentials
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.apache.hadoop.mapred._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -67,12 +64,16 @@ case class InsertIntoHiveDirCommand(
       s"when inserting into ${storage.locationUri.get}",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
-    val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
+    val table = CatalogTable(
       identifier = TableIdentifier(storage.locationUri.get.toString, Some("default")),
+      provider = Some(DDLUtils.HIVE_PROVIDER),
       tableType = org.apache.spark.sql.catalyst.catalog.CatalogTableType.VIEW,
       storage = storage,
       schema = outputColumns.toStructType
-    ))
+    )
+    DDLUtils.checkTableColumns(table)
+
+    val hiveTable = HiveClientImpl.toHiveTable(table)
     hiveTable.getMetadata.put(serdeConstants.SERIALIZATION_LIB,
       storage.serde.getOrElse(classOf[LazySimpleSerDe].getName))
 
@@ -83,13 +84,12 @@ case class InsertIntoHiveDirCommand(
     )
 
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
-    val jobConf = new JobConf(hadoopConf)
 
     val targetPath = new Path(storage.locationUri.get)
     val qualifiedPath = FileUtils.makeQualified(targetPath, hadoopConf)
     val (writeToPath: Path, fs: FileSystem) =
       if (isLocal) {
-        val localFileSystem = FileSystem.getLocal(jobConf)
+        val localFileSystem = FileSystem.getLocal(hadoopConf)
         (localFileSystem.makeQualified(targetPath), localFileSystem)
       } else {
         val dfs = qualifiedPath.getFileSystem(hadoopConf)
@@ -137,5 +137,8 @@ case class InsertIntoHiveDirCommand(
 
     Seq.empty[Row]
   }
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): InsertIntoHiveDirCommand = copy(query = newChild)
 }
 

@@ -58,7 +58,12 @@ writeObject <- function(con, object, writeType = TRUE) {
   # Checking types is needed here, since 'is.na' only handles atomic vectors,
   # lists and pairlists
   if (type %in% c("integer", "character", "logical", "double", "numeric")) {
-    if (is.na(object)) {
+    if (is.na(object[[1]])) {
+      # Uses the first element for now to keep the behavior same as R before
+      # 4.2.0. This is wrong because we should differenciate c(NA) from a
+      # single NA as the former means array(null) and the latter means null
+      # in Spark SQL. However, it requires non-trivial comparison to distinguish
+      # both in R. We should ideally fix this.
       object <- NULL
       type <- "NULL"
     }
@@ -84,7 +89,7 @@ writeObject <- function(con, object, writeType = TRUE) {
          Date = writeDate(con, object),
          POSIXlt = writeTime(con, object),
          POSIXct = writeTime(con, object),
-         stop(paste("Unsupported type for serialization", type)))
+         stop("Unsupported type for serialization ", type))
 }
 
 writeVoid <- function(con) {
@@ -158,7 +163,7 @@ writeType <- function(con, class) {
                  Date = "D",
                  POSIXlt = "t",
                  POSIXct = "t",
-                 stop(paste("Unsupported type for serialization", class)))
+                 stop("Unsupported type for serialization ", class))
   writeBin(charToRaw(type), con)
 }
 
@@ -222,15 +227,11 @@ writeArgs <- function(con, args) {
 }
 
 writeSerializeInArrow <- function(conn, df) {
-  # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now. See ARROW-3204.
-  requireNamespace1 <- requireNamespace
-  if (requireNamespace1("arrow", quietly = TRUE)) {
-    write_arrow <- get("write_arrow", envir = asNamespace("arrow"), inherits = FALSE)
-
+  if (requireNamespace("arrow", quietly = TRUE)) {
     # There looks no way to send each batch in streaming format via socket
     # connection. See ARROW-4512.
     # So, it writes the whole Arrow streaming-formatted binary at once for now.
-    writeRaw(conn, write_arrow(df, raw()))
+    writeRaw(conn, arrow::write_arrow(df, raw()))
   } else {
     stop("'arrow' package should be installed.")
   }

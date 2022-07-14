@@ -19,26 +19,30 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
   BisectingKMeansModel => MLlibBisectingKMeansModel}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 
 /**
  * Common params for BisectingKMeans and BisectingKMeansModel
  */
 private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
-  with HasFeaturesCol with HasSeed with HasPredictionCol with HasDistanceMeasure {
+  with HasFeaturesCol with HasSeed with HasPredictionCol with HasDistanceMeasure
+  with HasWeightCol {
 
   /**
    * The desired number of leaf clusters. Must be &gt; 1. Default: 4.
@@ -67,6 +71,8 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
   @Since("2.0.0")
   def getMinDivisibleClusterSize: Double = $(minDivisibleClusterSize)
 
+  setDefault(k -> 4, maxIter -> 20, minDivisibleClusterSize -> 1.0)
+
   /**
    * Validates and transforms the input schema.
    * @param schema input schema
@@ -90,6 +96,9 @@ class BisectingKMeansModel private[ml] (
   extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable
   with HasTrainingSummary[BisectingKMeansSummary] {
 
+  @Since("3.0.0")
+  lazy val numFeatures: Int = parentModel.clusterCenters.head.size
+
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
     val copied = copyValues(new BisectingKMeansModel(uid, parentModel), extra)
@@ -106,15 +115,21 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol),
-      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+      predictUDF(columnToVector(dataset, getFeaturesCol)),
+      outputSchema($(predictionCol)).metadata)
   }
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), parentModel.k)
+    }
+    outputSchema
   }
 
   @Since("3.0.0")
@@ -137,12 +152,18 @@ class BisectingKMeansModel private[ml] (
     "summary.", "3.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
-    val data = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
+    val data = columnToOldVector(dataset, getFeaturesCol)
     parentModel.computeCost(data)
   }
 
   @Since("2.0.0")
   override def write: MLWriter = new BisectingKMeansModel.BisectingKMeansModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"BisectingKMeansModel: uid=$uid, k=${parentModel.k}, distanceMeasure=${$(distanceMeasure)}, " +
+      s"numFeatures=$numFeatures"
+  }
 
   /**
    * Gets summary of model on training set. An exception is
@@ -206,11 +227,6 @@ class BisectingKMeans @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[BisectingKMeansModel] with BisectingKMeansParams with DefaultParamsWritable {
 
-  setDefault(
-    k -> 4,
-    maxIter -> 20,
-    minDivisibleClusterSize -> 1.0)
-
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeans = defaultCopy(extra)
 
@@ -245,15 +261,24 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("2.4.0")
   def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
 
+  /**
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * Default is not set, so all instances have weight one.
+   *
+   * @group setParam
+   */
+  @Since("3.0.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
-    val rdd = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, featuresCol, predictionCol, k, maxIter, seed,
-      minDivisibleClusterSize, distanceMeasure)
+      minDivisibleClusterSize, distanceMeasure, weightCol)
 
     val bkm = new MLlibBisectingKMeans()
       .setK($(k))
@@ -261,8 +286,17 @@ class BisectingKMeans @Since("2.0.0") (
       .setMinDivisibleClusterSize($(minDivisibleClusterSize))
       .setSeed($(seed))
       .setDistanceMeasure($(distanceMeasure))
-    val parentModel = bkm.run(rdd, Some(instr))
+
+    val instances = dataset.select(
+      checkNonNanVectors(columnToVector(dataset, $(featuresCol))),
+      checkNonNegativeWeights(get(weightCol))
+    ).rdd.map { case Row(f: Vector, w: Double) => (OldVectors.fromML(f), w)
+    }.setName("training instances")
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    val parentModel = bkm.runWithWeight(instances, handlePersistence, Some(instr))
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
+
     val summary = new BisectingKMeansSummary(
       model.transform(dataset),
       $(predictionCol),
@@ -291,7 +325,6 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
 
 
 /**
- * :: Experimental ::
  * Summary of BisectingKMeans.
  *
  * @param predictions  `DataFrame` produced by `BisectingKMeansModel.transform()`.
@@ -303,7 +336,6 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  *                     dataset. This is equivalent to sklearn's inertia.
  */
 @Since("2.1.0")
-@Experimental
 class BisectingKMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,

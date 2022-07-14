@@ -26,8 +26,8 @@ import org.apache.spark.sql.internal.SQLConf
  *   To run this benchmark:
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/WideTableBenchmark-results.txt".
  * }}}
  */
@@ -42,7 +42,7 @@ object WideTableBenchmark extends SqlBasedBenchmark {
       Seq("10", "100", "1024", "2048", "4096", "8192", "65536").foreach { n =>
         benchmark.addCase(s"split threshold $n", numIters = 5) { iter =>
           withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> n) {
-            df.selectExpr(columns: _*).foreach(_ => ())
+            df.selectExpr(columns: _*).noop()
           }
         }
       }

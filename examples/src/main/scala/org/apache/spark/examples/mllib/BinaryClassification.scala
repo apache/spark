@@ -18,7 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -58,7 +59,7 @@ object BinaryClassification {
       regType: RegType = L2,
       regParam: Double = 0.01) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("BinaryClassification") {
@@ -105,7 +106,7 @@ object BinaryClassification {
     val conf = new SparkConf().setAppName(s"BinaryClassification with $params")
     val sc = new SparkContext(conf)
 
-    Logger.getRootLogger.setLevel(Level.WARN)
+    Configurator.setRootLevel(Level.WARN)
 
     val examples = MLUtils.loadLibSVMFile(sc, params.input).cache()
 

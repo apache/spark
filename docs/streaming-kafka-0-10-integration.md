@@ -233,7 +233,7 @@ For data stores that support transactions, saving offsets in the same transactio
 {% highlight scala %}
 // The details depend on your data store, but the general idea looks like this
 
-// begin from the the offsets committed to the database
+// begin from the offsets committed to the database
 val fromOffsets = selectOffsetsFromYourDatabase.map { resultSet =>
   new TopicPartition(resultSet.string("topic"), resultSet.int("partition")) -> resultSet.long("offset")
 }.toMap
@@ -263,7 +263,7 @@ stream.foreachRDD { rdd =>
 {% highlight java %}
 // The details depend on your data store, but the general idea looks like this
 
-// begin from the the offsets committed to the database
+// begin from the offsets committed to the database
 Map<TopicPartition, Long> fromOffsets = new HashMap<>();
 for (resultSet : selectOffsetsFromYourDatabase)
   fromOffsets.put(new TopicPartition(resultSet.string("topic"), resultSet.int("partition")), resultSet.long("offset"));

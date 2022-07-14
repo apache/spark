@@ -17,26 +17,36 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.when
+import org.mockito.invocation.InvocationOnMock
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar._
+import org.scalatestplus.mockito.MockitoSugar._
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
-import org.apache.spark.internal.config.{CPUS_PER_TASK, UI}
+import org.apache.spark._
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceInformation, ResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.util.{RpcUtils, SerializableBuffer}
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.util.{RpcUtils, SerializableBuffer, Utils}
 
 class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext
     with Eventually {
 
-  private val executorUpTimeout = 60.seconds
+  private val executorUpTimeout = 1.minute
 
   test("serialized task larger than max RPC message size") {
     val conf = new SparkConf
@@ -63,7 +73,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       // Ensure all executors have been launched.
       assert(sc.getExecutorIds().length == 4)
     }
-    assert(sc.maxNumConcurrentTasks() == 12)
+    assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 12)
   }
 
   test("compute max number of concurrent tasks can be launched when spark.task.cpus > 1") {
@@ -77,7 +87,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       assert(sc.getExecutorIds().length == 4)
     }
     // Each executor can only launch one task since `spark.task.cpus` is 2.
-    assert(sc.maxNumConcurrentTasks() == 4)
+    assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
   }
 
   test("compute max number of concurrent tasks can be launched when some executors are busy") {
@@ -90,8 +100,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       Thread.sleep(5000)
       iter
     }
-    var taskStarted = new AtomicBoolean(false)
-    var taskEnded = new AtomicBoolean(false)
+    val taskStarted = new AtomicBoolean(false)
+    val taskEnded = new AtomicBoolean(false)
     val listener = new SparkListener() {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         taskStarted.set(true)
@@ -117,7 +127,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         assert(taskStarted.get())
         assert(taskEnded.get() == false)
         // Assert we count in slots on both busy and free executors.
-        assert(sc.maxNumConcurrentTasks() == 4)
+        assert(
+          sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
       }
     } finally {
       sc.removeSparkListener(listener)
@@ -164,23 +175,286 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     sc.addSparkListener(listener)
 
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, logUrls, attributes,
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, logUrls, attributes,
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes))
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes,
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(executorAddedCount === 3)
   }
 
+  test("extra resources from executor") {
+
+    val testStartTime = System.currentTimeMillis()
+
+    val execCores = 3
+    val conf = new SparkConf()
+      .set(EXECUTOR_CORES, execCores)
+      .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
+      .set(EXECUTOR_INSTANCES, 0) // avoid errors about duplicate executor registrations
+      .setMaster(
+      "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
+      .setAppName("test")
+    conf.set(TASK_GPU_ID.amountConf, "1")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "1")
+
+    sc = new SparkContext(conf)
+    val execGpu = new ExecutorResourceRequests().cores(1).resource(GPU, 3)
+    val taskGpu = new TaskResourceRequests().cpus(1).resource(GPU, 1)
+    val rp = new ResourceProfile(execGpu.requests, taskGpu.requests)
+    sc.resourceProfileManager.addResourceProfile(rp)
+    assert(rp.id > ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val backend = sc.schedulerBackend.asInstanceOf[TestCoarseGrainedSchedulerBackend]
+    // Note we get two in default profile and one in the new rp
+    // we need to put a req time in for all of them.
+    backend.requestTotalExecutors(Map((rp.id, 1)), Map(), Map())
+    backend.requestExecutors(3)
+    val mockEndpointRef = mock[RpcEndpointRef]
+    val mockAddress = mock[RpcAddress]
+    when(mockEndpointRef.send(LaunchTask)).thenAnswer((_: InvocationOnMock) => {})
+
+    val resources = Map(GPU -> new ResourceInformation(GPU, Array("0", "1", "3")))
+
+    var executorAddedCount: Int = 0
+    val infos = scala.collection.mutable.ArrayBuffer[ExecutorInfo]()
+    val listener = new SparkListener() {
+      override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+        // Lets check that the exec allocation times "make sense"
+        val info = executorAdded.executorInfo
+        infos += info
+        executorAddedCount += 1
+      }
+    }
+
+    sc.addSparkListener(listener)
+
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+        rp.id))
+
+    val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
+    val bytebuffer = java.nio.ByteBuffer.allocate(frameSize - 100)
+    val buffer = new SerializableBuffer(bytebuffer)
+
+    var execResources = backend.getExecutorAvailableResources("1")
+    assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
+
+    val exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
+    assert(exec3ResourceProfileId === rp.id)
+
+    val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
+    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
+      "t1", 0, 1, mutable.Map.empty[String, Long],
+      mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
+      new Properties(), 1, taskResources, bytebuffer)))
+    val ts = backend.getTaskSchedulerImpl()
+    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
+
+    backend.driverEndpoint.send(ReviveOffers)
+
+    eventually(timeout(5 seconds)) {
+      execResources = backend.getExecutorAvailableResources("1")
+      assert(execResources(GPU).availableAddrs.sorted === Array("1", "3"))
+      assert(execResources(GPU).assignedAddrs === Array("0"))
+    }
+
+    // To avoid allocating any resources immediately after releasing the resource from the task to
+    // make sure that `availableAddrs` below won't change
+    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
+    backend.driverEndpoint.send(
+      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskResources))
+
+    eventually(timeout(5 seconds)) {
+      execResources = backend.getExecutorAvailableResources("1")
+      assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
+      assert(execResources(GPU).assignedAddrs.isEmpty)
+    }
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(executorAddedCount === 3)
+    infos.foreach { info =>
+      assert(info.requestTime.get > 0,
+        "Exec allocation and request times don't make sense")
+      assert(info.requestTime.get > testStartTime,
+        "Exec allocation and request times don't make sense")
+      assert(info.registrationTime.get >= info.requestTime.get,
+        "Exec allocation and request times don't make sense")
+    }
+  }
+
+  test("exec alloc decrease.") {
+
+    val testStartTime = System.currentTimeMillis()
+
+    val execCores = 3
+    val conf = new SparkConf()
+      .set(EXECUTOR_CORES, execCores)
+      .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
+      .set(EXECUTOR_INSTANCES, 0) // avoid errors about duplicate executor registrations
+      .setMaster(
+      "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
+      .setAppName("test")
+    conf.set(TASK_GPU_ID.amountConf, "1")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "1")
+
+    sc = new SparkContext(conf)
+    val execGpu = new ExecutorResourceRequests().cores(1).resource(GPU, 3)
+    val taskGpu = new TaskResourceRequests().cpus(1).resource(GPU, 1)
+    val rp = new ResourceProfile(execGpu.requests, taskGpu.requests)
+    sc.resourceProfileManager.addResourceProfile(rp)
+    assert(rp.id > ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val backend = sc.schedulerBackend.asInstanceOf[TestCoarseGrainedSchedulerBackend]
+    // Note we get two in default profile and one in the new rp
+    // we need to put a req time in for all of them.
+    backend.requestTotalExecutors(Map((rp.id, 1)), Map(), Map())
+    // Decrease the number of execs requested in the new rp.
+    backend.requestTotalExecutors(Map((rp.id, 0)), Map(), Map())
+    // Request execs in the default profile.
+    backend.requestExecutors(3)
+    val mockEndpointRef = mock[RpcEndpointRef]
+    val mockAddress = mock[RpcAddress]
+    when(mockEndpointRef.send(LaunchTask)).thenAnswer((_: InvocationOnMock) => {})
+
+    val resources = Map(GPU -> new ResourceInformation(GPU, Array("0", "1", "3")))
+
+    var executorAddedCount: Int = 0
+    val infos = scala.collection.mutable.ArrayBuffer[ExecutorInfo]()
+    val listener = new SparkListener() {
+      override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+        // Lets check that the exec allocation times "make sense"
+        val info = executorAdded.executorInfo
+        infos += info
+        executorAddedCount += 1
+      }
+    }
+
+    sc.addSparkListener(listener)
+
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+        rp.id))
+
+    val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
+    val bytebuffer = java.nio.ByteBuffer.allocate(frameSize - 100)
+    val buffer = new SerializableBuffer(bytebuffer)
+
+    var execResources = backend.getExecutorAvailableResources("1")
+    assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
+
+    val exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
+    assert(exec3ResourceProfileId === rp.id)
+
+    val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
+    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
+      "t1", 0, 1, mutable.Map.empty[String, Long],
+      mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
+      new Properties(), 1, taskResources, bytebuffer)))
+    val ts = backend.getTaskSchedulerImpl()
+    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
+
+    backend.driverEndpoint.send(ReviveOffers)
+
+    eventually(timeout(5 seconds)) {
+      execResources = backend.getExecutorAvailableResources("1")
+      assert(execResources(GPU).availableAddrs.sorted === Array("1", "3"))
+      assert(execResources(GPU).assignedAddrs === Array("0"))
+    }
+
+    // To avoid allocating any resources immediately after releasing the resource from the task to
+    // make sure that `availableAddrs` below won't change
+    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
+    backend.driverEndpoint.send(
+      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskResources))
+
+    eventually(timeout(5 seconds)) {
+      execResources = backend.getExecutorAvailableResources("1")
+      assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
+      assert(execResources(GPU).assignedAddrs.isEmpty)
+    }
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(executorAddedCount === 3)
+    infos.foreach { info =>
+      info.requestTime.map { t =>
+        assert(t > 0,
+          "Exec request times don't make sense")
+        assert(t >= testStartTime,
+          "Exec allocation and request times don't make sense")
+        assert(t <= info.registrationTime.get,
+          "Exec allocation and request times don't make sense")
+      }
+    }
+    assert(infos.filter(_.requestTime.isEmpty).length === 1,
+      "Our unexpected executor does not have a request time.")
+  }
+
+
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
     sc.submitJob(
       rdd,
       (iter: Iterator[Int]) => iter.toArray,
-      0 until rdd.partitions.length,
+      rdd.partitions.indices,
       { case (_, _) => return }: (Int, Array[Int]) => Unit,
       { return }
     )
   }
+}
+
+/** Simple cluster manager that wires up our mock backend for the resource tests. */
+private class CSMockExternalClusterManager extends ExternalClusterManager {
+
+  private var ts: TaskSchedulerImpl = _
+
+  private val MOCK_REGEX = """coarseclustermanager\[(.*)\]""".r
+  override def canCreate(masterURL: String): Boolean = MOCK_REGEX.findFirstIn(masterURL).isDefined
+
+  override def createTaskScheduler(
+      sc: SparkContext,
+      masterURL: String): TaskScheduler = {
+    ts = mock[TaskSchedulerImpl]
+    when(ts.sc).thenReturn(sc)
+    when(ts.applicationId()).thenReturn("appid1")
+    when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
+    when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
+    when(ts.excludedNodes()).thenReturn(Set.empty[String])
+    ts
+  }
+
+  override def createSchedulerBackend(
+      sc: SparkContext,
+      masterURL: String,
+      scheduler: TaskScheduler): SchedulerBackend = {
+    masterURL match {
+      case MOCK_REGEX(backendClassName) =>
+        val backendClass = Utils.classForName(backendClassName)
+        val ctor = backendClass.getConstructor(classOf[TaskSchedulerImpl], classOf[RpcEnv])
+        ctor.newInstance(scheduler, sc.env.rpcEnv).asInstanceOf[SchedulerBackend]
+    }
+  }
+
+  override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
+    scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
+  }
+}
+
+private[spark]
+class TestCoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, override val rpcEnv: RpcEnv)
+  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
+
+  def getTaskSchedulerImpl(): TaskSchedulerImpl = scheduler
 }

@@ -16,10 +16,12 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.connector.read.streaming.PartitionOffset
 
 case class ContinuousRecordPartitionOffset(partitionId: Int, offset: Int) extends PartitionOffset
 case class GetRecord(offset: ContinuousRecordPartitionOffset)
@@ -33,7 +35,7 @@ case class GetRecord(offset: ContinuousRecordPartitionOffset)
  *                to the number of partitions.
  * @param lock a lock object for locking the buckets for read
  */
-class ContinuousRecordEndpoint(buckets: Seq[Seq[Any]], lock: Object)
+class ContinuousRecordEndpoint(buckets: Seq[mutable.Seq[UnsafeRow]], lock: Object)
   extends ThreadSafeRpcEndpoint {
 
   private var startOffsets: Seq[Int] = List.fill(buckets.size)(0)
@@ -63,7 +65,7 @@ class ContinuousRecordEndpoint(buckets: Seq[Seq[Any]], lock: Object)
         val buf = buckets(partitionId)
         val record = if (buf.size <= bufOffset) None else Some(buf(bufOffset))
 
-        context.reply(record.map(InternalRow(_)))
+        context.reply(record)
       }
   }
 }

@@ -22,11 +22,11 @@ import scala.util.Random
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 
-class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
+class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
 
   private var rand: Random = _
   private var seed: Long = 0
@@ -37,12 +37,18 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
     rand = new Random(seed)
   }
 
-  private def generateRandomInputData(): DataFrame = {
+  private def generateRandomInputData(numRows: Int, numParts: Int): DataFrame = {
     val schema = new StructType()
       .add("a", IntegerType, nullable = false)
       .add("b", IntegerType, nullable = false)
-    val inputData = Seq.fill(10000)(Row(rand.nextInt(), rand.nextInt()))
-    spark.createDataFrame(sparkContext.parallelize(Random.shuffle(inputData), 10), schema)
+    val rdd = if (numParts > 0) {
+      val inputData = Seq.fill(numRows)(Row(rand.nextInt(), rand.nextInt()))
+      sparkContext.parallelize(Random.shuffle(inputData), numParts)
+    } else {
+      sparkContext.emptyRDD[Row]
+    }
+    assert(rdd.getNumPartitions == numParts)
+    spark.createDataFrame(rdd, schema)
   }
 
   /**
@@ -52,35 +58,73 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
   private def noOpFilter(plan: SparkPlan): SparkPlan = FilterExec(Literal(true), plan)
 
   val limit = 250
-  val sortOrder = 'a.desc :: 'b.desc :: Nil
+  val sortOrder = $"a".desc :: $"b".desc :: Nil
 
   test("TakeOrderedAndProject.doExecute without project") {
     withClue(s"seed = $seed") {
-      checkThatPlansAgree(
-        generateRandomInputData(),
-        input =>
-          noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
-        input =>
-          GlobalLimitExec(limit,
-            LocalLimitExec(limit,
-              SortExec(sortOrder, true, input))),
-        sortAnswers = false)
+      Seq((0, 0), (10000, 1), (10000, 10)).foreach { case (n, m) =>
+        checkThatPlansAgree(
+          generateRandomInputData(n, m),
+          input =>
+            noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
+          input =>
+            GlobalLimitExec(limit,
+              LocalLimitExec(limit,
+                SortExec(sortOrder, true, input))),
+          sortAnswers = false)
+      }
     }
   }
 
   test("TakeOrderedAndProject.doExecute with project") {
     withClue(s"seed = $seed") {
-      checkThatPlansAgree(
-        generateRandomInputData(),
-        input =>
-          noOpFilter(
-            TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last), input)),
-        input =>
-          GlobalLimitExec(limit,
-            LocalLimitExec(limit,
-              ProjectExec(Seq(input.output.last),
-                SortExec(sortOrder, true, input)))),
-        sortAnswers = false)
+      Seq((0, 0), (10000, 1), (10000, 10)).foreach { case (n, m) =>
+        checkThatPlansAgree(
+          generateRandomInputData(n, m),
+          input =>
+            noOpFilter(
+              TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last), input)),
+          input =>
+            GlobalLimitExec(limit,
+              LocalLimitExec(limit,
+                ProjectExec(Seq(input.output.last),
+                  SortExec(sortOrder, true, input)))),
+          sortAnswers = false)
+      }
+    }
+  }
+
+  test("TakeOrderedAndProject.doExecute with local sort") {
+    withClue(s"seed = $seed") {
+      val expected = (input: SparkPlan) => {
+        GlobalLimitExec(limit,
+          LocalLimitExec(limit,
+            ProjectExec(Seq(input.output.last),
+              SortExec(sortOrder, true, input))))
+      }
+
+      // test doExecute
+      Seq((10000, 10), (200, 10)).foreach { case (n, m) =>
+        checkThatPlansAgree(
+          generateRandomInputData(n, m),
+          input =>
+            noOpFilter(
+              TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last),
+                SortExec(sortOrder, false, input))),
+          input => expected(input),
+          sortAnswers = false)
+      }
+
+      // test executeCollect
+      Seq((10000, 10), (200, 10)).foreach { case (n, m) =>
+        checkThatPlansAgree(
+          generateRandomInputData(n, m),
+          input =>
+            TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last),
+              SortExec(sortOrder, false, input)),
+          input => expected(input),
+          sortAnswers = false)
+      }
     }
   }
 }

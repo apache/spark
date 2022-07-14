@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{Clock, SystemClock}
@@ -49,6 +50,10 @@ private[spark] class DriverServiceFeatureStep(
       s"$shorterServiceName as the driver service's name.")
     shorterServiceName
   }
+  private val ipFamilyPolicy =
+    kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY)
+  private val ipFamilies =
+    kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILIES).split(",").toList.asJava
 
   private val driverPort = kubernetesConf.sparkConf.getInt(
     config.DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
@@ -69,9 +74,13 @@ private[spark] class DriverServiceFeatureStep(
     val driverService = new ServiceBuilder()
       .withNewMetadata()
         .withName(resolvedServiceName)
+        .addToAnnotations(kubernetesConf.serviceAnnotations.asJava)
+        .addToLabels(SPARK_APP_ID_LABEL, kubernetesConf.appId)
         .endMetadata()
       .withNewSpec()
         .withClusterIP("None")
+        .withIpFamilyPolicy(ipFamilyPolicy)
+        .withIpFamilies(ipFamilies)
         .withSelector(kubernetesConf.labels.asJava)
         .addNewPort()
           .withName(DRIVER_PORT_NAME)
@@ -98,5 +107,5 @@ private[spark] object DriverServiceFeatureStep {
   val DRIVER_BIND_ADDRESS_KEY = config.DRIVER_BIND_ADDRESS.key
   val DRIVER_HOST_KEY = config.DRIVER_HOST_ADDRESS.key
   val DRIVER_SVC_POSTFIX = "-driver-svc"
-  val MAX_SERVICE_NAME_LENGTH = 63
+  val MAX_SERVICE_NAME_LENGTH = KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH
 }

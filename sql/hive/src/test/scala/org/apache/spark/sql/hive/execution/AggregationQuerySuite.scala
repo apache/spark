@@ -24,13 +24,16 @@ import test.org.apache.spark.sql.MyDoubleAvg
 import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, UnsafeRow}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
+import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.unsafe.UnsafeAlignedOffset
 
 
 class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFunction {
@@ -203,11 +206,13 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("group by function") {
-    Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("data")
+    withTempView("data") {
+      Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("data")
 
-    checkAnswer(
-      sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
-      Row(1, Array(2)) :: Nil)
+      checkAnswer(
+        sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
+        Row(1, Array(2)) :: Nil)
+    }
   }
 
   test("empty table") {
@@ -777,7 +782,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     assert(math.abs(corr6 + 1.0) < 1e-12)
 
     // Test for udaf_corr in HiveCompatibilitySuite
-    // udaf_corr has been blacklisted due to numerical errors
+    // udaf_corr has been excluded due to numerical errors
     // We test it here:
     // SELECT corr(b, c) FROM covar_tab WHERE a < 1; => NULL
     // SELECT corr(b, c) FROM covar_tab WHERE a < 3; => NULL
@@ -799,43 +804,45 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       (5, 8, 17),
       (6, 2, 11)).toDF("a", "b", "c")
 
-    covar_tab.createOrReplaceTempView("covar_tab")
+    withTempView("covar_tab") {
+      covar_tab.createOrReplaceTempView("covar_tab")
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT corr(b, c) FROM covar_tab WHERE a < 1
-        """.stripMargin),
-      Row(null) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT corr(b, c) FROM covar_tab WHERE a < 1
+          """.stripMargin),
+        Row(null) :: Nil)
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT corr(b, c) FROM covar_tab WHERE a < 3
-        """.stripMargin),
-      Row(null) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT corr(b, c) FROM covar_tab WHERE a < 3
+          """.stripMargin),
+        Row(null) :: Nil)
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT corr(b, c) FROM covar_tab WHERE a = 3
-        """.stripMargin),
-      Row(Double.NaN) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT corr(b, c) FROM covar_tab WHERE a = 3
+          """.stripMargin),
+        Row(null) :: Nil)
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
-        """.stripMargin),
-      Row(1, null) ::
-      Row(2, null) ::
-      Row(3, Double.NaN) ::
-      Row(4, Double.NaN) ::
-      Row(5, Double.NaN) ::
-      Row(6, Double.NaN) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
+          """.stripMargin),
+        Row(1, null) ::
+        Row(2, null) ::
+        Row(3, null) ::
+        Row(4, null) ::
+        Row(5, null) ::
+        Row(6, null) :: Nil)
 
-    val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
-    assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
+      val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
+      assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
+    }
   }
 
   test("covariance: covar_pop and covar_samp") {
@@ -863,7 +870,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     // one row test
     val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(Double.NaN))
+    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(null))
     checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
   }
 
@@ -884,7 +891,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
-      new TestUDT.MyDenseVectorUDT())
+      new TestUDT.MyDenseVectorUDT()) ++ dayTimeIntervalTypes
     // Right now, we will use SortAggregate to handle UDAFs.
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
@@ -1018,42 +1025,74 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     val agg2 = agg1.groupBy($"text").agg(sum($"avg_res"))
     checkAnswer(agg2, Row("a", BigDecimal("11.9999999994857142860000")))
   }
+
+  test("SPARK-29122: hash-based aggregates for unfixed-length decimals in the interpreter mode") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+      withTempView("t") {
+        spark.range(3).selectExpr("CAST(id AS decimal(38, 0)) a").createOrReplaceTempView("t")
+        checkAnswer(sql("SELECT SUM(a) FROM t"), Row(java.math.BigDecimal.valueOf(3)))
+      }
+    }
+  }
+
+  test("SPARK-29140: HashAggregateExec aggregating binary type doesn't break codegen compilation") {
+    val schema = new StructType().add("id", IntegerType, nullable = false)
+      .add("c1", BinaryType, nullable = true)
+
+    withSQLConf(
+      SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
+      SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val emptyRows = spark.sparkContext.parallelize(Seq.empty[Row], 1)
+      val aggDf = spark.createDataFrame(emptyRows, schema)
+        .groupBy($"id" % 10 as "group")
+        .agg(countDistinct($"c1"))
+      checkAnswer(aggDf, Seq.empty[Row])
+    }
+  }
 }
 
 
+@SlowHiveTest
 class HashAggregationQuerySuite extends AggregationQuerySuite
 
 
+@SlowHiveTest
 class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     Seq("true", "false").foreach { enableTwoLevelMaps =>
-      withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enabled" ->
+      withSQLConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key ->
         enableTwoLevelMaps) {
-        (1 to 3).foreach { fallbackStartsAt =>
-          withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
-            s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {
-            // Create a new df to make sure its physical operator picks up
-            // spark.sql.TungstenAggregate.testFallbackStartsAt.
-            // todo: remove it?
-            val newActual = Dataset.ofRows(spark, actual.logicalPlan)
+        Seq(4, 8).foreach { uaoSize =>
+          UnsafeAlignedOffset.setUaoSize(uaoSize)
+          (1 to 3).foreach { fallbackStartsAt =>
+            withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
+              s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {
+              // Create a new df to make sure its physical operator picks up
+              // spark.sql.TungstenAggregate.testFallbackStartsAt.
+              // todo: remove it?
+              val newActual = Dataset.ofRows(spark, actual.logicalPlan)
 
-            QueryTest.checkAnswer(newActual, expectedAnswer) match {
-              case Some(errorMessage) =>
-                val newErrorMessage =
-                  s"""
-                     |The following aggregation query failed when using HashAggregate with
-                     |controlled fallback (it falls back to bytes to bytes map once it has processed
-                     |${fallbackStartsAt - 1} input rows and to sort-based aggregation once it has
-                     |processed $fallbackStartsAt input rows). The query is ${actual.queryExecution}
-                     |
-                    |$errorMessage
-                  """.stripMargin
+              QueryTest.getErrorMessageInCheckAnswer(newActual, expectedAnswer) match {
+                case Some(errorMessage) =>
+                  val newErrorMessage =
+                    s"""
+                       |The following aggregation query failed when using HashAggregate with
+                       |controlled fallback (it falls back to bytes to bytes map once it has
+                       |processed ${fallbackStartsAt - 1} input rows and to sort-based aggregation
+                       |once it has processed $fallbackStartsAt input rows).
+                       |The query is ${actual.queryExecution}
+                       |$errorMessage
+                    """.stripMargin
 
-                fail(newErrorMessage)
-              case None => // Success
+                  fail(newErrorMessage)
+                case None => // Success
+              }
             }
           }
+          // reset static uaoSize to avoid affect other tests
+          UnsafeAlignedOffset.setUaoSize(0)
         }
       }
     }

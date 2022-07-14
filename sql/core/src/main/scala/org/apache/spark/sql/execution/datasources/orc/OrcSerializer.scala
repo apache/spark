@@ -18,12 +18,12 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.hadoop.io._
-import org.apache.orc.TypeDescription
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -87,7 +87,7 @@ class OrcSerializer(dataSchema: StructType) {
         (getter, ordinal) => new ShortWritable(getter.getShort(ordinal))
       }
 
-    case IntegerType =>
+    case IntegerType | _: YearMonthIntervalType =>
       if (reuseObj) {
         val result = new IntWritable()
         (getter, ordinal) =>
@@ -98,7 +98,7 @@ class OrcSerializer(dataSchema: StructType) {
       }
 
 
-    case LongType =>
+    case LongType | _: DayTimeIntervalType | _: TimestampNTZType =>
       if (reuseObj) {
         val result = new LongWritable()
         (getter, ordinal) =>
@@ -152,7 +152,7 @@ class OrcSerializer(dataSchema: StructType) {
 
     case st: StructType => (getter, ordinal) =>
       val result = createOrcValue(st).asInstanceOf[OrcStruct]
-      val fieldConverters = st.map(_.dataType).map(newConverter(_))
+      val fieldConverters = st.map(_.dataType).map(newConverter(_)).toArray
       val numFields = st.length
       val struct = getter.getStruct(ordinal, numFields)
       var i = 0
@@ -206,13 +206,13 @@ class OrcSerializer(dataSchema: StructType) {
     case udt: UserDefinedType[_] => newConverter(udt.sqlType)
 
     case _ =>
-      throw new UnsupportedOperationException(s"$dataType is not supported yet.")
+      throw QueryExecutionErrors.dataTypeUnsupportedYetError(dataType)
   }
 
   /**
    * Return a Orc value object for the given Spark schema.
    */
   private def createOrcValue(dataType: DataType) = {
-    OrcStruct.createValue(TypeDescription.fromString(OrcFileFormat.getQuotedSchemaString(dataType)))
+    OrcStruct.createValue(OrcUtils.orcTypeDescription(dataType))
   }
 }

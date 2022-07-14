@@ -19,8 +19,10 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.ZoneId
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
@@ -40,7 +42,6 @@ class UnsafeArraySuite extends SparkFunSuite {
   val dateArray = Array(
     DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1")).get,
     DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26")).get)
-  private def defaultTz = DateTimeUtils.defaultTimeZone()
   private def defaultZoneId = ZoneId.systemDefault()
   val timestampArray = Array(
     DateTimeUtils.stringToTimestamp(
@@ -54,81 +55,71 @@ class UnsafeArraySuite extends SparkFunSuite {
     BigDecimal("1.2345678901234567890123456").setScale(21, BigDecimal.RoundingMode.FLOOR),
     BigDecimal("2.3456789012345678901234567").setScale(21, BigDecimal.RoundingMode.FLOOR))
 
-  val calenderintervalArray = Array(new CalendarInterval(3, 321), new CalendarInterval(1, 123))
+  val calendarintervalArray = Array(
+    new CalendarInterval(3, 2, 321), new CalendarInterval(1, 2, 123))
 
   val intMultiDimArray = Array(Array(1), Array(2, 20), Array(3, 30, 300))
   val doubleMultiDimArray = Array(
     Array(1.1, 11.1), Array(2.2, 22.2, 222.2), Array(3.3, 33.3, 333.3, 3333.3))
 
+  val serialArray = {
+    val offset = 32
+    val data = new Array[Byte](1024)
+    Platform.putLong(data, offset, 1)
+    val arrayData = new UnsafeArrayData()
+    arrayData.pointTo(data, offset, data.length)
+    arrayData.setLong(0, 19285)
+    arrayData
+  }
+
+  private def toUnsafeArray[T: TypeTag](array: Array[T]): ArrayData = {
+    val converted = ExpressionEncoder[Array[T]].createSerializer().apply(array).getArray(0)
+    assert(converted.numElements == array.length)
+    converted
+  }
+
   test("read array") {
-    val unsafeBoolean = ExpressionEncoder[Array[Boolean]].resolveAndBind().
-      toRow(booleanArray).getArray(0)
-    assert(unsafeBoolean.isInstanceOf[UnsafeArrayData])
-    assert(unsafeBoolean.numElements == booleanArray.length)
+    val unsafeBoolean = toUnsafeArray(booleanArray)
     booleanArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeBoolean.getBoolean(i) == e)
     }
 
-    val unsafeShort = ExpressionEncoder[Array[Short]].resolveAndBind().
-      toRow(shortArray).getArray(0)
-    assert(unsafeShort.isInstanceOf[UnsafeArrayData])
-    assert(unsafeShort.numElements == shortArray.length)
+    val unsafeShort = toUnsafeArray(shortArray)
     shortArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeShort.getShort(i) == e)
     }
 
-    val unsafeInt = ExpressionEncoder[Array[Int]].resolveAndBind().
-      toRow(intArray).getArray(0)
-    assert(unsafeInt.isInstanceOf[UnsafeArrayData])
-    assert(unsafeInt.numElements == intArray.length)
+    val unsafeInt = toUnsafeArray(intArray)
     intArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeInt.getInt(i) == e)
     }
 
-    val unsafeLong = ExpressionEncoder[Array[Long]].resolveAndBind().
-      toRow(longArray).getArray(0)
-    assert(unsafeLong.isInstanceOf[UnsafeArrayData])
-    assert(unsafeLong.numElements == longArray.length)
+    val unsafeLong = toUnsafeArray(longArray)
     longArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeLong.getLong(i) == e)
     }
 
-    val unsafeFloat = ExpressionEncoder[Array[Float]].resolveAndBind().
-      toRow(floatArray).getArray(0)
-    assert(unsafeFloat.isInstanceOf[UnsafeArrayData])
-    assert(unsafeFloat.numElements == floatArray.length)
+    val unsafeFloat = toUnsafeArray(floatArray)
     floatArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeFloat.getFloat(i) == e)
     }
 
-    val unsafeDouble = ExpressionEncoder[Array[Double]].resolveAndBind().
-      toRow(doubleArray).getArray(0)
-    assert(unsafeDouble.isInstanceOf[UnsafeArrayData])
-    assert(unsafeDouble.numElements == doubleArray.length)
+    val unsafeDouble = toUnsafeArray(doubleArray)
     doubleArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeDouble.getDouble(i) == e)
     }
 
-    val unsafeString = ExpressionEncoder[Array[String]].resolveAndBind().
-      toRow(stringArray).getArray(0)
-    assert(unsafeString.isInstanceOf[UnsafeArrayData])
-    assert(unsafeString.numElements == stringArray.length)
+    val unsafeString = toUnsafeArray(stringArray)
     stringArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeString.getUTF8String(i).toString().equals(e))
     }
 
-    val unsafeDate = ExpressionEncoder[Array[Int]].resolveAndBind().
-      toRow(dateArray).getArray(0)
-    assert(unsafeDate.isInstanceOf[UnsafeArrayData])
-    assert(unsafeDate.numElements == dateArray.length)
+    val unsafeDate = toUnsafeArray(dateArray)
     dateArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeDate.get(i, DateType).asInstanceOf[Int] == e)
     }
 
-    val unsafeTimestamp = ExpressionEncoder[Array[Long]].resolveAndBind().
-      toRow(timestampArray).getArray(0)
-    assert(unsafeTimestamp.isInstanceOf[UnsafeArrayData])
-    assert(unsafeTimestamp.numElements == timestampArray.length)
+    val unsafeTimestamp = toUnsafeArray(timestampArray)
     timestampArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeTimestamp.get(i, TimestampType).asInstanceOf[Long] == e)
     }
@@ -139,7 +130,7 @@ class UnsafeArraySuite extends SparkFunSuite {
         "array", ArrayType(DecimalType(decimal.precision, decimal.scale)))
       val encoder = RowEncoder(schema).resolveAndBind()
       val externalRow = Row(decimalArray)
-      val ir = encoder.toRow(externalRow)
+      val ir = encoder.createSerializer().apply(externalRow)
 
       val unsafeDecimal = ir.getArray(0)
       assert(unsafeDecimal.isInstanceOf[UnsafeArrayData])
@@ -151,19 +142,16 @@ class UnsafeArraySuite extends SparkFunSuite {
 
     val schema = new StructType().add("array", ArrayType(CalendarIntervalType))
     val encoder = RowEncoder(schema).resolveAndBind()
-    val externalRow = Row(calenderintervalArray)
-    val ir = encoder.toRow(externalRow)
+    val externalRow = Row(calendarintervalArray)
+    val ir = encoder.createSerializer().apply(externalRow)
     val unsafeCalendar = ir.getArray(0)
     assert(unsafeCalendar.isInstanceOf[UnsafeArrayData])
-    assert(unsafeCalendar.numElements == calenderintervalArray.length)
-    calenderintervalArray.zipWithIndex.map { case (e, i) =>
+    assert(unsafeCalendar.numElements == calendarintervalArray.length)
+    calendarintervalArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeCalendar.getInterval(i) == e)
     }
 
-    val unsafeMultiDimInt = ExpressionEncoder[Array[Array[Int]]].resolveAndBind().
-      toRow(intMultiDimArray).getArray(0)
-    assert(unsafeMultiDimInt.isInstanceOf[UnsafeArrayData])
-    assert(unsafeMultiDimInt.numElements == intMultiDimArray.length)
+    val unsafeMultiDimInt = toUnsafeArray(intMultiDimArray)
     intMultiDimArray.zipWithIndex.map { case (a, j) =>
       val u = unsafeMultiDimInt.getArray(j)
       assert(u.isInstanceOf[UnsafeArrayData])
@@ -173,10 +161,7 @@ class UnsafeArraySuite extends SparkFunSuite {
       }
     }
 
-    val unsafeMultiDimDouble = ExpressionEncoder[Array[Array[Double]]].resolveAndBind().
-      toRow(doubleMultiDimArray).getArray(0)
-    assert(unsafeDouble.isInstanceOf[UnsafeArrayData])
-    assert(unsafeMultiDimDouble.numElements == doubleMultiDimArray.length)
+    val unsafeMultiDimDouble = toUnsafeArray(doubleMultiDimArray)
     doubleMultiDimArray.zipWithIndex.map { case (a, j) =>
       val u = unsafeMultiDimDouble.getArray(j)
       assert(u.isInstanceOf[UnsafeArrayData])
@@ -206,22 +191,21 @@ class UnsafeArraySuite extends SparkFunSuite {
   }
 
   test("to primitive array") {
-    val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
-    assert(intEncoder.toRow(intArray).getArray(0).toIntArray.sameElements(intArray))
+    assert(toUnsafeArray(intArray).toIntArray().sameElements(intArray))
 
-    val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
-    assert(doubleEncoder.toRow(doubleArray).getArray(0).toDoubleArray.sameElements(doubleArray))
+    assert(toUnsafeArray(doubleArray).toDoubleArray().sameElements(doubleArray))
   }
 
   test("unsafe java serialization") {
-    val offset = 32
-    val data = new Array[Byte](1024)
-    Platform.putLong(data, offset, 1)
-    val arrayData = new UnsafeArrayData()
-    arrayData.pointTo(data, offset, data.length)
-    arrayData.setLong(0, 19285)
     val ser = new JavaSerializer(new SparkConf).newInstance()
-    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(arrayData))
+    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(serialArray))
+    assert(arrayDataSer.getLong(0) == 19285)
+    assert(arrayDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
+  }
+
+  test("unsafe Kryo serialization") {
+    val ser = new KryoSerializer(new SparkConf).newInstance()
+    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(serialArray))
     assert(arrayDataSer.getLong(0) == 19285)
     assert(arrayDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
   }

@@ -20,15 +20,88 @@ A simple example demonstrating Spark SQL data sources.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/datasource.py
 """
-from __future__ import print_function
-
 from pyspark.sql import SparkSession
 # $example on:schema_merging$
 from pyspark.sql import Row
 # $example off:schema_merging$
 
 
-def basic_datasource_example(spark):
+def generic_file_source_options_example(spark: SparkSession) -> None:
+    # $example on:ignore_corrupt_files$
+    # enable ignore corrupt files via the data source option
+    # dir1/file3.json is corrupt from parquet's view
+    test_corrupt_df0 = spark.read.option("ignoreCorruptFiles", "true")\
+        .parquet("examples/src/main/resources/dir1/",
+                 "examples/src/main/resources/dir1/dir2/")
+    test_corrupt_df0.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # |file2.parquet|
+    # +-------------+
+
+    # enable ignore corrupt files via the configuration
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
+    # dir1/file3.json is corrupt from parquet's view
+    test_corrupt_df1 = spark.read.parquet("examples/src/main/resources/dir1/",
+                                          "examples/src/main/resources/dir1/dir2/")
+    test_corrupt_df1.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # |file2.parquet|
+    # +-------------+
+    # $example off:ignore_corrupt_files$
+
+    # $example on:recursive_file_lookup$
+    recursive_loaded_df = spark.read.format("parquet")\
+        .option("recursiveFileLookup", "true")\
+        .load("examples/src/main/resources/dir1")
+    recursive_loaded_df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # |file2.parquet|
+    # +-------------+
+    # $example off:recursive_file_lookup$
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
+
+    # $example on:load_with_path_glob_filter$
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", pathGlobFilter="*.parquet")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # +-------------+
+    # $example off:load_with_path_glob_filter$
+
+    # $example on:load_with_modified_time_filter$
+    # Only load files modified before 07/1/2050 @ 08:30:00
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", modifiedBefore="2050-07-01T08:30:00")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # +-------------+
+    # Only load files modified after 06/01/2050 @ 08:30:00
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", modifiedAfter="2050-06-01T08:30:00")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # +-------------+
+    # $example off:load_with_modified_time_filter$
+
+
+def basic_datasource_example(spark: SparkSession) -> None:
     # $example on:generic_load_save_functions$
     df = spark.read.load("examples/src/main/resources/users.parquet")
     df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
@@ -44,7 +117,7 @@ def basic_datasource_example(spark):
         .write
         .partitionBy("favorite_color")
         .bucketBy(42, "name")
-        .saveAsTable("people_partitioned_bucketed"))
+        .saveAsTable("users_partitioned_bucketed"))
     # $example off:write_partition_and_bucket$
 
     # $example on:manual_load_options$
@@ -54,7 +127,7 @@ def basic_datasource_example(spark):
 
     # $example on:manual_load_options_csv$
     df = spark.read.load("examples/src/main/resources/people.csv",
-                         format="csv", sep=":", inferSchema="true", header="true")
+                         format="csv", sep=";", inferSchema="true", header="true")
     # $example off:manual_load_options_csv$
 
     # $example on:manual_save_options_orc$
@@ -66,6 +139,16 @@ def basic_datasource_example(spark):
         .save("users_with_options.orc"))
     # $example off:manual_save_options_orc$
 
+    # $example on:manual_save_options_parquet$
+    df = spark.read.parquet("examples/src/main/resources/users.parquet")
+    (df.write.format("parquet")
+        .option("parquet.bloom.filter.enabled#favorite_color", "true")
+        .option("parquet.bloom.filter.expected.ndv#favorite_color", "1000000")
+        .option("parquet.enable.dictionary", "true")
+        .option("parquet.page.write-checksum.enabled", "false")
+        .save("users_with_options.parquet"))
+    # $example off:manual_save_options_parquet$
+
     # $example on:write_sorting_and_bucketing$
     df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
     # $example off:write_sorting_and_bucketing$
@@ -75,10 +158,10 @@ def basic_datasource_example(spark):
     # $example off:direct_sql$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed")
-    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
+    spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed")
 
 
-def parquet_example(spark):
+def parquet_example(spark: SparkSession) -> None:
     # $example on:basic_parquet_example$
     peopleDF = spark.read.json("examples/src/main/resources/people.json")
 
@@ -102,7 +185,7 @@ def parquet_example(spark):
     # $example off:basic_parquet_example$
 
 
-def parquet_schema_merging_example(spark):
+def parquet_schema_merging_example(spark: SparkSession) -> None:
     # $example on:schema_merging$
     # spark is from the previous example.
     # Create a simple DataFrame, stored into a partition directory
@@ -132,7 +215,7 @@ def parquet_schema_merging_example(spark):
     # $example off:schema_merging$
 
 
-def json_dataset_example(spark):
+def json_dataset_example(spark: SparkSession) -> None:
     # $example on:json_dataset$
     # spark is from the previous example.
     sc = spark.sparkContext
@@ -174,7 +257,121 @@ def json_dataset_example(spark):
     # $example off:json_dataset$
 
 
-def jdbc_dataset_example(spark):
+def csv_dataset_example(spark: SparkSession) -> None:
+    # $example on:csv_dataset$
+    # spark is from the previous example
+    sc = spark.sparkContext
+
+    # A CSV dataset is pointed to by path.
+    # The path can be either a single CSV file or a directory of CSV files
+    path = "examples/src/main/resources/people.csv"
+
+    df = spark.read.csv(path)
+    df.show()
+    # +------------------+
+    # |               _c0|
+    # +------------------+
+    # |      name;age;job|
+    # |Jorge;30;Developer|
+    # |  Bob;32;Developer|
+    # +------------------+
+
+    # Read a csv with delimiter, the default delimiter is ","
+    df2 = spark.read.option("delimiter", ";").csv(path)
+    df2.show()
+    # +-----+---+---------+
+    # |  _c0|_c1|      _c2|
+    # +-----+---+---------+
+    # | name|age|      job|
+    # |Jorge| 30|Developer|
+    # |  Bob| 32|Developer|
+    # +-----+---+---------+
+
+    # Read a csv with delimiter and a header
+    df3 = spark.read.option("delimiter", ";").option("header", True).csv(path)
+    df3.show()
+    # +-----+---+---------+
+    # | name|age|      job|
+    # +-----+---+---------+
+    # |Jorge| 30|Developer|
+    # |  Bob| 32|Developer|
+    # +-----+---+---------+
+
+    # You can also use options() to use multiple options
+    df4 = spark.read.options(delimiter=";", header=True).csv(path)
+
+    # "output" is a folder which contains multiple csv files and a _SUCCESS file.
+    df3.write.csv("output")
+
+    # Read all files in a folder, please make sure only CSV files should present in the folder.
+    folderPath = "examples/src/main/resources"
+    df5 = spark.read.csv(folderPath)
+    df5.show()
+    # Wrong schema because non-CSV files are read
+    # +-----------+
+    # |        _c0|
+    # +-----------+
+    # |238val_238|
+    # |  86val_86|
+    # |311val_311|
+    # |  27val_27|
+    # |165val_165|
+    # +-----------+
+
+    # $example off:csv_dataset$
+
+
+def text_dataset_example(spark: SparkSession) -> None:
+    # $example on:text_dataset$
+    # spark is from the previous example
+    sc = spark.sparkContext
+
+    # A text dataset is pointed to by path.
+    # The path can be either a single text file or a directory of text files
+    path = "examples/src/main/resources/people.txt"
+
+    df1 = spark.read.text(path)
+    df1.show()
+    # +-----------+
+    # |      value|
+    # +-----------+
+    # |Michael, 29|
+    # |   Andy, 30|
+    # | Justin, 19|
+    # +-----------+
+
+    # You can use 'lineSep' option to define the line separator.
+    # The line separator handles all `\r`, `\r\n` and `\n` by default.
+    df2 = spark.read.text(path, lineSep=",")
+    df2.show()
+    # +-----------+
+    # |      value|
+    # +-----------+
+    # |    Michael|
+    # |   29\nAndy|
+    # | 30\nJustin|
+    # |       19\n|
+    # +-----------+
+
+    # You can also use 'wholetext' option to read each input file as a single row.
+    df3 = spark.read.text(path, wholetext=True)
+    df3.show()
+    # +--------------------+
+    # |               value|
+    # +--------------------+
+    # |Michael, 29\nAndy...|
+    # +--------------------+
+
+    # "output" is a folder which contains multiple text files and a _SUCCESS file.
+    df1.write.csv("output")
+
+    # You can specify the compression format using the 'compression' option.
+    df1.write.text("output_compressed", compression="gzip")
+
+    # $example off:text_dataset$
+
+
+def jdbc_dataset_example(spark: SparkSession) -> None:
     # $example on:jdbc_dataset$
     # Note: JDBC loading and saving can be achieved via either the load/save or jdbc methods
     # Loading data from a JDBC source
@@ -228,9 +425,12 @@ if __name__ == "__main__":
         .getOrCreate()
 
     basic_datasource_example(spark)
+    generic_file_source_options_example(spark)
     parquet_example(spark)
     parquet_schema_merging_example(spark)
     json_dataset_example(spark)
+    csv_dataset_example(spark)
+    text_dataset_example(spark)
     jdbc_dataset_example(spark)
 
     spark.stop()

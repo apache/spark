@@ -21,8 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
@@ -102,11 +102,15 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
     private val intProj = UnsafeProjection.create(Array[DataType](IntegerType))
     private val thread = new Thread() {
       override def run(): Unit = {
-        while (iterator.hasNext) {
-          outputBuffer.synchronized {
-            outputBuffer += iterator.next().getInt(0)
+        try {
+          while (iterator.hasNext) {
+            outputBuffer.synchronized {
+              outputBuffer += iterator.next().getInt(0)
+            }
+            Thread.sleep(sleepPerRowReadMs)
           }
-          Thread.sleep(sleepPerRowReadMs)
+        } finally {
+          buffer.close()
         }
       }
     }

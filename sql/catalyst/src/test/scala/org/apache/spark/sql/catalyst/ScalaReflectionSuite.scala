@@ -22,10 +22,12 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.FooEnum.FooEnum
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 case class PrimitiveData(
     intField: Int,
@@ -48,7 +50,8 @@ case class NullableData(
     decimalField: java.math.BigDecimal,
     dateField: Date,
     timestampField: Timestamp,
-    binaryField: Array[Byte])
+    binaryField: Array[Byte],
+    intervalField: CalendarInterval)
 
 case class OptionalData(
     intField: Option[Int],
@@ -58,7 +61,8 @@ case class OptionalData(
     shortField: Option[Short],
     byteField: Option[Byte],
     booleanField: Option[Boolean],
-    structField: Option[PrimitiveData])
+    structField: Option[PrimitiveData],
+    intervalField: Option[CalendarInterval])
 
 case class ComplexData(
     arrayField: Seq[Int],
@@ -77,11 +81,29 @@ object GenericData {
   type IntData = GenericData[Int]
 }
 
+case class NestedGeneric[T](
+  generic: GenericData[T])
+
+case class SeqNestedGeneric[T](
+  generic: Seq[T])
+
+
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
+class FooAnnotation extends scala.annotation.StaticAnnotation
+
+case class FooWithAnnotation(f1: String @FooAnnotation, f2: Option[String] @FooAnnotation)
+
 case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
+
+object FooEnum extends Enumeration {
+  type FooEnum = Value
+  val E1, E2 = Value
+}
+
+case class FooClassWithEnum(i: Int, e: FooEnum)
 
 object TestingUDT {
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
@@ -119,7 +141,6 @@ object ScroogeLikeExample {
 }
 
 trait ScroogeLikeExample extends Product1[Int] with Serializable {
-  import ScroogeLikeExample._
 
   def x: Int
 
@@ -134,8 +155,27 @@ trait ScroogeLikeExample extends Product1[Int] with Serializable {
   override def hashCode: Int = x
 }
 
+/** Counter-examples to [[ScroogeLikeExample]] as a trait without a companion object constructor */
+trait TraitProductWithoutCompanion extends Product1[Int] {}
+
+/** Counter-examples to [[ScroogeLikeExample]] as a trait with no-constructor companion object */
+object TraitProductWithNoConstructorCompanion {}
+
+trait TraitProductWithNoConstructorCompanion extends Product1[Int] {}
+
+object TestingValueClass {
+  case class IntWrapper(val i: Int) extends AnyVal
+  case class StrWrapper(s: String) extends AnyVal
+
+  case class ValueClassData(intField: Int,
+                            wrappedInt: IntWrapper, // an int column
+                            strField: String,
+                            wrappedStr: StrWrapper) // a string column
+}
+
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
+  import TestingValueClass._
 
   // A helper method used to test `ScalaReflection.serializerForType`.
   private def serializerFor[T: TypeTag]: Expression =
@@ -188,7 +228,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("decimalField", DecimalType.SYSTEM_DEFAULT, nullable = true),
         StructField("dateField", DateType, nullable = true),
         StructField("timestampField", TimestampType, nullable = true),
-        StructField("binaryField", BinaryType, nullable = true))),
+        StructField("binaryField", BinaryType, nullable = true),
+        StructField("intervalField", CalendarIntervalType, nullable = true))),
       nullable = true))
   }
 
@@ -203,7 +244,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("shortField", ShortType, nullable = true),
         StructField("byteField", ByteType, nullable = true),
         StructField("booleanField", BooleanType, nullable = true),
-        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true))),
+        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true),
+        StructField("intervalField", CalendarIntervalType, nullable = true))),
       nullable = true))
   }
 
@@ -260,6 +302,40 @@ class ScalaReflectionSuite extends SparkFunSuite {
       nullable = true))
   }
 
+  test("SPARK-38681: Nested generic data") {
+    val schema = schemaFor[NestedGeneric[Int]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField(
+          "generic",
+          StructType(Seq(
+            StructField("genericField", IntegerType, nullable = false))),
+          nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-38681: List nested generic") {
+    val schema = schemaFor[SeqNestedGeneric[Int]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField(
+          "generic",
+          ArrayType(IntegerType, false),
+          nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-38681: List nested generic with value class") {
+    val schema = schemaFor[SeqNestedGeneric[IntWrapper]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField(
+          "generic",
+          ArrayType(StructType(Seq(StructField("i", IntegerType, false))), true),
+          nullable = true))),
+      nullable = true))
+  }
+
   test("tuple data") {
     val schema = schemaFor[(Int, String)]
     assert(schema === Schema(
@@ -283,10 +359,17 @@ class ScalaReflectionSuite extends SparkFunSuite {
   test("convert Option[Product] to catalyst") {
     val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-      Some(primitiveData))
+      Some(primitiveData), Some(new CalendarInterval(1, 2, 3)))
     val dataType = schemaFor[OptionalData].dataType
     val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
-      InternalRow(1, 1, 1, 1, 1, 1, true))
+      InternalRow(1, 1, 1, 1, 1, 1, true), new CalendarInterval(1, 2, 3))
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
+  }
+
+  test("convert None to catalyst") {
+    val data = OptionalData(None, None, None, None, None, None, None, None, None)
+    val dataType = schemaFor[OptionalData].dataType
+    val convertedData = InternalRow(null, null, null, null, null, null, null, null, null)
     assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
@@ -398,5 +481,116 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(schema === Schema(
       StructType(Seq(
         StructField("x", IntegerType, nullable = false))), nullable = true))
+  }
+
+  test("SPARK-29026: schemaFor for trait without companion object throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithoutCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
+  }
+
+  test("SPARK-29026: schemaFor for trait with no-constructor companion throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithNoConstructorCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
+  }
+
+  test("SPARK-27625: annotated data types") {
+    assert(serializerFor[FooWithAnnotation].dataType == StructType(Seq(
+      StructField("f1", StringType),
+      StructField("f2", StringType))))
+    assert(deserializerFor[FooWithAnnotation].dataType == ObjectType(classOf[FooWithAnnotation]))
+  }
+
+  test("SPARK-32585: Support scala enumeration in ScalaReflection") {
+    assert(serializerFor[FooClassWithEnum].dataType == StructType(Seq(
+      StructField("i", IntegerType, false),
+      StructField("e", StringType, true))))
+    assert(deserializerFor[FooClassWithEnum].dataType == ObjectType(classOf[FooClassWithEnum]))
+  }
+
+  test("schema for case class that is a value class") {
+    val schema = schemaFor[IntWrapper]
+    assert(
+      schema === Schema(StructType(Seq(StructField("i", IntegerType, false))), nullable = true))
+  }
+
+  test("SPARK-20384: schema for case class that contains value class fields") {
+    val schema = schemaFor[ValueClassData]
+    assert(
+      schema === Schema(
+        StructType(Seq(
+          StructField("intField", IntegerType, nullable = false),
+          StructField("wrappedInt", IntegerType, nullable = false),
+          StructField("strField", StringType),
+          StructField("wrappedStr", StringType)
+        )),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for array of value class") {
+    val schema = schemaFor[Array[IntWrapper]]
+    assert(
+      schema === Schema(
+        ArrayType(StructType(Seq(StructField("i", IntegerType, false))), containsNull = true),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for map of value class") {
+    val schema = schemaFor[Map[IntWrapper, StrWrapper]]
+    assert(
+      schema === Schema(
+        MapType(
+          StructType(Seq(StructField("i", IntegerType, false))),
+          StructType(Seq(StructField("s", StringType))),
+          valueContainsNull = true),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for tuple_2 of value class") {
+    val schema = schemaFor[(IntWrapper, StrWrapper)]
+    assert(
+      schema === Schema(
+        StructType(
+          Seq(
+            StructField("_1", StructType(Seq(StructField("i", IntegerType, false)))),
+            StructField("_2", StructType(Seq(StructField("s", StringType))))
+          )
+        ),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for tuple_3 of value class") {
+    val schema = schemaFor[(IntWrapper, StrWrapper, StrWrapper)]
+    assert(
+      schema === Schema(
+        StructType(
+          Seq(
+            StructField("_1", StructType(Seq(StructField("i", IntegerType, false)))),
+            StructField("_2", StructType(Seq(StructField("s", StringType)))),
+            StructField("_3", StructType(Seq(StructField("s", StringType))))
+          )
+        ),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for nested tuple of value class") {
+    val schema = schemaFor[(IntWrapper, (StrWrapper, StrWrapper))]
+    assert(
+      schema === Schema(
+        StructType(
+          Seq(
+            StructField("_1", StructType(Seq(StructField("i", IntegerType, false)))),
+            StructField("_2", StructType(
+              Seq(
+                StructField("_1", StructType(Seq(StructField("s", StringType)))),
+                StructField("_2", StructType(Seq(StructField("s", StringType)))))
+              )
+            )
+          )
+        ),
+        nullable = true))
   }
 }

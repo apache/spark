@@ -118,18 +118,19 @@ class HiveSchemaInferenceSuite
         properties = Map.empty),
       true)
 
-    // Add partition records (if specified)
-    if (!partitionCols.isEmpty) {
-      spark.catalog.recoverPartitions(TEST_TABLE_NAME)
-    }
-
     // Check that the table returned by HiveExternalCatalog has schemaPreservesCase set to false
     // and that the raw table returned by the Hive client doesn't have any Spark SQL properties
     // set (table needs to be obtained from client since HiveExternalCatalog filters these
     // properties out).
     assert(!externalCatalog.getTable(DATABASE, TEST_TABLE_NAME).schemaPreservesCase)
     val rawTable = client.getTable(DATABASE, TEST_TABLE_NAME)
-    assert(rawTable.properties.filterKeys(_.startsWith(DATASOURCE_SCHEMA_PREFIX)) == Map.empty)
+    assert(rawTable.properties.filterKeys(_.startsWith(DATASOURCE_SCHEMA_PREFIX)).isEmpty)
+
+    // Add partition records (if specified)
+    if (!partitionCols.isEmpty) {
+      spark.catalog.recoverPartitions(TEST_TABLE_NAME)
+    }
+
     schema
   }
 

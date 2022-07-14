@@ -19,7 +19,6 @@ package org.apache.spark.ml.tree.impl
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
@@ -39,8 +38,6 @@ import org.apache.spark.util.collection.OpenHashMap
 class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import RandomForestSuite.mapToVec
-
-  private val seed = 42
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests for split calculation
@@ -338,6 +335,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
     val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
     val splits = RandomForest.findSplits(input, metadata, seed = 42)
+    val bcSplits = input.sparkContext.broadcast(splits)
 
     val treeInput = TreePoint.convertToTreeRDD(input, splits, metadata)
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, withReplacement = false)
@@ -350,9 +348,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map(0 -> Map(
       topNode.id -> new RandomForest.NodeIndexInfo(0, None)
     ))
-    val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
+    val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
-      nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
+      nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack)
+    bcSplits.destroy()
 
     // don't enqueue leaf nodes into node queue
     assert(nodeStack.isEmpty)
@@ -380,6 +379,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
     val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
     val splits = RandomForest.findSplits(input, metadata, seed = 42)
+    val bcSplits = input.sparkContext.broadcast(splits)
 
     val treeInput = TreePoint.convertToTreeRDD(input, splits, metadata)
     val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, withReplacement = false)
@@ -392,9 +392,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map(0 -> Map(
       topNode.id -> new RandomForest.NodeIndexInfo(0, None)
     ))
-    val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
+    val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
-      nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
+      nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack)
+    bcSplits.destroy()
 
     // don't enqueue a node into node queue if its impurity is 0.0
     assert(nodeStack.isEmpty)
@@ -487,7 +488,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  def binaryClassificationTestWithContinuousFeaturesAndSubsampledFeatures(strategy: OldStrategy) {
+  def binaryClassificationTestWithContinuousFeaturesAndSubsampledFeatures(
+      strategy: OldStrategy): Unit = {
     val numFeatures = 50
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures, 1000)
     val rdd = sc.parallelize(arr).map(_.asML.toInstance)
@@ -505,11 +507,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         val failString = s"Failed on test with:" +
           s"numTrees=$numTrees, featureSubsetStrategy=$featureSubsetStrategy," +
           s" numFeaturesPerNode=$numFeaturesPerNode, seed=$seed"
-        val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
+        val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
         val topNodes: Array[LearningNode] = new Array[LearningNode](numTrees)
         Range(0, numTrees).foreach { treeIndex =>
           topNodes(treeIndex) = LearningNode.emptyNode(nodeIndex = 1)
-          nodeStack.push((treeIndex, topNodes(treeIndex)))
+          nodeStack.prepend((treeIndex, topNodes(treeIndex)))
         }
         val rng = new scala.util.Random(seed = seed)
         val (nodesForGroup: Map[Int, Array[LearningNode]],

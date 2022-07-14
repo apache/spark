@@ -19,26 +19,21 @@ package org.apache.spark.streaming.ui
 
 import java.util.Properties
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.scheduler.SparkListenerJobStart
-import org.apache.spark.streaming._
+import org.apache.spark.streaming.{LocalStreamingContext, _}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler._
 
-class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
+class StreamingJobProgressListenerSuite
+  extends TestSuiteBase
+  with LocalStreamingContext
+  with Matchers {
 
   val input = (1 to 4).map(Seq(_)).toSeq
   val operation = (d: DStream[Int]) => d.map(x => x)
-
-  var ssc: StreamingContext = _
-
-  override def afterFunction() {
-    super.afterFunction()
-    if (ssc != null) {
-      ssc.stop()
-    }
-  }
 
   private def createJobStart(
       batchTime: Time, outputOpId: Int, jobId: Int): SparkListenerJobStart = {

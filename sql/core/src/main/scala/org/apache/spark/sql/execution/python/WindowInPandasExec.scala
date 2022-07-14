@@ -27,11 +27,11 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
-import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.execution.window._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -84,28 +84,7 @@ case class WindowInPandasExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
-
-  override def output: Seq[Attribute] =
-    child.output ++ windowExpression.map(_.toAttribute)
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    if (partitionSpec.isEmpty) {
-      // Only show warning when the number of bytes is larger than 100 MiB?
-      logWarning("No Partition Defined for Window operation! Moving all data to a single "
-        + "partition, this can cause serious performance degradation.")
-      AllTuples :: Nil
-    } else {
-      ClusteredDistribution(partitionSpec) :: Nil
-    }
-  }
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  extends WindowExecBase {
 
   /**
    * Helper functions and data structures for window bounds
@@ -134,7 +113,7 @@ case class WindowInPandasExec(
         (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
       case children =>
         // There should not be any other UDFs, or the children can't be evaluated directly.
-        assert(children.forall(_.find(_.isInstanceOf[PythonUDF]).isEmpty))
+        assert(children.forall(!_.exists(_.isInstanceOf[PythonUDF])))
         (ChainedPythonFunctions(Seq(udf.func)), udf.children)
     }
   }
@@ -153,7 +132,7 @@ case class WindowInPandasExec(
         _: SlidingWindowFunctionFrame |
         _: UnboundedPrecedingWindowFunctionFrame => BoundedWindow
       // It should be impossible to get other types of window function frame here
-      case frame => throw new RuntimeException(s"Unexpected window function frame $frame.")
+      case frame => throw QueryExecutionErrors.unexpectedWindowFunctionFrameError(frame.toString)
     }
 
     val requiredIndices = functionFrames.map {
@@ -251,7 +230,7 @@ case class WindowInPandasExec(
     }
 
     // Setting the window bounds argOffset for each UDF. For UDFs with bounded window, argOffset
-    // for the UDF is (lowerBoundOffet, upperBoundOffset, inputOffset1, inputOffset2, ...)
+    // for the UDF is (lowerBoundOffset, upperBoundOffset, inputOffset1, inputOffset2, ...)
     // For UDFs with unbounded window, argOffset is (inputOffset1, inputOffset2, ...)
     pyFuncs.indices.foreach { exprIndex =>
       val frameIndex = expressionIndexToFrameIndex(exprIndex)
@@ -304,7 +283,7 @@ case class WindowInPandasExec(
         var nextRow: UnsafeRow = null
         var nextGroup: UnsafeRow = null
         var nextRowAvailable: Boolean = false
-        private[this] def fetchNextRow() {
+        private[this] def fetchNextRow(): Unit = {
           nextRowAvailable = stream.hasNext
           if (nextRowAvailable) {
             nextRow = stream.next().asInstanceOf[UnsafeRow]
@@ -325,7 +304,7 @@ case class WindowInPandasExec(
 
         val frames = factories.map(_(indexRow))
 
-        private[this] def fetchNextPartition() {
+        private[this] def fetchNextPartition(): Unit = {
           // Collect all the rows in the current partition.
           // Before we start to fetch new input rows, make a copy of nextGroup.
           val currentGroup = nextGroup.copy()
@@ -401,4 +380,7 @@ case class WindowInPandasExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): WindowInPandasExec =
+    copy(child = newChild)
 }

@@ -19,35 +19,50 @@ package org.apache.spark.sql.execution.columnar
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.columnar.CachedBatch
+import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel._
-import org.apache.spark.util.Utils
 
-class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
+class TestCachedBatchSerializer(
+    useCompression: Boolean,
+    batchSize: Int) extends DefaultCachedBatchSerializer {
+
+  override def convertInternalRowToCachedBatch(input: RDD[InternalRow],
+      schema: Seq[Attribute],
+      storageLevel: StorageLevel,
+      conf: SQLConf): RDD[CachedBatch] = {
+    convertForCacheInternal(input, schema, batchSize, useCompression)
+  }
+}
+
+class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   setupTestData()
 
-  private def cachePrimitiveTest(data: DataFrame, dataType: String) {
+  private def cachePrimitiveTest(data: DataFrame, dataType: String): Unit = {
     data.createOrReplaceTempView(s"testData$dataType")
     val storageLevel = MEMORY_ONLY
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
-    val inMemoryRelation = InMemoryRelation(useCompression = true, 5, storageLevel, plan, None,
-      data.logicalPlan)
+    val inMemoryRelation = InMemoryRelation(new TestCachedBatchSerializer(useCompression = true, 5),
+      storageLevel, plan, None, data.logicalPlan)
 
     assert(inMemoryRelation.cacheBuilder.cachedColumnBuffers.getStorageLevel == storageLevel)
     inMemoryRelation.cacheBuilder.cachedColumnBuffers.collect().head match {
-      case _: CachedBatch =>
+      case _: DefaultCachedBatch =>
       case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
     }
     checkAnswer(inMemoryRelation, data.collect().toSeq)
@@ -119,27 +134,29 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("simple columnar query") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
-    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
-      testData.logicalPlan)
+    val scan = InMemoryRelation(new TestCachedBatchSerializer(useCompression = true, 5),
+      MEMORY_ONLY, plan, None, testData.logicalPlan)
 
     checkAnswer(scan, testData.collect().toSeq)
   }
 
   test("default size avoids broadcast") {
-    // TODO: Improve this test when we have better statistics
-    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
-      .toDF().createOrReplaceTempView("sizeTst")
-    spark.catalog.cacheTable("sizeTst")
-    assert(
-      spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
-        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+    withTempView("sizeTst") {
+      // TODO: Improve this test when we have better statistics
+      sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+        .toDF().createOrReplaceTempView("sizeTst")
+      spark.catalog.cacheTable("sizeTst")
+      assert(
+        spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
+          spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+    }
   }
 
   test("projection") {
-    val logicalPlan = testData.select('value, 'key).logicalPlan
+    val logicalPlan = testData.select($"value", $"key").logicalPlan
     val plan = spark.sessionState.executePlan(logicalPlan).sparkPlan
-    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
-      logicalPlan)
+    val scan = InMemoryRelation(new TestCachedBatchSerializer(useCompression = true, 5),
+      MEMORY_ONLY, plan, None, logicalPlan)
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
@@ -155,8 +172,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
-    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
-      testData.logicalPlan)
+    val scan = InMemoryRelation(new TestCachedBatchSerializer(useCompression = true, 5),
+      MEMORY_ONLY, plan, None, testData.logicalPlan)
 
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)
@@ -187,18 +204,20 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-2729 regression: timestamp data type") {
-    val timestamps = (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time")
-    timestamps.createOrReplaceTempView("timestamps")
+    withTempView("timestamps") {
+      val timestamps = (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time")
+      timestamps.createOrReplaceTempView("timestamps")
 
-    checkAnswer(
-      sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq)
+      checkAnswer(
+        sql("SELECT time FROM timestamps"),
+        timestamps.collect().toSeq)
 
-    spark.catalog.cacheTable("timestamps")
+      spark.catalog.cacheTable("timestamps")
 
-    checkAnswer(
-      sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq)
+      checkAnswer(
+        sql("SELECT time FROM timestamps"),
+        timestamps.collect().toSeq)
+    }
   }
 
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
@@ -229,10 +248,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
     assert(df.schema.head.dataType === DecimalType(15, 10))
 
-    df.cache().createOrReplaceTempView("test_fixed_decimal")
-    checkAnswer(
-      sql("SELECT * FROM test_fixed_decimal"),
-      (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
+    withTempView("test_fixed_decimal") {
+      df.cache().createOrReplaceTempView("test_fixed_decimal")
+      checkAnswer(
+        sql("SELECT * FROM test_fixed_decimal"),
+        (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
+    }
   }
 
   test("test different data types") {
@@ -330,7 +351,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-17549: cached table size should be correctly calculated") {
     val data = spark.sparkContext.parallelize(1 to 10, 5).toDF()
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
-    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None, data.logicalPlan)
+    val cached = InMemoryRelation(new TestCachedBatchSerializer(true, 5),
+      MEMORY_ONLY, plan, None, data.logicalPlan)
 
     // Materialize the data.
     val expectedAnswer = data.collect()
@@ -343,7 +365,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
    test("cached row count should be calculated") {
     val data = spark.range(6).toDF
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
-    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None, data.logicalPlan)
+    val cached = InMemoryRelation(new TestCachedBatchSerializer(true, 5),
+      MEMORY_ONLY, plan, None, data.logicalPlan)
 
     // Materialize the data.
     val expectedAnswer = data.collect()
@@ -437,7 +460,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-20356: pruned InMemoryTableScanExec should have correct ordering and partitioning") {
-    withSQLConf("spark.sql.shuffle.partitions" -> "200") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
       val df1 = Seq(("a", 1), ("b", 1), ("c", 2)).toDF("item", "group")
       val df2 = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("item", "id")
       val df3 = df1.join(df2, Seq("item")).select($"id", $"group".as("item")).distinct()
@@ -468,12 +491,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-22249: buildFilter should not throw exception when In contains an empty list") {
     val attribute = AttributeReference("a", IntegerType)()
-    val localTableScanExec = LocalTableScanExec(Seq(attribute), Nil)
-    val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY, localTableScanExec, None,
-      LocalRelation(Seq(attribute), Nil))
-    val tableScanExec = InMemoryTableScanExec(Seq(attribute),
-      Seq(In(attribute, Nil)), testRelation)
-    assert(tableScanExec.partitionFilters.isEmpty)
+    val testSerializer = new TestCachedBatchSerializer(false, 1)
+    testSerializer.buildFilter(Seq(In(attribute, Nil)), Seq(attribute))
   }
 
   testWithWholeStageCodegenOnAndOff("SPARK-22348: table cache " +
@@ -487,14 +506,11 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
     val planBeforeFilter = df2.queryExecution.executedPlan.collect {
       case f: FilterExec => f.child
+      case WholeStageCodegenExec(FilterExec(_, i: InputAdapter)) => i.child
     }
     assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 
-    val execPlan = if (codegenEnabled == "true") {
-      WholeStageCodegenExec(planBeforeFilter.head)(codegenStageId = 0)
-    } else {
-      planBeforeFilter.head
-    }
+    val execPlan = planBeforeFilter.head
     assert(execPlan.executeCollectPublic().length == 0)
   }
 
@@ -505,44 +521,99 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-22673: InMemoryRelation should utilize existing stats of the plan to be cached") {
-    // This test case depends on the size of parquet in statistics.
-    withSQLConf(
+    Seq("orc", "").foreach { useV1SourceReaderList =>
+      // This test case depends on the size of ORC in statistics.
+      withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
-        SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "parquet") {
-      withTempPath { workDir =>
-        withTable("table1") {
-          val workDirPath = workDir.getAbsolutePath
-          val data = Seq(100, 200, 300, 400).toDF("count")
-          data.write.parquet(workDirPath)
-          val dfFromFile = spark.read.parquet(workDirPath).cache()
-          val inMemoryRelation = dfFromFile.queryExecution.optimizedPlan.collect {
-            case plan: InMemoryRelation => plan
-          }.head
-          // InMemoryRelation's stats is file size before the underlying RDD is materialized
-          assert(inMemoryRelation.computeStats().sizeInBytes === 868)
+        SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "orc",
+        SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
+        withTempPath { workDir =>
+          withTable("table1") {
+            val workDirPath = workDir.getAbsolutePath
+            val data = Seq(100, 200, 300, 400).toDF("count")
+            data.write.orc(workDirPath)
+            val dfFromFile = spark.read.orc(workDirPath).cache()
+            val inMemoryRelation = dfFromFile.queryExecution.optimizedPlan.collect {
+              case plan: InMemoryRelation => plan
+            }.head
+            // InMemoryRelation's stats is file size before the underlying RDD is materialized
+            assert(inMemoryRelation.computeStats().sizeInBytes === getLocalDirSize(workDir))
 
-          // InMemoryRelation's stats is updated after materializing RDD
-          dfFromFile.collect()
-          assert(inMemoryRelation.computeStats().sizeInBytes === 16)
+            // InMemoryRelation's stats is updated after materializing RDD
+            dfFromFile.collect()
+            assert(inMemoryRelation.computeStats().sizeInBytes === 16)
 
-          // test of catalog table
-          val dfFromTable = spark.catalog.createTable("table1", workDirPath).cache()
-          val inMemoryRelation2 = dfFromTable.queryExecution.optimizedPlan.
-            collect { case plan: InMemoryRelation => plan }.head
+            // test of catalog table
+            val dfFromTable = spark.catalog.createTable("table1", workDirPath).cache()
+            val inMemoryRelation2 = dfFromTable.queryExecution.optimizedPlan.
+              collect { case plan: InMemoryRelation => plan }.head
 
-          // Even CBO enabled, InMemoryRelation's stats keeps as the file size before table's stats
-          // is calculated
-          assert(inMemoryRelation2.computeStats().sizeInBytes === 868)
+            // Even CBO enabled, InMemoryRelation's stats keeps as the file size before table's
+            // stats is calculated
+            assert(inMemoryRelation2.computeStats().sizeInBytes === getLocalDirSize(workDir))
 
-          // InMemoryRelation's stats should be updated after calculating stats of the table
-          // clear cache to simulate a fresh environment
-          dfFromTable.unpersist(blocking = true)
-          spark.sql("ANALYZE TABLE table1 COMPUTE STATISTICS")
-          val inMemoryRelation3 = spark.read.table("table1").cache().queryExecution.optimizedPlan.
-            collect { case plan: InMemoryRelation => plan }.head
-          assert(inMemoryRelation3.computeStats().sizeInBytes === 48)
+            // InMemoryRelation's stats should be updated after calculating stats of the table
+            // clear cache to simulate a fresh environment
+            dfFromTable.unpersist(blocking = true)
+            spark.sql("ANALYZE TABLE table1 COMPUTE STATISTICS")
+            val inMemoryRelation3 = spark.read.table("table1").cache().queryExecution.optimizedPlan.
+              collect { case plan: InMemoryRelation => plan }.head
+            assert(inMemoryRelation3.computeStats().sizeInBytes === 48)
+          }
         }
       }
     }
+  }
+
+  test("SPARK-39104: InMemoryRelation#isCachedColumnBuffersLoaded should be thread-safe") {
+    val plan = spark.range(1).queryExecution.executedPlan
+    val serializer = new TestCachedBatchSerializer(true, 1)
+    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None)
+
+    @volatile var isCachedColumnBuffersLoaded = false
+    @volatile var stopped = false
+
+    val th1 = new Thread {
+      override def run(): Unit = {
+        while (!isCachedColumnBuffersLoaded && !stopped) {
+          cachedRDDBuilder.cachedColumnBuffers
+          cachedRDDBuilder.clearCache()
+        }
+      }
+    }
+
+    val th2 = new Thread {
+      override def run(): Unit = {
+        while (!isCachedColumnBuffersLoaded && !stopped) {
+          isCachedColumnBuffersLoaded = cachedRDDBuilder.isCachedColumnBuffersLoaded
+        }
+      }
+    }
+
+    val th3 = new Thread {
+      override def run(): Unit = {
+        Thread.sleep(3000L)
+        stopped = true
+      }
+    }
+
+    val exceptionCnt = new AtomicInteger
+    val exceptionHandler: Thread.UncaughtExceptionHandler = (_: Thread, cause: Throwable) => {
+        exceptionCnt.incrementAndGet
+        fail(cause)
+      }
+
+    th1.setUncaughtExceptionHandler(exceptionHandler)
+    th2.setUncaughtExceptionHandler(exceptionHandler)
+    th1.start()
+    th2.start()
+    th3.start()
+    th1.join()
+    th2.join()
+    th3.join()
+
+    cachedRDDBuilder.clearCache()
+
+    assert(exceptionCnt.get == 0)
   }
 }

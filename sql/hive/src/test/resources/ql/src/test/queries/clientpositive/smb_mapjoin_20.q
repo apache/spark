@@ -32,7 +32,7 @@ CREATE TABLE test_table3 (key STRING, value1 int, value2 string) PARTITIONED BY 
 CLUSTERED BY (value1) SORTED BY (value1) INTO 2 BUCKETS;
 
 -- Insert data into the bucketed table by selecting from another bucketed table
--- This should be a map-only operation, although the bucketing positions dont match
+-- This should be a map-only operation, although the bucketing positions don't match
 EXPLAIN
 INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.value, a.key, a.value FROM test_table1 a WHERE a.ds = '1';

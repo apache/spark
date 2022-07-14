@@ -17,13 +17,12 @@
 
 package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 
 /**
- * :: DeveloperApi ::
  * Node in a decision tree.
  *
  * About node indexing:
@@ -40,7 +39,6 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
  * @param stats information gain stats
  */
 @Since("1.0.0")
-@DeveloperApi
 class Node @Since("1.2.0") (
     @Since("1.0.0") val id: Int,
     @Since("1.0.0") var predict: Predict,

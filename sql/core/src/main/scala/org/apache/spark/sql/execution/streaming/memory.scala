@@ -18,27 +18,24 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util
-import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
-import scala.util.control.NonFatal
+import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -48,14 +45,19 @@ object MemoryStream {
 
   def apply[A : Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+
+  def apply[A : Encoder](numPartitions: Int)(implicit sqlContext: SQLContext): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext, Some(numPartitions))
 }
 
 /**
  * A base class for memory stream implementations. Supports adding data and resetting.
  */
-abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends BaseStreamingSource {
+abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends SparkDataStream {
   val encoder = encoderFor[A]
   protected val attributes = encoder.schema.toAttributes
+
+  protected lazy val toRow: ExpressionEncoder.Serializer[A] = encoder.createSerializer()
 
   def toDS(): Dataset[A] = {
     Dataset[A](sqlContext.sparkSession, logicalPlan)
@@ -65,41 +67,56 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
     Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
   }
 
-  def addData(data: A*): Offset = {
+  def addData(data: A*): OffsetV2 = {
     addData(data.toTraversable)
   }
+
+  def addData(data: TraversableOnce[A]): OffsetV2
 
   def fullSchema(): StructType = encoder.schema
 
   protected val logicalPlan: LogicalPlan = {
     StreamingRelationV2(
-      MemoryStreamTableProvider,
+      Some(MemoryStreamTableProvider),
       "memory",
       new MemoryStreamTable(this),
       CaseInsensitiveStringMap.empty(),
       attributes,
-      None)(sqlContext.sparkSession)
+      None,
+      None,
+      None)
   }
 
-  def addData(data: TraversableOnce[A]): Offset
+  override def initialOffset(): OffsetV2 = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def deserializeOffset(json: String): OffsetV2 = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def commit(end: OffsetV2): Unit = {
+    throw new IllegalStateException("should not be called.")
+  }
 }
 
 // This class is used to indicate the memory stream data source. We don't actually use it, as
 // memory stream is for test only and we never look it up by name.
-object MemoryStreamTableProvider extends TableProvider {
+object MemoryStreamTableProvider extends SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new IllegalStateException("MemoryStreamTableProvider should not be used.")
   }
 }
 
-class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table
-  with SupportsMicroBatchRead with SupportsContinuousRead {
+class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table with SupportsRead {
 
   override def name(): String = "MemoryStreamDataSource"
 
   override def schema(): StructType = stream.fullSchema()
 
-  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
+  override def capabilities(): util.Set[TableCapability] = {
+    util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ)
+  }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new MemoryStreamScanBuilder(stream)
@@ -127,9 +144,14 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
  * A [[Source]] that produces value stored in memory as they are added by the user.  This [[Source]]
  * is intended for use in unit tests as it can only replay data when the object is still
  * available.
+ *
+ * If numPartitions is provided, the rows will be redistributed to the given number of partitions.
  */
-case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MemoryStreamBase[A](sqlContext) with MicroBatchStream with Logging {
+case class MemoryStream[A : Encoder](
+    id: Int,
+    sqlContext: SQLContext,
+    numPartitions: Option[Int] = None)
+  extends MemoryStreamBase[A](sqlContext) with MicroBatchStream with Logging {
 
   protected val output = logicalPlan.output
 
@@ -158,7 +180,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def addData(data: TraversableOnce[A]): Offset = {
     val objects = data.toSeq
-    val rows = objects.iterator.map(d => encoder.toRow(d).copy().asInstanceOf[UnsafeRow]).toArray
+    val rows = objects.iterator.map(d => toRow(d).copy().asInstanceOf[UnsafeRow]).toArray
     logDebug(s"Adding: $objects")
     this.synchronized {
       currentOffset = currentOffset + 1
@@ -195,11 +217,25 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
         batches.slice(sliceStart, sliceEnd)
       }
 
-      logDebug(generateDebugString(newBlocks.flatten, startOrdinal, endOrdinal))
+      logDebug(generateDebugString(newBlocks.flatten.toSeq, startOrdinal, endOrdinal))
 
-      newBlocks.map { block =>
-        new MemoryStreamInputPartition(block)
-      }.toArray
+      numPartitions match {
+        case Some(numParts) =>
+          // When the number of partition is provided, we redistribute the rows into
+          // the given number of partition, via round-robin manner.
+          val inputRows = newBlocks.flatten.toArray
+          (0 until numParts).map { newPartIdx =>
+            val records = inputRows.zipWithIndex.filter { case (_, idx) =>
+              idx % numParts == newPartIdx
+            }.map(_._1)
+            new MemoryStreamInputPartition(records)
+          }.toArray
+
+        case _ =>
+          newBlocks.map { block =>
+            new MemoryStreamInputPartition(block)
+          }.toArray
+      }
     }
   }
 
@@ -211,31 +247,25 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       rows: Seq[UnsafeRow],
       startOrdinal: Int,
       endOrdinal: Int): String = {
-    val fromRow = encoder.resolveAndBind().fromRow _
+    val fromRow = encoder.resolveAndBind().createDeserializer()
     s"MemoryBatch [$startOrdinal, $endOrdinal]: " +
         s"${rows.map(row => fromRow(row)).mkString(", ")}"
   }
 
   override def commit(end: OffsetV2): Unit = synchronized {
-    def check(newOffset: LongOffset): Unit = {
-      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
+    val newOffset = end.asInstanceOf[LongOffset]
+    val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
-      if (offsetDiff < 0) {
-        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
-      }
-
-      batches.trimStart(offsetDiff)
-      lastOffsetCommitted = newOffset
+    if (offsetDiff < 0) {
+      throw new IllegalStateException(
+        s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
 
-    LongOffset.convert(end) match {
-      case Some(lo) => check(lo)
-      case None => sys.error(s"MemoryStream.commit() received an offset ($end) " +
-        "that did not originate with an instance of this class")
-    }
+    batches.trimStart(offsetDiff)
+    lastOffsetCommitted = newOffset
   }
 
-  override def stop() {}
+  override def stop(): Unit = {}
 
   def reset(): Unit = synchronized {
     batches.clear()
@@ -266,94 +296,4 @@ object MemoryStreamReaderFactory extends PartitionReaderFactory {
       override def close(): Unit = {}
     }
   }
-}
-
-/** A common trait for MemorySinks with methods used for testing */
-trait MemorySinkBase extends BaseStreamingSink {
-  def allData: Seq[Row]
-  def latestBatchData: Seq[Row]
-  def dataSinceBatch(sinceBatchId: Long): Seq[Row]
-  def latestBatchId: Option[Long]
-}
-
-/**
- * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
- * tests and does not provide durability.
- */
-class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink
-  with MemorySinkBase with Logging {
-
-  private case class AddedData(batchId: Long, data: Array[Row])
-
-  /** An order list of batches that have been written to this [[Sink]]. */
-  @GuardedBy("this")
-  private val batches = new ArrayBuffer[AddedData]()
-
-  /** Returns all rows that are stored in this [[Sink]]. */
-  def allData: Seq[Row] = synchronized {
-    batches.flatMap(_.data)
-  }
-
-  def latestBatchId: Option[Long] = synchronized {
-    batches.lastOption.map(_.batchId)
-  }
-
-  def latestBatchData: Seq[Row] = synchronized { batches.lastOption.toSeq.flatten(_.data) }
-
-  def dataSinceBatch(sinceBatchId: Long): Seq[Row] = synchronized {
-    batches.filter(_.batchId > sinceBatchId).flatMap(_.data)
-  }
-
-  def toDebugString: String = synchronized {
-    batches.map { case AddedData(batchId, data) =>
-      val dataStr = try data.mkString(" ") catch {
-        case NonFatal(e) => "[Error converting to string]"
-      }
-      s"$batchId: $dataStr"
-    }.mkString("\n")
-  }
-
-  override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    val notCommitted = synchronized {
-      latestBatchId.isEmpty || batchId > latestBatchId.get
-    }
-    if (notCommitted) {
-      logDebug(s"Committing batch $batchId to $this")
-      outputMode match {
-        case Append | Update =>
-          val rows = AddedData(batchId, data.collect())
-          synchronized { batches += rows }
-
-        case Complete =>
-          val rows = AddedData(batchId, data.collect())
-          synchronized {
-            batches.clear()
-            batches += rows
-          }
-
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Output mode $outputMode is not supported by MemorySink")
-      }
-    } else {
-      logDebug(s"Skipping already committed batch: $batchId")
-    }
-  }
-
-  def clear(): Unit = synchronized {
-    batches.clear()
-  }
-
-  override def toString(): String = "MemorySink"
-}
-
-/**
- * Used to query the data that has been written into a [[MemorySink]].
- */
-case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode {
-  def this(sink: MemorySink) = this(sink, sink.schema.toAttributes)
-
-  private val sizePerRow = EstimationUtils.getSizePerRow(sink.schema.toAttributes)
-
-  override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
 }

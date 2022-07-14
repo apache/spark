@@ -17,32 +17,30 @@
 
 package org.apache.spark.network
 
-import java.io.Closeable
 import java.nio.ByteBuffer
 
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ShuffleClient}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient, DownloadFileManager}
 import org.apache.spark.storage.{BlockId, EncryptedManagedBuffer, StorageLevel}
 import org.apache.spark.util.ThreadUtils
 
+/**
+ * The BlockTransferService that used for fetching a set of blocks at time. Each instance of
+ * BlockTransferService contains both client and server inside.
+ */
 private[spark]
-abstract class BlockTransferService extends ShuffleClient with Closeable with Logging {
+abstract class BlockTransferService extends BlockStoreClient {
 
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
-   * local blocks or put local blocks.
+   * local blocks or put local blocks. The fetchBlocks method in [[BlockStoreClient]] also
+   * available only after this is invoked.
    */
   def init(blockDataManager: BlockDataManager): Unit
-
-  /**
-   * Tear down the transfer service.
-   */
-  def close(): Unit
 
   /**
    * Port number the service is listening on, available only after [[init]] is invoked.
@@ -53,22 +51,6 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    * Host name the service is listening on, available only after [[init]] is invoked.
    */
   def hostName: String
-
-  /**
-   * Fetch a sequence of blocks from a remote node asynchronously,
-   * available only after [[init]] is invoked.
-   *
-   * Note that this API takes a sequence so the implementation can batch requests, and does not
-   * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
-   * the data of a block is fetched, rather than waiting for all blocks to be fetched.
-   */
-  override def fetchBlocks(
-      host: String,
-      port: Int,
-      execId: String,
-      blockIds: Array[String],
-      listener: BlockFetchingListener,
-      tempFileManager: DownloadFileManager): Unit
 
   /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
@@ -127,6 +109,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    * This method is similar to [[uploadBlock]], except this one blocks the thread
    * until the upload finishes.
    */
+  @throws[java.io.IOException]
   def uploadBlockSync(
       hostname: String,
       port: Int,

@@ -1,0 +1,81 @@
+TakeOrderedAndProject [s_acctbal,n_name,s_name,p_partkey,p_mfgr,s_address,s_phone,s_comment]
+  WholeStageCodegen (10)
+    Project [s_acctbal,s_name,n_name,p_partkey,p_mfgr,s_address,s_phone,s_comment]
+      BroadcastHashJoin [n_regionkey,r_regionkey]
+        Project [p_partkey,p_mfgr,s_name,s_address,s_phone,s_acctbal,s_comment,n_name,n_regionkey]
+          BroadcastHashJoin [s_nationkey,n_nationkey]
+            Project [p_partkey,p_mfgr,s_name,s_address,s_nationkey,s_phone,s_acctbal,s_comment]
+              BroadcastHashJoin [ps_suppkey,s_suppkey]
+                Project [p_partkey,p_mfgr,ps_suppkey]
+                  BroadcastHashJoin [ps_supplycost,p_partkey,min(ps_supplycost),ps_partkey]
+                    Project [p_partkey,p_mfgr,ps_suppkey,ps_supplycost]
+                      BroadcastHashJoin [p_partkey,ps_partkey]
+                        Project [p_partkey,p_mfgr]
+                          Filter [p_size,p_type,p_partkey]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.part [p_partkey,p_mfgr,p_type,p_size]
+                        InputAdapter
+                          BroadcastExchange #1
+                            WholeStageCodegen (1)
+                              Filter [ps_partkey,ps_supplycost,ps_suppkey]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.partsupp [ps_partkey,ps_suppkey,ps_supplycost]
+                    InputAdapter
+                      BroadcastExchange #2
+                        WholeStageCodegen (6)
+                          Filter [min(ps_supplycost)]
+                            HashAggregate [ps_partkey,min] [min(ps_supplycost),min(ps_supplycost),min]
+                              InputAdapter
+                                Exchange [ps_partkey] #3
+                                  WholeStageCodegen (5)
+                                    HashAggregate [ps_partkey,ps_supplycost] [min,min]
+                                      Project [ps_partkey,ps_supplycost]
+                                        BroadcastHashJoin [n_regionkey,r_regionkey]
+                                          Project [ps_partkey,ps_supplycost,n_regionkey]
+                                            BroadcastHashJoin [s_nationkey,n_nationkey]
+                                              Project [ps_partkey,ps_supplycost,s_nationkey]
+                                                BroadcastHashJoin [ps_suppkey,s_suppkey]
+                                                  Filter [ps_suppkey,ps_partkey]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.partsupp [ps_partkey,ps_suppkey,ps_supplycost]
+                                                  InputAdapter
+                                                    BroadcastExchange #4
+                                                      WholeStageCodegen (2)
+                                                        Filter [s_suppkey,s_nationkey]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.supplier [s_suppkey,s_nationkey]
+                                              InputAdapter
+                                                BroadcastExchange #5
+                                                  WholeStageCodegen (3)
+                                                    Filter [n_nationkey,n_regionkey]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.nation [n_nationkey,n_regionkey]
+                                          InputAdapter
+                                            BroadcastExchange #6
+                                              WholeStageCodegen (4)
+                                                Project [r_regionkey]
+                                                  Filter [r_name,r_regionkey]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.region [r_regionkey,r_name]
+                InputAdapter
+                  BroadcastExchange #7
+                    WholeStageCodegen (7)
+                      Filter [s_suppkey,s_nationkey]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet default.supplier [s_suppkey,s_name,s_address,s_nationkey,s_phone,s_acctbal,s_comment]
+            InputAdapter
+              BroadcastExchange #8
+                WholeStageCodegen (8)
+                  Filter [n_nationkey,n_regionkey]
+                    ColumnarToRow
+                      InputAdapter
+                        Scan parquet default.nation [n_nationkey,n_name,n_regionkey]
+        InputAdapter
+          ReusedExchange [r_regionkey] #6

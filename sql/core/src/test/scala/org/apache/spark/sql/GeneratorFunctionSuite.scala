@@ -21,11 +21,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Generator}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
+class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("stack") {
@@ -88,28 +90,28 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   test("single explode") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     checkAnswer(
-      df.select(explode('intList)),
+      df.select(explode($"intList")),
       Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
   test("single explode_outer") {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
     checkAnswer(
-      df.select(explode_outer('intList)),
+      df.select(explode_outer($"intList")),
       Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
   }
 
   test("single posexplode") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     checkAnswer(
-      df.select(posexplode('intList)),
+      df.select(posexplode($"intList")),
       Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Nil)
   }
 
   test("single posexplode_outer") {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
     checkAnswer(
-      df.select(posexplode_outer('intList)),
+      df.select(posexplode_outer($"intList")),
       Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Row(null, null) :: Nil)
   }
 
@@ -117,13 +119,13 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
 
     checkAnswer(
-      df.select($"a", explode('intList)),
+      df.select($"a", explode($"intList")),
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, 3) :: Nil)
 
     checkAnswer(
-      df.select($"*", explode('intList)),
+      df.select($"*", explode($"intList")),
       Row(1, Seq(1, 2, 3), 1) ::
       Row(1, Seq(1, 2, 3), 2) ::
       Row(1, Seq(1, 2, 3), 3) :: Nil)
@@ -133,7 +135,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
 
     checkAnswer(
-      df.select($"a", explode_outer('intList)),
+      df.select($"a", explode_outer($"intList")),
       Row(1, 1) ::
         Row(1, 2) ::
         Row(1, 3) ::
@@ -141,7 +143,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
         Nil)
 
     checkAnswer(
-      df.select($"*", explode_outer('intList)),
+      df.select($"*", explode_outer($"intList")),
       Row(1, Seq(1, 2, 3), 1) ::
         Row(1, Seq(1, 2, 3), 2) ::
         Row(1, Seq(1, 2, 3), 3) ::
@@ -153,11 +155,11 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
 
     checkAnswer(
-      df.select(explode('intList).as('int)).select('int),
+      df.select(explode($"intList").as("int")).select($"int"),
       Row(1) :: Row(2) :: Row(3) :: Nil)
 
     checkAnswer(
-      df.select(explode('intList).as('int)).select(sum('int)),
+      df.select(explode($"intList").as("int")).select(sum($"int")),
       Row(6) :: Nil)
   }
 
@@ -165,11 +167,11 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
 
     checkAnswer(
-      df.select(explode_outer('intList).as('int)).select('int),
+      df.select(explode_outer($"intList").as("int")).select($"int"),
       Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
 
     checkAnswer(
-      df.select(explode('intList).as('int)).select(sum('int)),
+      df.select(explode($"intList").as("int")).select(sum($"int")),
       Row(6) :: Nil)
   }
 
@@ -177,7 +179,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Map("a" -> "b"))).toDF("a", "map")
 
     checkAnswer(
-      df.select(explode('map)),
+      df.select(explode($"map")),
       Row("a", "b"))
   }
 
@@ -186,7 +188,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       (3, Map("c" -> "d"))).toDF("a", "map")
 
     checkAnswer(
-      df.select(explode_outer('map)),
+      df.select(explode_outer($"map")),
       Row("a", "b") :: Row(null, null) :: Row("c", "d") :: Nil)
   }
 
@@ -194,7 +196,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Map("a" -> "b"))).toDF("a", "map")
 
     checkAnswer(
-      df.select(explode('map).as("key1" :: "value1" :: Nil)).select("key1", "value1"),
+      df.select(explode($"map").as("key1" :: "value1" :: Nil)).select("key1", "value1"),
       Row("a", "b"))
   }
 
@@ -202,13 +204,13 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((3, None), (1, Some(Map("a" -> "b")))).toDF("a", "map")
 
     checkAnswer(
-      df.select(explode_outer('map).as("key1" :: "value1" :: Nil)).select("key1", "value1"),
+      df.select(explode_outer($"map").as("key1" :: "value1" :: Nil)).select("key1", "value1"),
       Row("a", "b") :: Row(null, null) :: Nil)
   }
 
   test("self join explode") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-    val exploded = df.select(explode('intList).as('i))
+    val exploded = df.select(explode($"intList").as("i"))
 
     checkAnswer(
       exploded.join(exploded, exploded("i") === exploded("i")).agg(count("*")),
@@ -277,7 +279,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
 
   test("inline_outer") {
     val df = Seq((1, "2"), (3, "4"), (5, "6")).toDF("col1", "col2")
-    val df2 = df.select(when('col1 === 1, null).otherwise(array(struct('col1, 'col2))).as("col1"))
+    val df2 = df.select(
+      when($"col1" === 1, null).otherwise(array(struct($"col1", $"col2"))).as("col1"))
     checkAnswer(
       df2.selectExpr("inline(col1)"),
       Row(3, "4") :: Row(5, "6") :: Nil
@@ -303,15 +306,128 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
 
   test("outer generator()") {
     spark.sessionState.functionRegistry
-      .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator())
+      .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator(), "scala_udf")
     checkAnswer(
       sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
       Row(1, null) :: Row(2, null) :: Nil)
   }
+
+  test("generator in aggregate expression") {
+    withTempView("t1") {
+      Seq((1, 1), (1, 2), (2, 3)).toDF("c1", "c2").createTempView("t1")
+      checkAnswer(
+        sql("select explode(array(min(c2), max(c2))) from t1"),
+        Row(1) :: Row(3) :: Nil
+      )
+      checkAnswer(
+        sql("select posexplode(array(min(c2), max(c2))) from t1 group by c1"),
+        Row(0, 1) :: Row(1, 2) :: Row(0, 3) :: Row(1, 3) :: Nil
+      )
+      // test generator "stack" which require foldable argument
+      checkAnswer(
+        sql("select stack(2, min(c1), max(c1), min(c2), max(c2)) from t1"),
+        Row(1, 2) :: Row(1, 3) :: Nil
+      )
+
+      val msg1 = intercept[AnalysisException] {
+        sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
+      }.getMessage
+      assert(msg1.contains("The generator is not supported: nested in expressions"))
+
+      val msg2 = intercept[AnalysisException] {
+        sql(
+          """select
+            |  explode(array(min(c2), max(c2))),
+            |  posexplode(array(min(c2), max(c2)))
+            |from t1 group by c1
+          """.stripMargin)
+      }.getMessage
+      assert(msg2.contains("The generator is not supported: " +
+        "only one generator allowed per aggregate clause"))
+    }
+  }
+
+  test("SPARK-30998: Unsupported nested inner generators") {
+    val errMsg = intercept[AnalysisException] {
+      sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
+    }.getMessage
+    assert(errMsg.contains("The generator is not supported: " +
+      """nested in expressions "explode(explode(v))""""))
+  }
+
+  test("SPARK-30997: generators in aggregate expressions for dataframe") {
+    val df = Seq(1, 2, 3).toDF("v")
+    checkAnswer(df.select(explode(array(min($"v"), max($"v")))), Row(1) :: Row(3) :: Nil)
+  }
+
+  test("SPARK-38528: generator in stream of aggregate expressions") {
+    val df = Seq(1, 2, 3).toDF("v")
+    checkAnswer(
+      df.select(Stream(explode(array(min($"v"), max($"v"))), sum($"v")): _*),
+      Row(1, 6) :: Row(3, 6) :: Nil)
+  }
+
+  test("SPARK-37947: lateral view <func>_outer()") {
+    checkAnswer(
+      sql("select * from values 1, 2 lateral view explode_outer(array()) a as b"),
+      Row(1, null) :: Row(2, null) :: Nil)
+
+    checkAnswer(
+      sql("select * from values 1, 2 lateral view outer explode_outer(array()) a as b"),
+      Row(1, null) :: Row(2, null) :: Nil)
+
+    withTempView("t1") {
+      sql(
+        """select * from values
+          |array(struct(0, 1), struct(3, 4)),
+          |array(struct(6, 7)),
+          |array(),
+          |null
+          |as tbl(arr)
+         """.stripMargin).createOrReplaceTempView("t1")
+      checkAnswer(
+        sql("select f1, f2 from t1 lateral view inline_outer(arr) as f1, f2"),
+        Row(0, 1) :: Row(3, 4) :: Row(6, 7) :: Row(null, null) :: Row(null, null) :: Nil)
+    }
+  }
+
+  def testNullStruct(): Unit = {
+    val df = sql(
+      """select * from values
+        |(
+        |  1,
+        |  array(
+        |    named_struct('c1', 0, 'c2', 1),
+        |    null,
+        |    named_struct('c1', 2, 'c2', 3),
+        |    null
+        |  )
+        |)
+        |as tbl(a, b)
+         """.stripMargin)
+    df.createOrReplaceTempView("t1")
+
+    checkAnswer(
+      sql("select inline(b) from t1"),
+      Row(0, 1) :: Row(null, null) :: Row(2, 3) :: Row(null, null) :: Nil)
+
+    checkAnswer(
+      sql("select a, inline(b) from t1"),
+      Row(1, 0, 1) :: Row(1, null, null) :: Row(1, 2, 3) :: Row(1, null, null) :: Nil)
+  }
+
+  test("SPARK-39061: inline should handle null struct") {
+    testNullStruct
+  }
+
+  test("SPARK-39496: inline eval path should handle null struct") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      testNullStruct
+    }
+  }
 }
 
-case class EmptyGenerator() extends Generator {
-  override def children: Seq[Expression] = Nil
+case class EmptyGenerator() extends Generator with LeafLike[Expression] {
   override def elementSchema: StructType = new StructType().add("id", IntegerType)
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

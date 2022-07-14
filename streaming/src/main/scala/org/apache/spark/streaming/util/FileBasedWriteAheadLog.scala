@@ -24,8 +24,8 @@ import java.util.concurrent.RejectedExecutionException
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ExecutionContextTaskSupport
+import scala.collection.parallel.immutable.ParVector
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.language.postfixOps
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -142,11 +142,11 @@ private[streaming] class FileBasedWriteAheadLog(
       CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, () => reader.close())
     }
     if (!closeFileAfterWrite) {
-      logFilesToRead.iterator.map(readFile).flatten.asJava
+      logFilesToRead.iterator.flatMap(readFile).asJava
     } else {
       // For performance gains, it makes sense to parallelize the recovery if
       // closeFileAfterWrite = true
-      seqToParIterator(executionContext, logFilesToRead, readFile).asJava
+      seqToParIterator(executionContext, logFilesToRead.toSeq, readFile).asJava
     }
   }
 
@@ -190,7 +190,7 @@ private[streaming] class FileBasedWriteAheadLog(
           if (waitForCompletion) {
             import scala.concurrent.duration._
             // scalastyle:off awaitready
-            Await.ready(f, 1 second)
+            Await.ready(f, 1.second)
             // scalastyle:on awaitready
           }
         } catch {
@@ -277,10 +277,10 @@ private[streaming] object FileBasedWriteAheadLog {
   }
 
   def getCallerName(): Option[String] = {
-    val blacklist = Seq("WriteAheadLog", "Logging", "java.lang", "scala.")
+    val ignoreList = Seq("WriteAheadLog", "Logging", "java.lang", "scala.")
     Thread.currentThread.getStackTrace()
       .map(_.getClassName)
-      .find { c => !blacklist.exists(c.contains) }
+      .find { c => !ignoreList.exists(c.contains) }
       .flatMap(_.split("\\.").lastOption)
       .flatMap(_.split("\\$\\$").headOption)
   }
@@ -293,7 +293,7 @@ private[streaming] object FileBasedWriteAheadLog {
           val startTime = startTimeStr.toLong
           val stopTime = stopTimeStr.toLong
           Some(LogInfo(startTime, stopTime, file.toString))
-        case None =>
+        case None | Some(_) =>
           None
       }
     }.sortBy { _.startTime }
@@ -314,7 +314,7 @@ private[streaming] object FileBasedWriteAheadLog {
     val groupSize = taskSupport.parallelismLevel.max(8)
 
     source.grouped(groupSize).flatMap { group =>
-      val parallelCollection = group.par
+      val parallelCollection = new ParVector(group.toVector)
       parallelCollection.tasksupport = taskSupport
       parallelCollection.map(handler)
     }.flatten

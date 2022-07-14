@@ -31,15 +31,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
+class FileSourceStrategySuite extends QueryTest with SharedSparkSession with PredicateHelper {
   import testImplicits._
 
   protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
@@ -59,7 +60,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           "file9" -> 1,
           "file10" -> 1))
 
-    checkScan(table.select('c1)) { partitions =>
+    checkScan(table.select($"c1")) { partitions =>
       // 10 one byte files should fit in a single partition with 10 files.
       assert(partitions.size == 1, "when checking partitions")
       assert(partitions.head.files.size == 10, "when checking partition 1")
@@ -82,7 +83,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
     withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "11",
       SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
-      checkScan(table.select('c1)) { partitions =>
+      checkScan(table.select($"c1")) { partitions =>
         // 5 byte files should be laid out [(5, 5), (5)]
         assert(partitions.size == 2, "when checking partitions")
         assert(partitions(0).files.size == 2, "when checking partition 1")
@@ -107,7 +108,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
     withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
       SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
-      checkScan(table.select('c1)) { partitions =>
+      checkScan(table.select($"c1")) { partitions =>
         // Files should be laid out [(0-10), (10-15, 4)]
         assert(partitions.size == 2, "when checking partitions")
         assert(partitions(0).files.size == 1, "when checking partition 1")
@@ -140,7 +141,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
     withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "4",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
-      checkScan(table.select('c1)) { partitions =>
+      checkScan(table.select($"c1")) { partitions =>
         // Files should be laid out [(file1), (file2, file3), (file4, file5), (file6)]
         assert(partitions.size == 4, "when checking partitions")
         assert(partitions(0).files.size == 1, "when checking partition 1")
@@ -201,7 +202,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("partitioned table - case insensitive") {
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val table =
         createTable(
           files = Seq(
@@ -261,25 +262,27 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           "p1=2/file7_0000" -> 1),
         buckets = 3)
 
-    // No partition pruning
-    checkScan(table) { partitions =>
-      assert(partitions.size == 3)
-      assert(partitions(0).files.size == 5)
-      assert(partitions(1).files.size == 0)
-      assert(partitions(2).files.size == 2)
-    }
+    withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
+      // No partition pruning
+      checkScan(table) { partitions =>
+        assert(partitions.size == 3)
+        assert(partitions(0).files.size == 5)
+        assert(partitions(1).files.size == 0)
+        assert(partitions(2).files.size == 2)
+      }
 
-    // With partition pruning
-    checkScan(table.where("p1=2")) { partitions =>
-      assert(partitions.size == 3)
-      assert(partitions(0).files.size == 3)
-      assert(partitions(1).files.size == 0)
-      assert(partitions(2).files.size == 1)
+      // With partition pruning
+      checkScan(table.where("p1=2")) { partitions =>
+        assert(partitions.size == 3)
+        assert(partitions(0).files.size == 3)
+        assert(partitions(1).files.size == 0)
+        assert(partitions(2).files.size == 1)
+      }
     }
   }
 
   test("Locality support for FileScanRDD") {
-    val partition = FilePartition(0, Seq(
+    val partition = FilePartition(0, Array(
       PartitionedFile(InternalRow.empty, "fakePath0", 0, 10, Array("host0", "host1")),
       PartitionedFile(InternalRow.empty, "fakePath0", 10, 20, Array("host1", "host2")),
       PartitionedFile(InternalRow.empty, "fakePath1", 0, 5, Array("host3")),
@@ -289,7 +292,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     val fakeRDD = new FileScanRDD(
       spark,
       (file: PartitionedFile) => Iterator.empty,
-      Seq(partition)
+      Seq(partition),
+      StructType(Seq.empty)
     )
 
     assertResult(Set("host0", "host1", "host2")) {
@@ -355,7 +359,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
-        checkScan(table.select('c1)) { partitions =>
+        checkScan(table.select($"c1")) { partitions =>
           assert(partitions.size == 2)
           assert(partitions(0).files.size == 1)
           assert(partitions(1).files.size == 2)
@@ -371,7 +375,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
-        checkScan(table.select('c1)) { partitions =>
+        checkScan(table.select($"c1")) { partitions =>
           assert(partitions.size == 3)
           assert(partitions(0).files.size == 1)
           assert(partitions(1).files.size == 2)
@@ -414,24 +418,30 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("[SPARK-16818] partition pruned file scans implement sameResult correctly") {
-    withTempPath { path =>
-      val tempDir = path.getCanonicalPath
-      spark.range(100)
-        .selectExpr("id", "id as b")
-        .write
-        .partitionBy("id")
-        .parquet(tempDir)
-      val df = spark.read.parquet(tempDir)
-      def getPlan(df: DataFrame): SparkPlan = {
-        df.queryExecution.executedPlan
+    Seq("orc", "").foreach { useV1ReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1ReaderList) {
+        withTempPath { path =>
+          val tempDir = path.getCanonicalPath
+          spark.range(100)
+            .selectExpr("id", "id as b")
+            .write
+            .partitionBy("id")
+            .orc(tempDir)
+          val df = spark.read.orc(tempDir)
+
+          def getPlan(df: DataFrame): SparkPlan = {
+            df.queryExecution.executedPlan
+          }
+
+          assert(getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 2"))))
+          assert(!getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 3"))))
+        }
       }
-      assert(getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 2"))))
-      assert(!getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 3"))))
     }
   }
 
   test("[SPARK-16818] exchange reuse respects differences in partition pruning") {
-    spark.conf.set("spark.sql.exchange.reuse", true)
+    spark.conf.set(SQLConf.EXCHANGE_REUSE_ENABLED.key, true)
     withTempPath { path =>
       val tempDir = path.getCanonicalPath
       spark.range(10)
@@ -469,8 +479,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
         val e = intercept[SparkException] {
           spark.read.text(inputFile.toURI.toString).collect()
         }
-        assert(e.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getMessage === "Unexpected end of input stream")
+        assert(e.getCause.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)
@@ -489,6 +499,106 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       val filtered = ds.filter($"_1" === "true").toDF()
       checkAnswer(readBack, filtered)
     }
+  }
+
+  test("SPARK-29768: Column pruning through non-deterministic expressions") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(10)
+          .selectExpr("id as key", "id * 3 as s1", "id * 5 as s2")
+          .write.format("parquet").save(path.getAbsolutePath)
+        val df1 = spark.read.parquet(path.getAbsolutePath)
+        val df2 = df1.selectExpr("key", "rand()").where("key > 5")
+        val plan = df2.queryExecution.sparkPlan
+        val scan = plan.collect { case scan: FileSourceScanExec => scan }
+        assert(scan.size === 1)
+        assert(scan.head.requiredSchema == StructType(StructField("key", LongType) :: Nil))
+      }
+    }
+
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(10)
+          .selectExpr("id as key", "id * 3 as s1", "id * 5 as s2")
+          .write.format("parquet").save(path.getAbsolutePath)
+        val df1 = spark.read.parquet(path.getAbsolutePath)
+        val df2 = df1.selectExpr("key", "rand()").where("key > 5")
+        val plan = df2.queryExecution.optimizedPlan
+        val scan = plan.collect { case r: DataSourceV2ScanRelation => r }
+        assert(scan.size === 1)
+        assert(scan.head.scan.readSchema() == StructType(StructField("key", LongType) :: Nil))
+      }
+    }
+  }
+
+  test("SPARK-32019: Add spark.sql.files.minPartitionNum config") {
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1
+        ))
+      assert(table.rdd.partitions.length == 1)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1
+        ))
+      assert(table.rdd.partitions.length == 3)
+    }
+
+    withSQLConf(
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2MB",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> String.valueOf(4 * 1024 * 1024)) {
+
+      withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "8") {
+        val partitions = (1 to 12).map(i => s"file$i" -> 2 * 1024 * 1024)
+        val table = createTable(files = partitions)
+        // partition is limited by filesMaxPartitionBytes(2MB)
+        assert(table.rdd.partitions.length == 12)
+      }
+
+      withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "16") {
+        val partitions = (1 to 12).map(i => s"file$i" -> 4 * 1024 * 1024)
+        val table = createTable(files = partitions)
+        assert(table.rdd.partitions.length == 24)
+      }
+    }
+  }
+
+  test("SPARK-32352: Partially push down support data filter if it mixed in partition filters") {
+    val table =
+      createTable(
+        files = Seq(
+          "p1=1/file1" -> 10,
+          "p1=2/file2" -> 10,
+          "p1=3/file3" -> 10,
+          "p1=4/file4" -> 10))
+
+    checkScan(table.where("(c1 = 1) OR (c1 = 2)")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
+
+    checkScan(table.where("(p1 = 1 AND c1 = 1) OR (p1 = 2 and c1 = 2)")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
+
+    checkScan(table.where("(p1 = '1' AND c1 = 2) OR (c1 = 1 OR p1 = '2')")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set.empty)
+
+    checkScan(table.where("p1 = '1' OR (p1 = '2' AND c1 = 1)")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set.empty)
   }
 
   // Helpers for checking the arguments passed to the FileFormat.

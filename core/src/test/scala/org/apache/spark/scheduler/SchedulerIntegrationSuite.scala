@@ -17,16 +17,16 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.{TimeoutException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 import scala.concurrent.duration.{Duration, SECONDS}
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
+import org.scalatest.Assertions
 import org.scalatest.Assertions.AssertionsHelper
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -36,6 +36,7 @@ import org.apache.spark.TaskState._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_REVIVE_INTERVAL
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
 /**
@@ -43,7 +44,7 @@ import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
  * TaskSetManagers.
  *
  * Test cases are configured by providing a set of jobs to submit, and then simulating interaction
- * with spark's executors via a mocked backend (eg., task completion, task failure, executors
+ * with spark's executors via a mocked backend (e.g., task completion, task failure, executors
  * disconnecting, etc.).
  */
 abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends SparkFunSuite
@@ -52,9 +53,9 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
   var taskScheduler: TestTaskScheduler = null
   var scheduler: DAGScheduler = null
   var backend: T = _
-  // Even though the tests aren't doing much, occassionally we see flakiness from pauses over
+  // Even though the tests aren't doing much, occasionally we see flakiness from pauses over
   // a second (probably from GC?) so we leave a long timeout in here
-  val duration = Duration(10, SECONDS)
+  val duration = Duration(20, SECONDS)
 
   override def beforeEach(): Unit = {
     if (taskScheduler != null) {
@@ -135,7 +136,9 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc): Future[Any] = {
     val waiter: JobWaiter[Any] = scheduler.submitJob(rdd, func, partitions.toSeq, CallSite("", ""),
       (index, res) => results(index) = res, new Properties())
+    // scalastyle:off executioncontextglobal
     import scala.concurrent.ExecutionContext.Implicits.global
+    // scalastyle:on executioncontextglobal
     waiter.completionFuture.recover { case ex =>
       failure = ex
     }
@@ -170,7 +173,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       // and notifies the job waiter before our original thread in the task scheduler finishes
       // handling the event and marks the taskset as complete.  So its ok if we need to wait a
       // *little* bit longer for the original taskscheduler thread to finish up to deal w/ the race.
-      eventually(timeout(1 second), interval(10 millis)) {
+      eventually(timeout(1.second), interval(10.milliseconds)) {
         assert(taskScheduler.runningTaskSets.isEmpty)
       }
       assert(!backend.hasTasks)
@@ -204,7 +207,13 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
   def shuffle(nParts: Int, input: MockRDD): MockRDD = {
     val partitioner = new HashPartitioner(nParts)
     val shuffleDep = new ShuffleDependency[Int, Int, Nothing](input, partitioner)
-    new MockRDD(sc, nParts, List(shuffleDep))
+    new MockRDD(sc, nParts, List(shuffleDep), Nil)
+  }
+
+  /** models a one-to-one dependency within a stage, like a map or filter */
+  def oneToOne(input: MockRDD): MockRDD = {
+    val dep = new OneToOneDependency[(Int, Int)](input)
+    new MockRDD(sc, input.numPartitions, Nil, Seq(dep))
   }
 
   /** models a stage boundary with multiple dependencies, like a join */
@@ -213,7 +222,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     val shuffleDeps = inputs.map { inputRDD =>
       new ShuffleDependency[Int, Int, Nothing](inputRDD, partitioner)
     }
-    new MockRDD(sc, nParts, shuffleDeps)
+    new MockRDD(sc, nParts, shuffleDeps, Nil)
   }
 
   val backendException = new AtomicReference[Exception](null)
@@ -297,11 +306,11 @@ private[spark] abstract class MockBackend(
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
    * Each task should be responded to with either [[taskSuccess]] or [[taskFailed]].
    */
-  def beginTask(): (TaskDescription, Task[_]) = {
+  def beginTask[T](): (TaskDescription, Task[T]) = {
     synchronized {
       val toRun = assignedTasksWaitingToRun.remove(assignedTasksWaitingToRun.size - 1)
       runningTasks += toRun._1.taskId
-      toRun
+      toRun.asInstanceOf[(TaskDescription, Task[T])]
     }
   }
 
@@ -312,7 +321,7 @@ private[spark] abstract class MockBackend(
   def taskSuccess(task: TaskDescription, result: Any): Unit = {
     val ser = env.serializer.newInstance()
     val resultBytes = ser.serialize(result)
-    val directResult = new DirectTaskResult(resultBytes, Seq()) // no accumulator updates
+    val directResult = new DirectTaskResult(resultBytes, Seq(), Array()) // no accumulator updates
     taskUpdate(task, TaskState.FINISHED, directResult)
   }
 
@@ -371,7 +380,7 @@ private[spark] abstract class MockBackend(
 
   /**
    * Accessed by both scheduling and backend thread, so should be protected by this.
-   * Most likely the only thing that needs to be protected are the inidividual ExecutorTaskStatus,
+   * Most likely the only thing that needs to be protected are the individual ExecutorTaskStatus,
    * but for simplicity in this mock just lock the whole backend.
    */
   def executorIdToExecutor: Map[String, ExecutorTaskStatus]
@@ -385,7 +394,7 @@ private[spark] abstract class MockBackend(
     }.toIndexedSeq
   }
 
-  override def maxNumConcurrentTasks(): Int = 0
+  override def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 
   /**
    * This is called by the scheduler whenever it has tasks it would like to schedule, when a tasks
@@ -406,9 +415,9 @@ private[spark] abstract class MockBackend(
         (taskDescription, task)
       }
       newTasks.foreach { case (taskDescription, _) =>
+        freeCores -= taskScheduler.CPUS_PER_TASK
         executorIdToExecutor(taskDescription.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
-      freeCores -= newTasks.size * taskScheduler.CPUS_PER_TASK
       assignedTasksWaitingToRun ++= newTasks
     }
   }
@@ -448,10 +457,11 @@ case class ExecutorTaskStatus(host: String, executorId: String, var freeCores: I
 class MockRDD(
   sc: SparkContext,
   val numPartitions: Int,
-  val shuffleDeps: Seq[ShuffleDependency[Int, Int, Nothing]]
-) extends RDD[(Int, Int)](sc, shuffleDeps) with Serializable {
+  val shuffleDeps: Seq[ShuffleDependency[Int, Int, Nothing]],
+  val oneToOneDeps: Seq[OneToOneDependency[(Int, Int)]]
+) extends RDD[(Int, Int)](sc, deps = shuffleDeps ++ oneToOneDeps) with Serializable {
 
-  MockRDD.validate(numPartitions, shuffleDeps)
+  MockRDD.validate(numPartitions, shuffleDeps, oneToOneDeps)
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
     throw new RuntimeException("should not be reached")
@@ -464,16 +474,27 @@ class MockRDD(
   override def toString: String = "MockRDD " + id
 }
 
-object MockRDD extends AssertionsHelper with TripleEquals {
+object MockRDD extends AssertionsHelper with TripleEquals with Assertions {
   /**
    * make sure all the shuffle dependencies have a consistent number of output partitions
+   * and that one-to-one dependencies have the same partition counts as their parents
    * (mostly to make sure the test setup makes sense, not that Spark itself would get this wrong)
    */
-  def validate(numPartitions: Int, dependencies: Seq[ShuffleDependency[_, _, _]]): Unit = {
-    dependencies.foreach { dependency =>
+  def validate(
+      numPartitions: Int,
+      shuffleDependencies: Seq[ShuffleDependency[_, _, _]],
+      oneToOneDependencies: Seq[OneToOneDependency[_]]): Unit = {
+    shuffleDependencies.foreach { dependency =>
       val partitioner = dependency.partitioner
       assert(partitioner != null)
       assert(partitioner.numPartitions === numPartitions)
+    }
+    oneToOneDependencies.foreach { dependency =>
+      // In order to support the SPARK-23626 testcase, we cast to MockRDD
+      // and access `numPartitions` instead of just calling `getNumPartitions`:
+      // `getNumPartitions` would call `getPartitions`, undermining the intention
+      // of the SPARK-23626 testcase.
+      assert(dependency.rdd.asInstanceOf[MockRDD].numPartitions === numPartitions)
     }
   }
 }
@@ -534,11 +555,11 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    */
   testScheduler("super simple job") {
     def runBackend(): Unit = {
-      val (taskDescripition, _) = backend.beginTask()
-      backend.taskSuccess(taskDescripition, 42)
+      val (taskDescription, _) = backend.beginTask()
+      backend.taskSuccess(taskDescription, 42)
     }
     withBackend(runBackend _) {
-      val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
+      val jobFuture = submit(new MockRDD(sc, 10, Nil, Nil), (0 until 10).toArray)
       awaitJobTermination(jobFuture, duration)
     }
     assert(results === (0 until 10).map { _ -> 42 }.toMap)
@@ -563,7 +584,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       }
     }
 
-    val a = new MockRDD(sc, 2, Nil)
+    val a = new MockRDD(sc, 2, Nil, Nil)
     val b = shuffle(10, a)
     val c = shuffle(20, a)
     val d = join(30, b, c)
@@ -589,7 +610,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
           backend.taskSuccess(taskDescription, 4321 + partition)
       }
     }
-    withBackend(runBackend _) {
+    withBackend(() => runBackend()) {
       val jobFuture = submit(d, (0 until 30).toArray)
       awaitJobTermination(jobFuture, duration)
     }
@@ -603,7 +624,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    * (b) we get a second attempt for stage 0 & stage 1
    */
   testScheduler("job with fetch failure") {
-    val input = new MockRDD(sc, 2, Nil)
+    val input = new MockRDD(sc, 2, Nil, Nil)
     val shuffledRdd = shuffle(10, input)
     val shuffleId = shuffledRdd.shuffleDeps.head.shuffleId
 
@@ -622,7 +643,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
           backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostA", 10))
         case (1, 0, 0) =>
           val fetchFailed = FetchFailed(
-            DAGSchedulerSuite.makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored")
+            DAGSchedulerSuite.makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored")
           backend.taskFailed(taskDescription, fetchFailed)
         case (1, _, partition) =>
           backend.taskSuccess(taskDescription, 42 + partition)
@@ -645,10 +666,90 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       backend.taskFailed(taskDescription, new RuntimeException("test task failure"))
     }
     withBackend(runBackend _) {
-      val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
+      val jobFuture = submit(new MockRDD(sc, 10, Nil, Nil), (0 until 10).toArray)
       awaitJobTermination(jobFuture, duration)
       assert(failure.getMessage.contains("test task failure"))
     }
     assertDataStructuresEmpty(noFailure = false)
+  }
+
+  testScheduler("SPARK-23626: RDD with expensive getPartitions() doesn't block scheduler loop") {
+    // Before SPARK-23626, expensive `RDD.getPartitions()` calls might occur inside of the
+    // DAGScheduler event loop, causing concurrently-submitted jobs to block. This test case
+    // reproduces a scenario where that blocking could occur.
+
+    // We'll use latches to simulate an RDD with a slow getPartitions() call.
+    import MockRDDWithSlowGetPartitions._
+
+    // DAGScheduler.submitJob calls `.partitions` on the RDD passed to it.
+    // Therefore to write a proper regression test for SPARK-23626 we must
+    // ensure that the slow getPartitions() call occurs deeper in the RDD DAG:
+    val rddWithSlowGetPartitions = oneToOne(new MockRDDWithSlowGetPartitions(sc, 1))
+
+    // A RDD whose execution should not be blocked by the other RDD's slow getPartitions():
+    val simpleRdd = new MockRDD(sc, 1, Nil, Nil)
+
+    getPartitionsShouldNotHaveBeenCalledYet.set(false)
+
+    def runBackend(): Unit = {
+      val (taskDescription, _) = backend.beginTask()
+      backend.taskSuccess(taskDescription, 42)
+    }
+
+    withBackend(runBackend _) {
+      // Submit a job containing an RDD which will hang in getPartitions() until we release
+      // the countdown latch:
+      // scalastyle:off executioncontextglobal
+      import scala.concurrent.ExecutionContext.Implicits.global
+      // scalastyle:on executioncontextglobal
+      val slowJobFuture = Future { submit(rddWithSlowGetPartitions, Array(0)) }.flatten
+
+      // Block the current thread until the other thread has started the getPartitions() call:
+      beginGetPartitionsLatch.await(duration.toSeconds, SECONDS)
+
+      // Submit a concurrent job. This job's execution should not be blocked by the other job:
+      val fastJobFuture = submit(simpleRdd, Array(0))
+      awaitJobTermination(fastJobFuture, duration)
+
+      // The slow job should still be blocked in the getPartitions() call:
+      assert(!slowJobFuture.isCompleted)
+
+      // Allow it to complete:
+      endGetPartitionsLatch.countDown()
+      awaitJobTermination(slowJobFuture, duration)
+    }
+
+    assertDataStructuresEmpty()
+  }
+}
+
+/** Helper class used in SPARK-23626 test case */
+private object MockRDDWithSlowGetPartitions {
+  // Latch for blocking the test execution thread until getPartitions() has been called:
+  val beginGetPartitionsLatch = new CountDownLatch(1)
+
+  // Latch for blocking the getPartitions() call from completing:
+  val endGetPartitionsLatch = new CountDownLatch(1)
+
+  // Atomic boolean which is used to fail the test in case getPartitions() is called earlier
+  // than expected. This guards against false-negatives (e.g. the test passing because
+  // `.getPartitions()` was called in the test setup before we even submitted a job):
+  val getPartitionsShouldNotHaveBeenCalledYet = new AtomicBoolean(true)
+}
+
+/** Helper class used in SPARK-23626 test case */
+private class MockRDDWithSlowGetPartitions(
+    sc: SparkContext,
+    numPartitions: Int) extends MockRDD(sc, numPartitions, Nil, Nil) {
+  import MockRDDWithSlowGetPartitions._
+
+  override def getPartitions: Array[Partition] = {
+    if (getPartitionsShouldNotHaveBeenCalledYet.get()) {
+      throw new Exception("getPartitions() should not have been called at this point")
+    }
+    beginGetPartitionsLatch.countDown()
+    val partitions = super.getPartitions
+    endGetPartitionsLatch.await()
+    partitions
   }
 }

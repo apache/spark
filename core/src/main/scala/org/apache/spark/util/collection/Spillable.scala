@@ -27,7 +27,7 @@ import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
  * has been exceeded.
  */
 private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
-  extends MemoryConsumer(taskMemoryManager) with Logging {
+  extends MemoryConsumer(taskMemoryManager, MemoryMode.ON_HEAP) with Logging {
   /**
    * Spills the current in-memory collection to disk, and releases the memory.
    *
@@ -141,7 +141,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    *
    * @param size number of bytes spilled
    */
-  @inline private def logSpillage(size: Long) {
+  @inline private def logSpillage(size: Long): Unit = {
     val threadId = Thread.currentThread().getId
     logInfo("Thread %d spilling in-memory map of %s to disk (%d time%s so far)"
       .format(threadId, org.apache.spark.util.Utils.bytesToString(size),

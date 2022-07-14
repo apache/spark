@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.util.{Clock, SystemClock}
 
 trait TriggerExecutor {
@@ -32,7 +31,7 @@ trait TriggerExecutor {
 /**
  * A trigger executor that runs a single batch only, then terminates.
  */
-case class OneTimeExecutor() extends TriggerExecutor {
+case class SingleBatchExecutor() extends TriggerExecutor {
 
   /**
    * Execute a single batch using `batchRunner`.
@@ -41,12 +40,24 @@ case class OneTimeExecutor() extends TriggerExecutor {
 }
 
 /**
+ * A trigger executor that runs multiple batches then terminates.
+ */
+case class MultiBatchExecutor() extends TriggerExecutor {
+  /**
+   * Execute multiple batches using `batchRunner`
+   */
+  override def execute(batchRunner: () => Boolean): Unit = while (batchRunner()) {}
+}
+
+/**
  * A trigger executor that runs a batch every `intervalMs` milliseconds.
  */
-case class ProcessingTimeExecutor(processingTime: ProcessingTime, clock: Clock = new SystemClock())
+case class ProcessingTimeExecutor(
+    processingTimeTrigger: ProcessingTimeTrigger,
+    clock: Clock = new SystemClock())
   extends TriggerExecutor with Logging {
 
-  private val intervalMs = processingTime.intervalMs
+  private val intervalMs = processingTimeTrigger.intervalMs
   require(intervalMs >= 0)
 
   override def execute(triggerHandler: () => Boolean): Unit = {

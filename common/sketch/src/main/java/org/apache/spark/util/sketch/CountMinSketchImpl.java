@@ -60,7 +60,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     this.eps = eps;
     this.confidence = confidence;
     this.width = (int) Math.ceil(2 / eps);
-    this.depth = (int) Math.ceil(-Math.log(1 - confidence) / Math.log(2));
+    this.depth = (int) Math.ceil(-Math.log1p(-confidence) / Math.log(2));
     initTablesWith(depth, width, seed);
   }
 
@@ -70,7 +70,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
       return true;
     }
 
-    if (other == null || !(other instanceof CountMinSketchImpl)) {
+    if (!(other instanceof CountMinSketchImpl)) {
       return false;
     }
 

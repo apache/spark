@@ -117,8 +117,9 @@ case class HiveTableScanExec(
     // Specifies needed column IDs for those non-partitioning columns.
     val columnOrdinals = AttributeMap(relation.dataCols.zipWithIndex)
     val neededColumnIDs = output.flatMap(columnOrdinals.get).map(o => o: Integer)
+    val neededColumnNames = output.filter(columnOrdinals.contains).map(_.name)
 
-    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, output.map(_.name))
+    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, neededColumnNames)
 
     val deserializer = tableDesc.getDeserializerClass.getConstructor().newInstance()
     deserializer.initialize(hiveConf, tableDesc.getProperties)
@@ -146,7 +147,7 @@ case class HiveTableScanExec(
    * @param partitions All partitions of the relation.
    * @return Partitions that are involved in the query plan.
    */
-  private[hive] def prunePartitions(partitions: Seq[HivePartition]) = {
+  private[hive] def prunePartitions(partitions: Seq[HivePartition]): Seq[HivePartition] = {
     boundPruningPred match {
       case None => partitions
       case Some(shouldKeep) => partitions.filter { part =>
@@ -156,24 +157,42 @@ case class HiveTableScanExec(
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
-        val row = InternalRow.fromSeq(castedValues)
+        val row = InternalRow.fromSeq(castedValues.toSeq)
         shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }
   }
 
+  @transient lazy val prunedPartitions: Seq[HivePartition] = {
+    if (relation.prunedPartitions.nonEmpty) {
+      val hivePartitions =
+        relation.prunedPartitions.get.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+      if (partitionPruningPred.forall(!ExecSubqueryExpression.hasSubquery(_))) {
+        hivePartitions
+      } else {
+        prunePartitions(hivePartitions)
+      }
+    } else {
+      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
+        partitionPruningPred.nonEmpty) {
+        rawPartitions
+      } else {
+        prunePartitions(rawPartitions)
+      }
+    }
+  }
+
   // exposed for tests
-  @transient lazy val rawPartitions = {
+  @transient lazy val rawPartitions: Seq[HivePartition] = {
     val prunedPartitions =
       if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-          partitionPruningPred.size > 0) {
+        partitionPruningPred.nonEmpty) {
         // Retrieve the original attributes based on expression ID so that capitalization matches.
         val normalizedFilters = partitionPruningPred.map(_.transform {
           case a: AttributeReference => originalAttributes(a)
         })
-        sparkSession.sessionState.catalog.listPartitionsByFilter(
-          relation.tableMeta.identifier,
-          normalizedFilters)
+        sparkSession.sessionState.catalog
+          .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
       } else {
         sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
       }
@@ -184,12 +203,12 @@ case class HiveTableScanExec(
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // multiple partitions.
     val rdd = if (!relation.isPartitioned) {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
+      Utils.withDummyCallSite(sparkContext) {
         hadoopReader.makeRDDForTable(hiveQlTable)
       }
     } else {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
-        hadoopReader.makeRDDForPartitionedTable(prunePartitions(rawPartitions))
+      Utils.withDummyCallSite(sparkContext) {
+        hadoopReader.makeRDDForPartitionedTable(prunedPartitions)
       }
     }
     val numOutputRows = longMetric("numOutputRows")
@@ -205,12 +224,20 @@ case class HiveTableScanExec(
     }
   }
 
+  // Filters unused DynamicPruningExpression expressions - one which has been replaced
+  // with DynamicPruningExpression(Literal.TrueLiteral) during Physical Planning
+  private def filterUnusedDynamicPruningExpressions(
+      predicates: Seq[Expression]): Seq[Expression] = {
+    predicates.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral))
+  }
+
   override def doCanonicalize(): HiveTableScanExec = {
     val input: AttributeSeq = relation.output
     HiveTableScanExec(
-      requestedAttributes.map(QueryPlan.normalizeExprId(_, input)),
+      requestedAttributes.map(QueryPlan.normalizeExpressions(_, input)),
       relation.canonicalized.asInstanceOf[HiveTableRelation],
-      QueryPlan.normalizePredicates(partitionPruningPred, input))(sparkSession)
+      QueryPlan.normalizePredicates(
+        filterUnusedDynamicPruningExpressions(partitionPruningPred), input))(sparkSession)
   }
 
   override def otherCopyArgs: Seq[AnyRef] = Seq(sparkSession)

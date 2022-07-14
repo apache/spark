@@ -17,12 +17,26 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
+import java.util.Base64
+
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.hashing.MurmurHash3
 
-import org.apache.spark.annotation.Stable
+import org.json4s._
+import org.json4s.JsonAST.JValue
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.annotation.{Stable, Unstable}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * @since 1.3.0
@@ -147,13 +161,17 @@ trait Row extends Serializable {
    *   ByteType -> java.lang.Byte
    *   ShortType -> java.lang.Short
    *   IntegerType -> java.lang.Integer
+   *   LongType -> java.lang.Long
    *   FloatType -> java.lang.Float
    *   DoubleType -> java.lang.Double
    *   StringType -> String
    *   DecimalType -> java.math.BigDecimal
    *
-   *   DateType -> java.sql.Date
-   *   TimestampType -> java.sql.Timestamp
+   *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
+   *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
+   *
+   *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
+   *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
    *
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
@@ -172,13 +190,17 @@ trait Row extends Serializable {
    *   ByteType -> java.lang.Byte
    *   ShortType -> java.lang.Short
    *   IntegerType -> java.lang.Integer
+   *   LongType -> java.lang.Long
    *   FloatType -> java.lang.Float
    *   DoubleType -> java.lang.Double
    *   StringType -> String
    *   DecimalType -> java.math.BigDecimal
    *
-   *   DateType -> java.sql.Date
-   *   TimestampType -> java.sql.Timestamp
+   *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
+   *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
+   *
+   *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
+   *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
    *
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
@@ -295,7 +317,10 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
+  def getSeq[T](i: Int): Seq[T] = {
+    val res = getAs[scala.collection.Seq[T]](i)
+    if (res != null) res.toSeq else null
+  }
 
   /**
    * Returns the value at position i of array type as `java.util.List`.
@@ -330,7 +355,7 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i.
    * For primitive types if value is null it returns 'zero value' specific for primitive
-   * ie. 0 for Int - use isNullAt to ensure that value is not null
+   * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -339,7 +364,7 @@ trait Row extends Serializable {
   /**
    * Returns the value of a given fieldName.
    * For primitive types if value is null it returns 'zero value' specific for primitive
-   * ie. 0 for Int - use isNullAt to ensure that value is not null
+   * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
@@ -354,13 +379,13 @@ trait Row extends Serializable {
    * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
-    throw new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
+    throw QueryExecutionErrors.fieldIndexOnRowWithoutSchemaError()
   }
 
   /**
    * Returns a Map consisting of names and values for the requested fieldNames
    * For primitive types if value is null it returns 'zero value' specific for primitive
-   * ie. 0 for Int - use isNullAt to ensure that value is not null
+   * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
@@ -372,7 +397,7 @@ trait Row extends Serializable {
     }.toMap
   }
 
-  override def toString: String = s"[${this.mkString(",")}]"
+  override def toString: String = this.mkString("[", ",", "]")
 
   /**
    * Make a copy of the current [[Row]] object.
@@ -465,16 +490,31 @@ trait Row extends Serializable {
   }
 
   /** Displays all elements of this sequence in a string (without a separator). */
-  def mkString: String = toSeq.mkString
+  def mkString: String = mkString("")
 
   /** Displays all elements of this sequence in a string using a separator string. */
-  def mkString(sep: String): String = toSeq.mkString(sep)
+  def mkString(sep: String): String = mkString("", sep, "")
 
   /**
    * Displays all elements of this traversable or iterator in a string using
    * start, end, and separator strings.
    */
-  def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
+  def mkString(start: String, sep: String, end: String): String = {
+    val n = length
+    val builder = new StringBuilder
+    builder.append(start)
+    if (n > 0) {
+      builder.append(get(0))
+      var i = 1
+      while (i < n) {
+        builder.append(sep)
+        builder.append(get(i))
+        i += 1
+      }
+    }
+    builder.append(end)
+    builder.toString()
+  }
 
   /**
    * Returns the value at position i.
@@ -484,6 +524,95 @@ trait Row extends Serializable {
    * @throws NullPointerException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
-    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
+    if (isNullAt(i)) throw QueryExecutionErrors.valueIsNullError(i)
     else getAs[T](i)
+
+  /**
+   * The compact JSON representation of this row.
+   * @since 3.0
+   */
+  @Unstable
+  def json: String = compact(jsonValue)
+
+  /**
+   * The pretty (i.e. indented) JSON representation of this row.
+   * @since 3.0
+   */
+  @Unstable
+  def prettyJson: String = pretty(render(jsonValue))
+
+  /**
+   * JSON representation of the row.
+   *
+   * Note that this only supports the data types that are also supported by
+   * [[org.apache.spark.sql.catalyst.encoders.RowEncoder]].
+   *
+   * @return the JSON representation of the row.
+   */
+  private[sql] def jsonValue: JValue = {
+    require(schema != null, "JSON serialization requires a non-null schema.")
+
+    lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+    lazy val dateFormatter = DateFormatter()
+    lazy val timestampFormatter = TimestampFormatter(zoneId)
+
+    // Convert an iterator of values to a json array
+    def iteratorToJsonArray(iterator: Iterator[_], elementType: DataType): JArray = {
+      JArray(iterator.map(toJson(_, elementType)).toList)
+    }
+
+    // Convert a value to json.
+    def toJson(value: Any, dataType: DataType): JValue = (value, dataType) match {
+      case (null, _) => JNull
+      case (b: Boolean, _) => JBool(b)
+      case (b: Byte, _) => JLong(b)
+      case (s: Short, _) => JLong(s)
+      case (i: Int, _) => JLong(i)
+      case (l: Long, _) => JLong(l)
+      case (f: Float, _) => JDouble(f)
+      case (d: Double, _) => JDouble(d)
+      case (d: BigDecimal, _) => JDecimal(d)
+      case (d: java.math.BigDecimal, _) => JDecimal(d)
+      case (d: Decimal, _) => JDecimal(d.toBigDecimal)
+      case (s: String, _) => JString(s)
+      case (b: Array[Byte], BinaryType) =>
+        JString(Base64.getEncoder.encodeToString(b))
+      case (d: LocalDate, _) => JString(dateFormatter.format(d))
+      case (d: Date, _) => JString(dateFormatter.format(d))
+      case (i: Instant, _) => JString(timestampFormatter.format(i))
+      case (t: Timestamp, _) => JString(timestampFormatter.format(t))
+      case (i: CalendarInterval, _) => JString(i.toString)
+      case (a: Array[_], ArrayType(elementType, _)) =>
+        iteratorToJsonArray(a.iterator, elementType)
+      case (s: Seq[_], ArrayType(elementType, _)) =>
+        iteratorToJsonArray(s.iterator, elementType)
+      case (m: Map[String @unchecked, _], MapType(StringType, valueType, _)) =>
+        new JObject(m.toList.sortBy(_._1).map {
+          case (k, v) => k -> toJson(v, valueType)
+        })
+      case (m: Map[_, _], MapType(keyType, valueType, _)) =>
+        new JArray(m.iterator.map {
+          case (k, v) =>
+            new JObject("key" -> toJson(k, keyType) :: "value" -> toJson(v, valueType) :: Nil)
+        }.toList)
+      case (r: Row, _) => r.jsonValue
+      case (v: Any, udt: UserDefinedType[Any @unchecked]) =>
+        val dataType = udt.sqlType
+        toJson(CatalystTypeConverters.convertToScala(udt.serialize(v), dataType), dataType)
+      case _ =>
+        throw new IllegalArgumentException(s"Failed to convert value $value " +
+          s"(class of ${value.getClass}}) with the type of $dataType to JSON.")
+    }
+
+    // Convert the row fields to json
+    var n = 0
+    val elements = new mutable.ListBuffer[JField]
+    val len = length
+    while (n < len) {
+      val field = schema(n)
+      elements += (field.name -> toJson(apply(n), field.dataType))
+      n += 1
+    }
+    new JObject(elements.toList)
+  }
 }

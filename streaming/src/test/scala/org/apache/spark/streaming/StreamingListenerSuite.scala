@@ -21,12 +21,15 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.Future
 
 import org.mockito.Mockito.{mock, reset, verifyNoMoreInteractions}
-import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
@@ -36,19 +39,10 @@ import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
 
-class StreamingListenerSuite extends TestSuiteBase with Matchers {
+class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext with Matchers {
 
   val input = (1 to 4).map(Seq(_)).toSeq
   val operation = (d: DStream[Int]) => d.map(x => x)
-
-  var ssc: StreamingContext = _
-
-  override def afterFunction() {
-    super.afterFunction()
-    if (ssc != null) {
-      ssc.stop()
-    }
-  }
 
   // To make sure that the processing start and end times in collected
   // information are different for successive batches
@@ -130,7 +124,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
     ssc.start()
     try {
-      eventually(timeout(30 seconds), interval(20 millis)) {
+      eventually(timeout(30.seconds), interval(20.milliseconds)) {
         collector.startedReceiverStreamIds.size should equal (1)
         collector.startedReceiverStreamIds.peek() should equal (0)
         collector.stoppedReceiverStreamIds.size should equal (1)
@@ -157,7 +151,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
     ssc.start()
     try {
-      eventually(timeout(30 seconds), interval(20 millis)) {
+      eventually(timeout(30.seconds), interval(20.milliseconds)) {
         collector.startedOutputOperationIds.asScala.take(3) should be (Seq(0, 1, 2))
         collector.completedOutputOperationIds.asScala.take(3) should be (Seq(0, 1, 2))
       }
@@ -236,7 +230,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     // Post a Streaming event after stopping StreamingContext
     val receiverInfoStopped = ReceiverInfo(0, "test", false, "localhost", "0")
     ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(receiverInfoStopped))
-    ssc.sparkContext.listenerBus.waitUntilEmpty(1000)
+    ssc.sparkContext.listenerBus.waitUntilEmpty()
     // The StreamingListener should not receive any event
     verifyNoMoreInteractions(streamingListener)
   }
@@ -288,15 +282,15 @@ class BatchInfoCollector extends StreamingListener {
   val batchInfosStarted = new ConcurrentLinkedQueue[BatchInfo]
   val batchInfosSubmitted = new ConcurrentLinkedQueue[BatchInfo]
 
-  override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted) {
+  override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted): Unit = {
     batchInfosSubmitted.add(batchSubmitted.batchInfo)
   }
 
-  override def onBatchStarted(batchStarted: StreamingListenerBatchStarted) {
+  override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit = {
     batchInfosStarted.add(batchStarted.batchInfo)
   }
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     batchInfosCompleted.add(batchCompleted.batchInfo)
   }
 }
@@ -307,15 +301,15 @@ class ReceiverInfoCollector extends StreamingListener {
   val stoppedReceiverStreamIds = new ConcurrentLinkedQueue[Int]
   val receiverErrors = new ConcurrentLinkedQueue[(Int, String, String)]
 
-  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
+  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
     startedReceiverStreamIds.add(receiverStarted.receiverInfo.streamId)
   }
 
-  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
+  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped): Unit = {
     stoppedReceiverStreamIds.add(receiverStopped.receiverInfo.streamId)
   }
 
-  override def onReceiverError(receiverError: StreamingListenerReceiverError) {
+  override def onReceiverError(receiverError: StreamingListenerReceiverError): Unit = {
     receiverErrors.add(((receiverError.receiverInfo.streamId,
       receiverError.receiverInfo.lastErrorMessage, receiverError.receiverInfo.lastError)))
   }
@@ -338,7 +332,7 @@ class OutputOperationInfoCollector extends StreamingListener {
 }
 
 class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_ONLY) with Logging {
-  def onStart() {
+  def onStart(): Unit = {
     Future {
       logInfo("Started receiver and sleeping")
       Thread.sleep(10)
@@ -349,7 +343,7 @@ class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_O
       stop("test stop error")
     }
   }
-  def onStop() { }
+  def onStop(): Unit = { }
 }
 
 /**
@@ -377,7 +371,7 @@ class StreamingContextStoppingCollector(val ssc: StreamingContext) extends Strea
 
   private var isFirstBatch = true
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     if (isFirstBatch) {
       // We should only call `ssc.stop()` in the first batch. Otherwise, it's possible that the main
       // thread is calling `ssc.stop()`, while StreamingContextStoppingCollector is also calling

@@ -26,53 +26,21 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.orc._
-import org.apache.orc.OrcConf.{COMPRESS, MAPRED_OUTPUT_SCHEMA}
+import org.apache.orc.{OrcUtils => _, _}
+import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
-
-private[sql] object OrcFileFormat {
-  private def checkFieldName(name: String): Unit = {
-    try {
-      TypeDescription.fromString(s"struct<$name:int>")
-    } catch {
-      case _: IllegalArgumentException =>
-        throw new AnalysisException(
-          s"""Column name "$name" contains invalid character(s).
-             |Please use alias to rename it.
-           """.stripMargin.split("\n").mkString(" ").trim)
-    }
-  }
-
-  def checkFieldNames(names: Seq[String]): Unit = {
-    names.foreach(checkFieldName)
-  }
-
-  def getQuotedSchemaString(dataType: DataType): String = dataType match {
-    case _: AtomicType => dataType.catalogString
-    case StructType(fields) =>
-      fields.map(f => s"`${f.name}`:${getQuotedSchemaString(f.dataType)}")
-        .mkString("struct<", ",", ">")
-    case ArrayType(elementType, _) =>
-      s"array<${getQuotedSchemaString(elementType)}>"
-    case MapType(keyType, valueType, _) =>
-      s"map<${getQuotedSchemaString(keyType)},${getQuotedSchemaString(valueType)}>"
-    case _ => // UDT and others
-      dataType.catalogString
-  }
-}
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * New ORC File Format based on Apache ORC.
@@ -94,7 +62,7 @@ class OrcFileFormat
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    OrcUtils.readSchema(sparkSession, files)
+    OrcUtils.inferSchema(sparkSession, files, options)
   }
 
   override def prepareWrite(
@@ -106,19 +74,19 @@ class OrcFileFormat
 
     val conf = job.getConfiguration
 
-    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, OrcFileFormat.getQuotedSchemaString(dataSchema))
-
     conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
 
     conf.asInstanceOf[JobConf]
       .setOutputFormat(classOf[org.apache.orc.mapred.OrcOutputFormat[OrcStruct]])
+
+    val batchSize = sparkSession.sessionState.conf.orcVectorizedWriterBatchSize
 
     new OutputWriterFactory {
       override def newInstance(
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(path, dataSchema, context)
+        new OrcOutputWriter(path, dataSchema, context, batchSize)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
@@ -135,8 +103,9 @@ class OrcFileFormat
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
     conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      schema.length <= conf.wholeStageMaxNumFields &&
-      schema.forall(_.dataType.isInstanceOf[AtomicType])
+      !WholeStageCodegenExec.isTooManyFields(conf, schema) &&
+      schema.forall(s => OrcUtils.supportColumnarReads(
+        s.dataType, sparkSession.sessionState.conf.orcVectorizedReaderNestedColumnEnabled))
   }
 
   override def isSplitable(
@@ -154,24 +123,18 @@ class OrcFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    if (sparkSession.sessionState.conf.orcFilterPushDown) {
-      OrcFilters.createFilter(dataSchema, filters).foreach { f =>
-        OrcInputFormat.setSearchArgument(hadoopConf, f, dataSchema.fieldNames)
-      }
-    }
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
     val sqlConf = sparkSession.sessionState.conf
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
     val capacity = sqlConf.orcVectorizedReaderBatchSize
 
-    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, resultSchemaString)
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
@@ -180,19 +143,31 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val reader = OrcFile.createReader(filePath, readerOptions)
+      val orcSchema =
+        Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions))(_.getSchema)
+      val resultedColPruneInfo = OrcUtils.requestedColumnIds(
+        isCaseSensitive, dataSchema, requiredSchema, orcSchema, conf)
 
-      val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-        isCaseSensitive, dataSchema, requiredSchema, reader, conf)
-
-      if (requestedColIdsOrEmptyFile.isEmpty) {
+      if (resultedColPruneInfo.isEmpty) {
         Iterator.empty
       } else {
-        val requestedColIds = requestedColIdsOrEmptyFile.get
+        // ORC predicate pushdown
+        if (orcFilterPushDown && filters.nonEmpty) {
+          val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
+          OrcFilters.createFilter(fileSchema, filters).foreach { f =>
+            OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
+          }
+        }
+
+        val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
+        val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
+          dataSchema, resultSchema, partitionSchema, conf)
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
 
+        val includeColumns = requestedColIds.filter(_ != -1).sorted.mkString(",")
+        taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute, includeColumns)
         val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
@@ -224,7 +199,7 @@ class OrcFileFormat
 
           val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-          val deserializer = new OrcDeserializer(dataSchema, requiredSchema, requestedColIds)
+          val deserializer = new OrcDeserializer(requiredSchema, requestedColIds)
 
           if (partitionSchema.length == 0) {
             iter.map(value => unsafeProjection(deserializer.deserialize(value)))

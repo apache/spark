@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.KVIndex
 
 private[spark] case class AppStatusStoreMetadata(version: Long)
@@ -57,7 +58,7 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
   private def active: Boolean = info.isActive
 
   @JsonIgnore @KVIndex("host")
-  val host: String = info.hostPort.split(":")(0)
+  val host: String = Utils.parseHostPort(info.hostPort)._1
 
 }
 
@@ -94,7 +95,7 @@ private[spark] class StageDataWrapper(
   private def active: Boolean = info.status == StageStatus.ACTIVE
 
   @JsonIgnore @KVIndex("completionTime")
-  private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
+  def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
 }
 
 /**
@@ -128,7 +129,7 @@ private[spark] object TaskIndexNames {
   final val SER_TIME = "rst"
   final val SHUFFLE_LOCAL_BLOCKS = "slbl"
   final val SHUFFLE_READ_RECORDS = "srr"
-  final val SHUFFLE_READ_TIME = "srt"
+  final val SHUFFLE_READ_FETCH_WAIT_TIME = "srt"
   final val SHUFFLE_REMOTE_BLOCKS = "srbl"
   final val SHUFFLE_REMOTE_READS = "srby"
   final val SHUFFLE_REMOTE_READS_TO_DISK = "srbd"
@@ -140,6 +141,7 @@ private[spark] object TaskIndexNames {
   final val STAGE = "stage"
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
+  final val TASK_PARTITION_ID = "partid"
   final val COMPLETION_TIME = "ct"
 }
 
@@ -154,12 +156,16 @@ private[spark] object TaskIndexNames {
 private[spark] class TaskDataWrapper(
     // Storing this as an object actually saves memory; it's also used as the key in the in-memory
     // store, so in that case you'd save the extra copy of the value here.
-    @KVIndexParam
+    @KVIndexParam(parent = TaskIndexNames.STAGE)
     val taskId: JLong,
     @KVIndexParam(value = TaskIndexNames.TASK_INDEX, parent = TaskIndexNames.STAGE)
     val index: Int,
     @KVIndexParam(value = TaskIndexNames.ATTEMPT, parent = TaskIndexNames.STAGE)
     val attempt: Int,
+    @KVIndexParam(value = TaskIndexNames.TASK_PARTITION_ID, parent = TaskIndexNames.STAGE)
+    // Different kvstores have different default values (eg 0 or -1),
+    // thus we use the default value here for backwards compatibility.
+    val partitionId: Int = -1,
     @KVIndexParam(value = TaskIndexNames.LAUNCH_TIME, parent = TaskIndexNames.STAGE)
     val launchTime: Long,
     val resultFetchStart: Long,
@@ -177,10 +183,13 @@ private[spark] class TaskDataWrapper(
     val accumulatorUpdates: Seq[AccumulableInfo],
     val errorMessage: Option[String],
 
+    val hasMetrics: Boolean,
     // The following is an exploded view of a TaskMetrics API object. This saves 5 objects
-    // (= 80 bytes of Java object overhead) per instance of this wrapper. If the first value
-    // (executorDeserializeTime) is -1L, it means the metrics for this task have not been
-    // recorded.
+    // (= 80 bytes of Java object overhead) per instance of this wrapper. Non successful
+    // tasks' metrics will have negative values in `TaskDataWrapper`. `TaskData` will have
+    // actual metric values. To recover the actual metric value from `TaskDataWrapper`,
+    // need use `getMetricValue` method. If `hasMetrics` is false, it means the metrics
+    // for this task have not been recorded.
     @KVIndexParam(value = TaskIndexNames.DESER_TIME, parent = TaskIndexNames.STAGE)
     val executorDeserializeTime: Long,
     @KVIndexParam(value = TaskIndexNames.DESER_CPU_TIME, parent = TaskIndexNames.STAGE)
@@ -213,7 +222,8 @@ private[spark] class TaskDataWrapper(
     val shuffleRemoteBlocksFetched: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
     val shuffleLocalBlocksFetched: Long,
-    @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_TIME, parent = TaskIndexNames.STAGE)
+    @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_FETCH_WAIT_TIME,
+      parent = TaskIndexNames.STAGE)
     val shuffleFetchWaitTime: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_REMOTE_READS, parent = TaskIndexNames.STAGE)
     val shuffleRemoteBytesRead: Long,
@@ -233,39 +243,46 @@ private[spark] class TaskDataWrapper(
     val stageId: Int,
     val stageAttemptId: Int) {
 
-  def hasMetrics: Boolean = executorDeserializeTime >= 0
+  // SPARK-26260: To handle non successful tasks metrics (Running, Failed, Killed).
+  private def getMetricValue(metric: Long): Long = {
+    if (status != "SUCCESS") {
+      math.abs(metric + 1)
+    } else {
+      metric
+    }
+  }
 
   def toApi: TaskData = {
     val metrics = if (hasMetrics) {
       Some(new TaskMetrics(
-        executorDeserializeTime,
-        executorDeserializeCpuTime,
-        executorRunTime,
-        executorCpuTime,
-        resultSize,
-        jvmGcTime,
-        resultSerializationTime,
-        memoryBytesSpilled,
-        diskBytesSpilled,
-        peakExecutionMemory,
+        getMetricValue(executorDeserializeTime),
+        getMetricValue(executorDeserializeCpuTime),
+        getMetricValue(executorRunTime),
+        getMetricValue(executorCpuTime),
+        getMetricValue(resultSize),
+        getMetricValue(jvmGcTime),
+        getMetricValue(resultSerializationTime),
+        getMetricValue(memoryBytesSpilled),
+        getMetricValue(diskBytesSpilled),
+        getMetricValue(peakExecutionMemory),
         new InputMetrics(
-          inputBytesRead,
-          inputRecordsRead),
+          getMetricValue(inputBytesRead),
+          getMetricValue(inputRecordsRead)),
         new OutputMetrics(
-          outputBytesWritten,
-          outputRecordsWritten),
+          getMetricValue(outputBytesWritten),
+          getMetricValue(outputRecordsWritten)),
         new ShuffleReadMetrics(
-          shuffleRemoteBlocksFetched,
-          shuffleLocalBlocksFetched,
-          shuffleFetchWaitTime,
-          shuffleRemoteBytesRead,
-          shuffleRemoteBytesReadToDisk,
-          shuffleLocalBytesRead,
-          shuffleRecordsRead),
+          getMetricValue(shuffleRemoteBlocksFetched),
+          getMetricValue(shuffleLocalBlocksFetched),
+          getMetricValue(shuffleFetchWaitTime),
+          getMetricValue(shuffleRemoteBytesRead),
+          getMetricValue(shuffleRemoteBytesReadToDisk),
+          getMetricValue(shuffleLocalBytesRead),
+          getMetricValue(shuffleRecordsRead)),
         new ShuffleWriteMetrics(
-          shuffleBytesWritten,
-          shuffleWriteTime,
-          shuffleRecordsWritten)))
+          getMetricValue(shuffleBytesWritten),
+          getMetricValue(shuffleWriteTime),
+          getMetricValue(shuffleRecordsWritten))))
     } else {
       None
     }
@@ -274,6 +291,7 @@ private[spark] class TaskDataWrapper(
       taskId,
       index,
       attempt,
+      partitionId,
       new Date(launchTime),
       if (resultFetchStart > 0L) Some(new Date(resultFetchStart)) else None,
       if (duration > 0L) Some(duration) else None,
@@ -296,8 +314,10 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SCHEDULER_DELAY, parent = TaskIndexNames.STAGE)
   def schedulerDelay: Long = {
     if (hasMetrics) {
-      AppStatusUtils.schedulerDelay(launchTime, resultFetchStart, duration, executorDeserializeTime,
-        resultSerializationTime, executorRunTime)
+      AppStatusUtils.schedulerDelay(launchTime, resultFetchStart, duration,
+        getMetricValue(executorDeserializeTime),
+        getMetricValue(resultSerializationTime),
+        getMetricValue(executorRunTime))
     } else {
       -1L
     }
@@ -362,6 +382,13 @@ private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
 
 }
 
+private[spark] class ResourceProfileWrapper(val rpInfo: ResourceProfileInfo) {
+
+  @JsonIgnore @KVIndex
+  def id: Int = rpInfo.id
+
+}
+
 private[spark] class ExecutorStageSummaryWrapper(
     val stageId: Int,
     val stageAttemptId: Int,
@@ -377,6 +404,18 @@ private[spark] class ExecutorStageSummaryWrapper(
   @JsonIgnore
   def id: Array[Any] = _id
 
+}
+
+private[spark] class SpeculationStageSummaryWrapper(
+    val stageId: Int,
+    val stageAttemptId: Int,
+    val info: SpeculationStageSummary) {
+
+  @JsonIgnore @KVIndex("stage")
+  private def stage: Array[Int] = Array(stageId, stageAttemptId)
+
+  @KVIndex
+  private[this] val id: Array[Int] = Array(stageId, stageAttemptId)
 }
 
 private[spark] class StreamBlockData(
@@ -402,7 +441,9 @@ private[spark] class RDDOperationClusterWrapper(
     val childClusters: Seq[RDDOperationClusterWrapper]) {
 
   def toRDDOperationCluster(): RDDOperationCluster = {
-    val cluster = new RDDOperationCluster(id, name)
+    val isBarrier = childNodes.exists(_.barrier)
+    val name = if (isBarrier) this.name + "\n(barrier mode)" else this.name
+    val cluster = new RDDOperationCluster(id, isBarrier, name)
     childNodes.foreach(cluster.attachChildNode)
     childClusters.foreach { child =>
       cluster.attachChildCluster(child.toRDDOperationCluster())
@@ -452,6 +493,7 @@ private[spark] class CachedQuantile(
     val taskCount: Long,
 
     // The following fields are an exploded view of a single entry for TaskMetricDistributions.
+    val duration: Double,
     val executorDeserializeTime: Double,
     val executorDeserializeCpuTime: Double,
     val executorRunTime: Double,
@@ -489,5 +531,18 @@ private[spark] class CachedQuantile(
 
   @KVIndex("stage") @JsonIgnore
   def stage: Array[Int] = Array(stageId, stageAttemptId)
+
+}
+
+private[spark] class ProcessSummaryWrapper(val info: ProcessSummary) {
+
+  @JsonIgnore @KVIndex
+  private def id: String = info.id
+
+  @JsonIgnore @KVIndex("active")
+  private def active: Boolean = info.isActive
+
+  @JsonIgnore @KVIndex("host")
+  val host: String = Utils.parseHostPort(info.hostPort)._1
 
 }

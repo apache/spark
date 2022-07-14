@@ -22,14 +22,14 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.4.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>spark-hive-thriftserver_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Hive Thrift Server</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>hive-thriftserver</sbt.project.name>
   </properties>
@@ -48,6 +48,26 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-hive_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <!-- #if scala-2.13 --><!--
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+    </dependency>
+    --><!-- #endif scala-2.13 -->
+    <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>
@@ -62,6 +82,10 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-beeline</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-service-rpc</artifactId>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
@@ -81,7 +105,7 @@
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>selenium-htmlunit-driver</artifactId>
+      <artifactId>htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -106,34 +130,22 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
-
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>net.sf.jpam</groupId>
       <artifactId>jpam</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-cli</groupId>
+      <artifactId>commons-cli</artifactId>
     </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <plugins>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>add-source</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>src/gen/</source>
-              </sources>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
   </build>
 </project>

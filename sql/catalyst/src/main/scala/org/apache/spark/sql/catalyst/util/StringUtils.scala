@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.regex.{Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.lang3.{ StringUtils => ACLStringUtils }
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
@@ -39,24 +40,25 @@ object StringUtils extends Logging {
    * throw an [[AnalysisException]].
    *
    * @param pattern the SQL pattern to convert
+   * @param escapeChar the escape string contains one character.
    * @return the equivalent Java regular expression of the pattern
    */
-  def escapeLikeRegex(pattern: String): String = {
-    val in = pattern.toIterator
+  def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
+    val in = pattern.iterator
     val out = new StringBuilder()
 
-    def fail(message: String) = throw new AnalysisException(
-      s"the pattern '$pattern' is invalid, $message")
+    def fail(message: String) = throw QueryCompilationErrors.invalidPatternError(pattern, message)
 
     while (in.hasNext) {
       in.next match {
-        case '\\' if in.hasNext =>
+        case c1 if c1 == escapeChar && in.hasNext =>
           val c = in.next
           c match {
-            case '_' | '%' | '\\' => out ++= Pattern.quote(Character.toString(c))
+            case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
+            case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
             case _ => fail(s"the escape character is not allowed to precede '$c'")
           }
-        case '\\' => fail("it is not allowed to end with the escape character")
+        case c if c == escapeChar => fail("it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
         case c => out ++= Pattern.quote(Character.toString(c))
@@ -65,12 +67,22 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
-  private[this] val trueStrings = Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
-  private[this] val falseStrings = Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
+  private[this] val trueStrings =
+    Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
+
+  private[this] val falseStrings =
+    Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
+
+  private[spark] def orderStringsBySimilarity(
+      baseString: String,
+      testStrings: Seq[String]): Seq[String] = {
+    testStrings.sortBy(ACLStringUtils.getLevenshteinDistance(_, baseString))
+  }
 
   // scalastyle:off caselocale
-  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.toLowerCase)
-  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.toLowerCase)
+  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.trimAll().toLowerCase)
+
+  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.trimAll().toLowerCase)
   // scalastyle:on caselocale
 
   /**
@@ -118,7 +130,11 @@ object StringUtils extends Logging {
           val stringToAppend = if (available >= sLen) s else s.substring(0, available)
           strings.append(stringToAppend)
         }
-        length += sLen
+
+        // Keeps the total length of appended strings. Note that we need to cap the length at
+        // `ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH`; otherwise, we will overflow
+        // length causing StringIndexOutOfBoundsException in the substring call above.
+        length = Math.min(length.toLong + sLen, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH).toInt
       }
     }
 
