@@ -79,3 +79,15 @@ private[spark] class SparkArithmeticException(errorClass: String, messageParamet
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
+
+private[spark] class SparkRuntimeException(
+    errorClass: String,
+    messageParameters: Array[String],
+    cause: Throwable = null)
+  extends RuntimeException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters), cause)
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}

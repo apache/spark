@@ -33,6 +33,10 @@
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
   },
+  "INVALID_PARAMETER_VALUE" : {
+    "message" : [ "The value of parameter(s) '%s' in `%s` is invalid: '%s'" ],
+    "sqlState" : "22023"
+  },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
     "sqlState" : "42000"
