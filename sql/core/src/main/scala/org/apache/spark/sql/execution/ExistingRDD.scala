@@ -98,6 +98,11 @@ case class LogicalRDD(
     override val isStreaming: Boolean = false)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
+  originLogicalPlan.foreach { originPlan =>
+    assert(output == originPlan.output, "The output columns are expected to the same for output " +
+      "and originLogicalPlan")
+  }
+
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
   override def newInstance(): LogicalRDD.this.type = {
@@ -118,7 +123,7 @@ case class LogicalRDD(
 
     val rewrittenOriginLogicalPlan = originLogicalPlan.map { plan =>
       val projectList = output.map { attr =>
-        Alias(attr, attr.name)(exprId = rewrite.getOrElse(attr, attr).exprId)
+        Alias(attr, attr.name)(exprId = rewrite(attr).exprId)
       }
       Project(projectList, plan)
     }
