@@ -95,11 +95,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def unpivotRequiresValueColumns(ids: Seq[NamedExpression]): Throwable = {
     new AnalysisException(
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      messageParameters = Array(ids.mkString(", ")))
+      messageParameters = Array(ids.map(id => toSQLId(id.toString)).mkString(", ")))
   }
 
   def unpivotValDataTypeMismatchError(values: Seq[NamedExpression]): Throwable = {
-    val dataTypes = values.map(_.dataType).toSet
+    val dataTypes = values.map(_.dataType).toSet.map((dt: DataType) => toSQLType(dt))
     new AnalysisException(
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       messageParameters = Array(dataTypes.mkString(", ")))
