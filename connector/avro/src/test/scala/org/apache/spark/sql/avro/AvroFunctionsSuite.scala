@@ -238,4 +238,21 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(message.contains("Only UNION of a null type and a non-null type is supported"))
     }
   }
+
+  test("SPARK-39775: Disable validate default values when parsing Avro schemas") {
+    val avroTypeStruct = s"""
+      |{
+      |  "type": "record",
+      |  "name": "struct",
+      |  "fields": [
+      |    {"name": "id", "type": "long", "default": null}
+      |  ]
+      |}
+    """.stripMargin
+
+    val df = spark.range(5).select(struct('id).as("struct"))
+    val avroStructDF = df.select(functions.to_avro('struct, avroTypeStruct).as("avro"))
+
+    checkAnswer(avroStructDF.select(functions.from_avro('avro, avroTypeStruct)), df)
+  }
 }

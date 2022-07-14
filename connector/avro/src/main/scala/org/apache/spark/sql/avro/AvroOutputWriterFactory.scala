@@ -36,7 +36,8 @@ private[sql] class AvroOutputWriterFactory(
     avroSchemaAsJsonString: String,
     positionalFieldMatching: Boolean) extends OutputWriterFactory {
 
-  private lazy val avroSchema = new Schema.Parser().parse(avroSchemaAsJsonString)
+  private lazy val avroSchema =
+    new Schema.Parser().setValidateDefaults(false).parse(avroSchemaAsJsonString)
 
   override def getFileExtension(context: TaskAttemptContext): String = ".avro"
 
