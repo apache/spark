@@ -92,6 +92,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         pivotVal.toString, pivotVal.dataType.simpleString, pivotCol.dataType.catalogString))
   }
 
+  def unpivotRequiresValueColumns(ids: Seq[NamedExpression]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
+      messageParameters = Array(ids.mkString(", ")))
+  }
+
+  def unpivotValDataTypeMismatchError(values: Seq[NamedExpression]): Throwable = {
+    val dataTypes = values.map(_.dataType).toSet
+    new AnalysisException(
+      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
+      messageParameters = Array(dataTypes.mkString(", ")))
+  }
+
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",

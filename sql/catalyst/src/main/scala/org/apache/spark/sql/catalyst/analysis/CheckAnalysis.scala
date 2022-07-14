@@ -55,10 +55,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     throw new AnalysisException(msg)
   }
 
-  protected def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
-    throw new AnalysisException(errorClass, messageParameters)
-  }
-
   protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
     exprs.flatMap(_.collect {
       case e: Generator => e
@@ -428,12 +424,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           // see Analyzer.ResolveMelt
           case m: Melt if m.childrenResolved && m.ids.forall(_.resolved) && m.values.isEmpty =>
-            failAnalysis("UNPIVOT_REQUIRES_VALUE_COLUMNS", Array(m.ids.mkString(", ")))
+            throw QueryCompilationErrors.unpivotRequiresValueColumns(m.ids)
           // see TypeCoercionBase.MeltCoercion
           case m: Melt if m.values.nonEmpty && m.values.forall(_.resolved) && m.valueType.isEmpty =>
-            failAnalysis("UNPIVOT_VALUE_DATA_TYPE_MISMATCH", Array(
-              m.values.map(_.dataType).toSet.mkString(", ")
-            ))
+            throw QueryCompilationErrors.unpivotValDataTypeMismatchError(m.values)
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
