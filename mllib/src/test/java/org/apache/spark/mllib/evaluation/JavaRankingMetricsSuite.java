@@ -22,7 +22,9 @@ import java.util.Arrays;
 import java.util.List;
 
 import scala.Tuple2;
+import scala.Tuple3;
 import scala.Tuple2$;
+import scala.Tuple3$;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -32,6 +34,8 @@ import org.apache.spark.api.java.JavaRDD;
 
 public class JavaRankingMetricsSuite extends SharedSparkSession {
   private transient JavaRDD<Tuple2<List<Integer>, List<Integer>>> predictionAndLabels;
+  private transient JavaRDD<Tuple3<List<Integer>, List<Integer>, List<Double>>>
+    predictionLabelsAndRelevance;
 
   @Override
   public void setUp() throws IOException {
@@ -43,6 +47,22 @@ public class JavaRankingMetricsSuite extends SharedSparkSession {
         Arrays.asList(4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Arrays.asList(1, 2, 3)),
       Tuple2$.MODULE$.apply(
         Arrays.asList(1, 2, 3, 4, 5), Arrays.<Integer>asList())), 2);
+    predictionLabelsAndRelevance = jsc.parallelize(Arrays.asList(
+      Tuple3$.MODULE$.apply(
+        Arrays.asList(1, 6, 2, 7, 8, 3, 9, 10, 4, 5),
+        Arrays.asList(1, 2, 3, 4, 5),
+        Arrays.asList(3.0, 2.0, 1.0, 1.0, 1.0)
+      ),
+      Tuple3$.MODULE$.apply(
+        Arrays.asList(4, 1, 5, 6, 2, 7, 3, 8, 9, 10),
+        Arrays.asList(1, 2, 3),
+        Arrays.asList(2.0, 0.0, 0.0)
+      ),
+      Tuple3$.MODULE$.apply(
+        Arrays.asList(1, 2, 3, 4, 5),
+        Arrays.<Integer>asList(),
+        Arrays.<Double>asList()
+      )), 3);
   }
 
   @Test
@@ -50,5 +70,12 @@ public class JavaRankingMetricsSuite extends SharedSparkSession {
     RankingMetrics<?> metrics = RankingMetrics.of(predictionAndLabels);
     Assert.assertEquals(0.355026, metrics.meanAveragePrecision(), 1e-5);
     Assert.assertEquals(0.75 / 3.0, metrics.precisionAt(4), 1e-5);
+  }
+
+  @Test
+  public void rankingMetricsWithRelevance() {
+    RankingMetrics<?> metrics = RankingMetrics.of(predictionLabelsAndRelevance);
+    Assert.assertEquals(0.355026, metrics.meanAveragePrecision(), 1e-5);
+    Assert.assertEquals(0.511959, metrics.ndcgAt(3), 1e-5);
   }
 }

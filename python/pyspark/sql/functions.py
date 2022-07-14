@@ -141,6 +141,7 @@ def lit(col: Any) -> Column:
 def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+
     Examples
     --------
     >>> col('x')
@@ -1240,6 +1241,17 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     -----
     The function is non-deterministic because its results depends on the order of the
     rows which may be non-deterministic after a shuffle.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.groupby("name").agg(first("age")).orderBy("name").show()
+    +-----+----------+
+    | name|first(age)|
+    +-----+----------+
+    |Alice|         2|
+    |  Bob|         5|
+    +-----+----------+
     """
     return _invoke_function("first", _to_java_column(col), ignorenulls)
 
@@ -2507,19 +2519,25 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
 
 def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
+    Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
+    to a timestamp.
+
     .. versionadded:: 3.1.0
 
     Examples
     --------
     >>> from pyspark.sql.functions import timestamp_seconds
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
     >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).show()
     +-------------------+
     |                 ts|
     +-------------------+
-    |2008-12-25 07:30:00|
+    |2008-12-25 15:30:00|
     +-------------------+
+    >>> time_df.select(timestamp_seconds('unix_time').alias('ts')).printSchema()
+    root
+     |-- ts: timestamp (nullable = true)
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
 

@@ -68,10 +68,10 @@ class OptimizeLimitZeroSuite extends PlanTest {
 
   Seq(
     (Inner, LocalRelation($"a".int, $"b".int)),
-    (LeftOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1)
+    (LeftOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
       .analyze),
     (RightOuter, LocalRelation($"a".int, $"b".int)),
-    (FullOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1)
+    (FullOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
       .analyze)
   ).foreach { case (jt, correctAnswer) =>
       test(s"Limit 0: for join type $jt") {

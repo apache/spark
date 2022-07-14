@@ -139,11 +139,11 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
         i += 1
       }
       if (leftArray.numElements() < rightArray.numElements()) {
-        return -1
+        -1
       } else if (leftArray.numElements() > rightArray.numElements()) {
-        return 1
+        1
       } else {
-        return 0
+        0
       }
     }
   }

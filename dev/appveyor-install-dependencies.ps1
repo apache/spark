@@ -81,7 +81,7 @@ if (!(Test-Path $tools)) {
 # ========================== Maven
 # Push-Location $tools
 #
-# $mavenVer = "3.8.4"
+# $mavenVer = "3.8.6"
 # Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
 #
 # # extract
@@ -97,7 +97,7 @@ if (!(Test-Path $tools)) {
 # ========================== SBT
 Push-Location $tools
 
-$sbtVer = "1.6.2"
+$sbtVer = "1.7.1"
 Start-FileDownload "https://github.com/sbt/sbt/releases/download/v$sbtVer/sbt-$sbtVer.zip" "sbt.zip"
 
 # extract
@@ -129,7 +129,7 @@ $env:PATH = "$env:HADOOP_HOME\bin;" + $env:PATH
 Pop-Location
 
 # ========================== R
-$rVer = "4.0.2"
+$rVer = "4.2.0"
 $rToolsVer = "4.0.2"
 
 InstallR

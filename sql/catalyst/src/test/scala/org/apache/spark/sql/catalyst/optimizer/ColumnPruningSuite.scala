@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.NestedColumnAliasingSuite.collectGeneratedAliases
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -288,14 +287,14 @@ class ColumnPruningSuite extends PlanTest {
 
     val originalQuery =
       testRelation
-        .groupBy($"a")($"a" as Symbol("c"), count($"b"))
+        .groupBy($"a")($"a" as "c", count($"b"))
         .select($"c")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select($"a")
-        .groupBy($"a")($"a" as Symbol("c")).analyze
+        .groupBy($"a")($"a" as "c").analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -320,7 +319,7 @@ class ColumnPruningSuite extends PlanTest {
 
   test("push down project past sort") {
     val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
-    val x = testRelation.subquery(Symbol("x"))
+    val x = testRelation.subquery("x")
 
     // push down valid
     val originalQuery = {
@@ -358,7 +357,7 @@ class ColumnPruningSuite extends PlanTest {
     val winExpr = windowExpr(count($"d"), winSpec)
 
     val originalQuery = input.groupBy($"a", $"c", $"d")($"a", $"c", $"d",
-      winExpr.as(Symbol("window"))).select($"a", $"c")
+      winExpr.as("window")).select($"a", $"c")
     val correctAnswer = input.select($"a", $"c", $"d").groupBy($"a", $"c", $"d")($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -371,11 +370,11 @@ class ColumnPruningSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     val originalQuery =
-      input.select($"a", $"b", $"c", $"d", winExpr.as(Symbol("window")))
+      input.select($"a", $"b", $"c", $"d", winExpr.as("window"))
         .where($"window" > 1).select($"a", $"c")
     val correctAnswer =
       input.select($"a", $"b", $"c")
-        .window(winExpr.as(Symbol("window")) :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+        .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
         .where($"window" > 1).select($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -388,7 +387,7 @@ class ColumnPruningSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     val originalQuery = input.select($"a", $"b", $"c", $"d",
-      winExpr.as(Symbol("window"))).select($"a", $"c")
+      winExpr.as("window")).select($"a", $"c")
     val correctAnswer = input.select($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -437,16 +436,16 @@ class ColumnPruningSuite extends PlanTest {
 
   test("push project down into sample") {
     val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
-    val x = testRelation.subquery(Symbol("x"))
+    val x = testRelation.subquery("x")
 
     val query1 = Sample(0.0, 0.6, false, 11L, x).select($"a")
     val optimized1 = Optimize.execute(query1.analyze)
     val expected1 = Sample(0.0, 0.6, false, 11L, x.select($"a"))
     comparePlans(optimized1, expected1.analyze)
 
-    val query2 = Sample(0.0, 0.6, false, 11L, x).select($"a" as Symbol("aa"))
+    val query2 = Sample(0.0, 0.6, false, 11L, x).select($"a" as "aa")
     val optimized2 = Optimize.execute(query2.analyze)
-    val expected2 = Sample(0.0, 0.6, false, 11L, x.select($"a" as Symbol("aa")))
+    val expected2 = Sample(0.0, 0.6, false, 11L, x.select($"a" as "aa"))
     comparePlans(optimized2, expected2.analyze)
   }
 
@@ -465,34 +464,21 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
   }
 
-  test("SPARK-38531: Nested field pruning for Project and PosExplode") {
-    val name = StructType.fromDDL("first string, middle string, last string")
-    val employer = StructType.fromDDL("id int, company struct<name:string, address:string>")
-    val contact = LocalRelation(
-      'id.int,
-      'name.struct(name),
-      'address.string,
-      'friends.array(name),
-      'relatives.map(StringType, name),
-      'employer.struct(employer))
+  test("SPARK-39445: Remove the window if windowExpressions is empty in column pruning") {
+    object CustomOptimize extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("Column pruning", FixedPoint(10),
+        ColumnPruning,
+        CollapseProject) :: Nil
+    }
 
-    val query = contact
-      .select('id, 'friends)
-      .generate(PosExplode('friends))
-      .select('col.getField("middle"))
-      .analyze
-    val optimized = Optimize.execute(query)
+    val relation = LocalRelation($"a".int, $"b".string, $"c".double, $"d".int)
+    val winSpec = windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count($"b"), winSpec)
 
-    val aliases = collectGeneratedAliases(optimized)
+    val originalQuery = relation.select($"a", $"b", $"c", $"d",
+      winExpr.as("window")).select($"a", $"c")
+    val correctAnswer = relation.select($"a", $"c")
 
-    val expected = contact
-      // GetStructField is pushed down, unused id column is pruned.
-      .select(
-        'friends.getField("middle").as(aliases(0)))
-      .generate(PosExplode($"${aliases(0)}"),
-        unrequiredChildIndex = Seq(0)) // unrequiredChildIndex is added.
-      .select('col.as("col.middle"))
-      .analyze
-    comparePlans(optimized, expected)
+    comparePlans(CustomOptimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }

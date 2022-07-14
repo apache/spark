@@ -33,6 +33,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.CatalystIdentifier._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
@@ -346,7 +347,7 @@ class SessionCatalog(
 
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
+    val tableIdentifier = attachSessionCatalog(TableIdentifier(table, Some(db)))
     validateName(table)
 
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
@@ -412,7 +413,7 @@ class SessionCatalog(
   def alterTable(tableDefinition: CatalogTable): Unit = {
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
+    val tableIdentifier = attachSessionCatalog(TableIdentifier(table, Some(db)))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
@@ -443,7 +444,7 @@ class SessionCatalog(
       newDataSchema: StructType): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
+    val tableIdentifier = attachSessionCatalog(TableIdentifier(table, Some(db)))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
 
@@ -470,7 +471,7 @@ class SessionCatalog(
   def alterTableStats(identifier: TableIdentifier, newStats: Option[CatalogStatistics]): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
+    val tableIdentifier = attachSessionCatalog(TableIdentifier(table, Some(db)))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
     externalCatalog.alterTableStats(db, table, newStats)
@@ -965,6 +966,10 @@ class SessionCatalog(
     isTempView(nameParts.asTableIdentifier)
   }
 
+  def isGlobalTempViewDB(dbName: String): Boolean = {
+    globalTempViewManager.database.equalsIgnoreCase(dbName)
+  }
+
   def lookupTempView(name: TableIdentifier): Option[View] = {
     val tableName = formatTableName(name.table)
     if (name.database.isEmpty) {
@@ -1361,7 +1366,8 @@ class SessionCatalog(
   def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
     val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
     requireDbExists(db)
-    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
+    val identifier = attachSessionCatalog(
+      FunctionIdentifier(funcDefinition.identifier.funcName, Some(db)))
     val newFuncDefinition = funcDefinition.copy(identifier = identifier)
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
@@ -1377,7 +1383,7 @@ class SessionCatalog(
   def dropFunction(name: FunctionIdentifier, ignoreIfNotExists: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     requireDbExists(db)
-    val identifier = name.copy(database = Some(db))
+    val identifier = attachSessionCatalog(name.copy(database = Some(db)))
     if (functionExists(identifier)) {
       if (functionRegistry.functionExists(identifier)) {
         // If we have loaded this function into the FunctionRegistry,
@@ -1399,7 +1405,8 @@ class SessionCatalog(
   def alterFunction(funcDefinition: CatalogFunction): Unit = {
     val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
     requireDbExists(db)
-    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
+    val identifier = attachSessionCatalog(
+      FunctionIdentifier(funcDefinition.identifier.funcName, Some(db)))
     val newFuncDefinition = funcDefinition.copy(identifier = identifier)
     if (functionExists(identifier)) {
       if (functionRegistry.functionExists(identifier)) {
@@ -1650,7 +1657,7 @@ class SessionCatalog(
    */
   def lookupPersistentFunction(name: FunctionIdentifier): ExpressionInfo = {
     val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName)
-    val qualifiedName = name.copy(database = database)
+    val qualifiedName = attachSessionCatalog(name.copy(database = database))
     functionRegistry.lookupFunction(qualifiedName)
       .orElse(tableFunctionRegistry.lookupFunction(qualifiedName))
       .getOrElse {
@@ -1794,10 +1801,17 @@ class SessionCatalog(
     functions.map {
       case f if FunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
       case f if TableFunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
-      case f => (f, "USER")
+      case f => (attachSessionCatalog(f), "USER")
     }.distinct
   }
 
+  /**
+   * List all temporary functions.
+   */
+  def listTemporaryFunctions(): Seq[FunctionIdentifier] = {
+    (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
+      .filter(isTemporaryFunction)
+  }
 
   // -----------------
   // | Other methods |
@@ -1818,13 +1832,10 @@ class SessionCatalog(
     listTables(DEFAULT_DATABASE).foreach { table =>
       dropTable(table, ignoreIfNotExists = false, purge = false)
     }
-    listFunctions(DEFAULT_DATABASE).map(_._1).foreach { func =>
-      if (func.database.isDefined) {
-        dropFunction(func, ignoreIfNotExists = false)
-      } else {
-        dropTempFunction(func.funcName, ignoreIfNotExists = false)
-      }
-    }
+    // Temp functions are dropped below, we only need to drop permanent functions here.
+    externalCatalog.listFunctions(DEFAULT_DATABASE, "*").map { f =>
+      FunctionIdentifier(f, Some(DEFAULT_DATABASE))
+    }.foreach(dropFunction(_, ignoreIfNotExists = false))
     clearTempTables()
     globalTempViewManager.clear()
     functionRegistry.clear()

@@ -62,7 +62,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   test("check for invalid plan after execution of rule - special expression in wrong operator") {
     val analyzed =
-      Aggregate(Nil, Seq[NamedExpression](max($"id") as Symbol("m")),
+      Aggregate(Nil, Seq[NamedExpression](max($"id") as "m"),
         LocalRelation($"id".long)).analyze
     assert(analyzed.resolved)
 
@@ -80,7 +80,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   test("check for invalid plan before execution of any rule") {
     val analyzed =
-      Aggregate(Nil, Seq[NamedExpression](max($"id") as Symbol("m")),
+      Aggregate(Nil, Seq[NamedExpression](max($"id") as "m"),
         LocalRelation($"id".long)).analyze
     val invalidPlan = OptimizeRuleBreakSI.apply(analyzed)
 

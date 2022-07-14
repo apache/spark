@@ -20,15 +20,13 @@ package org.apache.spark.scheduler
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{never, verify, when}
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.BeforeAndAfterEach
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.util.ManualClock
 
-class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with MockitoSugar
-    with LocalSparkContext {
+class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSparkContext {
 
   private val clock = new ManualClock(0)
 

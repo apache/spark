@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
@@ -28,7 +29,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
-import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
+import org.apache.parquet.filter2.predicate.Operators.{Column => _, Eq, Gt, GtEq, Lt, LtEq, NotEq, UserDefinedByInstance}
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetOutputFormat}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
@@ -1316,6 +1317,34 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
+  test("SPARK-39393: Do not push down predicate filters for repeated primitive fields") {
+    import ParquetCompatibilityTest._
+    withTempDir { dir =>
+      val protobufParquetFilePath = new File(dir, "protobuf-parquet").getCanonicalPath
+
+      val protobufSchema =
+        """message protobuf_style {
+          |  repeated int32 f;
+          |}
+        """.stripMargin
+
+      writeDirect(protobufParquetFilePath, protobufSchema, { rc =>
+        rc.message {
+          rc.field("f", 0) {
+              rc.addInteger(1)
+              rc.addInteger(2)
+          }
+        }
+      })
+
+      // If the "isnotnull(f)" filter gets pushed down, this query will throw an exception
+      // since column "f" is repeated primitive column in the Parquet file.
+      checkAnswer(
+        spark.read.parquet(dir.getCanonicalPath).filter("isnotnull(f)"),
+        Seq(Row(Seq(1, 2))))
+    }
+  }
+
   test("Filters should be pushed down for vectorized Parquet reader at row group level") {
     import testImplicits._
 
@@ -2126,7 +2155,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 
       query.queryExecution.optimizedPlan.collectFirst {
         case PhysicalOperation(_, filters,
-            DataSourceV2ScanRelation(_, scan: ParquetScan, _, _)) =>
+            DataSourceV2ScanRelation(_, scan: ParquetScan, _, _, _)) =>
           assert(filters.nonEmpty, "No filter is analyzed from the given query")
           val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter(_, true)).toArray
           val pushedFilters = scan.pushedFilters

@@ -39,7 +39,7 @@ case class ParquetScanBuilder(
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema)
-    with SupportsPushDownAggregates{
+    with SupportsPushDownAggregates {
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.

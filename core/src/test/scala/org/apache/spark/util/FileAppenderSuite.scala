@@ -34,10 +34,10 @@ import org.mockito.Mockito.{atLeast, mock, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config
 import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
-class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
 
   val testFile = new File(Utils.createTempDir(), "FileAppenderSuite-test").getAbsoluteFile
 
@@ -178,7 +178,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     // send data to appender through the input stream, and wait for the data to be written
     val allGeneratedFiles = new HashSet[String]()
     val items = (1 to 10).map { _.toString * 10000 }
-    for (i <- 0 until items.size) {
+    for (i <- items.indices) {
       testOutputStream.write(items(i).getBytes(StandardCharsets.UTF_8))
       testOutputStream.flush()
       allGeneratedFiles ++= RollingFileAppender.getSortedRolledOverFiles(
@@ -364,7 +364,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     ): Seq[File] = {
     // send data to appender through the input stream, and wait for the data to be written
     val expectedText = textToAppend.mkString("")
-    for (i <- 0 until textToAppend.size) {
+    for (i <- textToAppend.indices) {
       outputStream.write(textToAppend(i).getBytes(StandardCharsets.UTF_8))
       outputStream.flush()
       Thread.sleep(sleepTimeBetweenTexts)

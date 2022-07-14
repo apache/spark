@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.DataStreamWriter
 
@@ -27,9 +29,27 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     val rdd = data.queryExecution.toRdd
+    val executedPlan = data.queryExecution.executedPlan
+    val node = LogicalRDD(
+      data.schema.toAttributes,
+      rdd,
+      Some(eliminateWriteMarkerNode(data.queryExecution.analyzed)),
+      executedPlan.outputPartitioning,
+      executedPlan.outputOrdering)(data.sparkSession)
     implicit val enc = encoder
-    val ds = data.sparkSession.internalCreateDataFrame(rdd, data.schema).as[T]
+    val ds = Dataset.ofRows(data.sparkSession, node).as[T]
     batchWriter(ds, batchId)
+  }
+
+  /**
+   * ForEachBatchSink implementation reuses the logical plan of `data` which breaks the contract
+   * of Sink.addBatch, which `data` should be just used to "collect" the output data.
+   * We have to deal with eliminating marker node here which we do this in streaming specific
+   * optimization rule.
+   */
+  private def eliminateWriteMarkerNode(plan: LogicalPlan): LogicalPlan = plan match {
+    case node: WriteToMicroBatchDataSourceV1 => node.child
+    case node => node
   }
 
   override def toString(): String = "ForeachBatchSink"

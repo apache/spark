@@ -21,7 +21,6 @@ import scala.collection.mutable.Queue
 
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -35,8 +34,7 @@ import org.apache.spark.ui.SparkUICssErrorHandler
 /**
  * Selenium tests for the Spark Streaming Web UI.
  */
-class UISeleniumSuite
-  extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
+class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with TestSuiteBase {
 
   implicit var webDriver: WebDriver = _
 

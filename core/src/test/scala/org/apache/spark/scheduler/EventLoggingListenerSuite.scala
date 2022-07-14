@@ -20,13 +20,11 @@ package org.apache.spark.scheduler
 import java.io.{File, InputStream}
 import java.util.{Arrays, Properties}
 
-import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.Set
 import scala.io.{Codec, Source}
 
 import org.apache.hadoop.fs.Path
-import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito
 import org.scalatest.BeforeAndAfter
 
@@ -35,7 +33,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.{EventLogFileReader, SingleEventLogFileWriter}
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EVENT_LOG_DIR, EVENT_LOG_ENABLED}
 import org.apache.spark.io._
 import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
@@ -50,8 +47,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  * logging events, whether the parsing of the file names is correct, and whether the logged events
  * can be read and deserialized into actual SparkListenerEvents.
  */
-class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
-  with Logging {
+class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter {
 
   private val fileSystem = Utils.getHadoopFileSystem("/",
     SparkHadoopUtil.get.newConfiguration(new SparkConf()))
@@ -140,7 +136,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       assert(lines(2).contains("SparkListenerJobStart"))
 
       lines.foreach{
-        line => JsonProtocol.sparkEventFromJson(parse(line)) match {
+        line => JsonProtocol.sparkEventFromJson(line) match {
           case logStartEvent: SparkListenerLogStart =>
             assert(logStartEvent == logStart)
 
@@ -180,7 +176,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     sc.stop()
 
     val eventLogStream = EventLogFileReader.openEventLog(new Path(testDirPath, appId), fileSystem)
-    val events = readLines(eventLogStream).map(line => JsonProtocol.sparkEventFromJson(parse(line)))
+    val events = readLines(eventLogStream).map(line => JsonProtocol.sparkEventFromJson(line))
     val jobStartEvents = events
       .filter(event => event.isInstanceOf[SparkListenerJobStart])
       .map(_.asInstanceOf[SparkListenerJobStart])
@@ -248,9 +244,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       assert(lines(0).contains("SparkListenerLogStart"))
       assert(lines(1).contains("SparkListenerApplicationStart"))
       assert(lines(2).contains("SparkListenerApplicationEnd"))
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(2))) === applicationEnd)
+      assert(JsonProtocol.sparkEventFromJson(lines(0)) === logStart)
+      assert(JsonProtocol.sparkEventFromJson(lines(1)) === applicationStart)
+      assert(JsonProtocol.sparkEventFromJson(lines(2)) === applicationEnd)
     } finally {
       logData.close()
     }
@@ -307,7 +303,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       lines.foreach { line =>
         eventSet.foreach { event =>
           if (line.contains(event)) {
-            val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
+            val parsedEvent = JsonProtocol.sparkEventFromJson(line)
             val eventType = Utils.getFormattedClassName(parsedEvent)
             if (eventType == event) {
               eventSet.remove(event)
@@ -315,7 +311,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
           }
         }
       }
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(JsonProtocol.sparkEventFromJson(lines(0)) === logStart)
       assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
     } {
       logData.close()
@@ -518,7 +514,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       assert(lines.size === 25)
       assert(lines(0).contains("SparkListenerLogStart"))
       assert(lines(1).contains("SparkListenerApplicationStart"))
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(JsonProtocol.sparkEventFromJson(lines(0)) === logStart)
       var logIdx = 1
       events.foreach { event =>
         event match {
@@ -609,7 +605,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   /** Check that the Spark history log line matches the expected event. */
   private def checkEvent(line: String, event: SparkListenerEvent): Unit = {
     assert(line.contains(event.getClass.toString.split("\\.").last))
-    val parsed = JsonProtocol.sparkEventFromJson(parse(line))
+    val parsed = JsonProtocol.sparkEventFromJson(line)
     assert(parsed.getClass === event.getClass)
     (event, parsed) match {
       case (expected: SparkListenerStageSubmitted, actual: SparkListenerStageSubmitted) =>
@@ -641,7 +637,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       line: String,
       stageId: Int,
       expectedEvents: Map[(Int, String), SparkListenerStageExecutorMetrics]): String = {
-    JsonProtocol.sparkEventFromJson(parse(line)) match {
+    JsonProtocol.sparkEventFromJson(line) match {
       case executorMetrics: SparkListenerStageExecutorMetrics =>
           expectedEvents.get((stageId, executorMetrics.execId)) match {
             case Some(expectedMetrics) =>

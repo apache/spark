@@ -24,10 +24,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
 import org.apache.spark.util.collection.OpenHashMap
 
 abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]]
@@ -57,9 +58,12 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
-  override lazy val dataType: DataType = percentageExpression.dataType match {
-    case _: ArrayType => ArrayType(DoubleType, false)
-    case _ => DoubleType
+  override lazy val dataType: DataType = {
+    val resultType = child.dataType match {
+      case it: AnsiIntervalType => it
+      case _ => DoubleType
+    }
+    if (returnPercentileArray) ArrayType(resultType, false) else resultType
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
@@ -67,8 +71,7 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType),
-      percentageExpType, IntegralType)
+    Seq(NumericAndAnsiInterval, percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -162,8 +165,13 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
     }
   }
 
-  private def generateOutput(results: Seq[Double]): Any = {
-    if (results.isEmpty) {
+  private def generateOutput(percentiles: Seq[Double]): Any = {
+    val results = child.dataType match {
+      case _: YearMonthIntervalType => percentiles.map(_.toInt)
+      case _: DayTimeIntervalType => percentiles.map(_.toLong)
+      case _ => percentiles
+    }
+    if (percentiles.isEmpty) {
       null
     } else if (returnPercentileArray) {
       new GenericArrayData(results)
@@ -288,7 +296,7 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
   usage =
     """
       _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
-       or ansi interval column `col` at the given percentage. The value of percentage must be
+       or ANSI interval column `col` at the given percentage. The value of percentage must be
        between 0.0 and 1.0. The value of frequency should be positive integral
 
       _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
@@ -304,9 +312,9 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
       > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
        [2.5,7.5]
       > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
-       5.0
+       0-5
       > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
-       [2000000.0,5000000.0]
+       [0 00:00:02.000000000,0 00:00:05.000000000]
   """,
   group = "agg_funcs",
   since = "2.1.0")
@@ -359,9 +367,33 @@ case class Percentile(
   )
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(col) - Returns the median of numeric or ANSI interval column `col`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
+       5.0
+      > SELECT _FUNC_(col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       0-5
+  """,
+  group = "agg_funcs",
+  since = "3.4.0")
+case class Median(child: Expression)
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with UnaryLike[Expression] {
+  private lazy val percentile = new Percentile(child, Literal(0.5, DoubleType))
+  override def replacement: Expression = percentile
+  override def nodeName: String = "median"
+  override def inputTypes: Seq[AbstractDataType] = percentile.inputTypes.take(1)
+  override protected def withNewChildInternal(
+      newChild: Expression): Median = this.copy(child = newChild)
+}
+
 /**
  * Return a percentile value based on a continuous distribution of
- * numeric or ansi interval column at the given percentage (specified in ORDER BY clause).
+ * numeric or ANSI interval column at the given percentage (specified in ORDER BY clause).
  * The value of percentage must be between 0.0 and 1.0.
  */
 case class PercentileCont(left: Expression, right: Expression, reverse: Boolean = false)

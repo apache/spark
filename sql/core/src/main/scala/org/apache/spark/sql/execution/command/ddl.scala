@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
@@ -180,7 +181,8 @@ case class DescribeDatabaseCommand(
       sparkSession.sessionState.catalog.getDatabaseMetadata(databaseName)
     val allDbProperties = dbMetadata.properties
     val result =
-      Row("Database Name", dbMetadata.name) ::
+      Row("Catalog Name", SESSION_CATALOG_NAME) ::
+        Row("Database Name", dbMetadata.name) ::
         Row("Comment", dbMetadata.description) ::
         Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
         Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
@@ -191,7 +193,7 @@ case class DescribeDatabaseCommand(
         if (properties.isEmpty) {
           ""
         } else {
-          properties.toSeq.sortBy(_._1).mkString("(", ", ", ")")
+          conf.redactOptions(properties).toSeq.sortBy(_._1).mkString("(", ", ", ")")
         }
       result :+ Row("Properties", propertiesStr)
     } else {
@@ -364,8 +366,7 @@ case class AlterTableChangeColumnCommand(
             // Check that the proposed default value parses and analyzes correctly, and that the
             // type of the resulting expression is equivalent or coercible to the destination column
             // type.
-            ResolveDefaultColumns.analyze(
-              sparkSession.sessionState.analyzer, result, "ALTER TABLE ALTER COLUMN")
+            ResolveDefaultColumns.analyze(result, "ALTER TABLE ALTER COLUMN")
             result
           } else {
             withNewComment.clearCurrentDefaultValue()

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Filter, HintInfo, Join, JoinHint, LogicalPlan, Project}
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin.LogicalPlanWithDatasetId
@@ -426,7 +427,8 @@ class DataFrameJoinSuite extends QueryTest
               case FileSourceScanExec(_, _, _, _, _, _, _, Some(tableIdent), _) => tableIdent
             }
             assert(tables.size == 1)
-            assert(tables.head === TableIdentifier(table1Name, Some(dbName)))
+            assert(tables.head ===
+              TableIdentifier(table1Name, Some(dbName), Some(SESSION_CATALOG_NAME)))
           }
 
           def checkIfHintNotApplied(df: DataFrame): Unit = {
@@ -550,6 +552,28 @@ class DataFrameJoinSuite extends QueryTest
           Row(2, 2, 2, 2, 2),
           Row(3, 3, 1, null, null),
           Row(3, 3, 2, null, null)
+        )
+      )
+    }
+  }
+
+  test("SPARK-39376: Hide duplicated columns in star expansion of subquery alias from USING JOIN") {
+    val joinDf = testData2.as("testData2").join(
+      testData3.as("testData3"), usingColumns = Seq("a"), joinType = "fullouter")
+    val equivalentQueries = Seq(
+      joinDf.select($"*"),
+      joinDf.as("r").select($"*"),
+      joinDf.as("r").select($"r.*")
+    )
+    equivalentQueries.foreach { query =>
+      checkAnswer(query,
+        Seq(
+          Row(1, 1, null),
+          Row(1, 2, null),
+          Row(2, 1, 2),
+          Row(2, 2, 2),
+          Row(3, 1, null),
+          Row(3, 2, null)
         )
       )
     }

@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -58,11 +58,6 @@ class ParquetFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
-  // Hold a reference to the (serializable) singleton instance of ParquetLogRedirector. This
-  // ensures the ParquetLogRedirector class is initialized whether an instance of ParquetFileFormat
-  // is constructed or deserialized. Do not heed the Scala compiler's warning about an unused field
-  // here.
-  private val parquetLogRedirector = ParquetLogRedirector.INSTANCE
 
   override def shortName(): String = "parquet"
 
@@ -146,11 +141,6 @@ class ParquetFileFormat
     }
 
     new OutputWriterFactory {
-      // This OutputWriterFactory instance is deserialized when writing Parquet files on the
-      // executor side without constructing or deserializing ParquetFileFormat. Therefore, we hold
-      // another reference to ParquetLogRedirector.INSTANCE here to ensure the latter class is
-      // initialized.
-      private val parquetLogRedirector = ParquetLogRedirector.INSTANCE
 
         override def newInstance(
           path: String,
@@ -186,13 +176,13 @@ class ParquetFileFormat
       requiredSchema: StructType,
       partitionSchema: StructType,
       sqlConf: SQLConf): Option[Seq[String]] = {
-    Option(Seq.fill(requiredSchema.fields.length + partitionSchema.fields.length)(
+    Option(Seq.fill(requiredSchema.fields.length)(
       if (!sqlConf.offHeapColumnVectorEnabled) {
         classOf[OnHeapColumnVector].getName
       } else {
         classOf[OffHeapColumnVector].getName
       }
-    ))
+    ) ++ Seq.fill(partitionSchema.fields.length)(classOf[ConstantColumnVector].getName))
   }
 
   override def isSplitable(

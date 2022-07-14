@@ -103,7 +103,7 @@ logging into the data sources.
     <td>(none)</td>
     <td>
       A prefix that will form the final query together with <code>query</code>.
-      As the specified <code>query</code> will be parenthesized as a subquery in the <code>FROM</code> clause and some databases do not 
+      As the specified <code>query</code> will be parenthesized as a subquery in the <code>FROM</code> clause and some databases do not
       support all clauses in subqueries, the <code>prepareQuery</code> property offers a way to run such complex queries.
       As an example, spark will issue a query of the following form to the JDBC Source.<br><br>
       <code>&lt;prepareQuery&gt; SELECT &lt;columns&gt; FROM (&lt;user_specified_query&gt;) spark_gen_alias</code><br><br>
@@ -340,10 +340,19 @@ logging into the data sources.
     <td>
       The name of the JDBC connection provider to use to connect to this URL, e.g. <code>db2</code>, <code>mssql</code>.
       Must be one of the providers loaded with the JDBC data source. Used to disambiguate when more than one provider can handle
-      the specified driver and options. The selected provider must not be disabled by <code>spark.sql.sources.disabledJdbcConnProviderList</code>. 
+      the specified driver and options. The selected provider must not be disabled by <code>spark.sql.sources.disabledJdbcConnProviderList</code>.
     </td>
     <td>read/write</td>
- </tr>  
+  </tr>
+  <tr>
+    <td><code>inferTimestampNTZType</code></td>
+    <td>false</td>
+    <td>
+      When the option is set to <code>true</code>, all timestamps are inferred as TIMESTAMP WITHOUT TIME ZONE.
+      Otherwise, timestamps are read as TIMESTAMP with local time zone.
+    </td>
+    <td>read</td>
+  </tr>
 </table>
 
 Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>

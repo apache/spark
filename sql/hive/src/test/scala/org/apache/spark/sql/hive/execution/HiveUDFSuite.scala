@@ -34,7 +34,6 @@ import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.{SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -548,32 +547,6 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       // Expected Max(s) is 1, as stateless UDF is deterministic and foldable and replaced
       // by constant 1 by ConstantFolding optimizer.
       checkAnswer(testData.selectExpr("statelessUDF() as s").agg(max($"s")), Row(1))
-    }
-  }
-
-  test("Show persistent functions") {
-    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    withTempView("inputTable") {
-      testData.createOrReplaceTempView("inputTable")
-      withUserDefinedFunction("testUDFToListInt" -> false) {
-        val numFunc = spark.catalog.listFunctions().count()
-        sql(s"CREATE FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
-        assert(spark.catalog.listFunctions().count() == numFunc + 1)
-        checkAnswer(
-          sql("SELECT testUDFToListInt(s) FROM inputTable"),
-          Seq(Row(Seq(1, 2, 3))))
-        assert(sql("show functions").count() ==
-          numFunc + FunctionRegistry.builtinOperators.size + 1)
-        assert(spark.catalog.listFunctions().count() == numFunc + 1)
-
-        withDatabase("db2") {
-          sql("CREATE DATABASE db2")
-          sql(s"CREATE FUNCTION db2.testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
-          checkAnswer(
-            sql("SHOW FUNCTIONS IN db2 LIKE 'testUDF*'"),
-            Seq(Row("db2.testudftolistint")))
-        }
-      }
     }
   }
 

@@ -30,9 +30,9 @@ import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
-import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -40,7 +40,6 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.{JobExecutionStatus, SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, UI_VIEW_ACLS, UI_VIEW_ACLS_GROUPS, USER_GROUPS_MAPPING}
@@ -57,7 +56,8 @@ import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
-abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
+abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
+
   private var testDir: File = null
 
   override def beforeEach(): Unit = {
@@ -218,6 +218,50 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     updateAndCheck(provider) { list =>
       list.size should be (1)
       provider.getAttempt("app1", None).logPath should not endWith(EventLogFileWriter.IN_PROGRESS)
+    }
+  }
+
+  test("SPARK-39439: Check final file if in-progress event log file does not exist") {
+    withTempDir { dir =>
+      val conf = createTestConf()
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN, 1)
+      conf.set(EVENT_LOG_COMPACTION_SCORE_THRESHOLD, 0.0d)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+      val provider = new FsHistoryProvider(conf)
+
+      val mergeApplicationListing = PrivateMethod[Unit]('mergeApplicationListing)
+
+      val inProgressFile = newLogFile("app1", None, inProgress = true)
+      val logAppender1 = new LogAppender("in-progress and final event log files does not exist")
+      withLogAppender(logAppender1) {
+        provider invokePrivate mergeApplicationListing(
+          EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
+          System.currentTimeMillis,
+          true
+        )
+      }
+      val logs1 = logAppender1.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("In-progress event log file does not exist: "))
+      assert(logs1.size === 1)
+
+      writeFile(inProgressFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
+        SparkListenerApplicationEnd(2L))
+      val finalFile = newLogFile("app1", None, inProgress = false)
+      inProgressFile.renameTo(finalFile)
+      val logAppender2 = new LogAppender("in-progress event log file has been renamed to final")
+      withLogAppender(logAppender2) {
+        provider invokePrivate mergeApplicationListing(
+          EventLogFileReader(fs, new Path(inProgressFile.toURI), None),
+          System.currentTimeMillis,
+          true
+        )
+      }
+      val logs2 = logAppender2.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("In-progress event log file does not exist: "))
+      assert(logs2.isEmpty)
     }
   }
 
@@ -1529,6 +1573,56 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     }
   }
 
+  test("SPARK-39225: Support spark.history.fs.update.batchSize") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(UPDATE_BATCHSIZE, 1)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val provider = new FsHistoryProvider(conf)
+
+      // Create 1st application
+      val writer1 = new RollingEventLogFilesWriter("app1", None, dir.toURI, conf, hadoopConf)
+      writer1.start()
+      writeEventsToRollingWriter(writer1, Seq(
+        SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer1.stop()
+
+      // Create 2nd application
+      val writer2 = new RollingEventLogFilesWriter("app2", None, dir.toURI, conf, hadoopConf)
+      writer2.start()
+      writeEventsToRollingWriter(writer2, Seq(
+        SparkListenerApplicationStart("app2", Some("app2"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer2.stop()
+
+      // The 1st checkForLogs should scan/update app2 only since it is newer than app1
+      provider.checkForLogs()
+      assert(provider.getListing.length === 1)
+      assert(dir.listFiles().size === 2)
+      assert(provider.getListing().map(e => e.id).contains("app2"))
+      assert(!provider.getListing().map(e => e.id).contains("app1"))
+
+      // Create 3rd application
+      val writer3 = new RollingEventLogFilesWriter("app3", None, dir.toURI, conf, hadoopConf)
+      writer3.start()
+      writeEventsToRollingWriter(writer3, Seq(
+        SparkListenerApplicationStart("app3", Some("app3"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer3.stop()
+
+      // The 2nd checkForLogs should scan/update app3 only since it is newer than app1
+      provider.checkForLogs()
+      assert(provider.getListing.length === 2)
+      assert(dir.listFiles().size === 3)
+      assert(provider.getListing().map(e => e.id).contains("app3"))
+      assert(!provider.getListing().map(e => e.id).contains("app1"))
+
+      provider.stop()
+    }
+  }
+
   test("SPARK-36354: EventLogFileReader should skip rolling event log directories with no logs") {
     withTempDir { dir =>
       val conf = createTestConf(true)
@@ -1633,13 +1727,13 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     val bstream = new BufferedOutputStream(cstream)
 
     val metadata = SparkListenerLogStart(org.apache.spark.SPARK_VERSION)
-    val eventJson = JsonProtocol.logStartToJson(metadata)
-    val metadataJson = compact(eventJson) + "\n"
+    val eventJsonString = JsonProtocol.sparkEventToJsonString(metadata)
+    val metadataJson = eventJsonString + "\n"
     bstream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
 
     val writer = new OutputStreamWriter(bstream, StandardCharsets.UTF_8)
     Utils.tryWithSafeFinally {
-      events.foreach(e => writer.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))
+      events.foreach(e => writer.write(JsonProtocol.sparkEventToJsonString(e) + "\n"))
     } {
       writer.close()
     }

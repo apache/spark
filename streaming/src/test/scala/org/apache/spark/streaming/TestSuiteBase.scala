@@ -468,7 +468,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
     logInfo("--------------------------------")
 
     // Match the output with the expected output
-    for (i <- 0 until output.size) {
+    for (i <- output.indices) {
       if (useSet) {
         assert(
           output(i).toSet === expectedOutput(i).toSet,

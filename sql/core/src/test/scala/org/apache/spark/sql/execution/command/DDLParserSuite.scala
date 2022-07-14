@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedDBObjectName, UnresolvedFunc}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunc, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -314,7 +314,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val parsed1 = parser.parsePlan(v1)
 
     val expected1 = CreateView(
-      UnresolvedDBObjectName(Seq("view1"), false),
+      UnresolvedIdentifier(Seq("view1")),
       Seq.empty[(String, Option[String])],
       None,
       Map.empty[String, String],
@@ -354,7 +354,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin
     val parsed1 = parser.parsePlan(v1)
     val expected1 = CreateView(
-      UnresolvedDBObjectName(Seq("view1"), false),
+      UnresolvedIdentifier(Seq("view1")),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
       Map("prop1Key" -> "prop1Val"),
@@ -410,35 +410,35 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("CREATE FUNCTION") {
     comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun", Seq(), false, false))
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun", Seq(), false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION a.b.c as 'fun'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), false, false))
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), false, false))
 
     comparePlans(parser.parsePlan("CREATE OR REPLACE FUNCTION a.b.c as 'fun'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), false, true))
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), false, true))
 
     comparePlans(parser.parsePlan("CREATE TEMPORARY FUNCTION a as 'fun'"),
       CreateFunctionCommand(Seq("a").asFunctionIdentifier, "fun", Seq(), true, false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), true, false))
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), true, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
         Seq(FunctionResource(JarResource, "j")), false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
         Seq(FunctionResource(ArchiveResource, "a")), false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING FILE 'f'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
         Seq(FunctionResource(FileResource, "f")), false, false))
 
     comparePlans(
       parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
         Seq(FunctionResource(JarResource, "j"),
           FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
         false, false))

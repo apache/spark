@@ -27,13 +27,12 @@ import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
 import org.mockito.Mock
 import org.mockito.Mockito.when
 import org.mockito.MockitoAnnotations
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.util.Utils
 
-class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite {
 
   @Mock(answer = RETURNS_SMART_NULLS)
   private var blockResolver: IndexShuffleBlockResolver = _

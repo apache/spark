@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.HistogramBin
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
@@ -101,7 +102,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .asInstanceOf[HiveTableRelation]
 
           val properties = relation.tableMeta.ignoredProperties
-          assert(properties.get("totalSize").isEmpty)
+          // Since HIVE-6727, Hive fixes table-level stats for external tables are incorrect.
+          assert(properties("totalSize").toLong == 6)
           assert(properties.get("rawDataSize").isEmpty)
 
           val sizeInBytes = relation.stats.sizeInBytes
@@ -535,7 +537,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         }.getMessage
         assert(message.contains(
           "DS is not a valid partition column in table " +
-            s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"))
+            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -598,13 +600,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
         "hour is not a valid partition column in table " +
-          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+          s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
       )
 
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
         "hour is not a valid partition column in table " +
-          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+          s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
       )
 
       intercept[NoSuchPartitionException] {

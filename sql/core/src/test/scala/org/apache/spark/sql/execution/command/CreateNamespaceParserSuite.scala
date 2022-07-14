@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedDBObjectName}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.CreateNamespace
 
 class CreateNamespaceParserSuite extends AnalysisTest {
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
     val expected = CreateNamespace(
-      UnresolvedDBObjectName(Seq("a", "b", "c"), true),
+      UnresolvedNamespace(Seq("a", "b", "c")),
       ifNotExists = true,
       Map(
         "a" -> "a",
@@ -84,7 +84,8 @@ class CreateNamespaceParserSuite extends AnalysisTest {
          |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
          |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
       """.stripMargin
-    intercept(sql, "Either PROPERTIES or DBPROPERTIES is allowed")
+    intercept(sql, "The feature is not supported: " +
+      "set PROPERTIES and DBPROPERTIES at the same time.")
   }
 
   test("create namespace - support for other types in PROPERTIES") {
@@ -97,7 +98,7 @@ class CreateNamespaceParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan(sql),
       CreateNamespace(
-        UnresolvedDBObjectName(Seq("a", "b", "c"), true),
+        UnresolvedNamespace(Seq("a", "b", "c")),
         ifNotExists = false,
         Map(
           "a" -> "1",

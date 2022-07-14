@@ -1115,6 +1115,13 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
+  val ORC_VECTORIZED_WRITER_BATCH_SIZE = buildConf("spark.sql.orc.columnarWriterBatchSize")
+    .doc("The number of rows to include in a orc vectorized writer batch. The number should " +
+      "be carefully chosen to minimize overhead and avoid OOMs in writing data.")
+    .version("3.4.0")
+    .intConf
+    .createWithDefault(1024)
+
   val ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED =
     buildConf("spark.sql.orc.enableNestedColumnVectorizedReader")
       .doc("Enables vectorized orc decoding for nested column.")
@@ -1541,7 +1548,8 @@ object SQLConf {
       "during tests. `FALLBACK` means trying codegen first and then falling back to " +
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
       "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that " +
-      "this config works only for tests.")
+      "this configuration is only for the internal usage, and NOT supposed to be set by " +
+      "end users.")
     .version("2.4.0")
     .internal()
     .stringConf
@@ -2557,8 +2565,9 @@ object SQLConf {
     buildConf("spark.sql.execution.arrow.pyspark.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers in PySpark. " +
         "This optimization applies to: " +
-        "1. pyspark.sql.DataFrame.toPandas " +
+        "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
+        "or a NumPy ndarray. " +
         "The following data types are unsupported: " +
         "ArrayType of TimestampType, and nested StructType.")
       .version("3.0.0")
@@ -2574,6 +2583,18 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
+
+  val ARROW_LOCAL_RELATION_THRESHOLD =
+    buildConf("spark.sql.execution.arrow.localRelationThreshold")
+      .doc(
+        "When converting Arrow batches to Spark DataFrame, local collections are used in the " +
+          "driver side if the byte size of Arrow batches is smaller than this threshold. " +
+          "Otherwise, the Arrow batches are sent and deserialized to Spark internal rows " +
+          "in the executors.")
+      .version("3.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "This value must be equal to or greater than 0.")
+      .createWithDefaultString("48MB")
 
   val PYSPARK_JVM_STACKTRACE_ENABLED =
     buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
@@ -2880,6 +2901,15 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DEFAULT_COLUMN_ALLOWED_PROVIDERS =
+    buildConf("spark.sql.defaultColumn.allowedProviders")
+      .internal()
+      .doc("List of table providers wherein SQL commands are permitted to assign DEFAULT column " +
+        "values. Comma-separated list, whitespace ignored, case-insensitive.")
+      .version("3.4.0")
+      .stringConf
+      .createWithDefault("csv,json,orc,parquet")
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
@@ -3667,6 +3697,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_DECIMAL_TO_STRING =
+    buildConf("spark.sql.legacy.castDecimalToString.enabled")
+      .internal()
+      .doc("When true, casting decimal values as string will use scientific notation if an " +
+        "exponent is needed, which is the same with the method java.math.BigDecimal.toString(). " +
+        "Otherwise, the casting result won't contain an exponent field, which is compliant to " +
+        "the ANSI SQL standard.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_PATH_OPTION_BEHAVIOR =
     buildConf("spark.sql.legacy.pathOptionBehavior.enabled")
       .internal()
@@ -3758,6 +3799,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT =
+    buildConf("spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled")
+      .doc("PySpark's SparkSession.createDataFrame infers the element type of an array from all " +
+        "values in the array by default. If this config is set to true, it restores the legacy " +
+        "behavior of only inferring the type from the first array element.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_USE_V1_COMMAND =
     buildConf("spark.sql.legacy.useV1Command")
       .internal()
@@ -3797,6 +3847,26 @@ object SQLConf {
         "If set to true, it restores the legacy behavior that nulls were written as quoted " +
         "empty strings, `\"\"`.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT =
+    buildConf("spark.sql.legacy.allowNullComparisonResultInArraySort")
+      .internal()
+      .doc("When set to false, `array_sort` function throws an error " +
+        "if the comparator function returns null. " +
+        "If set to true, it restores the legacy behavior that handles null as zero (equal).")
+      .version("3.2.2")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
+    buildConf("spark.sql.legacy.v1IdentifierNoCatalog")
+      .internal()
+      .doc(s"When set to false, the v1 identifier will include '$SESSION_CATALOG_NAME' as " +
+        "the catalog name if database is defined. When set to true, it restores the legacy " +
+        "behavior that does not include catalog name.")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -4029,6 +4099,8 @@ class SQLConf extends Serializable with Logging {
   def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
 
   def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+
+  def orcVectorizedWriterBatchSize: Int = getConf(ORC_VECTORIZED_WRITER_BATCH_SIZE)
 
   def orcVectorizedReaderNestedColumnEnabled: Boolean =
     getConf(ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED)
@@ -4389,6 +4461,8 @@ class SQLConf extends Serializable with Logging {
 
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
 
+  def arrowLocalRelationThreshold: Long = getConf(ARROW_LOCAL_RELATION_THRESHOLD)
+
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
@@ -4444,6 +4518,8 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
+
+  def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
 
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
@@ -4553,6 +4629,9 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def legacyInferArrayTypeFromFirstElement: Boolean = getConf(
+    SQLConf.LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT)
 
   def parquetFieldIdReadEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED)
 

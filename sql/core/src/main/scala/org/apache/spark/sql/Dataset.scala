@@ -705,6 +705,7 @@ class Dataset[T] private[sql](
         LogicalRDD(
           logicalPlan.output,
           internalRdd,
+          Some(queryExecution.analyzed),
           outputPartitioning,
           physicalPlan.outputOrdering,
           isStreaming
@@ -2100,6 +2101,16 @@ class Dataset[T] private[sql](
    */
   def limit(n: Int): Dataset[T] = withTypedPlan {
     Limit(Literal(n), logicalPlan)
+  }
+
+  /**
+   * Returns a new Dataset by skipping the first `n` rows.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def offset(n: Int): Dataset[T] = withTypedPlan {
+    Offset(Literal(n), logicalPlan)
   }
 
   /**
@@ -3679,7 +3690,7 @@ class Dataset[T] private[sql](
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
       case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _),
-          _, _, _) =>
+          _, _, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray
@@ -3906,12 +3917,15 @@ class Dataset[T] private[sql](
 
   /**
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
-   * user-registered callback functions.
+   * user-registered callback functions, and also to convert asserts/NPE to
+   * the internal error exception.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(qe, Some(name)) {
-      qe.executedPlan.resetMetrics()
-      action(qe.executedPlan)
+      QueryExecution.withInternalError(s"""The "$name" action failed.""") {
+        qe.executedPlan.resetMetrics()
+        action(qe.executedPlan)
+      }
     }
   }
 
