@@ -456,6 +456,7 @@ object FunctionRegistry {
     expression[TryAverage]("try_avg"),
     expression[TrySum]("try_sum"),
     expression[TryToBinary]("try_to_binary"),
+    expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),

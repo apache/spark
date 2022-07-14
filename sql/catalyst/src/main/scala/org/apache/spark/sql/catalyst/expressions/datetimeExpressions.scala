@@ -1161,6 +1161,21 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
   }
 }
 
+object TryToTimestampExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1 || numArgs == 2) {
+      ParseToTimestamp(
+        expressions.head,
+        expressions.drop(1).lastOption,
+        SQLConf.get.timestampType,
+        failOnError = false)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+    }
+  }
+}
+
 abstract class ToTimestamp
   extends BinaryExpression with TimestampFormatterHelper with ExpectsInputTypes {
 
@@ -2048,12 +2063,13 @@ case class ParseToTimestamp(
     left: Expression,
     format: Option[Expression],
     override val dataType: DataType,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = format.map { f =>
-    GetTimestamp(left, f, dataType, timeZoneId)
-  }.getOrElse(Cast(left, dataType, timeZoneId))
+    GetTimestamp(left, f, dataType, timeZoneId, failOnError = failOnError)
+  }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format), SQLConf.get.timestampType)
