@@ -287,6 +287,15 @@ logging into the data sources.
   </tr>
 
   <tr>
+    <td><code>pushDownOffset</code></td>
+    <td><code>false</code></td>
+    <td>
+     The option to enable or disable OFFSET push-down into V2 JDBC data source. The default value is false, in which case Spark will not push down OFFSET to the JDBC data source. Otherwise, if sets to true, SPARK will try to push down OFFSET to the JDBC data source. If <code>pushDownOffset</code> is true and <code>numPartitions</code> is equals to 1, OFFSET will be pushed down to the JDBC data source. Otherwise, OFFSET will not be pushed down and SPARK still applies OFFSET on the result from data source.
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
     <td><code>pushDownTableSample</code></td>
     <td><code>false</code></td>
     <td>
