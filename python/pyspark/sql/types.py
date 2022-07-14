@@ -1086,7 +1086,10 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     >>> for cls in _all_atomic_types.values():
-    ...     check_datatype(cls())
+    ...     if cls is not VarcharType:
+    ...         check_datatype(cls())
+    ...     else:
+    ...         check_datatype(cls(1))
 
     >>> # Simple ArrayType.
     >>> simple_arraytype = ArrayType(StringType(), True)
