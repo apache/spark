@@ -78,6 +78,12 @@ class JacksonParser(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
+  // Flag is needed to distinguish parsing mode when inferring timestamp and date types.
+  // For more information, see the comments for TimestampType and DateType converter functions.
+  // Available for testing.
+  val isLegacyParserPolicy =
+    SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema. This is a wrapper for the method
@@ -258,6 +264,12 @@ class JacksonParser(
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
+              //
+              // If a custom pattern was provided and parser policy is not legacy, throw exception
+              // without applying legacy behavior to avoid producing incorrect results.
+              if (!isLegacyParserPolicy && options.timestampFormatInRead.isDefined) {
+                throw e
+              }
               val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
               DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
           }
@@ -281,6 +293,12 @@ class JacksonParser(
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
+              //
+              // If a custom pattern was provided and parser policy is not legacy, throw exception
+              // without applying legacy behavior to avoid producing incorrect results.
+              if (!isLegacyParserPolicy && options.dateFormatInRead.isDefined) {
+                throw e
+              }
               val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
               DateTimeUtils.stringToDate(str).getOrElse {
                 // In Spark 1.5.0, we store the data as number of days since epoch in string.

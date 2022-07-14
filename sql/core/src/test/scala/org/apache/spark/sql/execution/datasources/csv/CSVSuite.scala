@@ -2789,11 +2789,11 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-39731: Correctly parse dates with yyyyMMdd pattern") {
+  test("SPARK-39731: Correctly parse dates and timestamps with yyyyMMdd pattern") {
     withTempPath { path =>
       Seq(
         "1,2020011,2020011",
-        "2,20201203,20201203").toDF("data")
+        "2,20201203,20201203").toDF()
         .repartition(1)
         .write.text(path.getAbsolutePath)
       val schema = new StructType()
