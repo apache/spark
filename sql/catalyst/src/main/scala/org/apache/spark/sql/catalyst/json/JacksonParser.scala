@@ -263,7 +263,7 @@ class JacksonParser(
           } catch {
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-              // compatibility.
+              // compatibility only if no custom pattern has been set.
               //
               // If a custom pattern was provided and parser policy is not legacy, throw exception
               // without applying legacy behavior to avoid producing incorrect results.
@@ -292,7 +292,7 @@ class JacksonParser(
           } catch {
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-              // compatibility.
+              // compatibility only if no custom pattern has been set.
               //
               // If a custom pattern was provided and parser policy is not legacy, throw exception
               // without applying legacy behavior to avoid producing incorrect results.
