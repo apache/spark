@@ -134,7 +134,7 @@ SELECT regexp_extract('1a 2b 14m', '(?l)')
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-The value of parameter(s) 'regexp' in `regexp_extract` is invalid: (?l)
+The value of parameter(s) 'regexp' in `regexp_extract` is invalid: '(?l)'
 
 
 -- !query
@@ -269,7 +269,7 @@ SELECT regexp_extract_all('abc', col0, 1) FROM VALUES('], [') AS t(col0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-The value of parameter(s) 'regexp' in `regexp_extract_all` is invalid: ], [
+The value of parameter(s) 'regexp' in `regexp_extract_all` is invalid: '], ['
 
 
 -- !query

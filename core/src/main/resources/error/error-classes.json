@@ -34,7 +34,7 @@
     "sqlState" : "42000"
   },
   "INVALID_PARAMETER_VALUE" : {
-    "message" : [ "The value of parameter(s) '%s' in `%s` is invalid: %s" ],
+    "message" : [ "The value of parameter(s) '%s' in `%s` is invalid: '%s'" ],
     "sqlState" : "22023"
   },
   "MISSING_COLUMN" : {
