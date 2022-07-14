@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.{CatalystIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedDBObjectName, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
@@ -336,10 +336,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 external = false)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
-                  UnresolvedDBObjectName(
-                    catalog.name +: ident.namespace.toSeq :+ ident.name,
-                    isNamespace = false
-                  ),
+                  UnresolvedIdentifier(catalog.name +: ident.namespace.toSeq :+ ident.name),
                   partitioningAsV2,
                   df.queryExecution.analyzed,
                   tableSpec,
@@ -603,7 +600,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           serde = None,
           external = false)
         ReplaceTableAsSelect(
-          UnresolvedDBObjectName(nameParts, isNamespace = false),
+          UnresolvedIdentifier(nameParts),
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
@@ -624,7 +621,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           external = false)
 
         CreateTableAsSelect(
-          UnresolvedDBObjectName(nameParts, isNamespace = false),
+          UnresolvedIdentifier(nameParts),
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
