@@ -2087,6 +2087,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         "regexp",
         toSQLId(funcName),
-        pattern))
+        toSQLValue(pattern, StringType)))
   }
 }
