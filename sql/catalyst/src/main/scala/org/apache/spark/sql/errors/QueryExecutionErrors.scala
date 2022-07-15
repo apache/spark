@@ -23,7 +23,6 @@ import java.net.{URISyntaxException, URL}
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.text.{ParseException => JavaParseException}
 import java.time.{DateTimeException, LocalDate}
-import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 import java.util.concurrent.TimeoutException
@@ -227,10 +226,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       Array(toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def ansiDateTimeParseError(e: DateTimeParseException): DateTimeParseException = {
-    val newMessage = s"${e.getMessage}. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
-    new DateTimeParseException(newMessage, e.getParsedString, e.getErrorIndex, e.getCause)
+  def ansiDateTimeParseError(e: Exception): SparkDateTimeException = {
+    new SparkDateTimeException(
+      errorClass = "CANNOT_PARSE_TIMESTAMP",
+      errorSubClass = None,
+      Array(e.getMessage, toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def ansiDateTimeError(e: DateTimeException): DateTimeException = {

@@ -29,6 +29,12 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_PARSE_TIMESTAMP" : {
+    "message" : [
+      "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
       "Cannot up cast <expression> from <sourceType> to <targetType>.",
