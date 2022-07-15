@@ -1097,12 +1097,6 @@ Spark SQL supports the vast majority of Hive features, such as:
 Below is a list of Hive features that we don't support yet. Most of these features are rarely used
 in Hive deployments.
 
-**Major Hive Features**
-
-* Tables with buckets: bucket is the hash partitioning within a Hive table partition. Spark SQL
-  doesn't support buckets yet.
-
-
 **Esoteric Hive Features**
 
 * `UNION` type
