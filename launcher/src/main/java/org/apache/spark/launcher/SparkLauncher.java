@@ -444,9 +444,7 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
     }
 
     ProcessBuilder pb = new ProcessBuilder(cmd.toArray(new String[cmd.size()]));
-    for (Map.Entry<String, String> e : builder.childEnv.entrySet()) {
-      pb.environment().put(e.getKey(), e.getValue());
-    }
+    pb.environment().putAll(builder.childEnv);
 
     if (workingDir != null) {
       pb.directory(workingDir);
