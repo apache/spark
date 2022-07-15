@@ -256,18 +256,6 @@
       "Key <keyValue> does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ]
   },
-  "UNPIVOT_REQUIRES_VALUE_COLUMNS" : {
-    "message" : [
-      "At least one value column needs to be specified for UNPIVOT, all columns specified as ids: [<ids>]"
-    ],
-    "sqlState" : "42000"
-  },
-  "UNPIVOT_VALUE_DATA_TYPE_MISMATCH" : {
-    "message" : [
-      "Unpivot value columns must share a least common type, some types do not: [<types>]"
-    ],
-    "sqlState" : "42000"
-  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
       "Unknown static partition column: <columnName>"
@@ -356,6 +344,18 @@
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
     ]
+  },
+  "UNPIVOT_REQUIRES_VALUE_COLUMNS" : {
+    "message" : [
+      "At least one value column needs to be specified for UNPIVOT, all columns specified as ids: [<ids>]"
+    ],
+    "sqlState" : "42000"
+  },
+  "UNPIVOT_VALUE_DATA_TYPE_MISMATCH" : {
+    "message" : [
+      "Unpivot value columns must share a least common type, some types do not: [<types>]"
+    ],
+    "sqlState" : "42000"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
