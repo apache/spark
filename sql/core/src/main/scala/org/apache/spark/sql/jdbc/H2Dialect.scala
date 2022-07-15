@@ -122,12 +122,12 @@ private[sql] object H2Dialect extends JdbcDialect {
     val sql = {
       s"""
          | SELECT
-         |  i.INDEX_CATALOG AS INDEX_CATALOG,
-         |  i.INDEX_SCHEMA AS INDEX_SCHEMA,
-         |  i.INDEX_NAME AS INDEX_NAME,
-         |  i.INDEX_TYPE_NAME AS INDEX_TYPE_NAME,
-         |  i.REMARKS as REMARKS,
-         |  ic.COLUMN_NAME AS COLUMN_NAME
+         |   i.INDEX_CATALOG AS INDEX_CATALOG,
+         |   i.INDEX_SCHEMA AS INDEX_SCHEMA,
+         |   i.INDEX_NAME AS INDEX_NAME,
+         |   i.INDEX_TYPE_NAME AS INDEX_TYPE_NAME,
+         |   i.REMARKS as REMARKS,
+         |   ic.COLUMN_NAME AS COLUMN_NAME
          | FROM INFORMATION_SCHEMA.INDEXES i, INFORMATION_SCHEMA.INDEX_COLUMNS ic
          | WHERE i.TABLE_CATALOG = ic.TABLE_CATALOG
          | AND i.TABLE_SCHEMA = ic.TABLE_SCHEMA
