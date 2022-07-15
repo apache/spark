@@ -138,4 +138,16 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
           |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           |""".stripMargin)
   }
+
+  test("CANNOT_PARSE_TIMESTAMP: parse string to timestamp") {
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        sql("select to_timestamp('abc', 'yyyy-MM-dd HH:mm:ss')").collect()
+      },
+      errorClass = "CANNOT_PARSE_TIMESTAMP",
+      parameters = Map(
+        "message" -> "Text 'abc' could not be parsed at index 0",
+        "ansiConfig" -> ansiConf)
+    )
+  }
 }

@@ -1211,12 +1211,10 @@ abstract class ToTimestamp
                 formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
               }
             } catch {
-              case e: DateTimeParseException if failOnError =>
+              case e: DateTimeException =>
                 throw QueryExecutionErrors.ansiDateTimeParseError(e)
-              case e: DateTimeException if failOnError =>
-                throw QueryExecutionErrors.ansiDateTimeError(e)
-              case e: ParseException if failOnError =>
-                throw QueryExecutionErrors.ansiParseError(e)
+              case e: ParseException =>
+                throw QueryExecutionErrors.ansiDateTimeParseError(e)
               case e if isParseError(e) => null
             }
           }
