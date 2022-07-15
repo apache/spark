@@ -261,6 +261,13 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
     withTempPath { dir =>
       df.write.format("avro").save(dir.getCanonicalPath)
       checkAnswer(spark.read.schema(sparkSchema).format("avro").load(dir.getCanonicalPath), df)
+
+      val msg = intercept[SparkException] {
+        spark.read.option("avroSchema", avroTypeStruct).format("avro")
+          .load(dir.getCanonicalPath)
+          .collect()
+      }.getCause.getMessage
+      assert(msg.contains("Invalid default for field id: null not a \"long\""))
     }
   }
 }
