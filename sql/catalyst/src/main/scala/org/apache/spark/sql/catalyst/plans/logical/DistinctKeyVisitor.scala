@@ -153,4 +153,11 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
     p.child.distinctKeys
 
   override def visitWithCTE(p: WithCTE): Set[ExpressionSet] = p.plan.distinctKeys
+
+  override def visitOffset(p: Offset): Set[ExpressionSet] = {
+    p.maxRows match {
+      case Some(value) if value <= 1 => p.output.map(attr => ExpressionSet(Seq(attr))).toSet
+      case _ => p.child.distinctKeys
+    }
+  }
 }

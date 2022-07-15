@@ -24,6 +24,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 
 class FileScanRDDWithSoftAffinitySuite extends QueryTest
   with SharedSparkSession with PredicateHelper {
@@ -42,7 +43,8 @@ class FileScanRDDWithSoftAffinitySuite extends QueryTest
     val fakeRDD = new FileScanRDD(
       spark,
       (file: PartitionedFile) => Iterator.empty,
-      Seq(partition)
+      Seq(partition),
+      StructType(Seq.empty)
     )
 
     assertResult(Set("host-1", "host-2", "host-3")) {
@@ -59,7 +61,8 @@ class FileScanRDDWithSoftAffinitySuite extends QueryTest
     val fakeRDD = new FileScanRDD(
       spark,
       (file: PartitionedFile) => Iterator.empty,
-      Seq(partition)
+      Seq(partition),
+      StructType(Seq.empty)
     )
 
     assertResult(Set("host-1", "host-4", "host-5")) {
@@ -76,7 +79,8 @@ class FileScanRDDWithSoftAffinitySuite extends QueryTest
     val fakeRDD = new FileScanRDD(
       spark,
       (file: PartitionedFile) => Iterator.empty,
-      Seq(partition)
+      Seq(partition),
+      StructType(Seq.empty)
     )
 
     assertResult(Set("executor_host-2_2", "executor_host-3_4")) {
@@ -93,7 +97,8 @@ class FileScanRDDWithSoftAffinitySuite extends QueryTest
     val fakeRDD = new FileScanRDD(
       spark,
       (file: PartitionedFile) => Iterator.empty,
-      Seq(partition)
+      Seq(partition),
+      StructType(Seq.empty)
     )
 
     assertResult(Set("host-1", "host-5", "host-6")) {
@@ -110,7 +115,8 @@ class FileScanRDDWithSoftAffinitySuite extends QueryTest
     val fakeRDD = new FileScanRDD(
       spark,
       (file: PartitionedFile) => Iterator.empty,
-      Seq(partition)
+      Seq(partition),
+      StructType(Seq.empty)
     )
 
     assertResult(Set("host-1", "host-5", "host-6")) {
