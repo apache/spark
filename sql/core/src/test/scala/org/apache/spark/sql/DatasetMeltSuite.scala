@@ -260,8 +260,8 @@ class DatasetMeltSuite extends QueryTest
     checkErrorClass(
       exception = e,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Melt value columns must have compatible data types, " +
-        "some data types are not compatible: \\[StringType, IntegerType\\];(\n.*)*",
+      msg = "Unpivot value columns must share a least common type, " +
+        "some types do not: \\[\"STRING\", \"INT\"\\];(\n.*)*",
       matchMsg = true)
   }
 
@@ -310,9 +310,9 @@ class DatasetMeltSuite extends QueryTest
     }
     checkErrorClass(
       exception = e1,
-      errorClass = "MISSING_COLUMN",
-      msg = "Column '`1`' does not exist\\. Did you mean one " +
-        "of the following\\? \\[id, int1, str1, str2, long1\\];(\n.*)*",
+      errorClass = "UNRESOLVED_COLUMN",
+      msg = "A column or function parameter with name `1` cannot be resolved\\. " +
+        "Did you mean one of the following\\? \\[`id`, `int1`, `str1`, `str2`, `long1`\\];(\n.*)*",
       matchMsg = true)
 
     // melting where value column does not exist
@@ -326,9 +326,9 @@ class DatasetMeltSuite extends QueryTest
     }
     checkErrorClass(
       exception = e2,
-      errorClass = "MISSING_COLUMN",
-      msg = "Column 'does' does not exist\\. Did you mean one " +
-        "of the following\\? \\[id, int1, long1, str1, str2\\];(\n.*)*",
+      errorClass = "UNRESOLVED_COLUMN",
+      msg = "A column or function parameter with name `does` cannot be resolved\\. " +
+        "Did you mean one of the following\\? \\[`id`, `int1`, `long1`, `str1`, `str2`\\];(\n.*)*",
       matchMsg = true)
 
     // melting with empty list of value columns
@@ -344,8 +344,8 @@ class DatasetMeltSuite extends QueryTest
     checkErrorClass(
       exception = e3,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Melt value columns must have compatible data types, " +
-        "some data types are not compatible: \\[IntegerType, StringType, LongType\\];(\n.*)*",
+      msg = "Unpivot value columns must share a least common type, " +
+        "some types do not: \\[\"INT\", \"STRING\", \"BIGINT\"\\];(\n.*)*",
       matchMsg = true)
 
     // melting with star id columns so that no value columns are left
@@ -360,8 +360,9 @@ class DatasetMeltSuite extends QueryTest
     checkErrorClass(
       exception = e4,
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      msg = "At least one non-id column is required to melt. All columns are id columns: " +
-        "\\[id#\\d+, str1#\\d+, str2#\\d+, int1#\\d+, long1#\\d+L\\];(\n.*)*",
+      msg = "At least one value column needs to be specified for UNPIVOT, " +
+        "all columns specified as ids: " +
+        "\\[`id#\\d+`, `str1#\\d+`, `str2#\\d+`, `int1#\\d+`, `long1#\\d+L`\\];(\n.*)*",
       matchMsg = true)
 
     // melting with star value columns
@@ -377,8 +378,8 @@ class DatasetMeltSuite extends QueryTest
     checkErrorClass(
       exception = e5,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Melt value columns must have compatible data types, " +
-        "some data types are not compatible: \\[IntegerType, StringType, LongType\\];(\n.*)*",
+      msg = "Unpivot value columns must share a least common type, " +
+        "some types do not: \\[\"INT\", \"STRING\", \"BIGINT\"\\];(\n.*)*",
       matchMsg = true)
 
     // melting without giving values and no non-id columns
@@ -393,8 +394,9 @@ class DatasetMeltSuite extends QueryTest
     checkErrorClass(
       exception = e6,
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      msg = "At least one non-id column is required to melt. " +
-        "All columns are id columns: \\[id#\\d+, str1#\\d+, str2#\\d+\\];(\n.*)*",
+      msg = "At least one value column needs to be specified for UNPIVOT, " +
+        "all columns specified as ids: " +
+        "\\[`id#\\d+`, `str1#\\d+`, `str2#\\d+`\\];(\n.*)*",
       matchMsg = true)
   }
 
@@ -447,9 +449,11 @@ class DatasetMeltSuite extends QueryTest
     }
     checkErrorClass(
       exception = e,
-      errorClass = "MISSING_COLUMN",
-      msg = "Column 'an.id' does not exist\\. Did you mean one " +
-        "of the following\\? \\[an.id, int1, long1, str.one, str.two\\];(\n.*)*",
+      errorClass = "UNRESOLVED_COLUMN",
+      // expected message is wrong: https://issues.apache.org/jira/browse/SPARK-39783
+      msg = "A column or function parameter with name `an`\\.`id` cannot be resolved\\. " +
+        "Did you mean one of the following\\? " +
+        "\\[`an`.`id`, `int1`, `long1`, `str`.`one`, `str`.`two`\\];(\n.*)*",
       matchMsg = true)
   }
 
