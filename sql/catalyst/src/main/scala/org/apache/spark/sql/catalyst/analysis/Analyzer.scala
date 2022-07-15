@@ -293,7 +293,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveUpCast ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
-      ResolveMelt ::
+      ResolveUnpivot ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveAggAliasInGroupBy ::
       ResolveMissingReferences ::
@@ -515,7 +515,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         if child.resolved && groupByOpt.isDefined && hasUnresolvedAlias(groupByOpt.get) =>
         Pivot(Some(assignAliases(groupByOpt.get)), pivotColumn, pivotValues, aggregates, child)
 
-      case m: Melt if m.child.resolved &&
+      case m: Unpivot if m.child.resolved &&
         (hasUnresolvedAlias(m.ids) || hasUnresolvedAlias(m.values)) =>
         m.copy(ids = assignAliases(m.ids), values = assignAliases(m.values))
 
@@ -864,21 +864,21 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
-  object ResolveMelt extends Rule[LogicalPlan] {
+  object ResolveUnpivot extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-      _.containsPattern(MELT), ruleId) {
+      _.containsPattern(UNPIVOT), ruleId) {
 
       // once children and ids are resolved, we can determine values, if non were given
-      case m: Melt if m.childrenResolved && m.ids.forall(_.resolved) && m.values.isEmpty =>
+      case m: Unpivot if m.childrenResolved && m.ids.forall(_.resolved) && m.values.isEmpty =>
         m.copy(values = m.child.output.diff(m.ids))
 
-      case m: Melt if !m.childrenResolved || !m.ids.forall(_.resolved)
+      case m: Unpivot if !m.childrenResolved || !m.ids.forall(_.resolved)
         || m.values.isEmpty || !m.values.forall(_.resolved) || m.valueType.isEmpty => m
 
-      // TypeCoercionBase.MeltCoercion determines valueType
+      // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
-      case Melt(ids, values, variableColumnName, valueColumnName, valueType, child) =>
-        // construct melt expressions for Expand
+      case Unpivot(ids, values, variableColumnName, valueColumnName, valueType, child) =>
+        // construct unpivot expressions for Expand
         val exprs: Seq[Seq[Expression]] = values.map {
           value => ids ++ Seq(Literal(value.name), value)
         }
@@ -889,7 +889,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           AttributeReference(valueColumnName, valueType.get, nullable = values.exists(_.nullable))()
         )
 
-        // expand the melt expressions
+        // expand the unpivot expressions
         Expand(exprs, output, child)
     }
   }
@@ -1384,8 +1384,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
-      // If the Melt ids or values contain Stars, expand them.
-      case m: Melt if containsStar(m.ids) || containsStar(m.values) =>
+      // If the Unpivot ids or values contain Stars, expand them.
+      case m: Unpivot if containsStar(m.ids) || containsStar(m.values) =>
         m.copy(
           ids = buildExpandedProjectList(m.ids, m.child),
           values = buildExpandedProjectList(m.values, m.child)

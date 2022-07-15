@@ -412,7 +412,7 @@ public class JavaDatasetSuite implements Serializable {
     );
 
     // test melt(ids, variableColumnName, valueColumnName)
-    Dataset<Row> meltedDs1 = ds.drop("label").melt(
+    Dataset<Row> meltedDs1 = ds.drop("label").unpivot(
       new Column[] { col("id") },
       "var",
       "val"
@@ -422,7 +422,7 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(expected, toSet(melted1));
 
     // test melt(ids, values, variableColumnName, valueColumnName)
-    Dataset<Row> meltedDs2 = ds.melt(
+    Dataset<Row> meltedDs2 = ds.unpivot(
       new Column[] { col("id") },
       new Column[] { col("int1"), col("int2") },
       "column",

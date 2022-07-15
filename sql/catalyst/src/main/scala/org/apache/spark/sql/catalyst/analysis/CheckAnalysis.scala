@@ -422,11 +422,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
             metrics.foreach(m => checkMetric(m, m))
 
-          // see Analyzer.ResolveMelt
-          case m: Melt if m.childrenResolved && m.ids.forall(_.resolved) && m.values.isEmpty =>
+          // see Analyzer.ResolveUnpivot
+          case m: Unpivot if m.childrenResolved && m.ids.forall(_.resolved) && m.values.isEmpty =>
             throw QueryCompilationErrors.unpivotRequiresValueColumns(m.ids)
-          // see TypeCoercionBase.MeltCoercion
-          case m: Melt if m.values.nonEmpty && m.values.forall(_.resolved) && m.valueType.isEmpty =>
+          // see TypeCoercionBase.UnpivotCoercion
+          case m: Unpivot if m.values.nonEmpty && m.values.forall(_.resolved) && m.valueType.isEmpty =>
             throw QueryCompilationErrors.unpivotValDataTypeMismatchError(m.values)
 
           case Sort(orders, _, _) =>

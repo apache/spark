@@ -737,12 +737,13 @@ abstract class TypeCoercionBase {
   }
 
   /**
-   * Determines the value type of a [[Melt]].
+   * Determines the value type of a [[Unpivot]].
    */
-  object MeltCoercion extends Rule[LogicalPlan] {
+  object UnpivotCoercion extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan =
       plan resolveOperators {
-        case m: Melt if m.values.nonEmpty && m.values.forall(_.resolved) && m.valueType.isEmpty =>
+        case m: Unpivot if m.values.nonEmpty && m.values.forall(_.resolved) &&
+          m.valueType.isEmpty =>
           val valueDataType = findWiderTypeWithoutStringPromotion(m.values.map(_.dataType))
           val values = valueDataType.map(valueType =>
             m.values.map(value => Alias(Cast(value, valueType), value.name)())
@@ -821,7 +822,7 @@ abstract class TypeCoercionBase {
 object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
-    MeltCoercion ::
+    UnpivotCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
       InConversion ::

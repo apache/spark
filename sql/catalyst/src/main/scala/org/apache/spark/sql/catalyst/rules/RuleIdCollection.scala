@@ -58,7 +58,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGroupingAnalytics" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHigherOrderFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveInsertInto" ::
-      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveMelt" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveMissingReferences" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNaturalAndUsingJoin" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNewInstance" ::
@@ -72,6 +71,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubqueryColumnAliases" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTables" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTempViews" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUnpivot" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUpCast" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUserSpecifiedColumns" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowFrame" ::

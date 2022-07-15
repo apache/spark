@@ -343,7 +343,7 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy("year").pivot("course").sum("earnings")
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.melt` for a reverse operation (except for the aggregation).
+   * @see `org.apache.spark.sql.Dataset.unpivot` for a reverse operation (except for the aggregation).
    *
    * @param pivotColumn Name of the column to pivot.
    * @since 1.6.0
@@ -373,7 +373,7 @@ class RelationalGroupedDataset protected[sql](
    *     .agg(sum($"earnings"))
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.melt` for a reverse operation (except for the aggregation).
+   * @see `org.apache.spark.sql.Dataset.unpivot` for a reverse operation (except for the aggregation).
    *
    * @param pivotColumn Name of the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
@@ -399,7 +399,7 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy("year").pivot("course").sum("earnings");
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.melt` for a reverse operation (except for the aggregation).
+   * @see `org.apache.spark.sql.Dataset.unpivot` for a reverse operation (except for the aggregation).
    *
    * @param pivotColumn Name of the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
@@ -418,7 +418,7 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy($"year").pivot($"course").sum($"earnings");
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.melt` for a reverse operation (except for the aggregation).
+   * @see `org.apache.spark.sql.Dataset.unpivot` for a reverse operation (except for the aggregation).
    *
    * @param pivotColumn he column to pivot.
    * @since 2.4.0
@@ -452,7 +452,7 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy($"year").pivot($"course", Seq("dotNET", "Java")).sum($"earnings")
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.melt` for a reverse operation (except for the aggregation).
+   * @see `org.apache.spark.sql.Dataset.unpivot` for a reverse operation (except for the aggregation).
    *
    * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
@@ -487,7 +487,7 @@ class RelationalGroupedDataset protected[sql](
    * aggregation. This is an overloaded version of the `pivot` method with `pivotColumn` of
    * the `String` type.
    *
-   * @see `org.apache.spark.sql.Dataset.melt` for a reverse operation (except for the aggregation).
+   * @see `org.apache.spark.sql.Dataset.unpivot` for a reverse operation (except for the aggregation).
    *
    * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.

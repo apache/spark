@@ -23,21 +23,21 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
- * Comprehensive tests for Dataset.melt.
+ * Comprehensive tests for Dataset.unpivot.
  */
-class DatasetMeltSuite extends QueryTest
+class DatasetUnpivotSuite extends QueryTest
   with QueryErrorsSuiteBase
   with SharedSparkSession {
   import testImplicits._
 
-  lazy val meltWideDataDs: Dataset[WideData] = Seq(
+  lazy val wideDataDs: Dataset[WideData] = Seq(
     WideData(1, "one", "One", Some(1), Some(1L)),
     WideData(2, "two", null, None, Some(2L)),
     WideData(3, null, "three", Some(3), None),
     WideData(4, null, null, None, None)
   ).toDS()
 
-  val meltedWideDataRows = Seq(
+  val longDataRows = Seq(
     Row(1, "str1", "one"),
     Row(1, "str2", "One"),
     Row(2, "str1", "two"),
@@ -48,23 +48,23 @@ class DatasetMeltSuite extends QueryTest
     Row(4, "str2", null)
   )
 
-  val meltedWideDataWithoutIdRows: Seq[Row] =
-    meltedWideDataRows.map(row => Row(row.getString(1), row.getString(2)))
+  val longDataWithoutIdRows: Seq[Row] =
+    longDataRows.map(row => Row(row.getString(1), row.getString(2)))
 
-  val meltedSchema: StructType = StructType(Seq(
+  val longSchema: StructType = StructType(Seq(
     StructField("id", IntegerType, nullable = false),
     StructField("var", StringType, nullable = false),
     StructField("val", StringType, nullable = true)
   ))
 
-  lazy val meltWideStructDataDs: DataFrame = meltWideDataDs.select(
+  lazy val wideStructDataDs: DataFrame = wideDataDs.select(
     struct($"id").as("an"),
     struct(
       $"str1".as("one"),
       $"str2".as("two")
     ).as("str")
   )
-  val meltedWideStructDataRows: Seq[Row] = meltedWideDataRows.map(row =>
+  val longStructDataRows: Seq[Row] = longDataRows.map(row =>
     Row(
       row.getInt(0),
       row.getString(1) match {
@@ -74,27 +74,27 @@ class DatasetMeltSuite extends QueryTest
       row.getString(2))
   )
 
-  test("overloaded melt without values") {
-    val ds = meltWideDataDs.select($"id", $"str1", $"str2")
+  test("overloaded unpivot without values") {
+    val ds = wideDataDs.select($"id", $"str1", $"str2")
     checkAnswer(
-      ds.melt(Array($"id"), "var", "val"),
-      ds.melt(Array($"id"), Array.empty, "var", "val"))
+      ds.unpivot(Array($"id"), "var", "val"),
+      ds.unpivot(Array($"id"), Array.empty, "var", "val"))
   }
 
-  test("melt with single id") {
-    val melted = meltWideDataDs
-      .melt(
+  test("unpivot with single id") {
+    val unpivoted = wideDataDs
+      .unpivot(
         Array($"id"),
         Array($"str1", $"str2"),
         variableColumnName = "var",
         valueColumnName = "val")
-    melted.explain(true)
-    assert(melted.schema === meltedSchema)
-    checkAnswer(melted, meltedWideDataRows)
+    unpivoted.explain(true)
+    assert(unpivoted.schema === longSchema)
+    checkAnswer(unpivoted, longDataRows)
   }
 
-  test("melt with two ids") {
-    val meltedRows = Seq(
+  test("unpivot with two ids") {
+    val unpivotedRows = Seq(
       Row(1, 1, "str1", "one"),
       Row(1, 1, "str2", "One"),
       Row(2, null, "str1", "two"),
@@ -104,114 +104,114 @@ class DatasetMeltSuite extends QueryTest
       Row(4, null, "str1", null),
       Row(4, null, "str2", null))
 
-    val melted = meltWideDataDs
-      .melt(
+    val unpivoted = wideDataDs
+      .unpivot(
         Array($"id", $"int1"),
         Array($"str1", $"str2"),
         variableColumnName = "var",
         valueColumnName = "val")
-    assert(melted.schema === StructType(Seq(
+    assert(unpivoted.schema === StructType(Seq(
       StructField("id", IntegerType, nullable = false),
       StructField("int1", IntegerType, nullable = true),
       StructField("var", StringType, nullable = false),
       StructField("val", StringType, nullable = true))))
-    checkAnswer(melted, meltedRows)
+    checkAnswer(unpivoted, unpivotedRows)
   }
 
-  test("melt without ids") {
-    val melted = meltWideDataDs
-      .melt(
+  test("unpivot without ids") {
+    val unpivoted = wideDataDs
+      .unpivot(
         Array.empty,
         Array($"str1", $"str2"),
         variableColumnName = "var",
         valueColumnName = "val")
-    assert(melted.schema === StructType(Seq(
+    assert(unpivoted.schema === StructType(Seq(
       StructField("var", StringType, nullable = false),
       StructField("val", StringType, nullable = true))))
-    checkAnswer(melted, meltedWideDataWithoutIdRows)
+    checkAnswer(unpivoted, longDataWithoutIdRows)
   }
 
-  test("melt without values") {
-    val melted = meltWideDataDs.select($"id", $"str1", $"str2")
-      .melt(
+  test("unpivot without values") {
+    val unpivoted = wideDataDs.select($"id", $"str1", $"str2")
+      .unpivot(
         Array($"id"),
         variableColumnName = "var",
         valueColumnName = "val")
-    assert(melted.schema === meltedSchema)
-    checkAnswer(melted, meltedWideDataRows)
+    assert(unpivoted.schema === longSchema)
+    checkAnswer(unpivoted, longDataRows)
 
-    val melted2 = meltWideDataDs.select($"id", $"str1", $"str2")
-      .melt(
+    val unpivoted2 = wideDataDs.select($"id", $"str1", $"str2")
+      .unpivot(
         Array($"id"),
         Array.empty,
         variableColumnName = "var",
         valueColumnName = "val")
-    assert(melted2.schema === meltedSchema)
-    checkAnswer(melted2, meltedWideDataRows)
+    assert(unpivoted2.schema === longSchema)
+    checkAnswer(unpivoted2, longDataRows)
   }
 
-  test("melt without ids or values") {
-    val melted = meltWideDataDs.select($"str1", $"str2")
-      .melt(
+  test("unpivot without ids or values") {
+    val unpivoted = wideDataDs.select($"str1", $"str2")
+      .unpivot(
         Array.empty,
         Array.empty,
         variableColumnName = "var",
         valueColumnName = "val")
-    assert(melted.schema === StructType(Seq(
+    assert(unpivoted.schema === StructType(Seq(
       StructField("var", StringType, nullable = false),
       StructField("val", StringType, nullable = true))))
-    checkAnswer(melted, meltedWideDataWithoutIdRows)
+    checkAnswer(unpivoted, longDataWithoutIdRows)
   }
 
-  test("melt with star values") {
-    val melted = meltWideDataDs.select($"str1", $"str2")
-      .melt(
+  test("unpivot with star values") {
+    val unpivoted = wideDataDs.select($"str1", $"str2")
+      .unpivot(
         Array.empty,
         Array($"*"),
         variableColumnName = "var",
         valueColumnName = "val")
-    assert(melted.schema === StructType(Seq(
+    assert(unpivoted.schema === StructType(Seq(
       StructField("var", StringType, nullable = false),
       StructField("val", StringType, nullable = true))))
-    checkAnswer(melted, meltedWideDataWithoutIdRows)
+    checkAnswer(unpivoted, longDataWithoutIdRows)
   }
 
-  test("melt with id and star values") {
-    val melted = meltWideDataDs.select($"id", $"int1", $"long1")
-      .melt(
+  test("unpivot with id and star values") {
+    val unpivoted = wideDataDs.select($"id", $"int1", $"long1")
+      .unpivot(
         Array($"id"),
         Array($"*"),
         variableColumnName = "var",
         valueColumnName = "val")
 
-    assert(melted.schema === StructType(Seq(
+    assert(unpivoted.schema === StructType(Seq(
       StructField("id", IntegerType, nullable = false),
       StructField("var", StringType, nullable = false),
       StructField("val", LongType, nullable = true))))
 
-    checkAnswer(melted, meltWideDataDs.collect().flatMap { row => Seq(
+    checkAnswer(unpivoted, wideDataDs.collect().flatMap { row => Seq(
       Row(row.id, "id", row.id),
       Row(row.id, "int1", row.int1.orNull),
       Row(row.id, "long1", row.long1.orNull)
     )})
   }
 
-  test("melt with expressions") {
+  test("unpivot with expressions") {
     // ids and values are all expressions (computed)
-    val melted = meltWideDataDs
-      .melt(
+    val unpivoted = wideDataDs
+      .unpivot(
         Array(($"id" * 10).as("primary"), $"str1".as("secondary")),
         Array(($"int1" + $"long1").as("sum"), length($"str2").as("len")),
         variableColumnName = "var",
         valueColumnName = "val")
 
-    assert(melted.schema === StructType(Seq(
+    assert(unpivoted.schema === StructType(Seq(
       StructField("primary", IntegerType, nullable = false),
       StructField("secondary", StringType, nullable = true),
       StructField("var", StringType, nullable = false),
       StructField("val", LongType, nullable = true))))
 
-    checkAnswer(melted, meltWideDataDs.collect().flatMap { row =>
+    checkAnswer(unpivoted, wideDataDs.collect().flatMap { row =>
       Seq(
         Row(
           row.id * 10,
@@ -229,17 +229,17 @@ class DatasetMeltSuite extends QueryTest
     })
   }
 
-  test("melt with variable / value columns") {
+  test("unpivot with variable / value columns") {
     // with value column `variable` and `value`
-    val melted = meltWideDataDs
+    val unpivoted = wideDataDs
       .withColumnRenamed("str1", "var")
       .withColumnRenamed("str2", "val")
-      .melt(
+      .unpivot(
         Array($"id"),
         Array($"var", $"val"),
         variableColumnName = "var",
         valueColumnName = "val")
-    checkAnswer(melted, meltedWideDataRows.map(row => Row(
+    checkAnswer(unpivoted, longDataRows.map(row => Row(
       row.getInt(0),
       row.getString(1) match {
         case "str1" => "var"
@@ -248,9 +248,9 @@ class DatasetMeltSuite extends QueryTest
       row.getString(2))))
   }
 
-  test("melt with incompatible value types") {
+  test("unpivot with incompatible value types") {
     val e = intercept[AnalysisException] {
-      meltWideDataDs.melt(
+      wideDataDs.unpivot(
         Array($"id"),
         Array($"str1", $"int1"),
         variableColumnName = "var",
@@ -265,19 +265,19 @@ class DatasetMeltSuite extends QueryTest
       matchMsg = true)
   }
 
-  test("melt with compatible value types") {
-    val melted = meltWideDataDs.melt(
+  test("unpivot with compatible value types") {
+    val unpivoted = wideDataDs.unpivot(
       Array($"id"),
       Array($"int1", $"long1"),
       variableColumnName = "var",
       valueColumnName = "val")
-    assert(melted.schema === StructType(Seq(
+    assert(unpivoted.schema === StructType(Seq(
       StructField("id", IntegerType, nullable = false),
       StructField("var", StringType, nullable = false),
       StructField("val", LongType, nullable = true)
     )))
 
-    val meltedRows = Seq(
+    val unpivotedRows = Seq(
       Row(1, "int1", 1L),
       Row(1, "long1", 1L),
       Row(2, "int1", null),
@@ -287,21 +287,21 @@ class DatasetMeltSuite extends QueryTest
       Row(4, "int1", null),
       Row(4, "long1", null)
     )
-    checkAnswer(melted, meltedRows)
+    checkAnswer(unpivoted, unpivotedRows)
   }
 
-  test("melt and drop nulls") {
+  test("unpivot and drop nulls") {
     checkAnswer(
-      meltWideDataDs
-        .melt(Array($"id"), Array($"str1", $"str2"), "var", "val")
+      wideDataDs
+        .unpivot(Array($"id"), Array($"str1", $"str2"), "var", "val")
         .where($"val".isNotNull),
-      meltedWideDataRows.filter(_.getString(2) != null))
+      longDataRows.filter(_.getString(2) != null))
   }
 
-  test("melt with invalid arguments") {
-    // melting where id column does not exist
+  test("unpivot with invalid arguments") {
+    // unpivoting where id column does not exist
     val e1 = intercept[AnalysisException] {
-      meltWideDataDs.melt(
+      wideDataDs.unpivot(
         Array($"1", $"2"),
         Array($"str1", $"str2"),
         variableColumnName = "var",
@@ -315,9 +315,9 @@ class DatasetMeltSuite extends QueryTest
         "Did you mean one of the following\\? \\[`id`, `int1`, `str1`, `str2`, `long1`\\];(\n.*)*",
       matchMsg = true)
 
-    // melting where value column does not exist
+    // unpivoting where value column does not exist
     val e2 = intercept[AnalysisException] {
-      meltWideDataDs.melt(
+      wideDataDs.unpivot(
         Array($"id"),
         Array($"does", $"not", $"exist"),
         variableColumnName = "var",
@@ -331,10 +331,10 @@ class DatasetMeltSuite extends QueryTest
         "Did you mean one of the following\\? \\[`id`, `int1`, `long1`, `str1`, `str2`\\];(\n.*)*",
       matchMsg = true)
 
-    // melting with empty list of value columns
+    // unpivoting with empty list of value columns
     // where potential value columns are of incompatible types
     val e3 = intercept[AnalysisException] {
-      meltWideDataDs.melt(
+      wideDataDs.unpivot(
         Array.empty,
         Array.empty,
         variableColumnName = "var",
@@ -348,9 +348,9 @@ class DatasetMeltSuite extends QueryTest
         "some types do not: \\[\"INT\", \"STRING\", \"BIGINT\"\\];(\n.*)*",
       matchMsg = true)
 
-    // melting with star id columns so that no value columns are left
+    // unpivoting with star id columns so that no value columns are left
     val e4 = intercept[AnalysisException] {
-      meltWideDataDs.melt(
+      wideDataDs.unpivot(
         Array($"*"),
         Array.empty,
         variableColumnName = "var",
@@ -365,10 +365,10 @@ class DatasetMeltSuite extends QueryTest
         "\\[`id#\\d+`, `str1#\\d+`, `str2#\\d+`, `int1#\\d+`, `long1#\\d+L`\\];(\n.*)*",
       matchMsg = true)
 
-    // melting with star value columns
+    // unpivoting with star value columns
     // where potential value columns are of incompatible types
     val e5 = intercept[AnalysisException] {
-      meltWideDataDs.melt(
+      wideDataDs.unpivot(
         Array.empty,
         Array($"*"),
         variableColumnName = "var",
@@ -382,9 +382,9 @@ class DatasetMeltSuite extends QueryTest
         "some types do not: \\[\"INT\", \"STRING\", \"BIGINT\"\\];(\n.*)*",
       matchMsg = true)
 
-    // melting without giving values and no non-id columns
+    // unpivoting without giving values and no non-id columns
     val e6 = intercept[AnalysisException] {
-      meltWideDataDs.select($"id", $"str1", $"str2").melt(
+      wideDataDs.select($"id", $"str1", $"str2").unpivot(
         Array($"id", $"str1", $"str2"),
         Array.empty,
         variableColumnName = "var",
@@ -400,37 +400,37 @@ class DatasetMeltSuite extends QueryTest
       matchMsg = true)
   }
 
-  test("melt after pivot") {
+  test("unpivot after pivot") {
     // see test "pivot courses" in DataFramePivotSuite
     val pivoted = courseSales.groupBy("year").pivot("course", Array("dotNET", "Java"))
       .agg(sum($"earnings"))
-    val melted = pivoted.melt(Array($"year"), "course", "earnings")
+    val unpivoted = pivoted.unpivot(Array($"year"), "course", "earnings")
     val expected = courseSales.groupBy("year", "course").sum("earnings")
-    checkAnswer(melted, expected)
+    checkAnswer(unpivoted, expected)
   }
 
-  test("melt of melt") {
+  test("unpivot of unpivot") {
     checkAnswer(
-      meltWideDataDs
-        .melt(Array($"id"), Array($"str1", $"str2"), "var", "val")
-        .melt(Array($"id"), Array($"var", $"val"), "col", "value"),
-      meltedWideDataRows.flatMap(row => Seq(
+      wideDataDs
+        .unpivot(Array($"id"), Array($"str1", $"str2"), "var", "val")
+        .unpivot(Array($"id"), Array($"var", $"val"), "col", "value"),
+      longDataRows.flatMap(row => Seq(
         Row(row.getInt(0), "var", row.getString(1)),
         Row(row.getInt(0), "val", row.getString(2)))))
   }
 
-  test("melt with dot and backtick") {
-    val ds = meltWideDataDs
+  test("unpivot with dot and backtick") {
+    val ds = wideDataDs
       .withColumnRenamed("id", "an.id")
       .withColumnRenamed("str1", "str.one")
       .withColumnRenamed("str2", "str.two")
 
-    val melted = ds.melt(
+    val unpivoted = ds.unpivot(
         Array($"`an.id`"),
         Array($"`str.one`", $"`str.two`"),
         variableColumnName = "var",
         valueColumnName = "val")
-    checkAnswer(melted, meltedWideDataRows.map(row => Row(
+    checkAnswer(unpivoted, longDataRows.map(row => Row(
         row.getInt(0),
         row.getString(1) match {
           case "str1" => "str.one"
@@ -440,7 +440,7 @@ class DatasetMeltSuite extends QueryTest
 
     // without backticks, this references struct fields, which do not exist
     val e = intercept[AnalysisException] {
-      ds.melt(
+      ds.unpivot(
         Array($"an.id"),
         Array($"str.one", $"str.two"),
         variableColumnName = "var",
@@ -457,34 +457,34 @@ class DatasetMeltSuite extends QueryTest
       matchMsg = true)
   }
 
-  test("SPARK-39292: melt with struct fields") {
+  test("SPARK-39292: unpivot with struct fields") {
     checkAnswer(
-      meltWideStructDataDs.melt(
+      wideStructDataDs.unpivot(
         Array($"an.id"),
         Array($"str.one", $"str.two"),
         "var",
         "val"),
-      meltedWideStructDataRows)
+      longStructDataRows)
   }
 
-  test("SPARK-39292: melt with struct ids star") {
+  test("SPARK-39292: unpivot with struct ids star") {
     checkAnswer(
-      meltWideStructDataDs.melt(
+      wideStructDataDs.unpivot(
         Array($"an.*"),
         Array($"str.one", $"str.two"),
         "var",
         "val"),
-      meltedWideStructDataRows)
+      longStructDataRows)
   }
 
-  test("SPARK-39292: melt with struct values star") {
+  test("SPARK-39292: unpivot with struct values star") {
     checkAnswer(
-      meltWideStructDataDs.melt(
+      wideStructDataDs.unpivot(
         Array($"an.id"),
         Array($"str.*"),
         "var",
         "val"),
-      meltedWideStructDataRows)
+      longStructDataRows)
   }
 }
 
