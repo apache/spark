@@ -2014,8 +2014,9 @@ class Dataset[T] private[sql](
   def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
 
   /**
-   * Unpivot a DataFrame from wide format to long format, optionally
-   * leaving identifier columns set.
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(…).pivot(…).agg(…)`, except for the aggregation,
+   * which cannot be reversed.
    *
    * This function is useful to massage a DataFrame into a format where some
    * columns are identifier columns ("ids"), while all other columns ("values")
@@ -2082,8 +2083,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Unpivot a DataFrame from wide format to long format, optionally
-   * leaving identifier columns set.
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(…).pivot(…).agg(…)`, except for the aggregation,
+   * which cannot be reversed.
    *
    * @see `org.apache.spark.sql.Dataset.unpivot(Array, Array, String, String)`
    *
@@ -2104,8 +2106,9 @@ class Dataset[T] private[sql](
     unpivot(ids, Array.empty, variableColumnName, valueColumnName)
 
   /**
-   * Unpivot a DataFrame from wide format to long format, optionally
-   * leaving identifier columns set. This is an alias for `unpivot`.
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(…).pivot(…).agg(…)`, except for the aggregation,
+   * which cannot be reversed. This is an alias for `unpivot`.
    *
    * @see `org.apache.spark.sql.Dataset.unpivot(Array, Array, String, String)`
    *
@@ -2127,6 +2130,8 @@ class Dataset[T] private[sql](
   /**
    * Unpivot a DataFrame from wide format to long format, optionally
    * leaving identifier columns set. This is an alias for `unpivot`.
+   * Unpivot is the reverse to `groupBy(…).pivot(…).agg(…)`,
+   * except for the aggregation, which cannot be reversed.
    *
    * @see `org.apache.spark.sql.Dataset.unpivot(Array, Array, String, String)`
    *
