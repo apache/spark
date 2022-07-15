@@ -73,12 +73,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
     } match {
       case Success(_) => true
-      // This may be a known `TableAlreadyExist` exception, which is normal and proves that the
+      // This may be a known `TableNotFound` exception, which is normal and proves that the
       // table does not exist, but perhaps some other exception, which in fact does exist, will
       // cause an error when renewing the table later. We need to know about the exception stack
       case Failure(e) =>
         logDebug(s"JDBC detect the table whether exists, exception is (it may be a known and" +
-          s" normal `TableAlreadyExistException`): $e")
+          s" normal `TableNotFoundException`): $e")
         false
     }
   }
