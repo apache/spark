@@ -188,8 +188,7 @@ class VarcharType(AtomicType):
     Parameters
     ----------
     length : int
-    the length limitation. Data writing will fail if the input
-    string exceeds the length limitation.
+        the length limitation.
     """
 
     def __init__(self, length: int):
@@ -1698,7 +1697,7 @@ def _make_type_verifier(
                 new_msg("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
             )
 
-    if isinstance(dataType, StringType) or isinstance(dataType, VarcharType):
+    if isinstance(dataType, (StringType, VarcharType)):
         # StringType and VarcharType can work with any types
         def verify_value(obj: Any) -> None:
             pass

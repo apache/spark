@@ -1145,6 +1145,7 @@ class DataTypeTests(unittest.TestCase):
         self.assertNotEqual(v1, v2)
         v3 = VarcharType(10)
         self.assertEqual(v1, v3)
+        self.assertFalse(v1 is v3)
 
     # regression test for SPARK-10392
     def test_datetype_equal_zero(self):
