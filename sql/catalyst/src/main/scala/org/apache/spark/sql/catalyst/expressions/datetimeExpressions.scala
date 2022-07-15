@@ -1211,9 +1211,9 @@ abstract class ToTimestamp
                 formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
               }
             } catch {
-              case e: DateTimeException =>
+              case e: DateTimeException if failOnError =>
                 throw QueryExecutionErrors.ansiDateTimeParseError(e)
-              case e: ParseException =>
+              case e: ParseException if failOnError =>
                 throw QueryExecutionErrors.ansiDateTimeParseError(e)
               case e if isParseError(e) => null
             }
@@ -1224,8 +1224,8 @@ abstract class ToTimestamp
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
-    def parseErrorBranch(method: String): String = if (failOnError) {
-      s"throw QueryExecutionErrors.$method(e);"
+    val parseErrorBranch: String = if (failOnError) {
+      s"throw QueryExecutionErrors.ansiDateTimeParseError(e);"
     } else {
       s"${ev.isNull} = true;"
     }
@@ -1248,12 +1248,10 @@ abstract class ToTimestamp
           s"""
              |try {
              |  ${ev.value} = $formatterName.$parseMethod($datetimeStr.toString()) $downScaleCode;
-             |} catch (java.time.format.DateTimeParseException e) {
-             |  ${parseErrorBranch("ansiDateTimeParseError")}
              |} catch (java.time.DateTimeException e) {
-             |  ${parseErrorBranch("ansiDateTimeError")}
+             |  ${parseErrorBranch}
              |} catch (java.text.ParseException e) {
-             |  ${parseErrorBranch("ansiParseError")}
+             |  ${parseErrorBranch}
              |}
              |""".stripMargin)
       }.getOrElse {
@@ -1270,12 +1268,10 @@ abstract class ToTimestamp
              |  true);
              |try {
              |  ${ev.value} = $timestampFormatter.$parseMethod($string.toString()) $downScaleCode;
-             |} catch (java.time.format.DateTimeParseException e) {
-             |    ${parseErrorBranch("ansiDateTimeParseError")}
              |} catch (java.time.DateTimeException e) {
-             |    ${parseErrorBranch("ansiDateTimeError")}
+             |    ${parseErrorBranch}
              |} catch (java.text.ParseException e) {
-             |    ${parseErrorBranch("ansiParseError")}
+             |    ${parseErrorBranch}
              |}
              |""".stripMargin)
       }

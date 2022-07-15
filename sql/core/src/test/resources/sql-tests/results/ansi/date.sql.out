@@ -136,8 +136,8 @@ select to_date("02-29", "MM-dd")
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid date 'February 29' as '1970' is not a leap year. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Invalid date 'February 29' as '1970' is not a leap year. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query

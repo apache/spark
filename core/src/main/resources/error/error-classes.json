@@ -23,15 +23,15 @@
     ],
     "sqlState" : "22005"
   },
-  "CANNOT_PARSE_TIMESTAMP" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
-    ],
-    "sqlState" : "42000"
-  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal"
+    ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_PARSE_TIMESTAMP" : {
+    "message" : [
+      "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "42000"
   },

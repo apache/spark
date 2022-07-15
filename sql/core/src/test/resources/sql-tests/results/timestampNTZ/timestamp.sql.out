@@ -330,10 +330,9 @@ NULL
 -- !query
 select to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<>
+struct<to_timestamp(2019-10-06 10:11:12., yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp_ntz>
 -- !query output
-org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2019-10-06 10:11:12.' could not be parsed at index 20. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+NULL
 
 
 -- !query
@@ -395,10 +394,9 @@ struct<to_timestamp(2019-10-06 10:11:12.123456PST, yyyy-MM-dd HH:mm:ss.SSSSSS[zz
 -- !query
 select to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<>
+struct<to_timestamp(2019-10-06 10:11:12.1234567PST, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp_ntz>
 -- !query output
-org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+NULL
 
 
 -- !query
@@ -412,10 +410,9 @@ struct<to_timestamp(123456 2019-10-06 10:11:12.123456PST, SSSSSS yyyy-MM-dd HH:m
 -- !query
 select to_timestamp('223456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<>
+struct<to_timestamp(223456 2019-10-06 10:11:12.123456PST, SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp_ntz>
 -- !query output
-org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+NULL
 
 
 -- !query
@@ -477,19 +474,17 @@ struct<to_timestamp(12.12342019-10-06S10:11, ss.SSSSyyyy-MM-dd'S'HH:mm):timestam
 -- !query
 select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm")
 -- !query schema
-struct<>
+struct<to_timestamp(12.1232019-10-06S10:11, ss.SSSSyyyy-MM-dd'S'HH:mm):timestamp_ntz>
 -- !query output
-org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '12.1232019-10-06S10:11' could not be parsed at index 7. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+NULL
 
 
 -- !query
 select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyy-MM-dd'S'HH:mm")
 -- !query schema
-struct<>
+struct<to_timestamp(12.1232019-10-06S10:11, ss.SSSSyy-MM-dd'S'HH:mm):timestamp_ntz>
 -- !query output
-org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '12.1232019-10-06S10:11' could not be parsed at index 9. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+NULL
 
 
 -- !query
@@ -559,10 +554,9 @@ struct<to_timestamp(16, dd):timestamp_ntz>
 -- !query
 select to_timestamp("02-29", "MM-dd")
 -- !query schema
-struct<>
+struct<to_timestamp(02-29, MM-dd):timestamp_ntz>
 -- !query output
-org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Invalid date 'February 29' as '1970' is not a leap year. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+NULL
 
 
 -- !query
