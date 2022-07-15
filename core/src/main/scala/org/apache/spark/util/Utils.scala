@@ -922,7 +922,7 @@ private[spark] object Utils extends Logging {
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
-      conf.getenv("SPARK_LOCAL_DIRS").split(",")
+      randomizeInPlace(conf.getenv("SPARK_LOCAL_DIRS").split(","))
     } else if (conf.getenv("MESOS_SANDBOX") != null && !shuffleServiceEnabled) {
       // Mesos already creates a directory per Mesos task. Spark should use that directory
       // instead so all temporary files are automatically cleaned up when the Mesos task ends.
@@ -937,7 +937,7 @@ private[spark] object Utils extends Logging {
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
       // permissions under each listed directory.
-      conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")).split(",")
+      randomizeInPlace(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")).split(","))
     }
   }
 
