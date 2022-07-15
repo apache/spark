@@ -426,7 +426,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case m: Unpivot if m.childrenResolved && m.ids.forall(_.resolved) && m.values.isEmpty =>
             throw QueryCompilationErrors.unpivotRequiresValueColumns(m.ids)
           // see TypeCoercionBase.UnpivotCoercion
-          case m: Unpivot if m.values.nonEmpty && m.values.forall(_.resolved) && m.valueType.isEmpty =>
+          case m: Unpivot if m.values.nonEmpty && m.values.forall(_.resolved) &&
+            m.valueType.isEmpty =>
             throw QueryCompilationErrors.unpivotValDataTypeMismatchError(m.values)
 
           case Sort(orders, _, _) =>

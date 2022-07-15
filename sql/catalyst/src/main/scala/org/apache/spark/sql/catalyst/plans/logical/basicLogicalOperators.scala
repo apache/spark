@@ -1261,7 +1261,7 @@ case class Pivot(
  * @see `org.apache.spark.sql.catalyst.analysis.TypeCoercionBase.UnpivotCoercion`
  *
  * @param ids                Id columns
- * @param values             Value columns to upivot
+ * @param values             Value columns to unpivot
  * @param variableColumnName Name of the variable column
  * @param valueColumnName    Name of the value column
  * @param valueType          Type of value column once known
@@ -1279,7 +1279,8 @@ case class Unpivot(
   override def metadataOutput: Seq[Attribute] = Nil
   final override val nodePatterns: Seq[TreePattern] = Seq(UNPIVOT)
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): Unpivot = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): Unpivot =
+    copy(child = newChild)
 }
 
 /**
