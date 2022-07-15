@@ -416,9 +416,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "VAR_POP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 10000d)
-      assert(row(1).getDouble(0) === 2500d)
-      assert(row(2).getDouble(0) === 0d)
+      assert(row(0).getDouble(0) === 10000.0)
+      assert(row(1).getDouble(0) === 2500.0)
+      assert(row(2).getDouble(0) === 0.0)
     }
   }
 
@@ -433,8 +433,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "VAR_SAMP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 20000d)
-      assert(row(1).getDouble(0) === 5000d)
+      assert(row(0).getDouble(0) === 20000.0)
+      assert(row(1).getDouble(0) === 5000.0)
       assert(row(2).isNullAt(0))
     }
   }
@@ -450,9 +450,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "STDDEV_POP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 100d)
-      assert(row(1).getDouble(0) === 50d)
-      assert(row(2).getDouble(0) === 0d)
+      assert(row(0).getDouble(0) === 100.0)
+      assert(row(1).getDouble(0) === 50.0)
+      assert(row(2).getDouble(0) === 0.0)
     }
   }
 
@@ -467,8 +467,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "STDDEV_SAMP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 141.4213562373095d)
-      assert(row(1).getDouble(0) === 70.71067811865476d)
+      assert(row(0).getDouble(0) === 141.4213562373095)
+      assert(row(1).getDouble(0) === 70.71067811865476)
       assert(row(2).isNullAt(0))
     }
   }
@@ -484,9 +484,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "COVAR_POP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 10000d)
-      assert(row(1).getDouble(0) === 2500d)
-      assert(row(2).getDouble(0) === 0d)
+      assert(row(0).getDouble(0) === 10000.0)
+      assert(row(1).getDouble(0) === 2500.0)
+      assert(row(2).getDouble(0) === 0.0)
     }
   }
 
@@ -501,8 +501,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "COVAR_SAMP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 20000d)
-      assert(row(1).getDouble(0) === 5000d)
+      assert(row(0).getDouble(0) === 20000.0)
+      assert(row(1).getDouble(0) === 5000.0)
       assert(row(2).isNullAt(0))
     }
   }
@@ -518,8 +518,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "CORR")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 1d)
-      assert(row(1).getDouble(0) === 1d)
+      assert(row(0).getDouble(0) === 1.0)
+      assert(row(1).getDouble(0) === 1.0)
       assert(row(2).isNullAt(0))
     }
   }
@@ -535,8 +535,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "REGR_INTERCEPT")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 0d)
-      assert(row(1).getDouble(0) === 0d)
+      assert(row(0).getDouble(0) === 0.0)
+      assert(row(1).getDouble(0) === 0.0)
       assert(row(2).isNullAt(0))
     }
   }
@@ -552,8 +552,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "REGR_SLOPE")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 1d)
-      assert(row(1).getDouble(0) === 1d)
+      assert(row(0).getDouble(0) === 1.0)
+      assert(row(1).getDouble(0) === 1.0)
       assert(row(2).isNullAt(0))
     }
   }
@@ -569,8 +569,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "REGR_R2")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 1d)
-      assert(row(1).getDouble(0) === 1d)
+      assert(row(0).getDouble(0) === 1.0)
+      assert(row(1).getDouble(0) === 1.0)
       assert(row(2).isNullAt(0))
     }
   }
@@ -586,9 +586,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "REGR_SXY")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 20000d)
-      assert(row(1).getDouble(0) === 5000d)
-      assert(row(2).getDouble(0) === 0d)
+      assert(row(0).getDouble(0) === 20000.0)
+      assert(row(1).getDouble(0) === 5000.0)
+      assert(row(2).getDouble(0) === 0.0)
     }
   }
 }
