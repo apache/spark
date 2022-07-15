@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 
 class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -249,10 +250,17 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  ]
       |}
     """.stripMargin
+    val avroSchema = AvroOptions(Map("avroSchema" -> avroTypeStruct)).schema.get
+    val sparkSchema = SchemaConverters.toSqlType(avroSchema).dataType.asInstanceOf[StructType]
 
-    val df = spark.range(5).select(struct('id).as("struct"))
-    val avroStructDF = df.select(functions.to_avro('struct, avroTypeStruct).as("avro"))
+    val df = spark.range(5).select('id)
+    val structDf = df.select(struct('id).as("struct"))
+    val avroStructDF = structDf.select(functions.to_avro('struct, avroTypeStruct).as("avro"))
+    checkAnswer(avroStructDF.select(functions.from_avro('avro, avroTypeStruct)), structDf)
 
-    checkAnswer(avroStructDF.select(functions.from_avro('avro, avroTypeStruct)), df)
+    withTempPath { dir =>
+      df.write.format("avro").save(dir.getCanonicalPath)
+      checkAnswer(spark.read.schema(sparkSchema).format("avro").load(dir.getCanonicalPath), df)
+    }
   }
 }
