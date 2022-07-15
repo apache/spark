@@ -335,7 +335,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       val searchName = searchPath.head
       val found = struct.fields.filter(f => resolver(searchName, f.name))
       if (found.length > 1) {
-        throw QueryCompilationErrors.ambiguousFieldNameError(fieldNames, found.length, context)
+        throw QueryCompilationErrors.ambiguousColumnOrFieldError(fieldNames, found.length, context)
       } else if (found.isEmpty) {
         None
       } else {
