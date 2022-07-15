@@ -109,7 +109,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
-  public void testShellCliParser() throws Exception {
+  public void testShellCliParser() {
     List<String> sparkSubmitArgs = Arrays.asList(
       parser.CLASS,
       "org.apache.spark.repl.Main",
@@ -129,7 +129,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
-  public void testAlternateSyntaxParsing() throws Exception {
+  public void testAlternateSyntaxParsing() {
     List<String> sparkSubmitArgs = Arrays.asList(
       parser.CLASS + "=org.my.Class",
       parser.MASTER + "=foo",
@@ -208,7 +208,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
-  public void testExamplesRunnerWithMasterNoMainClass() throws Exception {
+  public void testExamplesRunnerWithMasterNoMainClass() {
     List<String> sparkSubmitArgs = Arrays.asList(
       SparkSubmitCommandBuilder.RUN_EXAMPLE,
       parser.MASTER + "=foo"
@@ -237,7 +237,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
-  public void testExamplesRunnerPrimaryResource() throws Exception {
+  public void testExamplesRunnerPrimaryResource() {
     List<String> sparkSubmitArgs = Arrays.asList(
             SparkSubmitCommandBuilder.RUN_EXAMPLE,
             parser.MASTER + "=foo",

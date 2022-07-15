@@ -64,19 +64,6 @@ class CommandBuilderUtils {
     return sb.toString();
   }
 
-  /**
-   * Returns the first non-empty value mapped to the given key in the given maps, or null otherwise.
-   */
-  static String firstNonEmptyValue(String key, Map<?, ?>... maps) {
-    for (Map<?, ?> map : maps) {
-      String value = (String) map.get(key);
-      if (!isEmpty(value)) {
-        return value;
-      }
-    }
-    return null;
-  }
-
   /** Returns the first non-empty, non-null string in the given list, or null otherwise. */
   static String firstNonEmpty(String... candidates) {
     for (String s : candidates) {

@@ -57,7 +57,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   private static File TEST_SCRIPT_PATH;
 
   @AfterClass
-  public static void cleanupClass() throws Exception {
+  public static void cleanupClass() {
     if (TEST_SCRIPT_PATH != null) {
       TEST_SCRIPT_PATH.delete();
       TEST_SCRIPT_PATH = null;
@@ -78,7 +78,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   }
 
   @Test
-  public void testRedirectsSimple() throws Exception {
+  public void testRedirectsSimple() {
     SparkLauncher launcher = new SparkLauncher();
     launcher.redirectError(ProcessBuilder.Redirect.PIPE);
     assertNotNull(launcher.errorStream);
@@ -90,7 +90,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   }
 
   @Test
-  public void testRedirectLastWins() throws Exception {
+  public void testRedirectLastWins() {
     SparkLauncher launcher = new SparkLauncher();
     launcher.redirectError(ProcessBuilder.Redirect.PIPE)
       .redirectError(ProcessBuilder.Redirect.INHERIT);
@@ -105,8 +105,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   public void testRedirectToLog() throws Exception {
     assumeFalse(isWindows());
 
-    SparkAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
-      .startApplication();
+    SparkAppHandle handle = new TestSparkLauncher().startApplication();
     waitFor(handle);
 
     assertTrue(MESSAGES.contains("output"));
@@ -136,7 +135,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     Path out = Files.createTempFile("stdout", "txt");
     out.toFile().deleteOnExit();
 
-    SparkAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
+    SparkAppHandle handle = new TestSparkLauncher()
       .redirectOutput(out.toFile())
       .startApplication();
     waitFor(handle);

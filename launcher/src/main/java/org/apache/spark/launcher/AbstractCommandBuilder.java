@@ -129,7 +129,7 @@ abstract class AbstractCommandBuilder {
    * each entry is formatted in the way expected by <i>java.net.URLClassLoader</i> (more
    * specifically, with trailing slashes for directories).
    */
-  List<String> buildClassPath(String appClassPath) throws IOException {
+  List<String> buildClassPath(String appClassPath) {
     String sparkHome = getSparkHome();
 
     Set<String> cp = new LinkedHashSet<>();
