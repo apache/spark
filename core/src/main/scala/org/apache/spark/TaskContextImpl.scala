@@ -126,9 +126,6 @@ private[spark] class TaskContextImpl(
     }.foreach(invokeTaskFailureListeners)
     this
   }
-  
-  
-
   override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
     resources.asJava
   }
