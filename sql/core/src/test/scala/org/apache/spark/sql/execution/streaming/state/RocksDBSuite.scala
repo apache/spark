@@ -478,7 +478,7 @@ class RocksDBSuite extends SparkFunSuite {
     test(s"SPARK-39781: adding valid max_open_files=$maxOpenFiles config property " +
       "for RocksDB state store instance should succeed") {
       withTempDir { dir =>
-        val sqlConf = new SQLConf()
+        val sqlConf = SQLConf.get
         sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles", maxOpenFiles)
         val dbConf = RocksDBConf(StateStoreConf(sqlConf))
         assert(dbConf.maxOpenFiles === maxOpenFiles.toInt)
@@ -499,8 +499,8 @@ class RocksDBSuite extends SparkFunSuite {
     test(s"SPARK-39781: adding invalid max_open_files=$maxOpenFiles config property " +
       "for RocksDB state store instance should fail") {
       withTempDir { dir =>
-        val ex = intercept[Exception] {
-          val sqlConf = new SQLConf()
+        val ex = intercept[IllegalArgumentException] {
+          val sqlConf = SQLConf.get
           sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles",
             maxOpenFiles)
           val dbConf = RocksDBConf(StateStoreConf(sqlConf))
@@ -515,7 +515,6 @@ class RocksDBSuite extends SparkFunSuite {
             assert(toStr(db.get("a")) === "1")
           }
         }
-        assert(ex.isInstanceOf[IllegalArgumentException])
         assert(ex.getMessage.contains("Invalid value for"))
         assert(ex.getMessage.contains("must be an integer"))
       }

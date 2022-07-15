@@ -1960,7 +1960,7 @@ Here are the configs regarding to RocksDB instance of the state store provider:
   </tr>
   <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.maxOpenFiles</td>
-    <td>The number of open files that can be used by the RocksDB instance. Value of -1 means that files opened are always kept open.</td>
+    <td>The number of open files that can be used by the RocksDB instance. Value of -1 means that files opened are always kept open. If the open file limit is reached, RocksDB will evict entries from the open file cache and close those file descriptors and remove the entries from the cache.</td>
     <td>-1</td>
   </tr>
   <tr>
