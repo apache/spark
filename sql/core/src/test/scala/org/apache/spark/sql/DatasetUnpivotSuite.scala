@@ -360,8 +360,7 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e4,
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       msg = "At least one value column needs to be specified for UNPIVOT, " +
-        "all columns specified as ids: " +
-        "\\[`id#\\d+`, `str1#\\d+`, `str2#\\d+`, `int1#\\d+`, `long1#\\d+L`\\];(\n.*)*",
+        "all columns specified as ids;(\\n.*)*",
       matchMsg = true)
 
     // unpivoting with star value columns
@@ -394,8 +393,7 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e6,
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       msg = "At least one value column needs to be specified for UNPIVOT, " +
-        "all columns specified as ids: " +
-        "\\[`id#\\d+`, `str1#\\d+`, `str2#\\d+`\\];(\n.*)*",
+        "all columns specified as ids;(\\n.*)*",
       matchMsg = true)
   }
 

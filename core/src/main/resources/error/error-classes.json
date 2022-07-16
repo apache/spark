@@ -347,7 +347,7 @@
   },
   "UNPIVOT_REQUIRES_VALUE_COLUMNS" : {
     "message" : [
-      "At least one value column needs to be specified for UNPIVOT, all columns specified as ids: [<ids>]"
+      "At least one value column needs to be specified for UNPIVOT, all columns specified as ids"
     ],
     "sqlState" : "42000"
   },

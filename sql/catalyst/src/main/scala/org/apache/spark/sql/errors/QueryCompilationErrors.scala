@@ -92,10 +92,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         pivotVal.toString, pivotVal.dataType.simpleString, pivotCol.dataType.catalogString))
   }
 
-  def unpivotRequiresValueColumns(ids: Seq[NamedExpression]): Throwable = {
+  def unpivotRequiresValueColumns(): Throwable = {
     new AnalysisException(
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      messageParameters = Array(ids.map(id => toSQLId(id.toString)).mkString(", ")))
+      messageParameters = Array.empty)
   }
 
   def unpivotValDataTypeMismatchError(values: Seq[NamedExpression]): Throwable = {
