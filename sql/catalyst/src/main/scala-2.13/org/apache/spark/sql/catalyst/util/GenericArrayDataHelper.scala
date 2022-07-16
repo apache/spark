@@ -19,16 +19,12 @@ package org.apache.spark.sql.catalyst.util
 
 object GenericArrayDataHelper {
   def toArray(seq: scala.collection.Seq[Any]): Array[Any] = seq match {
-    case ias: scala.collection.immutable.ArraySeq.ofRef[_] =>
-      ias.unsafeArray.asInstanceOf[Array[Any]]
     case mas: scala.collection.mutable.ArraySeq.ofRef[_] =>
       mas.array.asInstanceOf[Array[Any]]
     case _ => seq.toArray
   }
 
   def toArray(seqOrArray: Any): Array[Any] = seqOrArray match {
-    case ias: scala.collection.immutable.ArraySeq.ofRef[_] =>
-      ias.unsafeArray.asInstanceOf[Array[Any]]
     case mas: scala.collection.mutable.ArraySeq.ofRef[_] =>
       mas.array.asInstanceOf[Array[Any]]
     // Specified this as`scala.collection.Seq` because seqOrArray can be
