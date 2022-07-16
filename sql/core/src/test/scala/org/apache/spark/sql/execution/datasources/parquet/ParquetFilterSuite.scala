@@ -22,6 +22,7 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDate, LocalDateTime, Period, ZoneId}
+import java.util.HashSet
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -29,7 +30,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
-import org.apache.parquet.filter2.predicate.Operators.{Column => _, Eq, Gt, GtEq, Lt, LtEq, NotEq, UserDefinedByInstance}
+import org.apache.parquet.filter2.predicate.Operators.{Column => _, Eq, Gt, GtEq, In => FilterIn, Lt, LtEq, NotEq, UserDefinedByInstance}
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetOutputFormat}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
@@ -201,7 +202,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
             In(tsAttr, Array(ts2.ts, ts3.ts, ts4.ts, "2021-05-01 00:01:02".ts).map(Literal.apply)),
-            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(ts2)), Row(resultFun(ts3)), Row(resultFun(ts4))))
         }
       }
@@ -362,7 +363,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
             In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply)),
-            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2)), Row(resultFun(3)), Row(resultFun(4))))
         }
       }
@@ -406,7 +407,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
             In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply)),
-            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2L)), Row(resultFun(3L)), Row(resultFun(4L))))
         }
       }
@@ -450,7 +451,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
             In(floatAttr, Array(2F, 3F, 4F, 5F, 6F, 7F).map(Literal.apply)),
-            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2F)), Row(resultFun(3F)), Row(resultFun(4F))))
         }
       }
@@ -494,7 +495,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
             In(doubleAttr, Array(2.0D, 3.0D, 4.0D, 5.0D, 6.0D, 7.0D).map(Literal.apply)),
-            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2D)), Row(resultFun(3D)), Row(resultFun(4F))))
         }
       }
@@ -538,7 +539,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
             In(stringAttr, Array("2", "3", "4", "5", "6", "7").map(Literal.apply)),
-            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun("2")), Row(resultFun("3")), Row(resultFun("4"))))
         }
       }
@@ -587,7 +588,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
             In(binaryAttr, Array(2.b, 3.b, 4.b, 5.b, 6.b, 7.b).map(Literal.apply)),
-            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2.b)), Row(resultFun(3.b)), Row(resultFun(4.b))))
         }
       }
@@ -664,7 +665,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
                 checkFilterPredicate(
                   In(dateAttr, Array("2018-03-19".date, "2018-03-20".date, "2018-03-21".date,
                     "2018-03-22".date).map(Literal.apply)),
-                  if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+                  if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
                   Seq(Row(resultFun("2018-03-19")), Row(resultFun("2018-03-20")),
                     Row(resultFun("2018-03-21"))))
               }
@@ -773,7 +774,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
               checkFilterPredicate(
                 In(decimalAttr, Array(2, 3, 4, 5).map(Literal.apply)
                   .map(_.cast(DecimalType(precision, 2)))),
-                if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+                if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
                 Seq(Row(resultFun(2)), Row(resultFun(3)), Row(resultFun(4))))
             }
           }
@@ -1659,25 +1660,29 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       val parquetFilters = createParquetFilters(
         new SparkToParquetSchemaConverter(conf).convert(StructType.fromDDL("a int")))
 
-      assertResult(Some(and(
-        FilterApi.gtEq(intColumn("a"), 1: Integer),
-        FilterApi.ltEq(intColumn("a"), 20: Integer)))
-      ) {
+      var set = new HashSet[Integer]()
+      (1 to 20) foreach (n => set.add(n))
+
+      assertResult(Some(FilterApi.in(intColumn("a"), set))) {
         parquetFilters.createFilter(sources.In("a", (1 to 20).toArray))
       }
 
-      assertResult(Some(and(
-        FilterApi.gtEq(intColumn("a"), -200: Integer),
-        FilterApi.ltEq(intColumn("a"), 40: Integer)))
-      ) {
+      set = new HashSet[Integer]()
+      set.add(-100)
+      set.add(10)
+      set.add(-200)
+      set.add(40)
+      assertResult(Some(FilterApi.in(intColumn("a"), set))) {
         parquetFilters.createFilter(sources.In("A", Array(-100, 10, -200, 40)))
       }
 
-      assertResult(Some(or(
-        FilterApi.eq(intColumn("a"), null: Integer),
-        and(
-          FilterApi.gtEq(intColumn("a"), 2: Integer),
-          FilterApi.ltEq(intColumn("a"), 7: Integer))))
+      set = new HashSet[Integer]()
+      set.add(2)
+      set.add(3)
+      set.add(7)
+      set.add(6)
+      assertResult(
+        Some(or(FilterApi.eq(intColumn("a"), null: Integer), FilterApi.in(intColumn("a"), set)))
       ) {
         parquetFilters.createFilter(sources.In("a", Array(2, 3, 7, null, 6)))
       }
@@ -1955,7 +1960,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
             In(iAttr, Array(2, 3, 4, 5, 6, 7).map(monthsLit)),
-            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(months(2))), Row(resultFun(months(3))), Row(resultFun(months(4)))))
         }
       }
@@ -2001,7 +2006,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
             In(iAttr, Array(2, 3, 4, 5, 6, 7).map(secsLit)),
-            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(secs(2))), Row(resultFun(secs(3))), Row(resultFun(secs(4)))))
         }
       }
@@ -2011,33 +2016,39 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("SPARK-38825: in and notIn filters") {
     import testImplicits._
     withTempPath { file =>
-      Seq(1, 2, 0, -1, 99, Integer.MAX_VALUE, 1000, 3, 7, Integer.MIN_VALUE, 2)
-        .toDF("id").coalesce(1).write.mode("overwrite")
-        .parquet(file.getCanonicalPath)
-      var df = spark.read.parquet(file.getCanonicalPath)
-      var in = df.filter(col("id").isin(100, 3, 11, 12, 13, Integer.MAX_VALUE, Integer.MIN_VALUE))
-      var notIn =
-        df.filter(!col("id").isin(100, 3, 11, 12, 13, Integer.MAX_VALUE, Integer.MIN_VALUE))
-      checkAnswer(in, Seq(Row(3), Row(-2147483648), Row(2147483647)))
-      checkAnswer(notIn, Seq(Row(1), Row(2), Row(0), Row(-1), Row(99), Row(1000), Row(7), Row(2)))
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          Seq(1, 2, 0, -1, 99, Integer.MAX_VALUE, 1000, 3, 7, Integer.MIN_VALUE, 2)
+            .toDF("id").coalesce(1).write.mode("overwrite")
+            .parquet(file.getCanonicalPath)
+          var df = spark.read.parquet(file.getCanonicalPath)
+          var in = df.filter(col("id")
+            .isin(100, 3, 11, 12, 13, Integer.MAX_VALUE, Integer.MIN_VALUE))
+          var notIn = df.filter(!col("id")
+            .isin(100, 3, 11, 12, 13, Integer.MAX_VALUE, Integer.MIN_VALUE))
+          checkAnswer(in, Seq(Row(3), Row(-2147483648), Row(2147483647)))
+          checkAnswer(notIn,
+            Seq(Row(1), Row(2), Row(0), Row(-1), Row(99), Row(1000), Row(7), Row(2)))
 
-      Seq("mary", "martin", "lucy", "alex", null, "mary", "dan").toDF("name").coalesce(1)
-        .write.mode("overwrite").parquet(file.getCanonicalPath)
-      df = spark.read.parquet(file.getCanonicalPath)
-      in = df.filter(col("name").isin("mary", "victor", "leo", "alex"))
-      notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex"))
-      checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
-      checkAnswer(notIn, Seq(Row("martin"), Row("lucy"), Row("dan")))
+          Seq("mary", "martin", "lucy", "alex", null, "mary", "dan").toDF("name").coalesce(1)
+            .write.mode("overwrite").parquet(file.getCanonicalPath)
+          df = spark.read.parquet(file.getCanonicalPath)
+          in = df.filter(col("name").isin("mary", "victor", "leo", "alex"))
+          notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex"))
+          checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
+          checkAnswer(notIn, Seq(Row("martin"), Row("lucy"), Row("dan")))
 
-      in = df.filter(col("name").isin("mary", "victor", "leo", "alex", null))
-      notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex", null))
-      checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
-      checkAnswer(notIn, Seq())
+          in = df.filter(col("name").isin("mary", "victor", "leo", "alex", null))
+          notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex", null))
+          checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
+          checkAnswer(notIn, Seq())
 
-      in = df.filter(col("name").isin(null))
-      notIn = df.filter(!col("name").isin(null))
-      checkAnswer(in, Seq())
-      checkAnswer(notIn, Seq())
+          in = df.filter(col("name").isin(null))
+          notIn = df.filter(!col("name").isin(null))
+          checkAnswer(in, Seq())
+          checkAnswer(notIn, Seq())
+        }
+      }
     }
   }
 }
