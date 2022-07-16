@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import com.google.common.base.Objects
-
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -108,13 +107,15 @@ case class BatchScanExec(
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
+    val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
       sparkContext.parallelize(Array.empty[InternalRow], 1)
     } else {
       new DataSourceRDD(
         sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
     }
+    postDriverMetrics()
+    rdd
   }
 
   override def doCanonicalize(): BatchScanExec = {
