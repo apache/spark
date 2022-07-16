@@ -1161,6 +1161,50 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
   }
 }
 
+/**
+ * * Parses a column to a timestamp based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp. The function always returns null on an invalid input with/without ANSI SQL
+      mode enabled. By default, it follows casting rules to a timestamp if the `fmt` is omitted.
+      The result data type is consistent with the value of configuration `spark.sql.timestampType`.
+  """,
+  arguments = """
+    Arguments:
+      * timestamp_str - A string to be parsed to timestamp.
+      * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+              date and time format patterns.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31 00:12:00');
+       2016-12-31 00:12:00
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31 00:00:00
+      > SELECT _FUNC_('foo', 'yyyy-MM-dd');
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+object TryToTimestampExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1 || numArgs == 2) {
+      ParseToTimestamp(
+        expressions.head,
+        expressions.drop(1).lastOption,
+        SQLConf.get.timestampType,
+        failOnError = false)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+    }
+  }
+}
+
 abstract class ToTimestamp
   extends BinaryExpression with TimestampFormatterHelper with ExpectsInputTypes {
 
@@ -2048,12 +2092,13 @@ case class ParseToTimestamp(
     left: Expression,
     format: Option[Expression],
     override val dataType: DataType,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = format.map { f =>
-    GetTimestamp(left, f, dataType, timeZoneId)
-  }.getOrElse(Cast(left, dataType, timeZoneId))
+    GetTimestamp(left, f, dataType, timeZoneId, failOnError = failOnError)
+  }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format), SQLConf.get.timestampType)
