@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import scala.collection.immutable
 import scala.collection.mutable
 
 object GenericArrayDataHelper {
