@@ -17,6 +17,8 @@
 
 package org.apache.spark.executor
 
+import java.util.concurrent.locks.ReentrantReadWriteLock
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 
@@ -253,12 +255,25 @@ class TaskMetrics private[spark] () extends Serializable {
    * External accumulators registered with this task.
    */
   @transient private[spark] lazy val externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
+  private[spark] val lock = new ReentrantReadWriteLock()
 
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
-    externalAccums += a
+    lock.writeLock().lock()
+    try {
+      externalAccums += a
+    } finally {
+      lock.writeLock().unlock()
+    }
   }
 
-  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
+  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = {
+    lock.readLock().lock()
+    try {
+      internalAccums ++ externalAccums
+    } finally {
+      lock.readLock().unlock()
+    }
+  }
 
   private[spark] def nonZeroInternalAccums(): Seq[AccumulatorV2[_, _]] = {
     // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its

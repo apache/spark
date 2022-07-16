@@ -17,6 +17,8 @@
 
 package org.apache.spark.executor
 
+import java.util.concurrent.atomic.LongAdder
+
 import org.scalatest.Assertions
 
 import org.apache.spark._
@@ -223,6 +225,54 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(!newUpdates(acc3.id).countFailedValues)
     assert(newUpdates(acc4.id).countFailedValues)
     assert(newUpdates.size === tm.internalAccums.size + 4)
+  }
+
+  test("SPARK-39696: Concurrent r/w of TaskMetrics should not throw Exception") {
+
+    val taskMetrics = TaskMetrics.empty
+    val readExceptions = new LongAdder
+    val writeExceptions = new LongAdder
+
+    def registerAccumulator(idx: Int): Unit = {
+      try {
+        taskMetrics.registerAccumulator(
+          AccumulatorSuite.createLongAccum(s"acc_$idx", true))
+      } catch {
+        case _: Exception => writeExceptions.increment()
+      }
+    }
+
+    val writeThread1 = new Thread() {
+      override def run(): Unit = {
+        (0 until 10000).foreach { i => registerAccumulator(i) }
+      }
+    }
+    val writeThread2 = new Thread() {
+      override def run(): Unit = {
+        (10000 until 20000).foreach { i => registerAccumulator(i) }
+      }
+    }
+    val readThread = new Thread() {
+      override def run(): Unit = {
+        (0 until 10000).foreach { _ =>
+          try {
+            taskMetrics.accumulators().filterNot(_.isZero)
+          } catch {
+            case _: Exception => readExceptions.increment()
+          }
+        }
+      }
+    }
+
+    writeThread1.start()
+    writeThread2.start()
+    readThread.start()
+    writeThread1.join()
+    writeThread2.join()
+    readThread.join()
+
+    assert(writeExceptions.intValue() == 0)
+    assert(readExceptions.intValue() == 0)
   }
 }
 
