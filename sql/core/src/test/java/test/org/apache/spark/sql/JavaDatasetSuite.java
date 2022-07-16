@@ -391,49 +391,6 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
-  public void testMelt() {
-    // SPARK-38864: tests Dataset.melt()
-    Dataset<Row> ds = spark.createDataset(
-      Arrays.asList(
-        new Tuple4<Integer, String, Integer, Integer>(1, "one", 11, 12),
-        new Tuple4<Integer, String, Integer, Integer>(2, "two", 21, 22),
-        new Tuple4<Integer, String, Integer, Integer>(3, "three", null, 32)
-      ),
-      Encoders.tuple(Encoders.INT(), Encoders.STRING(), Encoders.INT(), Encoders.INT())
-    ).toDF("id", "label", "int1", "int2");
-
-    Set<Row> expected = asSet(
-      new GenericRow(new Object[] { 1, "int1", 11 }),
-      new GenericRow(new Object[] { 1, "int2", 12 }),
-      new GenericRow(new Object[] { 2, "int1", 21 }),
-      new GenericRow(new Object[] { 2, "int2", 22 }),
-      new GenericRow(new Object[] { 3, "int1", null }),
-      new GenericRow(new Object[] { 3, "int2", 32 })
-    );
-
-    // test melt(ids, variableColumnName, valueColumnName)
-    Dataset<Row> meltedDs1 = ds.drop("label").unpivot(
-      new Column[] { col("id") },
-      "var",
-      "val"
-    );
-    Assert.assertArrayEquals(new String[] { "id", "var", "val" }, meltedDs1.columns());
-    List<Row> melted1 = meltedDs1.collectAsList();
-    Assert.assertEquals(expected, toSet(melted1));
-
-    // test melt(ids, values, variableColumnName, valueColumnName)
-    Dataset<Row> meltedDs2 = ds.unpivot(
-      new Column[] { col("id") },
-      new Column[] { col("int1"), col("int2") },
-      "column",
-      "value"
-    );
-    Assert.assertArrayEquals(new String[] { "id", "column", "value" }, meltedDs2.columns());
-    List<Row> melted2 = meltedDs2.collectAsList();
-    Assert.assertEquals(expected, toSet(melted2));
-  }
-
-  @Test
   public void testObservation() {
     // SPARK-34806: tests the Observation Java API and Dataset.observe(Observation, Column, Column*)
     Observation namedObservation = new Observation("named");

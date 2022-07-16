@@ -88,7 +88,6 @@ class DatasetUnpivotSuite extends QueryTest
         Array($"str1", $"str2"),
         variableColumnName = "var",
         valueColumnName = "val")
-    unpivoted.explain(true)
     assert(unpivoted.schema === longSchema)
     checkAnswer(unpivoted, longDataRows)
   }
@@ -339,7 +338,7 @@ class DatasetUnpivotSuite extends QueryTest
         Array.empty,
         variableColumnName = "var",
         valueColumnName = "val"
-      ).collect()
+      )
     }
     checkErrorClass(
       exception = e3,
@@ -445,7 +444,7 @@ class DatasetUnpivotSuite extends QueryTest
         Array($"str.one", $"str.two"),
         variableColumnName = "var",
         valueColumnName = "val"
-      ).collect()  // TODO: check if collect is really needed
+      )
     }
     checkErrorClass(
       exception = e,
@@ -457,7 +456,7 @@ class DatasetUnpivotSuite extends QueryTest
       matchMsg = true)
   }
 
-  test("SPARK-39292: unpivot with struct fields") {
+  test("unpivot with struct fields") {
     checkAnswer(
       wideStructDataDs.unpivot(
         Array($"an.id"),
@@ -467,7 +466,7 @@ class DatasetUnpivotSuite extends QueryTest
       longStructDataRows)
   }
 
-  test("SPARK-39292: unpivot with struct ids star") {
+  test("unpivot with struct ids star") {
     checkAnswer(
       wideStructDataDs.unpivot(
         Array($"an.*"),
@@ -477,7 +476,7 @@ class DatasetUnpivotSuite extends QueryTest
       longStructDataRows)
   }
 
-  test("SPARK-39292: unpivot with struct values star") {
+  test("unpivot with struct values star") {
     checkAnswer(
       wideStructDataDs.unpivot(
         Array($"an.id"),
