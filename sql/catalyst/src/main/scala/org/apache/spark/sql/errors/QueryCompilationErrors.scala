@@ -99,7 +99,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def unpivotValDataTypeMismatchError(values: Seq[NamedExpression]): Throwable = {
-    val dataTypes = values.map(_.dataType).toSet.map((dt: DataType) => toSQLType(dt))
+    val dataTypes = values
+      .groupBy(_.dataType)
+      .mapValues(values => values.map(value => toSQLId(value.toString)))
+      .mapValues(values => if (values.length > 3) values.take(3) :+ "..." else values)
+      .map { case (dataType, values) => s"${toSQLType(dataType)} (${values.mkString(", ")})" }
+
     new AnalysisException(
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       messageParameters = Array(dataTypes.mkString(", ")))

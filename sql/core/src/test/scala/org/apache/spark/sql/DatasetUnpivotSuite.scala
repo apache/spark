@@ -249,18 +249,27 @@ class DatasetUnpivotSuite extends QueryTest
 
   test("unpivot with incompatible value types") {
     val e = intercept[AnalysisException] {
-      wideDataDs.unpivot(
-        Array($"id"),
-        Array($"str1", $"int1"),
-        variableColumnName = "var",
-        valueColumnName = "val"
-      )
+      wideDataDs
+        .select(
+          $"id",
+          $"str1",
+          $"int1", $"int1".as("int2"), $"int1".as("int3"), $"int1".as("int4"),
+          $"long1", $"long1".as("long2")
+        )
+        .unpivot(
+          Array($"id"),
+          Array(),
+          variableColumnName = "var",
+          valueColumnName = "val"
+        )
     }
     checkErrorClass(
       exception = e,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Unpivot value columns must share a least common type, " +
-        "some types do not: \\[\"STRING\", \"INT\"\\];(\n.*)*",
+      msg = "Unpivot value columns must share a least common type, some types do not: \\[" +
+        "\"STRING\" \\(`str1#\\d+`\\), " +
+        "\"INT\" \\(`int1#\\d+`, `int2#\\d+`, `int3#\\d+`, ...\\), " +
+        "\"BIGINT\" \\(`long1#\\d+L`, `long2#\\d+L`\\)\\];(\n.*)*",
       matchMsg = true)
   }
 
@@ -343,8 +352,10 @@ class DatasetUnpivotSuite extends QueryTest
     checkErrorClass(
       exception = e3,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Unpivot value columns must share a least common type, " +
-        "some types do not: \\[\"INT\", \"STRING\", \"BIGINT\"\\];(\n.*)*",
+      msg = "Unpivot value columns must share a least common type, some types do not: \\[" +
+        "\"INT\" \\(`id#5`, `int1#8`\\), " +
+        "\"STRING\" \\(`str1#6`, `str2#7`\\), " +
+        "\"BIGINT\" \\(`long1#9L`\\)\\];(\n.*)*",
       matchMsg = true)
 
     // unpivoting with star id columns so that no value columns are left
@@ -376,8 +387,10 @@ class DatasetUnpivotSuite extends QueryTest
     checkErrorClass(
       exception = e5,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Unpivot value columns must share a least common type, " +
-        "some types do not: \\[\"INT\", \"STRING\", \"BIGINT\"\\];(\n.*)*",
+      msg = "Unpivot value columns must share a least common type, some types do not: \\[" +
+        "\"INT\" \\(`id#\\d+`, `int1#\\d+`\\), " +
+        "\"STRING\" \\(`str1#\\d+`, `str2#\\d+`\\), " +
+        "\"BIGINT\" \\(`long1#\\d+L`\\)\\];(\n.*)*",
       matchMsg = true)
 
     // unpivoting without giving values and no non-id columns
