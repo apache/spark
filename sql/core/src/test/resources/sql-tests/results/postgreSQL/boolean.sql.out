@@ -54,9 +54,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'test' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('test') AS error
-       ^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -74,9 +71,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'foo' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('foo') AS error
-       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -102,9 +96,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'yeah' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('yeah') AS error
-       ^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -130,9 +121,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'nay' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('nay') AS error
-       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -142,9 +130,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'on' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('on') AS true
-       ^^^^^^^^^^^^^
 
 
 -- !query
@@ -154,9 +139,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'off' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('off') AS `false`
-       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -166,9 +148,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'of' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('of') AS `false`
-       ^^^^^^^^^^^^^
 
 
 -- !query
@@ -178,9 +157,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'o' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('o') AS error
-       ^^^^^^^^^^^^
 
 
 -- !query
@@ -190,9 +166,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'on_' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('on_') AS error
-       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -202,9 +175,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value 'off_' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('off_') AS error
-       ^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -222,9 +192,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value '11' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('11') AS error
-       ^^^^^^^^^^^^^
 
 
 -- !query
@@ -242,9 +209,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value '000' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('000') AS error
-       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -254,9 +218,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value '' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean('') AS error
-       ^^^^^^^^^^^
 
 
 -- !query
@@ -363,9 +324,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value '  tru e ' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean(string('  tru e ')) AS invalid
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -375,9 +333,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 [CAST_INVALID_INPUT] The value '' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT boolean(string('')) AS invalid
-       ^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -521,11 +476,7 @@ INSERT INTO BOOLTBL2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-failed to evaluate expression CAST('XXX' AS BOOLEAN): [CAST_INVALID_INPUT] The value 'XXX' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 2, position 12) ==
-   VALUES (boolean('XXX'))
-           ^^^^^^^^^^^^^^
-; line 2 pos 3
+failed to evaluate expression CAST('XXX' AS BOOLEAN): [CAST_INVALID_INPUT] The value 'XXX' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.; line 2 pos 3
 
 
 -- !query

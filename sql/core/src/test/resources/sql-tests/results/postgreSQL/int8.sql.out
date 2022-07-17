@@ -390,9 +390,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [ARITHMETIC_OVERFLOW] long overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 29) ==
-SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
-                            ^^^^^^^
 
 
 -- !query
@@ -648,9 +645,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-select bigint('9223372036854775800') / bigint('0')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -660,9 +654,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-select bigint('-9223372036854775808') / smallint('0')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -672,9 +663,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-select smallint('100') / bigint('0')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -827,9 +815,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [ARITHMETIC_OVERFLOW] long overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT bigint((-9223372036854775808)) * bigint((-1))
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -855,9 +840,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [ARITHMETIC_OVERFLOW] long overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT bigint((-9223372036854775808)) * int((-1))
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -883,9 +865,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [ARITHMETIC_OVERFLOW] long overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT bigint((-9223372036854775808)) * smallint((-1))
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query

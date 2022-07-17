@@ -202,9 +202,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-select interval '2 seconds' / 0
-       ^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -238,9 +235,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-select interval '2' year / 0
-       ^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1990,9 +1984,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [ARITHMETIC_OVERFLOW] Overflow in integral divide. Use 'try_divide' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -2002,9 +1993,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [ARITHMETIC_OVERFLOW] Overflow in integral divide. Use 'try_divide' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -2048,9 +2036,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [ARITHMETIC_OVERFLOW] Overflow in integral divide. Use 'try_divide' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -2060,9 +2045,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [ARITHMETIC_OVERFLOW] Overflow in integral divide. Use 'try_divide' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
