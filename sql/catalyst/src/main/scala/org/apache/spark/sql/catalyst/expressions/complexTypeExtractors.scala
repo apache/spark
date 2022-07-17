@@ -267,7 +267,7 @@ case class GetArrayItem(
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
         throw QueryExecutionErrors.invalidArrayIndexError(
-          index, baseValue.numElements, queryContext)
+          index, baseValue.numElements, _queryContext)
       } else {
         null
       }
@@ -291,7 +291,7 @@ case class GetArrayItem(
       }
 
       val indexOutOfBoundBranch = if (failOnError) {
-        val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+        val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
         // scalastyle:off line.size.limit
         s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements(), $errorContext);"
         // scalastyle:on line.size.limit
@@ -314,7 +314,7 @@ case class GetArrayItem(
       newLeft: Expression, newRight: Expression): GetArrayItem =
     copy(child = newLeft, ordinal = newRight)
 
-  override def initQueryContext(): String = if (failOnError) {
+  override def _initQueryContext(): String = if (failOnError) {
     origin.context
   } else {
     ""
@@ -379,7 +379,7 @@ trait GetMapValueUtil
 
     if (!found) {
       if (failOnError) {
-        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, keyType, queryContext)
+        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, keyType, _queryContext)
       } else {
         null
       }
@@ -412,7 +412,7 @@ trait GetMapValueUtil
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
-    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+    lazy val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
     val keyDt = ctx.addReferenceObj("keyType", keyType, keyType.getClass.getName)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
@@ -503,7 +503,7 @@ case class GetMapValue(
       newLeft: Expression, newRight: Expression): GetMapValue =
     copy(child = newLeft, key = newRight)
 
-  override def initQueryContext(): String = if (failOnError) {
+  override def _initQueryContext(): String = if (failOnError) {
     origin.context
   } else {
     ""

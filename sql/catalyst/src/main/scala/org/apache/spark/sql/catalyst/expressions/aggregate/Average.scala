@@ -136,9 +136,9 @@ case class Average(
 
   override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
 
-  override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
+  override lazy val evaluateExpression: Expression = getEvaluateExpression(_queryContext)
 
-  override def initQueryContext(): String = if (useAnsiAdd) {
+  override def _initQueryContext(): String = if (useAnsiAdd) {
     origin.context
   } else {
     ""

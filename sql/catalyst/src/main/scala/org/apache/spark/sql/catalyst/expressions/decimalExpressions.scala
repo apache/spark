@@ -122,13 +122,13 @@ case class CheckOverflow(
       dataType.scale,
       Decimal.ROUND_HALF_UP,
       nullOnOverflow,
-      queryContext)
+      _queryContext)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = if (nullOnOverflow) {
       "\"\""
     } else {
-      ctx.addReferenceObj("errCtx", queryContext)
+      ctx.addReferenceObj("errCtx", _queryContext)
     }
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
@@ -148,7 +148,7 @@ case class CheckOverflow(
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
 
-  override def initQueryContext(): String = if (nullOnOverflow) {
+  override def _initQueryContext(): String = if (nullOnOverflow) {
     ""
   } else {
     origin.context

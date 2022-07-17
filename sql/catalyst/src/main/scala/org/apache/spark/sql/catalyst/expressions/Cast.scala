@@ -481,7 +481,7 @@ case class Cast(
 
   override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
-  override def initQueryContext(): String = if (ansiEnabled) {
+  override def _initQueryContext(): String = if (ansiEnabled) {
     origin.context
   } else {
     ""
@@ -650,7 +650,7 @@ case class Cast(
           false
         } else {
           if (ansiEnabled) {
-            throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s, queryContext)
+            throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s, _queryContext)
           } else {
             null
           }
@@ -682,7 +682,7 @@ case class Cast(
     case StringType =>
       buildCast[UTF8String](_, utfs => {
         if (ansiEnabled) {
-          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId, queryContext)
+          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId, _queryContext)
         } else {
           DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull
         }
@@ -707,14 +707,14 @@ case class Cast(
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
       if (ansiEnabled) {
-        buildCast[Double](_, d => doubleToTimestampAnsi(d, queryContext))
+        buildCast[Double](_, d => doubleToTimestampAnsi(d, _queryContext))
       } else {
         buildCast[Double](_, d => doubleToTimestamp(d))
       }
     // TimestampWritable.floatToTimestamp
     case FloatType =>
       if (ansiEnabled) {
-        buildCast[Float](_, f => doubleToTimestampAnsi(f.toDouble, queryContext))
+        buildCast[Float](_, f => doubleToTimestampAnsi(f.toDouble, _queryContext))
       } else {
         buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
       }
@@ -724,7 +724,7 @@ case class Cast(
     case StringType =>
       buildCast[UTF8String](_, utfs => {
         if (ansiEnabled) {
-          DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(utfs, queryContext)
+          DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(utfs, _queryContext)
         } else {
           DateTimeUtils.stringToTimestampWithoutTimeZone(utfs).orNull
         }
@@ -757,7 +757,7 @@ case class Cast(
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
       if (ansiEnabled) {
-        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, queryContext))
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, _queryContext))
       } else {
         buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s).orNull)
       }
@@ -814,7 +814,7 @@ case class Cast(
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, v => UTF8StringUtils.toLongExact(v, queryContext))
+      buildCast[UTF8String](_, v => UTF8StringUtils.toLongExact(v, _queryContext))
     case StringType =>
       val result = new LongWrapper()
       buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
@@ -837,7 +837,7 @@ case class Cast(
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, v => UTF8StringUtils.toIntExact(v, queryContext))
+      buildCast[UTF8String](_, v => UTF8StringUtils.toIntExact(v, _queryContext))
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
@@ -869,7 +869,7 @@ case class Cast(
   // ShortConverter
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, v => UTF8StringUtils.toShortExact(v, queryContext))
+      buildCast[UTF8String](_, v => UTF8StringUtils.toShortExact(v, _queryContext))
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toShort(result)) {
@@ -916,7 +916,7 @@ case class Cast(
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, v => UTF8StringUtils.toByteExact(v, queryContext))
+      buildCast[UTF8String](_, v => UTF8StringUtils.toByteExact(v, _queryContext))
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toByte(result)) {
@@ -983,7 +983,7 @@ case class Cast(
         null
       } else {
         throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
-          value, decimalType.precision, decimalType.scale, queryContext)
+          value, decimalType.precision, decimalType.scale, _queryContext)
       }
     }
   }
@@ -1006,7 +1006,7 @@ case class Cast(
       })
     case StringType if ansiEnabled =>
       buildCast[UTF8String](_,
-        s => changePrecision(Decimal.fromStringANSI(s, target, queryContext), target))
+        s => changePrecision(Decimal.fromStringANSI(s, target, _queryContext), target))
     case BooleanType =>
       buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
@@ -1048,7 +1048,7 @@ case class Cast(
             val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
             if(ansiEnabled && d == null) {
               throw QueryExecutionErrors.invalidInputInCastToNumberError(
-                DoubleType, s, queryContext)
+                DoubleType, s, _queryContext)
             } else {
               d
             }
@@ -1074,7 +1074,7 @@ case class Cast(
             val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
             if (ansiEnabled && f == null) {
               throw QueryExecutionErrors.invalidInputInCastToNumberError(
-                FloatType, s, queryContext)
+                FloatType, s, _queryContext)
             } else {
               f
             }
@@ -1190,7 +1190,7 @@ case class Cast(
   }
 
   def errorContextCode(codegenContext: CodegenContext): String = {
-    codegenContext.addReferenceObj("errCtx", queryContext)
+    codegenContext.addReferenceObj("errCtx", _queryContext)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1502,7 +1502,7 @@ case class Cast(
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
         (c, evPrim, evNull) =>
           if (ansiEnabled) {
-            val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+            val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
             code"""
               $evPrim = $dateTimeUtilsCls.stringToDateAnsi($c, $errorContext);
             """
@@ -1592,7 +1592,7 @@ case class Cast(
               }
           """
       case StringType if ansiEnabled =>
-        val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+        val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
         val toType = ctx.addReferenceObj("toType", target)
         (c, evPrim, evNull) =>
           code"""
@@ -1669,7 +1669,7 @@ case class Cast(
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
           code"""
             $evPrim = $dateTimeUtilsCls.stringToTimestampAnsi($c, $zid, $errorContext);
            """
@@ -1708,7 +1708,7 @@ case class Cast(
     case DoubleType =>
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
           code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi($c, $errorContext);"
         } else {
           code"""
@@ -1722,7 +1722,7 @@ case class Cast(
     case FloatType =>
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
           code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi((double)$c, $errorContext);"
         } else {
           code"""
@@ -1742,7 +1742,7 @@ case class Cast(
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
           code"""
             $evPrim = $dateTimeUtilsCls.stringToTimestampWithoutTimeZoneAnsi($c, $errorContext);
            """
@@ -1859,7 +1859,7 @@ case class Cast(
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
         val castFailureCode = if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
           s"throw QueryExecutionErrors.invalidInputSyntaxForBooleanError($c, $errorContext);"
         } else {
           s"$evNull = true;"
@@ -1994,7 +1994,7 @@ case class Cast(
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
-      val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+      val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
       (c, evPrim, evNull) => code"$evPrim = $stringUtils.toByteExact($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
@@ -2031,7 +2031,7 @@ case class Cast(
       ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
-      val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+      val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
       (c, evPrim, evNull) => code"$evPrim = $stringUtils.toShortExact($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
@@ -2066,7 +2066,7 @@ case class Cast(
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
-      val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+      val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
       (c, evPrim, evNull) => code"$evPrim = $stringUtils.toIntExact($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
@@ -2101,7 +2101,7 @@ case class Cast(
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
-      val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+      val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
       (c, evPrim, evNull) => code"$evPrim = $stringUtils.toLongExact($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
@@ -2138,7 +2138,7 @@ case class Cast(
         val floatStr = ctx.freshVariable("floatStr", StringType)
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
-            val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+            val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
             s"throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
               s"org.apache.spark.sql.types.FloatType$$.MODULE$$,$c, $errorContext);"
           } else {
@@ -2176,7 +2176,7 @@ case class Cast(
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
-            val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+            val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
             s"throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
               s"org.apache.spark.sql.types.DoubleType$$.MODULE$$, $c, $errorContext);"
           } else {
