@@ -151,7 +151,7 @@ case class CheckOverflow(
   override def _initQueryContext(): String = if (nullOnOverflow) {
     ""
   } else {
-    origin.context
+    origin._context
   }
 }
 

@@ -257,7 +257,7 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   override def _initQueryContext(): String = {
     if (failOnError) {
-      origin.context
+      origin._context
     } else {
       ""
     }

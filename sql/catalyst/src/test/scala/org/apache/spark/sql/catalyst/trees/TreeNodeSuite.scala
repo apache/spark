@@ -885,7 +885,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         |^^^^^
         |""".stripMargin
 
-    assert(origin.context == expected)
+    assert(origin._context == expected)
   }
 
   test("SPARK-39046: Return an empty context string if TreeNode.origin is wrongly set") {
@@ -921,7 +921,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       stopIndex = Some(1),
       sqlText = text)
     Seq(origin1, origin2, origin3, origin4, origin5, origin6).foreach { origin =>
-      assert(origin.context.isEmpty)
+      assert(origin._context.isEmpty)
     }
   }
 }

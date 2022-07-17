@@ -315,7 +315,7 @@ case class GetArrayItem(
     copy(child = newLeft, ordinal = newRight)
 
   override def _initQueryContext(): String = if (failOnError) {
-    origin.context
+    origin._context
   } else {
     ""
   }
@@ -504,7 +504,7 @@ case class GetMapValue(
     copy(child = newLeft, key = newRight)
 
   override def _initQueryContext(): String = if (failOnError) {
-    origin.context
+    origin._context
   } else {
     ""
   }

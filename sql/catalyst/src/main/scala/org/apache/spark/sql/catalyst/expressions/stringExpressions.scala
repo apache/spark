@@ -383,7 +383,7 @@ case class Elt(
     copy(children = newChildren)
 
   override def _initQueryContext(): String = if (failOnError) {
-    origin.context
+    origin._context
   } else {
     ""
   }

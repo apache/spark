@@ -2267,7 +2267,7 @@ case class ElementAt(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 
   override def _initQueryContext(): String = if (failOnError) {
-    origin.context
+    origin._context
   } else {
     ""
   }

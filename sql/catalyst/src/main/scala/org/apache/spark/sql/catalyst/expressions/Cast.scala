@@ -482,7 +482,7 @@ case class Cast(
   override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
   override def _initQueryContext(): String = if (ansiEnabled) {
-    origin.context
+    origin._context
   } else {
     ""
   }

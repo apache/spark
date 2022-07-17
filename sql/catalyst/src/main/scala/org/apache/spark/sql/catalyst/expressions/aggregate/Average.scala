@@ -139,7 +139,7 @@ case class Average(
   override lazy val evaluateExpression: Expression = getEvaluateExpression(_queryContext)
 
   override def _initQueryContext(): String = if (useAnsiAdd) {
-    origin.context
+    origin._context
   } else {
     ""
   }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
@@ -594,8 +595,10 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
  */
 trait SupportQueryContext extends Expression with Serializable {
   protected var _queryContext: String = _initQueryContext()
+  protected var queryContext: Option[QueryContext] = initQueryContext()
 
   def _initQueryContext(): String
+  def initQueryContext(): Option[QueryContext] = None
 
   // Note: Even though query contexts are serialized to executors, it will be regenerated from an
   //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors
@@ -605,6 +608,7 @@ trait SupportQueryContext extends Expression with Serializable {
     other match {
       case s: SupportQueryContext =>
         _queryContext = s._queryContext
+        queryContext = s.queryContext
       case _ =>
     }
     super.copyTagsFrom(other)
