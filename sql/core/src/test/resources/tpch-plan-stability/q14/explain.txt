@@ -7,14 +7,14 @@
             :- * Project (4)
             :  +- * Filter (3)
             :     +- * ColumnarToRow (2)
-            :        +- Scan parquet default.lineitem (1)
+            :        +- Scan parquet spark_catalog.default.lineitem (1)
             +- BroadcastExchange (8)
                +- * Filter (7)
                   +- * ColumnarToRow (6)
-                     +- Scan parquet default.part (5)
+                     +- Scan parquet spark_catalog.default.part (5)
 
 
-(1) Scan parquet default.lineitem
+(1) Scan parquet spark_catalog.default.lineitem
 Output [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -32,7 +32,7 @@ Condition : (((isnotnull(l_shipdate#4) AND (l_shipdate#4 >= 1995-09-01)) AND (l_
 Output [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
 Input [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
 
-(5) Scan parquet default.part
+(5) Scan parquet spark_catalog.default.part
 Output [2]: [p_partkey#5, p_type#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/part]

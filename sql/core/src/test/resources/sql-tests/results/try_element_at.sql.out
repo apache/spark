@@ -4,8 +4,8 @@ SELECT try_element_at(array(1, 2, 3), 0)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArrayIndexOutOfBoundsException
-SQL array indices start at 1
+org.apache.spark.SparkRuntimeException
+[ELEMENT_AT_BY_INDEX_ZERO] The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
 
 
 -- !query

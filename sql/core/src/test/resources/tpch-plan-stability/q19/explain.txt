@@ -7,14 +7,14 @@
             :- * Project (4)
             :  +- * Filter (3)
             :     +- * ColumnarToRow (2)
-            :        +- Scan parquet default.lineitem (1)
+            :        +- Scan parquet spark_catalog.default.lineitem (1)
             +- BroadcastExchange (8)
                +- * Filter (7)
                   +- * ColumnarToRow (6)
-                     +- Scan parquet default.part (5)
+                     +- Scan parquet spark_catalog.default.part (5)
 
 
-(1) Scan parquet default.lineitem
+(1) Scan parquet spark_catalog.default.lineitem
 Output [6]: [l_partkey#1, l_quantity#2, l_extendedprice#3, l_discount#4, l_shipinstruct#5, l_shipmode#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -32,7 +32,7 @@ Condition : ((((isnotnull(l_shipinstruct#5) AND l_shipmode#6 IN (AIR,AIR REG)) A
 Output [4]: [l_partkey#1, l_quantity#2, l_extendedprice#3, l_discount#4]
 Input [6]: [l_partkey#1, l_quantity#2, l_extendedprice#3, l_discount#4, l_shipinstruct#5, l_shipmode#6]
 
-(5) Scan parquet default.part
+(5) Scan parquet spark_catalog.default.part
 Output [4]: [p_partkey#7, p_brand#8, p_size#9, p_container#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/part]

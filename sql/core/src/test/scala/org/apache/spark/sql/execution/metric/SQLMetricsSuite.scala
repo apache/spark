@@ -22,12 +22,14 @@ import java.io.File
 import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -109,11 +111,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val df = testData2.groupBy().count() // 2 partitions
     val expected1 = Seq(
       Map("number of output rows" -> 2L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L),
       Map("number of output rows" -> 1L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L))
     val shuffleExpected1 = Map(
@@ -131,11 +133,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val df2 = testData2.groupBy($"a").count()
     val expected2 = Seq(
       Map("number of output rows" -> 4L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L),
       Map("number of output rows" -> 3L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L))
 
@@ -184,7 +186,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       }
       val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
       nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe bucket list iters").toString
+        val probes = metrics(nodeId)._2("avg hash probes per key").toString
         if (!probes.contains("\n")) {
           // It's a single metrics value
           assert(probes.toDouble > 1.0)
@@ -579,8 +581,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     assert(metricInfo.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
     // After serializing to JSON, the original value type is lost, but we can still
     // identify that it's a SQL metric from the metadata
-    val metricInfoJson = JsonProtocol.accumulableInfoToJson(metricInfo)
-    val metricInfoDeser = JsonProtocol.accumulableInfoFromJson(metricInfoJson)
+    val mapper = new ObjectMapper()
+    val metricInfoJson = JsonProtocol.toJsonString(
+      JsonProtocol.accumulableInfoToJson(metricInfo, _))
+    val metricInfoDeser = JsonProtocol.accumulableInfoFromJson(mapper.readTree(metricInfoJson))
     metricInfoDeser.update match {
       case Some(v: String) => assert(v.toLong === 10L)
       case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
@@ -738,7 +742,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       val df = spark.sql(
         "SELECT * FROM testDataForScan WHERE p = 1")
       testSparkPlanMetrics(df, 1, Map(
-        0L -> (("Scan parquet default.testdataforscan", Map(
+        0L -> ((s"Scan parquet $SESSION_CATALOG_NAME.default.testdataforscan", Map(
           "number of output rows" -> 3L,
           "number of files read" -> 2L))))
       )

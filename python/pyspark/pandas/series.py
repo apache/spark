@@ -405,6 +405,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 assert not fastpath
                 s = data
             else:
+                from pyspark.pandas.indexes.base import Index
+
+                if isinstance(index, Index):
+                    raise TypeError(
+                        "The given index cannot be a pandas-on-Spark index. "
+                        "Try pandas index or array-like."
+                    )
+
                 s = pd.Series(
                     data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
                 )
@@ -4730,7 +4738,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ser_count = self.value_counts(dropna=dropna, sort=False)
         sdf_count = ser_count._internal.spark_frame
         most_value = ser_count.max()
-        sdf_most_value = sdf_count.filter("count == {}".format(most_value))
+        sdf_most_value = sdf_count.filter("count == {}".format(str(most_value)))
         sdf = sdf_most_value.select(
             F.col(SPARK_DEFAULT_INDEX_NAME).alias(SPARK_DEFAULT_SERIES_NAME)
         )
@@ -5016,7 +5024,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             if regex:
                 # to_replace must be a string
-                cond = self.spark.column.rlike(to_replace)
+                cond = self.spark.column.rlike(cast(str, to_replace))
             else:
                 cond = self.spark.column.isin(to_replace)
                 # to_replace may be a scalar

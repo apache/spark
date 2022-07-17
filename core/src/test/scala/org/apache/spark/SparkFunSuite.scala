@@ -18,7 +18,8 @@
 package org.apache.spark
 
 import java.io.File
-import java.nio.file.Path
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
@@ -224,6 +225,19 @@ abstract class SparkFunSuite
   }
 
   /**
+   * Creates a temporary directory containing a secret file, which is then passed to `f` and
+   * will be deleted after `f` returns.
+   */
+  protected def withSecretFile(contents: String = "test-secret")(f: File => Unit): Unit = {
+    val secretDir = Utils.createTempDir("temp-secrets")
+    val secretFile = new File(secretDir, "temp-secret.txt")
+    Files.write(secretFile.toPath, contents.getBytes(UTF_8))
+    try f(secretFile) finally {
+      Utils.deleteRecursively(secretDir)
+    }
+  }
+
+  /**
    * Adds a log appender and optionally sets a log level to the root logger or the logger with
    * the specified name, then executes the specified function, and in the end removes the log
    * appender and restores the log level if necessary.
@@ -307,7 +321,7 @@ abstract class SparkFunSuite
   }
 
   protected def checkError(
-      exception: Exception with SparkThrowable,
+      exception: SparkThrowable,
       errorClass: String,
       errorSubClass: String,
       sqlState: String,
@@ -315,14 +329,14 @@ abstract class SparkFunSuite
     checkError(exception, errorClass, Some(errorSubClass), Some(sqlState), parameters)
 
   protected def checkError(
-      exception: Exception with SparkThrowable,
+      exception: SparkThrowable,
       errorClass: String,
       sqlState: String,
       parameters: Map[String, String]): Unit =
     checkError(exception, errorClass, None, Some(sqlState), parameters)
 
   protected def checkError(
-      exception: Exception with SparkThrowable,
+      exception: SparkThrowable,
       errorClass: String,
       parameters: Map[String, String]): Unit =
     checkError(exception, errorClass, None, None, parameters)

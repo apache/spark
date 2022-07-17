@@ -107,7 +107,8 @@ class StreamSuite extends StreamTest {
   test("StreamingExecutionRelation.computeStats") {
     val memoryStream = MemoryStream[Int]
     val executionRelation = StreamingExecutionRelation(
-      memoryStream, memoryStream.encoder.schema.toAttributes)(memoryStream.sqlContext.sparkSession)
+      memoryStream, memoryStream.encoder.schema.toAttributes, None)(
+      memoryStream.sqlContext.sparkSession)
     assert(executionRelation.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
 

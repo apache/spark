@@ -22,7 +22,8 @@ import scala.language.implicitConversions
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.execution.SerializeFromObjectExec
+import org.apache.spark.sql.execution.{LogicalRDD, SerializeFromObjectExec}
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming._
@@ -184,6 +185,48 @@ class ForeachBatchSinkSuite extends StreamTest {
     val dsUntyped = mem2.toDF().selectExpr("value + 1 as value")
     assertPlan(mem2, dsUntyped)
   }
+
+  test("Leaf node of Dataset in foreachBatch should carry over origin logical plan") {
+    def assertPlan[T](stream: MemoryStream[Int], ds: Dataset[T]): Unit = {
+      var planAsserted = false
+
+      val writer: (Dataset[T], Long) => Unit = { case (df, _) =>
+        df.logicalPlan.collectLeaves().head match {
+          case l: LogicalRDD =>
+            assert(l.originLogicalPlan.nonEmpty, "Origin logical plan should be available in " +
+              "LogicalRDD")
+            l.originLogicalPlan.get.collectLeaves().head match {
+              case _: StreamingDataSourceV2Relation => // pass
+              case p =>
+                fail("Expect StreamingDataSourceV2Relation in the leaf node of origin " +
+                  s"logical plan! Actual: $p")
+            }
+
+          case p =>
+            fail(s"Expect LogicalRDD in the leaf node of Dataset! Actual: $p")
+        }
+        planAsserted = true
+      }
+
+      stream.addData(1, 2, 3, 4, 5)
+
+      val query = ds.writeStream.trigger(Trigger.Once()).foreachBatch(writer).start()
+      query.awaitTermination()
+
+      assert(planAsserted, "ForeachBatch writer should be called!")
+    }
+
+    // typed
+    val mem = MemoryStream[Int]
+    val ds = mem.toDS.map(_ + 1)
+    assertPlan(mem, ds)
+
+    // untyped
+    val mem2 = MemoryStream[Int]
+    val dsUntyped = mem2.toDF().selectExpr("value + 1 as value")
+    assertPlan(mem2, dsUntyped)
+  }
+
 
   // ============== Helper classes and methods =================
 

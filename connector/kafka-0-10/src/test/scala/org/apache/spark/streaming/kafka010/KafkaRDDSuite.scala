@@ -30,14 +30,13 @@ import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.streaming.kafka010.mocks.MockTime
 
-class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
+class KafkaRDDSuite extends SparkFunSuite {
 
   private var kafkaTestUtils: KafkaTestUtils = _
 

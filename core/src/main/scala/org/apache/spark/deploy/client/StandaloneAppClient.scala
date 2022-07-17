@@ -30,6 +30,7 @@ import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.Logging
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
@@ -294,14 +295,25 @@ private[spark] class StandaloneAppClient(
   }
 
   /**
-   * Request executors from the Master by specifying the total number desired,
-   * including existing pending and running executors.
+   * Request executors for default resource profile from the Master by specifying the
+   * total number desired, including existing pending and running executors.
    *
    * @return whether the request is acknowledged.
    */
   def requestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+    requestTotalExecutors(Map(appDescription.defaultProfile -> requestedTotal))
+  }
+
+  /**
+   * Request executors from the Master by specifying the total number desired for each
+   * resource profile, including existing pending and running executors.
+   *
+   * @return whether the request is acknowledged.
+   */
+  def requestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
     if (endpoint.get != null && appId.get != null) {
-      endpoint.get.ask[Boolean](RequestExecutors(appId.get, requestedTotal))
+      endpoint.get.ask[Boolean](RequestExecutors(appId.get, resourceProfileToTotalExecs))
     } else {
       logWarning("Attempted to request executors before driver fully initialized.")
       Future.successful(false)

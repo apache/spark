@@ -18,12 +18,12 @@
          :     :  :     :  :              :  +- * BroadcastHashJoin Inner BuildRight (5)
          :     :  :     :  :              :     :- * Filter (3)
          :     :  :     :  :              :     :  +- * ColumnarToRow (2)
-         :     :  :     :  :              :     :     +- Scan parquet default.store_sales (1)
+         :     :  :     :  :              :     :     +- Scan parquet spark_catalog.default.store_sales (1)
          :     :  :     :  :              :     +- ReusedExchange (4)
          :     :  :     :  :              +- BroadcastExchange (10)
          :     :  :     :  :                 +- * Filter (9)
          :     :  :     :  :                    +- * ColumnarToRow (8)
-         :     :  :     :  :                       +- Scan parquet default.customer_address (7)
+         :     :  :     :  :                       +- Scan parquet spark_catalog.default.customer_address (7)
          :     :  :     :  +- BroadcastExchange (28)
          :     :  :     :     +- * HashAggregate (27)
          :     :  :     :        +- Exchange (26)
@@ -34,7 +34,7 @@
          :     :  :     :                    :  +- * BroadcastHashJoin Inner BuildRight (20)
          :     :  :     :                    :     :- * Filter (18)
          :     :  :     :                    :     :  +- * ColumnarToRow (17)
-         :     :  :     :                    :     :     +- Scan parquet default.store_sales (16)
+         :     :  :     :                    :     :     +- Scan parquet spark_catalog.default.store_sales (16)
          :     :  :     :                    :     +- ReusedExchange (19)
          :     :  :     :                    +- ReusedExchange (22)
          :     :  :     +- BroadcastExchange (42)
@@ -47,7 +47,7 @@
          :     :  :                       :  +- * BroadcastHashJoin Inner BuildRight (34)
          :     :  :                       :     :- * Filter (32)
          :     :  :                       :     :  +- * ColumnarToRow (31)
-         :     :  :                       :     :     +- Scan parquet default.store_sales (30)
+         :     :  :                       :     :     +- Scan parquet spark_catalog.default.store_sales (30)
          :     :  :                       :     +- ReusedExchange (33)
          :     :  :                       +- ReusedExchange (36)
          :     :  +- BroadcastExchange (57)
@@ -60,7 +60,7 @@
          :     :                    :  +- * BroadcastHashJoin Inner BuildRight (49)
          :     :                    :     :- * Filter (47)
          :     :                    :     :  +- * ColumnarToRow (46)
-         :     :                    :     :     +- Scan parquet default.web_sales (45)
+         :     :                    :     :     +- Scan parquet spark_catalog.default.web_sales (45)
          :     :                    :     +- ReusedExchange (48)
          :     :                    +- ReusedExchange (51)
          :     +- BroadcastExchange (71)
@@ -73,7 +73,7 @@
          :                       :  +- * BroadcastHashJoin Inner BuildRight (63)
          :                       :     :- * Filter (61)
          :                       :     :  +- * ColumnarToRow (60)
-         :                       :     :     +- Scan parquet default.web_sales (59)
+         :                       :     :     +- Scan parquet spark_catalog.default.web_sales (59)
          :                       :     +- ReusedExchange (62)
          :                       +- ReusedExchange (65)
          +- BroadcastExchange (86)
@@ -86,12 +86,12 @@
                            :  +- * BroadcastHashJoin Inner BuildRight (78)
                            :     :- * Filter (76)
                            :     :  +- * ColumnarToRow (75)
-                           :     :     +- Scan parquet default.web_sales (74)
+                           :     :     +- Scan parquet spark_catalog.default.web_sales (74)
                            :     +- ReusedExchange (77)
                            +- ReusedExchange (80)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_addr_sk#1, ss_ext_sales_price#2, ss_sold_date_sk#3]
 Batched: true
 Location: InMemoryFileIndex []
@@ -118,7 +118,7 @@ Join condition: None
 Output [4]: [ss_addr_sk#1, ss_ext_sales_price#2, d_year#6, d_qoy#7]
 Input [6]: [ss_addr_sk#1, ss_ext_sales_price#2, ss_sold_date_sk#3, d_date_sk#5, d_year#6, d_qoy#7]
 
-(7) Scan parquet default.customer_address
+(7) Scan parquet spark_catalog.default.customer_address
 Output [2]: [ca_address_sk#8, ca_county#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -163,7 +163,7 @@ Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#2))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#2))#12]
 Results [3]: [ca_county#9, d_year#6, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#12,17,2) AS store_sales#13]
 
-(16) Scan parquet default.store_sales
+(16) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_addr_sk#14, ss_ext_sales_price#15, ss_sold_date_sk#16]
 Batched: true
 Location: InMemoryFileIndex []
@@ -229,7 +229,7 @@ Left keys [1]: [ca_county#9]
 Right keys [1]: [ca_county#22]
 Join condition: None
 
-(30) Scan parquet default.store_sales
+(30) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_addr_sk#26, ss_ext_sales_price#27, ss_sold_date_sk#28]
 Batched: true
 Location: InMemoryFileIndex []
@@ -299,7 +299,7 @@ Join condition: None
 Output [5]: [ca_county#9, d_year#6, store_sales#13, store_sales#25, store_sales#37]
 Input [7]: [ca_county#9, d_year#6, store_sales#13, ca_county#22, store_sales#25, ca_county#34, store_sales#37]
 
-(45) Scan parquet default.web_sales
+(45) Scan parquet spark_catalog.default.web_sales
 Output [3]: [ws_bill_addr_sk#38, ws_ext_sales_price#39, ws_sold_date_sk#40]
 Batched: true
 Location: InMemoryFileIndex []
@@ -365,7 +365,7 @@ Left keys [1]: [ca_county#9]
 Right keys [1]: [ca_county#45]
 Join condition: None
 
-(59) Scan parquet default.web_sales
+(59) Scan parquet spark_catalog.default.web_sales
 Output [3]: [ws_bill_addr_sk#50, ws_ext_sales_price#51, ws_sold_date_sk#52]
 Batched: true
 Location: InMemoryFileIndex []
@@ -435,7 +435,7 @@ Join condition: (CASE WHEN (web_sales#49 > 0.00) THEN (web_sales#60 / web_sales#
 Output [8]: [ca_county#9, d_year#6, store_sales#13, store_sales#25, store_sales#37, ca_county#45, web_sales#49, web_sales#60]
 Input [9]: [ca_county#9, d_year#6, store_sales#13, store_sales#25, store_sales#37, ca_county#45, web_sales#49, ca_county#57, web_sales#60]
 
-(74) Scan parquet default.web_sales
+(74) Scan parquet spark_catalog.default.web_sales
 Output [3]: [ws_bill_addr_sk#61, ws_ext_sales_price#62, ws_sold_date_sk#63]
 Batched: true
 Location: InMemoryFileIndex []
@@ -519,10 +519,10 @@ Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#3 IN dyn
 BroadcastExchange (94)
 +- * Filter (93)
    +- * ColumnarToRow (92)
-      +- Scan parquet default.date_dim (91)
+      +- Scan parquet spark_catalog.default.date_dim (91)
 
 
-(91) Scan parquet default.date_dim
+(91) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#5, d_year#6, d_qoy#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -544,10 +544,10 @@ Subquery:2 Hosting operator id = 16 Hosting Expression = ss_sold_date_sk#16 IN d
 BroadcastExchange (98)
 +- * Filter (97)
    +- * ColumnarToRow (96)
-      +- Scan parquet default.date_dim (95)
+      +- Scan parquet spark_catalog.default.date_dim (95)
 
 
-(95) Scan parquet default.date_dim
+(95) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#18, d_year#19, d_qoy#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
@@ -569,10 +569,10 @@ Subquery:3 Hosting operator id = 30 Hosting Expression = ss_sold_date_sk#28 IN d
 BroadcastExchange (102)
 +- * Filter (101)
    +- * ColumnarToRow (100)
-      +- Scan parquet default.date_dim (99)
+      +- Scan parquet spark_catalog.default.date_dim (99)
 
 
-(99) Scan parquet default.date_dim
+(99) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#30, d_year#31, d_qoy#32]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

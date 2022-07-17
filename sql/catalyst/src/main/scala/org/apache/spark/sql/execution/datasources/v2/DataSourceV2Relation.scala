@@ -68,7 +68,11 @@ case class DataSourceV2Relation(
   override def skipSchemaResolution: Boolean = table.supports(TableCapability.ACCEPT_ANY_SCHEMA)
 
   override def simpleString(maxFields: Int): String = {
-    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+    val qualifiedTableName = (catalog, identifier) match {
+      case (Some(cat), Some(ident)) => s"${cat.name()}.${ident.toString}"
+      case _ => ""
+    }
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $qualifiedTableName $name"
   }
 
   override def computeStats(): Statistics = {
@@ -152,6 +156,8 @@ case class StreamingDataSourceV2Relation(
     output: Seq[Attribute],
     scan: Scan,
     stream: SparkDataStream,
+    catalog: Option[CatalogPlugin],
+    identifier: Option[Identifier],
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None)
   extends LeafNode with MultiInstanceRelation {
@@ -167,6 +173,17 @@ case class StreamingDataSourceV2Relation(
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
+
+  private val stringArgsVal: Seq[Any] = {
+    val qualifiedTableName = (catalog, identifier) match {
+      case (Some(cat), Some(ident)) => Some(s"${cat.name()}.${ident.toString}")
+      case _ => None
+    }
+
+    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset)
+  }
+
+  override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
 }
 
 object DataSourceV2Relation {

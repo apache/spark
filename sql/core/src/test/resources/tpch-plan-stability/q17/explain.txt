@@ -8,12 +8,12 @@
             :  +- * BroadcastHashJoin Inner BuildRight (9)
             :     :- * Filter (3)
             :     :  +- * ColumnarToRow (2)
-            :     :     +- Scan parquet default.lineitem (1)
+            :     :     +- Scan parquet spark_catalog.default.lineitem (1)
             :     +- BroadcastExchange (8)
             :        +- * Project (7)
             :           +- * Filter (6)
             :              +- * ColumnarToRow (5)
-            :                 +- Scan parquet default.part (4)
+            :                 +- Scan parquet spark_catalog.default.part (4)
             +- BroadcastExchange (18)
                +- * Filter (17)
                   +- * HashAggregate (16)
@@ -21,10 +21,10 @@
                         +- * HashAggregate (14)
                            +- * Filter (13)
                               +- * ColumnarToRow (12)
-                                 +- Scan parquet default.lineitem (11)
+                                 +- Scan parquet spark_catalog.default.lineitem (11)
 
 
-(1) Scan parquet default.lineitem
+(1) Scan parquet spark_catalog.default.lineitem
 Output [3]: [l_partkey#1, l_quantity#2, l_extendedprice#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -38,7 +38,7 @@ Input [3]: [l_partkey#1, l_quantity#2, l_extendedprice#3]
 Input [3]: [l_partkey#1, l_quantity#2, l_extendedprice#3]
 Condition : (isnotnull(l_partkey#1) AND isnotnull(l_quantity#2))
 
-(4) Scan parquet default.part
+(4) Scan parquet spark_catalog.default.part
 Output [3]: [p_partkey#4, p_brand#5, p_container#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/part]
@@ -69,7 +69,7 @@ Join condition: None
 Output [3]: [l_quantity#2, l_extendedprice#3, p_partkey#4]
 Input [4]: [l_partkey#1, l_quantity#2, l_extendedprice#3, p_partkey#4]
 
-(11) Scan parquet default.lineitem
+(11) Scan parquet spark_catalog.default.lineitem
 Output [2]: [l_partkey#8, l_quantity#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]

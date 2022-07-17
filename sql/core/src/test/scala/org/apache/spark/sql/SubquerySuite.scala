@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
@@ -2218,6 +2218,62 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         assert(join.head.right.isInstanceOf[LocalLimitExec])
         assert(join.head.right.asInstanceOf[LocalLimitExec].limit === 1)
       }
+    }
+  }
+
+  test("SPARK-39672: Fix removing project before filter with correlated subquery") {
+    withTempView("v1", "v2") {
+      Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c").createTempView("v1")
+      Seq((1, 3, 5), (4, 5, 6)).toDF("a", "b", "c").createTempView("v2")
+
+      def findProject(df: DataFrame): Seq[Project] = {
+        df.queryExecution.optimizedPlan.collect {
+          case p: Project => p
+        }
+      }
+
+      // project before filter cannot be removed since subquery has conflicting attributes
+      // with outer reference
+      val df1 = sql(
+        """
+         |select * from
+         |(
+         |select
+         |v1.a,
+         |v1.b,
+         |v2.c
+         |from v1
+         |inner join v2
+         |on v1.a=v2.a) t3
+         |where not exists (
+         |  select 1
+         |  from v2
+         |  where t3.a=v2.a and t3.b=v2.b and t3.c=v2.c
+         |)
+         |""".stripMargin)
+      checkAnswer(df1, Row(1, 2, 5))
+      assert(findProject(df1).size == 4)
+
+      // project before filter can be removed when there are no conflicting attributes
+      val df2 = sql(
+        """
+         |select * from
+         |(
+         |select
+         |v1.b,
+         |v2.c
+         |from v1
+         |inner join v2
+         |on v1.b=v2.c) t3
+         |where not exists (
+         |  select 1
+         |  from v2
+         |  where t3.b=v2.b and t3.c=v2.c
+         |)
+         |""".stripMargin)
+
+      checkAnswer(df2, Row(5, 5))
+      assert(findProject(df2).size == 3)
     }
   }
 }

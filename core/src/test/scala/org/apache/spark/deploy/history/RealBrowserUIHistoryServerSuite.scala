@@ -22,7 +22,6 @@ import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.proxy.ProxyServlet
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.openqa.selenium.WebDriver
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.selenium.WebBrowser
@@ -37,8 +36,7 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
  * Tests for HistoryServer with real web browsers.
  */
 abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
-  extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll
-  with BeforeAndAfterEach with ResetSystemProperties {
+  extends SparkFunSuite with WebBrowser with Matchers with ResetSystemProperties {
 
   implicit var webDriver: WebDriver
 

@@ -29,7 +29,6 @@ import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.CoarseGrainedExecutorBackend
@@ -44,7 +43,7 @@ import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
 import org.apache.spark.storage._
 import org.apache.spark.util.ThreadUtils
 
-class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
+class ShuffleBlockPusherSuite extends SparkFunSuite {
 
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var dependency: ShuffleDependency[Int, Int, Int] = _

@@ -94,7 +94,7 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
     @property
     def pdf6(self):
         np.random.seed(55)
-        index = pd.date_range(start="2022-05-02 03:04:05", end="2022-05-03 06:07:08", freq="1S")
+        index = pd.date_range(start="2022-05-02 03:04:05", end="2022-05-02 06:07:08", freq="1S")
         return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
@@ -229,14 +229,14 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
         self._test_resample(
             self.pdf1,
             self.psdf1,
-            ["Y", "3Y", "M", "9M", "D", "17D"],
+            ["3Y", "9M", "17D"],
             ["min", "max", "sum", "mean", "std", "var"],
         )
-        self._test_resample(self.pdf2, self.psdf2, ["3A", "A", "11M", "D"], ["sum"])
-        self._test_resample(self.pdf3, self.psdf3, ["27H", "1D", "2D", "1M"], ["sum"])
-        self._test_resample(self.pdf4, self.psdf4, ["1H", "5H", "D", "2D"], ["sum"])
-        self._test_resample(self.pdf5, self.psdf5, ["1T", "2T", "5MIN", "1H", "2H", "D"], ["sum"])
-        self._test_resample(self.pdf6, self.psdf6, ["1S", "2S", "1MIN", "H", "2H"], ["sum"])
+        self._test_resample(self.pdf2, self.psdf2, ["3A", "11M", "D"], ["sum"])
+        self._test_resample(self.pdf3, self.psdf3, ["2D", "1M"], ["sum"])
+        self._test_resample(self.pdf4, self.psdf4, ["1H", "2D"], ["sum"])
+        self._test_resample(self.pdf5, self.psdf5, ["11T", "55MIN", "2H", "D"], ["sum"])
+        self._test_resample(self.pdf6, self.psdf6, ["29S", "10MIN", "3H"], ["sum"])
 
     def test_series_resample(self):
         self._test_resample(self.pdf1.A, self.psdf1.A, ["4Y"], ["sum"])
@@ -244,7 +244,7 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
         self._test_resample(self.pdf3.A, self.psdf3.A, ["18H"], ["sum"])
         self._test_resample(self.pdf4.A, self.psdf4.A, ["6D"], ["sum"])
         self._test_resample(self.pdf5.A, self.psdf5.A, ["47T"], ["sum"])
-        self._test_resample(self.pdf6.A, self.psdf6.A, ["37S"], ["sum"])
+        self._test_resample(self.pdf6.A, self.psdf6.A, ["111S"], ["sum"])
 
     def test_resample_on(self):
         np.random.seed(77)

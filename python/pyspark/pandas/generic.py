@@ -3117,11 +3117,11 @@ class Frame(object, metaclass=ABCMeta):
         if isinstance(self, ps.Series):
             if indexes_increasing:
                 result = first_series(
-                    self.to_frame().loc[before:after]  # type: ignore[arg-type, assignment]
+                    self.to_frame().loc[before:after]  # type: ignore[arg-type]
                 ).rename(self.name)
             else:
                 result = first_series(
-                    self.to_frame().loc[after:before]  # type: ignore[arg-type,assignment]
+                    self.to_frame().loc[after:before]  # type: ignore[arg-type]
                 ).rename(self.name)
         elif isinstance(self, ps.DataFrame):
             if axis == 0:

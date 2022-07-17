@@ -56,6 +56,11 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
+      image_url: >-
+        ${{
+          (inputs.branch == 'master' && steps.infra-image-outputs.outputs.image_url)
+          || 'dongjoon/apache-spark-github-action-image:20220207'
+        }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -108,6 +113,14 @@ jobs:
           precondition="${precondition//$'\n'/'%0A'}"
           echo "::set-output name=required::$precondition"
         fi
+    - name: Generate infra image URL
+      id: infra-image-outputs
+      run: |
+        # Convert to lowercase to meet Docker repo name requirement
+        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        echo ::set-output name=image_url::$IMG_URL
 
   # Build: build Spark and run the tests for specified modules.
   build:
@@ -251,13 +264,60 @@ jobs:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/unit-tests.log"
 
-  pyspark:
+  infra-image:
+    name: "Base image build"
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).pyspark == 'true'
+    # Currently, only enable docker build from cache for `master` branch jobs
+    if: >-
+      (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
+      fromJson(needs.precondition.outputs.required).lint == 'true' ||
+      fromJson(needs.precondition.outputs.required).sparkr == 'true') &&
+      inputs.branch == 'master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout Spark repository
+        uses: actions/checkout@v2
+        # In order to fetch changed files
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          context: ./dev/infra/
+          push: true
+          tags: |
+            ${{ needs.precondition.outputs.image_url }}
+          # Use the infra image cache to speed up
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
+
+  pyspark:
+    needs: [precondition, infra-image]
+    # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
+    if: always() && fromJson(needs.precondition.outputs.required).pyspark == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20220207
+      image: ${{ needs.precondition.outputs.image_url }}
     strategy:
       fail-fast: false
       matrix:
@@ -289,6 +349,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -354,12 +417,13 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).sparkr == 'true'
+    needs: [precondition, infra-image]
+    # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
+    if: always() && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20220207
+      image: ${{ needs.precondition.outputs.image_url }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -374,6 +438,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -421,8 +488,9 @@ jobs:
 
   # Static analysis, and documentation build
   lint:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).lint == 'true'
+    needs: [precondition, infra-image]
+    # always run if lint == 'true', even infra-image is skip (such as non-master job)
+    if: always() && fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
     env:
@@ -431,7 +499,7 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
     container:
-      image: dongjoon/apache-spark-github-action-image:20220207
+      image: ${{ needs.precondition.outputs.image_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -439,6 +507,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -635,6 +706,7 @@ jobs:
         ./dev/change-scala-version.sh 2.13
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
 
+  # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
@@ -695,7 +767,7 @@ jobs:
       run: cd tpcds-kit/tools && make OS=LINUX
     - name: Generate TPC-DS (SF=1) table data
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-      run: build/sbt "sql/test:runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
+      run: build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
     - name: Run TPC-DS queries (Sort merge join)
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"

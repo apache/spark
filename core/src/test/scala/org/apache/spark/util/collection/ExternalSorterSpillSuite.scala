@@ -25,7 +25,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite, TaskContext}
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -35,7 +34,7 @@ import org.apache.spark.serializer.{KryoSerializer, SerializerInstance, Serializ
 import org.apache.spark.storage.{BlockId, BlockManager, DiskBlockManager, DiskBlockObjectWriter, TempShuffleBlockId}
 import org.apache.spark.util.{Utils => UUtils}
 
-class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
+class ExternalSorterSpillSuite extends SparkFunSuite {
 
   private val spillFilesCreated = ArrayBuffer.empty[File]
 

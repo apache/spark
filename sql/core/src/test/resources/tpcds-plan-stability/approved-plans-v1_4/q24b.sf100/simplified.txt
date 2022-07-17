@@ -50,7 +50,7 @@ WholeStageCodegen (14)
                                                                                                   Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
                                                                                                     ColumnarToRow
                                                                                                       InputAdapter
-                                                                                                        Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
+                                                                                                        Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
                                                                                                 InputAdapter
                                                                                                   BroadcastExchange #16
                                                                                                     WholeStageCodegen (1)
@@ -58,7 +58,7 @@ WholeStageCodegen (14)
                                                                                                         Filter [s_market_id,s_store_sk,s_zip]
                                                                                                           ColumnarToRow
                                                                                                             InputAdapter
-                                                                                                              Scan parquet default.store [s_store_sk,s_store_name,s_market_id,s_state,s_zip]
+                                                                                                              Scan parquet spark_catalog.default.store [s_store_sk,s_store_name,s_market_id,s_state,s_zip]
                                                                                 InputAdapter
                                                                                   WholeStageCodegen (5)
                                                                                     Sort [i_item_sk]
@@ -68,7 +68,7 @@ WholeStageCodegen (14)
                                                                                             Filter [i_item_sk]
                                                                                               ColumnarToRow
                                                                                                 InputAdapter
-                                                                                                  Scan parquet default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
+                                                                                                  Scan parquet spark_catalog.default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
                                                                 InputAdapter
                                                                   WholeStageCodegen (9)
                                                                     Sort [c_customer_sk]
@@ -88,7 +88,7 @@ WholeStageCodegen (14)
                                             Filter [ca_country,ca_zip]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.customer_address [ca_state,ca_zip,ca_country]
+                                                  Scan parquet spark_catalog.default.customer_address [ca_state,ca_zip,ca_country]
     HashAggregate [c_last_name,c_first_name,s_store_name,sum,isEmpty] [sum(netpaid),paid,sum,isEmpty]
       InputAdapter
         Exchange [c_last_name,c_first_name,s_store_name] #1
@@ -123,14 +123,14 @@ WholeStageCodegen (14)
                                                                   Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
                                                                     ColumnarToRow
                                                                       InputAdapter
-                                                                        Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
+                                                                        Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
                                                                 InputAdapter
                                                                   BroadcastExchange #5
                                                                     WholeStageCodegen (1)
                                                                       Filter [i_color,i_item_sk]
                                                                         ColumnarToRow
                                                                           InputAdapter
-                                                                            Scan parquet default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
+                                                                            Scan parquet spark_catalog.default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
                                                 InputAdapter
                                                   WholeStageCodegen (5)
                                                     Sort [c_customer_sk]
@@ -140,7 +140,7 @@ WholeStageCodegen (14)
                                                             Filter [c_customer_sk,c_birth_country]
                                                               ColumnarToRow
                                                                 InputAdapter
-                                                                  Scan parquet default.customer [c_customer_sk,c_first_name,c_last_name,c_birth_country]
+                                                                  Scan parquet spark_catalog.default.customer [c_customer_sk,c_first_name,c_last_name,c_birth_country]
                                 InputAdapter
                                   WholeStageCodegen (9)
                                     Sort [sr_ticket_number,sr_item_sk]
@@ -151,7 +151,7 @@ WholeStageCodegen (14)
                                               Filter [sr_ticket_number,sr_item_sk]
                                                 ColumnarToRow
                                                   InputAdapter
-                                                    Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_returned_date_sk]
+                                                    Scan parquet spark_catalog.default.store_returns [sr_item_sk,sr_ticket_number,sr_returned_date_sk]
                             InputAdapter
                               BroadcastExchange #8
                                 WholeStageCodegen (11)
@@ -164,8 +164,8 @@ WholeStageCodegen (14)
                                               Filter [s_market_id,s_store_sk,s_zip]
                                                 ColumnarToRow
                                                   InputAdapter
-                                                    Scan parquet default.store [s_store_sk,s_store_name,s_market_id,s_state,s_zip]
+                                                    Scan parquet spark_catalog.default.store [s_store_sk,s_store_name,s_market_id,s_state,s_zip]
                                       Filter [ca_country,ca_zip]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.customer_address [ca_state,ca_zip,ca_country]
+                                            Scan parquet spark_catalog.default.customer_address [ca_state,ca_zip,ca_country]

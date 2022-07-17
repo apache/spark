@@ -1865,7 +1865,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           case Descending => PercentileDisc(sortOrder.child, percentage, true)
         }
     }
-    val aggregateExpression = percentile.toAggregateExpression()
+    val filter = Option(ctx.where).map(expression(_))
+    val aggregateExpression = percentile.toAggregateExpression(false, filter)
     ctx.windowSpec match {
       case spec: WindowRefContext =>
         UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
@@ -3192,9 +3193,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
 
     CreateNamespace(
-      UnresolvedDBObjectName(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
-        isNamespace = true),
+      UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
       ctx.EXISTS != null,
       properties)
   }
@@ -3586,16 +3585,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           ctx)
 
       case Some(query) =>
-        CreateTableAsSelect(
-          UnresolvedDBObjectName(table, isNamespace = false),
+        CreateTableAsSelect(UnresolvedIdentifier(table),
           partitioning, query, tableSpec, Map.empty, ifNotExists)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
         val schema = StructType(columns ++ partCols)
-        CreateTable(
-          UnresolvedDBObjectName(table, isNamespace = false),
+        CreateTable(UnresolvedIdentifier(table),
           schema, partitioning, tableSpec, ignoreIfExists = ifNotExists)
     }
   }
@@ -3658,16 +3655,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           ctx)
 
       case Some(query) =>
-        ReplaceTableAsSelect(
-          UnresolvedDBObjectName(table, isNamespace = false),
+        ReplaceTableAsSelect(UnresolvedIdentifier(table),
           partitioning, query, tableSpec, writeOptions = Map.empty, orCreate = orCreate)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
         val schema = StructType(columns ++ partCols)
-        ReplaceTable(
-          UnresolvedDBObjectName(table, isNamespace = false),
+        ReplaceTable(UnresolvedIdentifier(table),
           schema, partitioning, tableSpec, orCreate = orCreate)
     }
   }
@@ -3701,7 +3696,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    SetCatalogAndNamespace(UnresolvedDBObjectName(nameParts, isNamespace = true))
+    SetCatalogAndNamespace(UnresolvedNamespace(nameParts))
   }
 
   /**
