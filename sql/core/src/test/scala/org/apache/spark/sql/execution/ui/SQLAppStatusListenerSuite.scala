@@ -873,7 +873,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(metrics(innerMetric.id) === expectedInnerValue)
   }
 
-  test("Report driver metrics from Datasource v2 scan") {
+  test("SPARK-39635: Report driver metrics from Datasource v2 scan") {
     val statusStore = spark.sharedState.statusStore
     val oldCount = statusStore.executionsList().size
 
