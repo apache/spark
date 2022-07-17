@@ -433,7 +433,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("Sort should be included in WholeStageCodegen") {
     Seq(-1, 100000).foreach { threshold =>
-      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+      withSQLConf(SQLConf.TOP_K_SORT_MAX_ROWS_THRESHOLD.key -> threshold.toString) {
         val df = spark.range(3, 0, -1).toDF().sort(col("id"))
         val plan = df.queryExecution.executedPlan
         if (threshold > 0) {

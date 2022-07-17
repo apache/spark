@@ -1298,7 +1298,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-39698: Use TakeOrderedAndProject if maxRows below the topKSortFallbackThreshold") {
     Seq(-1, 10).foreach { threshold =>
-      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+      withSQLConf(SQLConf.TOP_K_SORT_MAX_ROWS_THRESHOLD.key -> threshold.toString) {
         val df = Seq(1 -> "a", 2 -> "b", 3 -> "c", 4 -> "d", 5 -> "e").toDF("i", "j").orderBy($"i")
         assert(df.queryExecution.optimizedPlan.maxRows === Some(5))
         if (threshold < 0) {

@@ -58,7 +58,7 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
     // And the ChiSquareTest result is also need updated. So disable AQE.
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString,
-      SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "-1") {
+      SQLConf.TOP_K_SORT_MAX_ROWS_THRESHOLD.key -> "-1") {
       // The default chi-sq value should be low
       assert(computeChiSquareTest() < 100)
 

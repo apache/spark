@@ -151,7 +151,7 @@ abstract class RemoveRedundantSortsSuiteBase
       """.stripMargin
 
       Seq(-1, 100000).foreach { threshold =>
-        withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+        withSQLConf(SQLConf.TOP_K_SORT_MAX_ROWS_THRESHOLD.key -> threshold.toString) {
           Seq(("MERGE", if (threshold > 0) 2 else 3),
             ("SHUFFLE_HASH", if (threshold > 0) 0 else 1)).foreach { case (hint, count) =>
             val query = queryTemplate.format(hint)

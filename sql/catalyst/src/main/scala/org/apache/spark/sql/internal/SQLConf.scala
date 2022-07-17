@@ -3031,6 +3031,17 @@ object SQLConf {
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
+  val TOP_K_SORT_MAX_ROWS_THRESHOLD = buildConf("spark.sql.execution.topKSortMaxRowsThreshold")
+    .doc("In SQL queries with a SORT and max rows exists like " +
+        "'SELECT DISTINCT x FROM t ORDER BY y', if max rows is under this threshold, do a top-K " +
+      "sort in memory to avoid doing range repartition.")
+    .version("3.4.0")
+    .intConf
+    .checkValue(_ <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+      "The top-K sort max rows threshold should be less than or equal to " +
+        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+    .createWithDefault(655360)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
