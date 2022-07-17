@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.scalatest.BeforeAndAfter
-
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.command
@@ -27,21 +26,12 @@ import org.apache.spark.sql.execution.command
  * The class contains tests for the `ALTER TABLE .. SET [SERDE|SERDEPROPERTIES]` command to
  * check V2 table catalogs.
  */
-class AlterTableSetSerdeSuite
-  extends command.AlterTableSetSerdeSuiteBase
-  with CommandSuiteBase with BeforeAndAfter {
+class AlterTableSetSerdeSuite extends command.AlterTableSetSerdeSuiteBase with CommandSuiteBase {
 
-  before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
-  }
+  override def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
 
-  after {
-    spark.sessionState.catalog.reset()
-    spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.clear()
-  }
-
-  test("ALTER TABLE SerDe properties") {
+  test("v2 catalog doesn't support ALTER TABLE SerDe properties") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) " +
