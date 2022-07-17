@@ -160,6 +160,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
+    // TODO(MaxGekk): Use QueryContext
     queryContext: String = "") extends UnaryExpression {
 
   override def nullable: Boolean = true
