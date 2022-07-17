@@ -38,6 +38,7 @@ case class BatchScanExec(
     @transient scan: Scan,
     runtimeFilters: Seq[Expression],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    rangePartitioning: Option[Seq[SortOrder]] = None,
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
     commonPartitionValues: Option[Seq[(InternalRow, Int)]] = None,

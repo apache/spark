@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
@@ -245,10 +245,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("partitioning reporting") {
-    import org.apache.spark.sql.functions.{count, sum}
+  test("partitioning reporting - KeyGroupedPartitioning") {
     withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
-      Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
+      Seq(
+        classOf[KeyGroupedPartitioningAwareDataSource],
+        classOf[JavaKeyGroupedPartitioningAwareDataSource]
+      ).foreach { cls =>
         withClue(cls.getName) {
           val df = spark.read.format(cls.getName).load()
           checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
@@ -281,11 +283,51 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("ordering and partitioning reporting") {
+  test("partitioning reporting - RangePartitioning") {
     withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
       Seq(
-        classOf[OrderAndPartitionAwareDataSource],
-        classOf[JavaOrderAndPartitionAwareDataSource]
+        classOf[RangePartitioningAwareDataSource],
+        classOf[JavaRangePartitioningAwareDataSource]
+      ).foreach { cls =>
+        withClue(cls.getName) {
+          val df = spark.read.format(cls.getName).load()
+          checkAnswer(df, Seq(Row(2, 3), Row(1, 1), Row(3, 4), Row(4, 2), Row(5, 4), Row(4, 3)))
+
+          val orderByColI = df.orderBy($"i")
+          checkAnswer(orderByColI,
+            Seq(Row(1, 1), Row(2, 3), Row(3, 4), Row(4, 2), Row(4, 3), Row(5, 4)))
+          assert(collectFirst(orderByColI.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isEmpty)
+
+          val orderByColJ = df.orderBy($"j")
+          checkAnswer(orderByColJ,
+            Seq(Row(1, 1), Row(4, 2), Row(2, 3), Row(4, 3), Row(3, 4), Row(5, 4)))
+          assert(collectFirst(orderByColJ.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isDefined)
+
+          val groupByColI = df.groupBy($"i").agg(sum($"j"))
+          checkAnswer(groupByColI, Seq(Row(1, 1), Row(2, 3), Row(3, 4), Row(4, 5), Row(5, 4)))
+          assert(collectFirst(groupByColI.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isEmpty)
+
+          val groupByColJ = df.groupBy($"j").agg(sum($"i"))
+          checkAnswer(groupByColJ, Seq(Row(1, 1), Row(2, 4), Row(3, 6), Row(4, 8)))
+          assert(collectFirst(groupByColJ.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isDefined)
+        }
+      }
+    }
+  }
+
+  test("ordering and partitioning reporting - KeyGroupedPartitioning") {
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      Seq(
+        classOf[OrderAndKeyGroupedPartitioningAwareDataSource],
+        classOf[JavaOrderAndKeyGroupedPartitioningAwareDataSource]
       ).foreach { cls =>
         withClue(cls.getName) {
           // we test report ordering (together with report partitioning) with these transformations:
@@ -296,20 +338,20 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           //   hash-partitions by "i" and sorts each partition by "j"
           //   requires partitioning by "i" and sort by "i" and "j"
           Seq(
-            // with no partitioning and no order, we expect shuffling AND sorting
+            // with no partitioning and no order, expect shuffling AND sorting
             (None, None, (true, true), (true, true)),
-            // partitioned by i and no order, we expect NO shuffling BUT sorting
+            // partitioned by i and no order, expect NO shuffling BUT sorting
             (Some("i"), None, (false, true), (false, true)),
             // partitioned by i and in-partition sorted by i,
             // we expect NO shuffling AND sorting for groupBy but sorting for window function
             (Some("i"), Some("i"), (false, false), (false, true)),
-            // partitioned by i and in-partition sorted by j, we expect NO shuffling BUT sorting
+            // partitioned by i and in-partition sorted by j, expect NO shuffling BUT sorting
             (Some("i"), Some("j"), (false, true), (false, true)),
-            // partitioned by i and in-partition sorted by i,j, we expect NO shuffling NOR sorting
+            // partitioned by i and in-partition sorted by i,j, expect NO shuffling NOR sorting
             (Some("i"), Some("i,j"), (false, false), (false, false)),
-            // partitioned by j and in-partition sorted by i, we expect shuffling AND sorting
+            // partitioned by j and in-partition sorted by i, expect shuffling AND sorting
             (Some("j"), Some("i"), (true, true), (true, true)),
-            // partitioned by j and in-partition sorted by i,j, we expect shuffling and sorting
+            // partitioned by j and in-partition sorted by i,j, expect shuffling and sorting
             (Some("j"), Some("i,j"), (true, true), (true, true))
           ).foreach { testParams =>
             val (partitionKeys, orderKeys, groupByExpects, windowFuncExpects) = testParams
@@ -327,10 +369,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
                 val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
                   .flatMapGroups { (i: Int, it: Iterator[(Int, Int)]) =>
                     Iterator.single((i, it.length)) }
-                checkAnswer(
-                  groupBy.toDF(),
-                  Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
-                )
+                checkAnswer(groupBy.toDF(),
+                  Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2)))
 
                 val (shuffleExpected, sortExpected) = groupByExpects
                 assert(collectFirst(groupBy.queryExecution.executedPlan) {
@@ -348,6 +388,108 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
                 )
                 checkAnswer(windowPartByColIOrderByColJ, Seq(
                   Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2)
+                ))
+
+                val (shuffleExpected, sortExpected) = windowFuncExpects
+                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                  case e: ShuffleExchangeExec => e
+                }.isDefined === shuffleExpected)
+                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                  case e: SortExec => e
+                }.isDefined === sortExpected)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("ordering and partitioning reporting - RangePartitioning") {
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      Seq(
+        classOf[OrderAndRangePartitioningAwareDataSource],
+        classOf[JavaOrderAndRangePartitioningAwareDataSource]
+      ).foreach { cls =>
+        withClue(cls.getName) {
+          // we test report ordering together with report range partitioning
+          // with these transformations:
+          // - orderBy("i")
+          //   requires range partitioning by i
+          // - groupBy("i").flatMapGroups:
+          //   hash-partitions by "i" and sorts each partition by "i"
+          //   requires any partitioning and sort by "i"
+          // - aggregation function over window partitioned by "i" and ordered by "j":
+          //   hash-partitions by "i" and sorts each partition by "j"
+          //   requires any partitioning by "i" and sort by "i" and "j"
+          Seq(
+            // with no range partitioning and no order, we expect shuffling AND sorting
+            (None, None, (true, true), (true, true), (true, true)),
+            // range partitioned by i and no order, we expect NO shuffling BUT sorting
+            (Some("i"), None, (false, true), (false, true), (false, true)),
+            // range partitioned by i and in-partition sorted by i,
+            // expect NO shuffling AND sorting for groupBy but sorting for window function
+            (Some("i"), Some("i"), (false, false), (false, false), (false, true)),
+            // range partitioned by i and in-partition sorted by j, expect NO shuffling BUT sorting
+            (Some("i"), Some("j"), (false, true), (false, true), (false, true)),
+            // range partitioned by i and in-partition sorted by i,j, expect NO shuffling / sorting
+            (Some("i"), Some("i,j"), (false, false), (false, false), (false, false))
+          ).foreach { testParams =>
+            val (partitionOrderKeys, orderKeys, orderExpects, groupByExpects, windowFuncExpects) =
+              testParams
+
+            withClue(f"${partitionOrderKeys.orNull} ${orderKeys.orNull}") {
+              val df = spark.read
+                .option("partitionOrderKeys", partitionOrderKeys.orNull)
+                .option("orderKeys", orderKeys.orNull)
+                .format(cls.getName)
+                .load()
+              checkAnswer(df, Seq(Row(1, 1), Row(2, 3), Row(3, 4), Row(4, 2), Row(4, 3), Row(5, 4)))
+
+              // orderBy(i)
+              {
+                val orderByColI = df.orderBy($"i")
+                checkAnswer(
+                  orderByColI,
+                  Seq(Row(1, 1), Row(2, 3), Row(3, 4), Row(4, 2), Row(4, 3), Row(5, 4))
+                )
+
+                val (shuffleExpected, sortExpected) = orderExpects
+                assert(collectFirst(orderByColI.queryExecution.executedPlan) {
+                  case e: ShuffleExchangeExec => e
+                }.isDefined === shuffleExpected)
+                assert(collectFirst(orderByColI.queryExecution.executedPlan) {
+                  case e: SortExec => e
+                }.isDefined === sortExpected)
+              }
+
+              // groupBy(i).flatMapGroups
+              {
+                val groupByColI = df.groupBy($"i").as[Int, (Int, Int)]
+                  .flatMapGroups { (i: Int, it: Iterator[(Int, Int)]) =>
+                    Iterator.single((i, it.length))
+                  }
+                checkAnswer(
+                  groupByColI.toDF(),
+                  Seq(Row(1, 1), Row(2, 1), Row(3, 1), Row(4, 2), Row(5, 1))
+                )
+
+                val (shuffleExpected, sortExpected) = groupByExpects
+                assert(collectFirst(groupByColI.queryExecution.executedPlan) {
+                  case e: ShuffleExchangeExec => e
+                }.isDefined === shuffleExpected)
+                assert(collectFirst(groupByColI.queryExecution.executedPlan) {
+                  case e: SortExec => e
+                }.isDefined == sortExpected)
+              }
+
+              // aggregation function over window partitioned by i and ordered by j
+              {
+                val windowPartByColIOrderByColJ = df.withColumn("no",
+                  row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+                )
+                checkAnswer(windowPartByColIOrderByColJ, Seq(
+                  Row(1, 1, 1), Row(2, 3, 1), Row(3, 4, 1), Row(4, 2, 1), Row(4, 3, 2), Row(5, 4, 1)
                 ))
 
                 val (shuffleExpected, sortExpected) = windowFuncExpects
@@ -945,7 +1087,7 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   }
 }
 
-class PartitionAwareDataSource extends TestingV2Source {
+class KeyGroupedPartitioningAwareDataSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder
     with SupportsReportPartitioning {
@@ -972,7 +1114,34 @@ class PartitionAwareDataSource extends TestingV2Source {
   }
 }
 
-class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
+class RangePartitioningAwareDataSource extends TestingV2Source {
+
+  class MyScanBuilder extends SimpleScanBuilder
+    with SupportsReportPartitioning {
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      // Note that partitions are ordered by partition column ""i" but no in-partition order exists
+      Array(
+        SpecificInputPartition(Array(2, 1, 3), Array(3, 1, 4)),
+        SpecificInputPartition(Array(4, 5, 4), Array(2, 4, 3)))
+    }
+
+    override def createReaderFactory(): PartitionReaderFactory = {
+      SpecificReaderFactory
+    }
+
+    override def outputPartitioning(): Partitioning =
+      new RangePartitioning(Array(new MySortOrder("i")), 2)
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder()
+    }
+  }
+}
+
+class OrderAndKeyGroupedPartitioningAwareDataSource extends KeyGroupedPartitioningAwareDataSource {
 
   class MyScanBuilder(
       val partitionKeys: Option[Seq[String]],
@@ -1014,24 +1183,65 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
       )
     }
   }
+}
 
-  class MySortOrder(columnName: String) extends SortOrder {
-    override def expression(): Expression = new MyIdentityTransform(
-      new MyNamedReference(columnName)
-    )
-    override def direction(): SortDirection = SortDirection.ASCENDING
-    override def nullOrdering(): NullOrdering = NullOrdering.NULLS_FIRST
+class OrderAndRangePartitioningAwareDataSource extends TestingV2Source {
+
+  class MyScanBuilder(
+      val partitionOrderKeys: Option[Seq[String]],
+      val orderKeys: Seq[String])
+    extends SimpleScanBuilder
+    with SupportsReportPartitioning with SupportsReportOrdering {
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      // Note that partitions are ordered by partition column ""i" and in-partition order exists
+      Array(
+        SpecificInputPartition(Array(1, 2, 3), Array(1, 3, 4)),
+        SpecificInputPartition(Array(4, 4, 5), Array(2, 3, 4)))
+    }
+
+    override def createReaderFactory(): PartitionReaderFactory = {
+      SpecificReaderFactory
+    }
+
+    override def outputPartitioning(): Partitioning = {
+      partitionOrderKeys.map(keys =>
+        new RangePartitioning(keys.map(new MySortOrder(_)).toArray, 2)
+      ).getOrElse(
+        new UnknownPartitioning(2)
+      )
+    }
+
+    override def outputOrdering(): Array[SortOrder] =
+      orderKeys.map(new MySortOrder(_)).toArray
   }
 
-  class MyNamedReference(parts: String*) extends NamedReference {
-    override def fieldNames(): Array[String] = parts.toArray
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder(
+        Option(options.get("partitionOrderKeys")).map(_.split(",")),
+        Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
+      )
+    }
   }
+}
 
-  class MyIdentityTransform(namedReference: NamedReference) extends Transform {
-    override def name(): String = "identity"
-    override def references(): Array[NamedReference] = Array.empty
-    override def arguments(): Array[Expression] = Seq(namedReference).toArray
-  }
+class MySortOrder(columnName: String) extends SortOrder {
+  override def expression(): Expression = new MyIdentityTransform(
+    new MyNamedReference(columnName)
+  )
+  override def direction(): SortDirection = SortDirection.ASCENDING
+  override def nullOrdering(): NullOrdering = NullOrdering.NULLS_FIRST
+}
+
+class MyNamedReference(parts: String*) extends NamedReference {
+  override def fieldNames(): Array[String] = parts.toArray
+}
+
+class MyIdentityTransform(namedReference: NamedReference) extends Transform {
+  override def name(): String = "identity"
+  override def references(): Array[NamedReference] = Array.empty
+  override def arguments(): Array[Expression] = Seq(namedReference).toArray
 }
 
 case class SpecificInputPartition(

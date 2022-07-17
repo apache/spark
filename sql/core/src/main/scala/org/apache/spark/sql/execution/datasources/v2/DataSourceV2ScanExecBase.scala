@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, RangePartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SQLExecution}
@@ -49,6 +49,10 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   /** Optional partitioning expressions provided by the V2 data sources, through
    * `SupportsReportPartitioning` */
   def keyGroupedPartitioning: Option[Seq[Expression]]
+
+  /** Optional partitioning expressions provided by the V2 data sources, through
+   * `SupportsReportPartitioning` */
+  def rangePartitioning: Option[Seq[SortOrder]]
 
   /** Optional ordering expressions provided by the V2 data sources, through
    * `SupportsReportOrdering` */
@@ -92,16 +96,25 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
 
   override def outputPartitioning: physical.Partitioning = {
     if (partitions.length == 1) {
-      SinglePartition
+      SinglePartition.asInstanceOf[physical.Partitioning]
     } else {
-      keyGroupedPartitioning match {
-        case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
-          groupedPartitions.map { partitionValues =>
-            KeyGroupedPartitioning(exprs, partitionValues.size, partitionValues.map(_._1))
-          }.getOrElse(super.outputPartitioning)
-        case _ =>
-          super.outputPartitioning
-      }
+      groupedPartitions.map { partitionValues =>
+        // range partitioning has precedence over key-grouped partitioning
+        // since range partitioning IS A key-grouped partitioning
+        rangePartitioning.map(order =>
+          RangePartitioning(order, partitionValues.size)
+            .asInstanceOf[physical.Partitioning]
+        ).orElse(
+          keyGroupedPartitioning match {
+            case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
+              groupedPartitions.map { partitionValues =>
+                KeyGroupedPartitioning(exprs, partitionValues.size, partitionValues.map(_._1))
+              }.getOrElse(super.outputPartitioning)
+            case _ =>
+              super.outputPartitioning
+          }
+        ).getOrElse(super.outputPartitioning)
+      }.getOrElse(super.outputPartitioning)
     }
   }
 

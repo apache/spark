@@ -33,6 +33,7 @@ case class MicroBatchScanExec(
     @transient start: Offset,
     @transient end: Offset,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    rangePartitioning: Option[Seq[SortOrder]] = None,
     ordering: Option[Seq[SortOrder]] = None) extends DataSourceV2ScanExecBase {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.

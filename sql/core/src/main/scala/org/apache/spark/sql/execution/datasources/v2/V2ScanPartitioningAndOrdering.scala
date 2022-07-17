@@ -18,11 +18,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
+import org.apache.spark.sql.catalyst.expressions.{SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
-import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
@@ -40,8 +40,8 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
   }
 
   private def partitioning(plan: LogicalPlan) = plan.transformDown {
-    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None, _) =>
-      val catalystPartitioning = scan.outputPartitioning() match {
+    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None, _, _) =>
+      val keyGroupedPartitioning = scan.outputPartitioning() match {
         case kgp: KeyGroupedPartitioning =>
           val partitioning = sequenceToOption(
             kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)))
@@ -61,11 +61,23 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
           None
       }
 
-      d.copy(keyGroupedPartitioning = catalystPartitioning)
+      val rangePartitioning = scan.outputPartitioning() match {
+        case rp: RangePartitioning => sequenceToOption(rp.order().map(
+          V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)
+            .map(_.asInstanceOf[SortOrder])))
+        case _: KeyGroupedPartitioning => None
+        case _: UnknownPartitioning => None
+        case p =>
+          logWarning(s"Spark ignores the partitioning ${p.getClass.getSimpleName}." +
+            " Please use KeyGroupedPartitioning for better performance")
+          None
+      }
+
+      d.copy(keyGroupedPartitioning = keyGroupedPartitioning, rangePartitioning = rangePartitioning)
   }
 
   private def ordering(plan: LogicalPlan) = plan.transformDown {
-    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportOrdering, _, _, _) =>
+    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportOrdering, _, _, _, _) =>
       val ordering = V2ExpressionUtils.toCatalystOrdering(scan.outputOrdering(), relation)
       d.copy(ordering = Some(ordering))
   }

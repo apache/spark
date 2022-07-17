@@ -17,32 +17,35 @@
 
 package test.org.apache.spark.sql.connector;
 
-import java.util.Arrays;
-
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.expressions.*;
-import org.apache.spark.sql.connector.read.*;
-import org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning;
+import org.apache.spark.sql.connector.read.InputPartition;
+import org.apache.spark.sql.connector.read.ScanBuilder;
+import org.apache.spark.sql.connector.read.SupportsReportOrdering;
 import org.apache.spark.sql.connector.read.partitioning.Partitioning;
+import org.apache.spark.sql.connector.read.partitioning.RangePartitioning;
 import org.apache.spark.sql.connector.read.partitioning.UnknownPartitioning;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
-public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareDataSource {
+import java.util.Arrays;
 
-  static class MyScanBuilder extends JavaPartitionAwareDataSource.MyScanBuilder
+public class JavaOrderAndRangePartitioningAwareDataSource
+        extends JavaRangePartitioningAwareDataSource {
+
+  static class MyScanBuilder extends JavaRangePartitioningAwareDataSource.MyScanBuilder
     implements SupportsReportOrdering {
 
     private final Partitioning partitioning;
     private final SortOrder[] ordering;
 
-    MyScanBuilder(String partitionKeys, String orderKeys) {
-      if (partitionKeys != null) {
-        String[] keys = partitionKeys.split(",");
-        Expression[] clustering = new Transform[keys.length];
+    MyScanBuilder(String partitionOrderKeys, String orderKeys) {
+      if (partitionOrderKeys != null) {
+        String[] keys = partitionOrderKeys.split(",");
+        SortOrder[] order = new MySortOrder[keys.length];
         for (int i = 0; i < keys.length; i++) {
-          clustering[i] = Expressions.identity(keys[i]);
+          order[i] = new MySortOrder(keys[i]);
         }
-        this.partitioning = new KeyGroupedPartitioning(clustering, 2);
+        this.partitioning = new RangePartitioning(order, 2);
       } else {
         this.partitioning = new UnknownPartitioning(2);
       }
@@ -61,8 +64,8 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
     @Override
     public InputPartition[] planInputPartitions() {
       InputPartition[] partitions = new InputPartition[2];
-      partitions[0] = new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 5, 5});
-      partitions[1] = new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 1, 2});
+      partitions[0] = new SpecificInputPartition(new int[]{1, 2, 3}, new int[]{1, 3, 4});
+      partitions[1] = new SpecificInputPartition(new int[]{4, 4, 5}, new int[]{2, 3, 4});
       return partitions;
     }
 
@@ -82,18 +85,18 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
     return new JavaSimpleBatchTable() {
       @Override
       public Transform[] partitioning() {
-        String partitionKeys = options.get("partitionKeys");
-        if (partitionKeys == null) {
+        String partitionOrderKeys = options.get("partitionOrderKeys");
+        if (partitionOrderKeys == null) {
           return new Transform[0];
         } else {
-          return (Transform[]) Arrays.stream(partitionKeys.split(","))
-            .map(Expressions::identity).toArray();
+          return (Transform[]) Arrays.stream(partitionOrderKeys.split(","))
+            .map(MySortOrder::new).toArray();
         }
       }
 
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        return new MyScanBuilder(options.get("partitionKeys"), options.get("orderKeys"));
+        return new MyScanBuilder(options.get("partitionOrderKeys"), options.get("orderKeys"));
       }
     };
   }

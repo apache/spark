@@ -116,13 +116,16 @@ case class DataSourceV2Relation(
  * @param output the output attributes of this relation
  * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
  *                               rows in the scan across different partitions
- * @param ordering if set, the ordering provided by the scan
+ * @param rangePartitioning if set, the range partitioning expressions that are used to split the
+ *                               rows in the scan across different partitions
+ * @param ordering if set, the in-partition ordering provided by the scan
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
     scan: Scan,
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    rangePartitioning: Option[Seq[SortOrder]] = None,
     ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
 
   override def name: String = relation.table.name()

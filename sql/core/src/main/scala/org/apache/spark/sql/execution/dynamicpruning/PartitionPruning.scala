@@ -60,27 +60,27 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   def getFilterableTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
     srcInfo.flatMap {
-      case (resExp, l: LogicalRelation) =>
+      case (exp, l: LogicalRelation) =>
         l.relation match {
           case fs: HadoopFsRelation =>
             val partitionColumns = AttributeSet(
               l.resolve(fs.partitionSchema, fs.sparkSession.sessionState.analyzer.resolver))
-            if (resExp.references.subsetOf(partitionColumns)) {
+            if (exp.references.subsetOf(partitionColumns)) {
               return Some(l)
             } else {
               None
             }
           case _ => None
         }
-      case (resExp, l: HiveTableRelation) =>
-        if (resExp.references.subsetOf(AttributeSet(l.partitionCols))) {
+      case (exp, l: HiveTableRelation) =>
+        if (exp.references.subsetOf(AttributeSet(l.partitionCols))) {
           return Some(l)
         } else {
           None
         }
-      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _)) =>
+      case (exp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _, _)) =>
         val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
-        if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {
+        if (exp.references.subsetOf(AttributeSet(filterAttrs))) {
           Some(r)
         } else {
           None
