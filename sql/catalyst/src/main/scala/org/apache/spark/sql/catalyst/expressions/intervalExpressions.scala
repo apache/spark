@@ -22,6 +22,7 @@ import java.util.Locale
 
 import com.google.common.math.{DoubleMath, IntMath, LongMath}
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MONTHS_PER_YEAR
 import org.apache.spark.sql.catalyst.util.IntervalUtils
@@ -611,7 +612,10 @@ trait IntervalDivide {
     }
   }
 
-  def divideByZeroCheck(dataType: DataType, num: Any, context: String): Unit = dataType match {
+  def divideByZeroCheck(
+      dataType: DataType,
+      num: Any,
+      context: Option[QueryContext]): Unit = dataType match {
     case _: DecimalType =>
       if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError(context)
     case _ => if (num == 0) throw QueryExecutionErrors.divideByZeroError(context)
@@ -657,12 +661,13 @@ case class DivideYMInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num, origin._context)
-    divideByZeroCheck(right.dataType, num, origin._context)
+    divideByZeroCheck(right.dataType, num, Some(origin.context))
     evalFunc(interval.asInstanceOf[Int], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContext = ctx.addReferenceObj("errCtx", origin._context)
+    val _errorContext = ctx.addReferenceObj("_errCtx", origin._context)
+    val errorContext = ctx.addReferenceObj("errCtx", Some(origin.context))
     right.dataType match {
       case t: IntegralType =>
         val math = t match {
@@ -674,7 +679,7 @@ case class DivideYMInterval(
           val checkIntegralDivideOverflow =
             s"""
                |if ($m == ${Int.MinValue} && $n == -1)
-               |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
+               |  throw QueryExecutionErrors.overflowInIntegralDivideError(${_errorContext});
                |""".stripMargin
           // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit
           // to `Int`. Casting to `Int` is safe here.
@@ -734,12 +739,13 @@ case class DivideDTInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(interval.asInstanceOf[Long], Long.MinValue, right, num, origin._context)
-    divideByZeroCheck(right.dataType, num, origin._context)
+    divideByZeroCheck(right.dataType, num, Some(origin.context))
     evalFunc(interval.asInstanceOf[Long], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContext = ctx.addReferenceObj("errCtx", origin._context)
+    val _errorContext = ctx.addReferenceObj("_errCtx", origin._context)
+    val errorContext = ctx.addReferenceObj("errCtx", Some(origin.context))
     right.dataType match {
       case _: IntegralType =>
         val math = classOf[LongMath].getName
@@ -747,7 +753,7 @@ case class DivideDTInterval(
           val checkIntegralDivideOverflow =
             s"""
                |if ($m == ${Long.MinValue}L && $n == -1L)
-               |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
+               |  throw QueryExecutionErrors.overflowInIntegralDivideError(${_errorContext});
                |""".stripMargin
           s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}

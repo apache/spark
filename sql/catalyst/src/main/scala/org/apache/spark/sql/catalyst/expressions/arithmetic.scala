@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.SqlQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -577,7 +578,7 @@ trait DivModLike extends BinaryArithmetic {
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must be true.
-          throw QueryExecutionErrors.divideByZeroError(_queryContext)
+          throw QueryExecutionErrors.divideByZeroError(queryContext)
         }
         if (checkDivideOverflow && input1 == Long.MinValue && input2 == -1) {
           throw QueryExecutionErrors.overflowInIntegralDivideError(_queryContext)
@@ -602,8 +603,13 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
+    val _errorContext = if (failOnError) {
+      ctx.addReferenceObj("_errCtx", _queryContext)
+    } else {
+      "\"\""
+    }
     val errorContext = if (failOnError) {
-      ctx.addReferenceObj("errCtx", _queryContext)
+      ctx.addReferenceObj("errCtx", queryContext, classOf[SqlQueryContext].getName)
     } else {
       "\"\""
     }
@@ -612,7 +618,7 @@ trait DivModLike extends BinaryArithmetic {
         val decimalValue = ctx.freshName("decimalValue")
         s"""
            |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, ${_errorContext});
            |if ($decimalValue != null) {
            |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
            |} else {
@@ -624,7 +630,7 @@ trait DivModLike extends BinaryArithmetic {
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
       s"""
         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
-        |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
+        |  throw QueryExecutionErrors.overflowInIntegralDivideError(${_errorContext});
         |""".stripMargin
     } else {
       ""
@@ -961,7 +967,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw QueryExecutionErrors.divideByZeroError(_queryContext)
+          throw QueryExecutionErrors.divideByZeroError(queryContext)
         }
         pmodFunc(input1, input2)
       }

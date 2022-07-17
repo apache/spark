@@ -59,7 +59,7 @@ case class SqlQueryContext(
     override val startIndex: Int,
     override val stopIndex: Int,
     override val fragment: String,
-    val summary: String) extends QueryContext
+    override val summary: String) extends QueryContext
 
 /**
  * Contexts of TreeNodes, including location, SQL text, object type and object name.

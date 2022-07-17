@@ -100,7 +100,7 @@ private[spark] object SparkThrowableHelper {
     val displayMessage = String.format(
       displayFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
       displayMessageParameters : _*)
-    val displayQueryContext = queryContext.map(q => "\n" + q.fragment()).getOrElse("")
+    val displayQueryContext = queryContext.map(q => "\n" + q.summary()).getOrElse("")
 
     s"[$displayClass] $displayMessage$displayQueryContext"
   }
