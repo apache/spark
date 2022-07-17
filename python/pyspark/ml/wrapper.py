@@ -264,7 +264,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         return self._java_obj
 
     @staticmethod
-    def _from_java(java_stage: "JavaObject") -> "JP":
+    def _from_java(java_stage: "JavaObject") -> "JP":  # type: ignore[type-var]
         """
         Given a Java object, create and return a Python wrapper of it.
         Used for ML persistence.
