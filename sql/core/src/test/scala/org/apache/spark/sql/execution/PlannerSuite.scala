@@ -794,7 +794,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     // when enable AQE, the reusedExchange is inserted when executed.
     withSQLConf(
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "-1") {
+      SQLConf.TOP_K_SORT_MAX_ROWS_THRESHOLD.key -> "-1") {
       // ReusedExchange is HashPartitioning
       val df1 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
       val df2 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
