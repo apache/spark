@@ -2824,12 +2824,6 @@ df.writeStream
   .trigger(Trigger.ProcessingTime("2 seconds"))
   .start()
 
-// One-time trigger
-df.writeStream
-  .format("console")
-  .trigger(Trigger.Once())
-  .start()
-
 // Available-now trigger
 df.writeStream
   .format("console")
