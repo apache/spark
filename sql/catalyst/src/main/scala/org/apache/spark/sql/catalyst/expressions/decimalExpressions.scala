@@ -252,7 +252,8 @@ case class DecimalAddNoOverflowCheck(
  * A divide expression for decimal values which is only used internally by Avg.
  *
  * It will fail when nullOnOverflow is false follows:
- *   - left is null, as the right side should never be null
+ *   - left (sum in avg) is null due to over the max precision 38,
+ *     the right (count in avg) should never be null
  *   - the result of divide is overflow
  */
 case class DecimalDivideWithOverflowCheck(
