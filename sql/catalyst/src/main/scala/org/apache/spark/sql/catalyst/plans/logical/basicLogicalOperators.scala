@@ -1264,7 +1264,6 @@ case class Pivot(
  * @param values             Value columns to unpivot
  * @param variableColumnName Name of the variable column
  * @param valueColumnName    Name of the value column
- * @param valueType          Type of value column once known
  * @param child              Child operator
  */
 case class Unpivot(
@@ -1272,7 +1271,6 @@ case class Unpivot(
     values: Seq[NamedExpression],
     variableColumnName: String,
     valueColumnName: String,
-    valueType: Option[DataType],
     child: LogicalPlan) extends UnaryNode {
   override lazy val resolved = false  // Unpivot will be replaced after being resolved.
   override def output: Seq[Attribute] = Nil
@@ -1281,6 +1279,9 @@ case class Unpivot(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Unpivot =
     copy(child = newChild)
+
+  def valuesTypeCoercioned: Boolean = values.nonEmpty && values.forall(_.resolved) &&
+    values.tail.forall(v => v.dataType.sameType(values.head.dataType))
 }
 
 /**

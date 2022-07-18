@@ -515,9 +515,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         if child.resolved && groupByOpt.isDefined && hasUnresolvedAlias(groupByOpt.get) =>
         Pivot(Some(assignAliases(groupByOpt.get)), pivotColumn, pivotValues, aggregates, child)
 
-      case m: Unpivot if m.child.resolved &&
-        (hasUnresolvedAlias(m.ids) || hasUnresolvedAlias(m.values)) =>
-        m.copy(ids = assignAliases(m.ids), values = assignAliases(m.values))
+      case up: Unpivot if up.child.resolved &&
+        (hasUnresolvedAlias(up.ids) || hasUnresolvedAlias(up.values)) =>
+        up.copy(ids = assignAliases(up.ids), values = assignAliases(up.values))
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
@@ -869,15 +869,15 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsPattern(UNPIVOT), ruleId) {
 
       // once children and ids are resolved, we can determine values, if non were given
-      case m: Unpivot if m.childrenResolved && m.ids.forall(_.resolved) && m.values.isEmpty =>
-        m.copy(values = m.child.output.diff(m.ids))
+      case up: Unpivot if up.childrenResolved && up.ids.forall(_.resolved) && up.values.isEmpty =>
+        up.copy(values = up.child.output.diff(up.ids))
 
-      case m: Unpivot if !m.childrenResolved || !m.ids.forall(_.resolved)
-        || m.values.isEmpty || !m.values.forall(_.resolved) || m.valueType.isEmpty => m
+      case up: Unpivot if !up.childrenResolved || !up.ids.forall(_.resolved) ||
+        up.values.isEmpty || !up.values.forall(_.resolved) || !up.valuesTypeCoercioned => up
 
       // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
-      case Unpivot(ids, values, variableColumnName, valueColumnName, valueType, child) =>
+      case Unpivot(ids, values, variableColumnName, valueColumnName, child) =>
         // construct unpivot expressions for Expand
         val exprs: Seq[Seq[Expression]] = values.map {
           value => ids ++ Seq(Literal(value.name), value)
@@ -886,7 +886,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         // construct output attributes
         val output = ids.map(_.toAttribute) ++ Seq(
           AttributeReference(variableColumnName, StringType, nullable = false)(),
-          AttributeReference(valueColumnName, valueType.get, nullable = values.exists(_.nullable))()
+          AttributeReference(valueColumnName, values.head.dataType, values.exists(_.nullable))()
         )
 
         // expand the unpivot expressions
@@ -1385,10 +1385,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
       // If the Unpivot ids or values contain Stars, expand them.
-      case m: Unpivot if containsStar(m.ids) || containsStar(m.values) =>
-        m.copy(
-          ids = buildExpandedProjectList(m.ids, m.child),
-          values = buildExpandedProjectList(m.values, m.child)
+      case up: Unpivot if containsStar(up.ids) || containsStar(up.values) =>
+        up.copy(
+          ids = buildExpandedProjectList(up.ids, up.child),
+          values = buildExpandedProjectList(up.values, up.child)
         )
 
       case u @ Union(children, _, _)
