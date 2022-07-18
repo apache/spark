@@ -79,7 +79,7 @@ class LocalDirsSuite extends SparkFunSuite with LocalRootDirsTest {
     }.getMessage
     // If any temporary directory could not be retrieved under the given paths above, it should
     // throw an exception with the message that includes the paths.
-    assert(message.contains(s"$path1,$path2"))
+    assert(message.contains(s"$path1,$path2") || message.contains(s"$path2,$path1"))
 
     // These directories should not be created.
     assert(!f1.exists())
