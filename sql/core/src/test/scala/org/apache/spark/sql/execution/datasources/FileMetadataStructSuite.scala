@@ -30,6 +30,8 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructFiel
 
 class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
+  import testImplicits._
+
   val data0: Seq[Row] = Seq(Row("jack", 24, Row(12345L, "uom")))
 
   val data1: Seq[Row] = Seq(Row("lily", 31, Row(54321L, "ucb")))
@@ -571,15 +573,14 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString) {
         withTempPath { dir =>
           // Store dynamically partitioned data.
-          val sourceDf = spark.range(0, 5, 1, 1).toDF("id")
-            .withColumn("pb", lit(1))
-          sourceDf.write.format("parquet").partitionBy("pb").save(dir.getAbsolutePath)
+          Seq(1 -> 1).toDF("a", "b").write.format("parquet").partitionBy("b")
+            .save(dir.getAbsolutePath)
 
           // Identify the data file and its metadata.
           // We expect there to be exactly one subdirectory containing exactly one parquet file.
           val subdirectory = dir.listFiles().filter(_.isDirectory).head
           val file = subdirectory.listFiles().filter(_.getName.endsWith(".parquet")).head
-          val expectedDf = sourceDf
+          val expectedDf = Seq(1 -> 1).toDF("a", "b")
             .withColumn(FileFormat.FILE_NAME, lit(file.getName))
             .withColumn(FileFormat.FILE_SIZE, lit(file.length()))
 
