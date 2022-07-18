@@ -97,9 +97,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
   }
 
   private def rewriteAggregate(agg: Aggregate): LogicalPlan = agg.child match {
-    case ScanOperation(project, Nil, holder@ScanBuilderHolder(_, _, r: SupportsPushDownAggregates))
-        if CollapseProject.canCollapseExpressions(
-          agg.aggregateExpressions, project, alwaysInline = true) =>
+    case ScanOperation(project, Nil, holder @ ScanBuilderHolder(_, _,
+        r: SupportsPushDownAggregates)) if CollapseProject.canCollapseExpressions(
+        agg.aggregateExpressions, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val actualResultExprs = agg.aggregateExpressions.map(replaceAliasButKeepName(_, aliasMap))
       val actualGroupExprs = agg.groupingExpressions.map(replaceAlias(_, aliasMap))
@@ -187,13 +187,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
       // +- RelationV2[c2#10, min(c1)#21, max(c1)#22]
       // scalastyle:on
-      val newOutput = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
+      val groupOutput = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"group_col_$i", e.dataType)()
-      } ++ finalAggExprs.zipWithIndex.map { case (e, i) =>
+      }
+      val aggOutput = finalAggExprs.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"agg_func_$i", e.dataType)()
       }
-      val groupOutput = newOutput.take(normalizedGroupingExpr.length)
-      val aggOutput = newOutput.drop(normalizedGroupingExpr.length)
+      val newOutput = groupOutput ++ aggOutput
       val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       normalizedGroupingExpr.zipWithIndex.foreach { case (expr, ordinal) =>
         if (!groupByExprToOutputOrdinal.contains(expr.canonicalized)) {
