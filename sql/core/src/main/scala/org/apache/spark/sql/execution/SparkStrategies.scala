@@ -140,8 +140,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def supportTakeOrdered(plan: LogicalPlan): Boolean = {
-      // Maximum support up to 655360, a larger number of rows does not improve performance.
-      plan.maxRows.exists(_ < math.min(conf.topKSortFallbackThreshold, 655360)) &&
+      plan.maxRows.exists(_ < conf.getConf(SQLConf.TOP_K_SORT_MAX_ROWS_THRESHOLD)) &&
         // The plan should not contain global sort, to avoid sorting it again.
         !plan.exists {
           case s: Sort => s.global
