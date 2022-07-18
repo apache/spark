@@ -352,6 +352,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     return appShuffleInfo.appPathsInfo.activeLocalDirs;
   }
 
+  private void removeOldApplicationAttemptsFromDb(AppShuffleInfo info) {
+    if (info.attemptId != UNDEFINED_ATTEMPT_ID) {
+      for (int formerAttemptId = 0; formerAttemptId < info.attemptId; formerAttemptId ++) {
+        removeAppAttemptPathInfoFromDB(info.appId, formerAttemptId);
+      }
+    }
+  }
+
   @Override
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
@@ -363,11 +371,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // Try cleaning up this application attempt local paths information
         // and also the local paths information from former attempts in DB.
         removeAppAttemptPathInfoFromDB(info.appId, info.attemptId);
-        if (info.attemptId != UNDEFINED_ATTEMPT_ID) {
-          for (int formerAttemptId = info.attemptId - 1; formerAttemptId >= 0; formerAttemptId--) {
-            removeAppAttemptPathInfoFromDB(info.appId, formerAttemptId);
-          }
-        }
+        removeOldApplicationAttemptsFromDb(info);
         ref.set(info);
       }
       // Return null to remove the entry
@@ -376,7 +380,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AppShuffleInfo appShuffleInfo = ref.get();
     if (null != appShuffleInfo) {
       submitCleanupTask(
-        () -> closeAndDeletePartitions(appShuffleInfo, cleanupLocalDirs));
+        () -> closeAndDeletePartitionsIfNeeded(appShuffleInfo, cleanupLocalDirs));
     }
   }
 
@@ -387,7 +391,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    */
   @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
   @VisibleForTesting
-  void closeAndDeletePartitions(
+  void closeAndDeletePartitionsIfNeeded(
       AppShuffleInfo appShuffleInfo,
       boolean cleanupLocalDirs) {
     appShuffleInfo.shuffles.forEach((shuffleId, shuffleInfo) -> shuffleInfo.shuffleMergePartitions
@@ -750,7 +754,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                   mergeDir, executorInfo.subDirsPerLocalDir);
               // Clean up the outdated App Attempt local path info in the DB and
               // put the newly registered local path info from newer attempt into the DB.
-              // Deletion or insertion may fail as of various reasons.
               if (appShuffleInfo != null) {
                 removeAppAttemptPathInfoFromDB(appId, appShuffleInfo.attemptId);
               }
@@ -769,7 +772,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 "application attempt registered", appId, appShuffleInfo.attemptId);
             // Clean up all the merge shuffle related information in the DB for the former attempt
             submitCleanupTask(
-              () -> closeAndDeletePartitions(appShuffleInfo, true)
+              () -> closeAndDeletePartitionsIfNeeded(appShuffleInfo, true)
             );
           }
         }
@@ -898,11 +901,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         dbKeysToBeRemoved.forEach(
             (key) -> {
               try {
-                if (logger.isDebugEnabled()) {
-                  logger.debug("Removing dangling key {} in DB",
-                      parseDbAppAttemptShufflePartitionKey(
-                          new String(key, StandardCharsets.UTF_8)));
-                }
                 db.delete(key);
               } catch (Exception e) {
                 logger.error("Error deleting dangling key {} in DB", key, e);

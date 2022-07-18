@@ -525,8 +525,7 @@ public class RemoteBlockPushResolverSuite {
     callback1.onComplete(callback1.getID());
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
     // Close the index stream so it throws IOException
-    TestMergeShuffleFile testIndexFile =
-      (TestMergeShuffleFile) partitionInfo.getIndexFile();
+    TestMergeShuffleFile testIndexFile = (TestMergeShuffleFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
       new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 1, 0, 0));
@@ -559,8 +558,7 @@ public class RemoteBlockPushResolverSuite {
     callback1.onComplete(callback1.getID());
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
     // Close the index stream so it throws IOException
-    TestMergeShuffleFile testIndexFile =
-      (TestMergeShuffleFile) partitionInfo.getIndexFile();
+    TestMergeShuffleFile testIndexFile = (TestMergeShuffleFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
       new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 1, 0, 0));
@@ -588,8 +586,7 @@ public class RemoteBlockPushResolverSuite {
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
     callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[4]));
     callback1.onComplete(callback1.getID());
-    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo =
-      callback1.getPartitionInfo();
+    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
     // Close the meta stream so it throws IOException
     TestMergeShuffleFile testMetaFile =
       (TestMergeShuffleFile) partitionInfo.getMetaFile();
@@ -691,8 +688,7 @@ public class RemoteBlockPushResolverSuite {
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
     callback.onComplete(callback.getID());
-    TestMergeShuffleFile testIndexFile =
-      (TestMergeShuffleFile) partitionInfo.getIndexFile();
+    TestMergeShuffleFile testIndexFile = (TestMergeShuffleFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     for (int i = 1; i < 5; i++) {
       RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
@@ -734,8 +730,7 @@ public class RemoteBlockPushResolverSuite {
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
-    TestMergeShuffleFile testIndexFile =
-      (TestMergeShuffleFile) partitionInfo.getIndexFile();
+    TestMergeShuffleFile testIndexFile = (TestMergeShuffleFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     for (int i = 1; i < 6; i++) {
       RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
@@ -766,8 +761,7 @@ public class RemoteBlockPushResolverSuite {
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
-    TestMergeShuffleFile testIndexFile =
-      (TestMergeShuffleFile) partitionInfo.getIndexFile();
+    TestMergeShuffleFile testIndexFile = (TestMergeShuffleFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     for (int i = 1; i < 5; i++) {
       RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
@@ -813,8 +807,7 @@ public class RemoteBlockPushResolverSuite {
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[2]));
     callback.onComplete(callback.getID());
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
-    TestMergeShuffleFile testIndexFile =
-      (TestMergeShuffleFile) partitionInfo.getIndexFile();
+    TestMergeShuffleFile testIndexFile = (TestMergeShuffleFile) partitionInfo.getIndexFile();
     // Close the index file so truncate throws IOException
     testIndexFile.close();
     MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
@@ -898,10 +891,10 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitions(
+      void closeAndDeletePartitionsIfNeeded(
         AppShuffleInfo appShuffleInfo,
         boolean cleanupLocalDirs) {
-        super.closeAndDeletePartitions(
+        super.closeAndDeletePartitionsIfNeeded(
             appShuffleInfo, cleanupLocalDirs);
         closed.release();
       }
@@ -996,10 +989,10 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitions(
+      void closeAndDeletePartitionsIfNeeded(
           AppShuffleInfo appShuffleInfo,
           boolean cleanupLocalDirs) {
-        super.closeAndDeletePartitions(
+        super.closeAndDeletePartitionsIfNeeded(
             appShuffleInfo, cleanupLocalDirs);
         closed.release();
       }

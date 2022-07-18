@@ -50,12 +50,7 @@ object ShuffleTestAccessor {
   def getAppPathsInfo(
       appId: String,
       mergeManager: RemoteBlockPushResolver): Option[AppPathsInfo] = {
-    val appShuffleInfo = mergeManager.appsShuffleInfo.get(appId)
-    if (appShuffleInfo != null) {
-      Some(appShuffleInfo.getAppPathsInfo)
-    } else {
-      None
-    }
+    Option(mergeManager.appsShuffleInfo.get(appId)).flatMap(v => Option(v.getAppPathsInfo))
   }
 
   def getAppsShuffleInfo(
