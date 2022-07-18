@@ -493,14 +493,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def tableExists(tableName: String): Boolean = {
     try {
-      val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-      tableExists(tableIdent.database.orNull, tableIdent.table)
+      getTable(tableName)
+      true
     } catch {
-      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
-        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-        val catalog =
-          sparkSession.sessionState.catalogManager.catalog(ident(0)).asTableCatalog
-        catalog.tableExists(Identifier.of(Array(ident(1)), ident(2)))
+      case e: AnalysisException => false
     }
   }
 
