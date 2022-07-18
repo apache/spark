@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.math.{max, min}
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -263,8 +264,16 @@ abstract class BinaryArithmetic extends BinaryOperator
     }
   }
 
+  override def initQueryContext(): Option[QueryContext] = {
+    if (failOnError) {
+      Some(origin.context)
+    } else {
+      None
+    }
+  }
+
   protected def checkDecimalOverflow(value: Decimal, precision: Int, scale: Int): Decimal = {
-    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError, _queryContext)
+    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError, queryContext)
   }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
@@ -284,11 +293,7 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      val errorContextCode = if (failOnError) {
-        ctx.addReferenceObj("_errCtx", _queryContext)
-      } else {
-        "\"\""
-      }
+      val errorContextCode = ctx.addReferenceObj("errCtx", queryContext)
       val updateIsNull = if (failOnError) {
         ""
       } else {
@@ -602,23 +607,13 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    // TODO(MaxGekk): Remove this
-    val _errorContext = if (failOnError) {
-      ctx.addReferenceObj("_errCtx", _queryContext)
-    } else {
-      "\"\""
-    }
-    val errorContext = if (failOnError) {
-      ctx.addReferenceObj("errCtx", queryContext)
-    } else {
-      "\"\""
-    }
+    val errorContext = ctx.addReferenceObj("errCtx", queryContext)
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalValue = ctx.freshName("decimalValue")
         s"""
            |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, ${_errorContext});
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
            |if ($decimalValue != null) {
            |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
            |} else {
@@ -984,17 +979,7 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-    // TODO(MaxGekk): Remove this
-    val _errorContext = if (failOnError) {
-      ctx.addReferenceObj("_errCtx", _queryContext)
-    } else {
-      "\"\""
-    }
-    val errorContext = if (failOnError) {
-      ctx.addReferenceObj("errCtx", queryContext)
-    } else {
-      "\"\""
-    }
+    val errorContext = ctx.addReferenceObj("errCtx", queryContext)
     val result = dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalAdd = "$plus"
@@ -1006,7 +991,7 @@ case class Pmod(
            |  ${ev.value}=$remainder;
            |}
            |${ev.value} = ${ev.value}.toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, ${_errorContext});
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
            |${ev.isNull} = ${ev.value} == null;
            |""".stripMargin
 

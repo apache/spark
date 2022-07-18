@@ -96,8 +96,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       value: Decimal,
       decimalPrecision: Int,
       decimalScale: Int,
-      // TODO(MaxGekk): Use QueryContext
-      context: String): ArithmeticException = {
+      context: Option[QueryContext] = None): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       messageParameters = Array(
@@ -105,8 +104,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         decimalPrecision.toString,
         decimalScale.toString,
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      // TODO(MaxGekk): Use QueryContext
-      queryContext = None)
+      queryContext = context)
   }
 
   def invalidInputInCastToDatetimeError(
@@ -143,7 +141,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
-      errorContext: String): SparkNumberFormatException = {
+      context: Option[QueryContext]): SparkNumberFormatException = {
     new SparkNumberFormatException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -151,8 +149,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(StringType),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      // TODO(MaxGekk): Use QueryContext
-      queryContext = None)
+      queryContext = context)
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {

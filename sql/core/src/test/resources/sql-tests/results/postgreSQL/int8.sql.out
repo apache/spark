@@ -645,6 +645,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 8) ==
+select bigint('9223372036854775800') / bigint('0')
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -654,6 +657,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 8) ==
+select bigint('-9223372036854775808') / smallint('0')
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -663,6 +669,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 8) ==
+select smallint('100') / bigint('0')
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query

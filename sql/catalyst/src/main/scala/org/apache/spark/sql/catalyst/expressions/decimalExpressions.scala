@@ -123,14 +123,10 @@ case class CheckOverflow(
       dataType.scale,
       Decimal.ROUND_HALF_UP,
       nullOnOverflow,
-      _queryContext)
+      queryContext)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContextCode = if (nullOnOverflow) {
-      "\"\""
-    } else {
-      ctx.addReferenceObj("_errCtx", _queryContext)
-    }
+    val errorContextCode = ctx.addReferenceObj("errCtx", queryContext)
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
       s"""
@@ -176,20 +172,13 @@ case class CheckOverflowInSum(
         dataType.scale,
         Decimal.ROUND_HALF_UP,
         nullOnOverflow,
-        // TODO(MaxGekk): Use QueryContext
-        "")
+        queryContext)
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    // TODO(MaxGekk): Remove this
-    val _errorContextCode = "\"\""
-    val errorContextCode = if (nullOnOverflow) {
-      "\"\""
-    } else {
-      ctx.addReferenceObj("errCtx", queryContext)
-    }
+    val errorContextCode = ctx.addReferenceObj("errCtx", queryContext)
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
@@ -204,7 +193,7 @@ case class CheckOverflowInSum(
        |  $nullHandling
        |} else {
        |  ${ev.value} = ${childGen.value}.toPrecision(
-       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, ${_errorContextCode});
+       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
        |  ${ev.isNull} = ${ev.value} == null;
        |}
        |""".stripMargin
