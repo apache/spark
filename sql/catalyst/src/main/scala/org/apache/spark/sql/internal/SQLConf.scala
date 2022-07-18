@@ -3697,6 +3697,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_DECIMAL_TO_STRING =
+    buildConf("spark.sql.legacy.castDecimalToString.enabled")
+      .internal()
+      .doc("When true, casting decimal values as string will use scientific notation if an " +
+        "exponent is needed, which is the same with the method java.math.BigDecimal.toString(). " +
+        "Otherwise, the casting result won't contain an exponent field, which is compliant to " +
+        "the ANSI SQL standard.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_PATH_OPTION_BEHAVIOR =
     buildConf("spark.sql.legacy.pathOptionBehavior.enabled")
       .internal()

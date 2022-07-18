@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{SQLException, Types}
+import java.sql.{Connection, SQLException, Types}
+import java.util
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -25,10 +26,12 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
 
 private[sql] object H2Dialect extends JdbcDialect {
@@ -74,6 +77,47 @@ private[sql] object H2Dialect extends JdbcDialect {
     functionMap.clear()
   }
 
+  // CREATE INDEX syntax
+  // https://www.h2database.com/html/commands.html#create_index
+  override def createIndex(
+      indexName: String,
+      tableIdent: Identifier,
+      columns: Array[NamedReference],
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): String = {
+    val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
+    val (indexType, _) = JdbcUtils.processIndexProperties(properties, "h2")
+
+    s"CREATE INDEX ${quoteIdentifier(indexName)} $indexType ON " +
+      s"${tableNameWithSchema(tableIdent)} (${columnList.mkString(", ")})"
+  }
+
+  // DROP INDEX syntax
+  // https://www.h2database.com/html/commands.html#drop_index
+  override def dropIndex(indexName: String, tableIdent: Identifier): String = {
+    s"DROP INDEX ${indexNameWithSchema(tableIdent, indexName)}"
+  }
+
+  // See https://www.h2database.com/html/systemtables.html?#information_schema_indexes
+  override def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableIdent: Identifier,
+      options: JDBCOptions): Boolean = {
+    val sql = s"SELECT * FROM INFORMATION_SCHEMA.INDEXES WHERE " +
+      s"TABLE_SCHEMA = '${tableIdent.namespace().last}' AND " +
+      s"TABLE_NAME = '${tableIdent.name()}' AND INDEX_NAME = '$indexName'"
+    JdbcUtils.checkIfIndexExists(conn, sql, options)
+  }
+
+  private def tableNameWithSchema(ident: Identifier): String = {
+    (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
+  }
+
+  private def indexNameWithSchema(ident: Identifier, indexName: String): String = {
+    (ident.namespace() :+ indexName).map(quoteIdentifier).mkString(".")
+  }
+
   override def classifyException(message: String, e: Throwable): AnalysisException = {
     e match {
       case exception: SQLException =>
@@ -88,6 +132,12 @@ private[sql] object H2Dialect extends JdbcDialect {
           // SCHEMA_NOT_FOUND_1
           case 90079 =>
             throw NoSuchNamespaceException(message, cause = Some(e))
+          // INDEX_ALREADY_EXISTS_1
+          case 42111 =>
+            throw new IndexAlreadyExistsException(message, cause = Some(e))
+          // INDEX_NOT_FOUND_1
+          case 42112 =>
+            throw new NoSuchIndexException(message, cause = Some(e))
           case _ => // do nothing
         }
       case _ => // do nothing

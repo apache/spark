@@ -107,6 +107,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ConstantPropagation,
         FoldablePropagation,
         OptimizeIn,
+        OptimizeRand,
         ConstantFolding,
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
@@ -942,11 +943,23 @@ object ColumnPruning extends Rule[LogicalPlan] {
    * order, otherwise lower Projects can be missed.
    */
   private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
+    case p1 @ Project(_, f @ Filter(e, p2 @ Project(_, child)))
       if p2.outputSet.subsetOf(child.outputSet) &&
         // We only remove attribute-only project.
-        p2.projectList.forall(_.isInstanceOf[AttributeReference]) =>
+        p2.projectList.forall(_.isInstanceOf[AttributeReference]) &&
+        // We can't remove project when the child has conflicting attributes
+        // with the subquery in filter predicate
+        !hasConflictingAttrsWithSubquery(e, child) =>
       p1.copy(child = f.copy(child = child))
+  }
+
+  private def hasConflictingAttrsWithSubquery(
+      predicate: Expression,
+      child: LogicalPlan): Boolean = {
+    predicate.find {
+      case s: SubqueryExpression if s.plan.outputSet.intersect(child.outputSet).nonEmpty => true
+      case _ => false
+    }.isDefined
   }
 }
 
@@ -1011,24 +1024,92 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       .forall {
         case (reference, count) =>
           val producer = producerMap.getOrElse(reference, reference)
-          producer.deterministic && (count == 1 || alwaysInline || {
-            val relatedConsumers = consumers.filter(_.references.contains(reference))
-            // It's still exactly-only if there is only one reference in non-extract expressions,
-            // as we won't duplicate the expensive CreateStruct-like expressions.
-            val extractOnly = relatedConsumers.map(refCountInNonExtract(_, reference)).sum <= 1
-            shouldInline(producer, extractOnly)
-          })
+          val relatedConsumers = consumers.filter(_.references.contains(reference))
+
+          def cheapToInlineProducer: Boolean = trimAliases(producer) match {
+            // These collection creation functions are not cheap as a producer, but we have
+            // optimizer rules that can optimize them out if they are only consumed by
+            // ExtractValue (See SimplifyExtractValueOps), so we need to allow to inline them to
+            // avoid perf regression. As an example:
+            //   Project(s.a, s.b, Project(create_struct(a, b, c) as s, child))
+            // We should collapse these two projects and eventually get Project(a, b, child)
+            case e @ (_: CreateNamedStruct | _: UpdateFields | _: CreateMap | _: CreateArray) =>
+              // We can inline the collection creation producer if at most one of its access
+              // is non-cheap. Cheap access here means the access can be optimized by
+              // `SimplifyExtractValueOps` and become a cheap expression. For example,
+              // `create_struct(a, b, c).a` is a cheap access as it can be optimized to `a`.
+              // For a query:
+              //   Project(s.a, s, Project(create_struct(a, b, c) as s, child))
+              // We should collapse these two projects and eventually get
+              //   Project(a, create_struct(a, b, c) as s, child)
+              var nonCheapAccessSeen = false
+              def nonCheapAccessVisitor(): Boolean = {
+                // Returns true for all calls after the first.
+                try {
+                  nonCheapAccessSeen
+                } finally {
+                  nonCheapAccessSeen = true
+                }
+              }
+
+              !relatedConsumers.exists(findNonCheapAccesses(_, reference, e, nonCheapAccessVisitor))
+
+            case other => isCheap(other)
+          }
+
+          producer.deterministic && (count == 1 || alwaysInline || cheapToInlineProducer)
       }
   }
 
-  private def refCountInNonExtract(expr: Expression, ref: Attribute): Int = {
-    def refCount(e: Expression): Int = e match {
-      case a: Attribute if a.semanticEquals(ref) => 1
-      // The first child of `ExtractValue` is the complex type to be extracted.
-      case e: ExtractValue if e.children.head.semanticEquals(ref) => 0
-      case _ => e.children.map(refCount).sum
+  private object ExtractOnlyRef {
+    def unapply(expr: Expression): Option[Attribute] = expr match {
+      case a: Alias => unapply(a.child)
+      case e: ExtractValue => unapply(e.children.head)
+      case a: Attribute => Some(a)
+      case _ => None
     }
-    refCount(expr)
+  }
+
+  private def inlineReference(expr: Expression, ref: Attribute, refExpr: Expression): Expression = {
+    expr.transformUp {
+      case a: Attribute if a.semanticEquals(ref) => refExpr
+    }
+  }
+
+  private object SimplifyExtractValueExecutor extends RuleExecutor[LogicalPlan] {
+    override val batches = Batch("SimplifyExtractValueOps", FixedPoint(10),
+      SimplifyExtractValueOps,
+      // `SimplifyExtractValueOps` turns map lookup to CaseWhen, and we need the following two rules
+      // to further optimize CaseWhen.
+      ConstantFolding,
+      SimplifyConditionals) :: Nil
+  }
+
+  private def simplifyExtractValues(expr: Expression): Expression = {
+    val fakePlan = Project(Seq(Alias(expr, "fake")()), LocalRelation(Nil))
+    SimplifyExtractValueExecutor.execute(fakePlan)
+      .asInstanceOf[Project].projectList.head.asInstanceOf[Alias].child
+  }
+
+  // This method visits the consumer expression tree and finds non-cheap accesses to the reference.
+  // It returns true as long as the `nonCheapAccessVisitor` returns true.
+  private def findNonCheapAccesses(
+      consumer: Expression,
+      ref: Attribute,
+      refExpr: Expression,
+      nonCheapAccessVisitor: () => Boolean): Boolean = consumer match {
+    // Direct access to the collection creation producer is non-cheap.
+    case attr: Attribute if attr.semanticEquals(ref) =>
+      nonCheapAccessVisitor()
+
+    // If the collection creation producer is accessed by a `ExtractValue` chain, inline it and
+    // apply `SimplifyExtractValueOps` to see if the result expression is cheap.
+    case e @ ExtractOnlyRef(attr) if attr.semanticEquals(ref) =>
+      val finalExpr = simplifyExtractValues(inlineReference(e, ref, refExpr))
+      !isCheap(finalExpr) && nonCheapAccessVisitor()
+
+    case _ =>
+      consumer.children.exists(findNonCheapAccesses(_, ref, refExpr, nonCheapAccessVisitor))
   }
 
   /**
@@ -1053,20 +1134,13 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   /**
    * Check if the given expression is cheap that we can inline it.
    */
-  private def shouldInline(e: Expression, extractOnlyConsumer: Boolean): Boolean = e match {
+  private def isCheap(e: Expression): Boolean = e match {
     case _: Attribute | _: OuterReference => true
     case _ if e.foldable => true
     // PythonUDF is handled by the rule ExtractPythonUDFs
     case _: PythonUDF => true
     // Alias and ExtractValue are very cheap.
-    case _: Alias | _: ExtractValue => e.children.forall(shouldInline(_, extractOnlyConsumer))
-    // These collection create functions are not cheap, but we have optimizer rules that can
-    // optimize them out if they are only consumed by ExtractValue, so we need to allow to inline
-    // them to avoid perf regression. As an example:
-    //   Project(s.a, s.b, Project(create_struct(a, b, c) as s, child))
-    // We should collapse these two projects and eventually get Project(a, b, child)
-    case _: CreateNamedStruct | _: CreateArray | _: CreateMap | _: UpdateFields =>
-      extractOnlyConsumer
+    case _: Alias | _: ExtractValue => e.children.forall(isCheap)
     case _ => false
   }
 

@@ -647,6 +647,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_resample",
         "pyspark.pandas.tests.test_reshape",
         "pyspark.pandas.tests.test_rolling",
+        "pyspark.pandas.tests.test_scalars",
         "pyspark.pandas.tests.test_series_conversion",
         "pyspark.pandas.tests.test_series_datetime",
         "pyspark.pandas.tests.test_series_string",

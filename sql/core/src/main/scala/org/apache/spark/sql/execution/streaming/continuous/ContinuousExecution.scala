@@ -269,7 +269,6 @@ class ContinuousExecution(
         } catch {
           case _: InterruptedException =>
             // Cleanly stop the query.
-            return
         }
       }
     }, s"epoch update thread for $prettyIdString")

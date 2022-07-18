@@ -9974,7 +9974,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             non_existence_col = [idv for idv in id_vars if idv not in column_labels]
             if len(non_existence_col) != 0:
-                raveled_column_labels = np.ravel(column_labels)
+                raveled_column_labels: np.ndarray[Any, np.dtype[Any]] = np.ravel(column_labels)
                 missing = [
                     nec for nec in np.ravel(non_existence_col) if nec not in raveled_column_labels
                 ]

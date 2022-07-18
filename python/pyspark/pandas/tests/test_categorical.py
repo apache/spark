@@ -433,7 +433,7 @@ class CategoricalTest(ComparisonTestBase, TestUtils):
 
         pdf, psdf = self.df_pair
 
-        def identity(x) -> ps.Series[psdf.b.dtype]:  # type: ignore[name-defined, no-untyped-def]
+        def identity(x) -> ps.Series[psdf.b.dtype]:  # type: ignore[name-defined]
             return x
 
         self.assert_eq(

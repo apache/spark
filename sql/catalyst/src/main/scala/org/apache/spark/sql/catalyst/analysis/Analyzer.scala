@@ -278,7 +278,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       KeepLegacyOutputs),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions(v1SessionCatalog) ::
-      ResolveNamespace(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
       ResolveUserSpecifiedColumns ::
       ResolveInsertInto ::
@@ -857,26 +856,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       case e: Attribute =>
         throw QueryCompilationErrors.aggregateExpressionRequiredForPivotError(e.sql)
       case e => e.children.foreach(checkValidAggregateExpression)
-    }
-  }
-
-  case class ResolveNamespace(catalogManager: CatalogManager)
-    extends Rule[LogicalPlan] with LookupCatalog {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
-        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-      case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _, _) =>
-        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-      case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
-        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-      case s @ ShowFunctions(UnresolvedNamespace(Seq()), _, _, _, _) =>
-        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-      case a @ AnalyzeTables(UnresolvedNamespace(Seq()), _) =>
-        a.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-      case UnresolvedNamespace(Seq()) =>
-        ResolvedNamespace(currentCatalog, Seq.empty[String])
-      case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
-        ResolvedNamespace(catalog, ns)
     }
   }
 

@@ -23,7 +23,6 @@ import java.net.{URISyntaxException, URL}
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.text.{ParseException => JavaParseException}
 import java.time.{DateTimeException, LocalDate}
-import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 import java.util.concurrent.TimeoutException
@@ -38,8 +37,8 @@ import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOut
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
+import org.apache.spark.sql.catalyst.{TableIdentifier, WalkedTypePath}
 import org.apache.spark.sql.catalyst.ScalaReflection.Schema
-import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
@@ -227,10 +226,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       Array(toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def ansiDateTimeParseError(e: DateTimeParseException): DateTimeParseException = {
-    val newMessage = s"${e.getMessage}. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
-    new DateTimeParseException(newMessage, e.getParsedString, e.getErrorIndex, e.getCause)
+  def ansiDateTimeParseError(e: Exception): SparkDateTimeException = {
+    new SparkDateTimeException(
+      errorClass = "CANNOT_PARSE_TIMESTAMP",
+      errorSubClass = None,
+      Array(e.getMessage, toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def ansiDateTimeError(e: DateTimeException): DateTimeException = {
@@ -1755,11 +1755,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s" ${maxBroadcastTableBytes >> 30}GB: ${dataSize >> 30} GB")
   }
 
-  def notEnoughMemoryToBuildAndBroadcastTableError(oe: OutOfMemoryError): Throwable = {
+  def notEnoughMemoryToBuildAndBroadcastTableError(
+      oe: OutOfMemoryError, tables: Seq[TableIdentifier]): Throwable = {
+    val analyzeTblMsg = if (tables.nonEmpty) {
+      " or analyze these tables through: " +
+        s"${tables.map(t => s"ANALYZE TABLE $t COMPUTE STATISTICS;").mkString(" ")}."
+    } else {
+      "."
+    }
     new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
       "worker nodes. As a workaround, you can either disable broadcast by setting " +
       s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
-      s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
+      s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value$analyzeTblMsg")
       .initCause(oe.getCause)
   }
 
@@ -2023,5 +2030,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def nullComparisonResultError(): Throwable = {
     new SparkException(errorClass = "NULL_COMPARISON_RESULT",
       messageParameters = Array(), cause = null)
+  }
+
+  def invalidPatternError(funcName: String, pattern: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "regexp",
+        toSQLId(funcName),
+        pattern))
   }
 }

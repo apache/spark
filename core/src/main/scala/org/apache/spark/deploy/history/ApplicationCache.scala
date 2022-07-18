@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.NoSuchElementException
 import java.util.concurrent.ExecutionException
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}

@@ -33,7 +33,6 @@ import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -61,7 +60,7 @@ class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
 }
 
-class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
+class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   val conf = new YarnConfiguration()
   val sparkConf = new SparkConf()
   sparkConf.set(DRIVER_HOST_ADDRESS, "localhost")

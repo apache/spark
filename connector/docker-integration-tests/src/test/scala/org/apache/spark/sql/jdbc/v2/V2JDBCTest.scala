@@ -406,9 +406,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   protected def caseConvert(tableName: String): String = tableName
 
+  private def withOrWithout(isDistinct: Boolean): String = if (isDistinct) "with" else "without"
+
   protected def testVarPop(isDistinct: Boolean = false): Unit = {
     val distinct = if (isDistinct) "DISTINCT " else ""
-    test(s"scan with aggregate push-down: VAR_POP with distinct: $isDistinct") {
+    test(s"scan with aggregate push-down: VAR_POP ${withOrWithout(isDistinct)} DISTINCT") {
       val df = sql(s"SELECT VAR_POP(${distinct}bonus) FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
@@ -416,15 +418,15 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "VAR_POP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 10000d)
-      assert(row(1).getDouble(0) === 2500d)
-      assert(row(2).getDouble(0) === 0d)
+      assert(row(0).getDouble(0) === 10000.0)
+      assert(row(1).getDouble(0) === 2500.0)
+      assert(row(2).getDouble(0) === 0.0)
     }
   }
 
   protected def testVarSamp(isDistinct: Boolean = false): Unit = {
     val distinct = if (isDistinct) "DISTINCT " else ""
-    test(s"scan with aggregate push-down: VAR_SAMP with distinct: $isDistinct") {
+    test(s"scan with aggregate push-down: VAR_SAMP ${withOrWithout(isDistinct)} DISTINCT") {
       val df = sql(
         s"SELECT VAR_SAMP(${distinct}bonus) FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
@@ -433,15 +435,15 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "VAR_SAMP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 20000d)
-      assert(row(1).getDouble(0) === 5000d)
+      assert(row(0).getDouble(0) === 20000.0)
+      assert(row(1).getDouble(0) === 5000.0)
       assert(row(2).isNullAt(0))
     }
   }
 
   protected def testStddevPop(isDistinct: Boolean = false): Unit = {
     val distinct = if (isDistinct) "DISTINCT " else ""
-    test(s"scan with aggregate push-down: STDDEV_POP with distinct: $isDistinct") {
+    test(s"scan with aggregate push-down: STDDEV_POP ${withOrWithout(isDistinct)} DISTINCT") {
       val df = sql(
         s"SELECT STDDEV_POP(${distinct}bonus) FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
@@ -450,15 +452,15 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "STDDEV_POP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 100d)
-      assert(row(1).getDouble(0) === 50d)
-      assert(row(2).getDouble(0) === 0d)
+      assert(row(0).getDouble(0) === 100.0)
+      assert(row(1).getDouble(0) === 50.0)
+      assert(row(2).getDouble(0) === 0.0)
     }
   }
 
   protected def testStddevSamp(isDistinct: Boolean = false): Unit = {
     val distinct = if (isDistinct) "DISTINCT " else ""
-    test(s"scan with aggregate push-down: STDDEV_SAMP with distinct: $isDistinct") {
+    test(s"scan with aggregate push-down: STDDEV_SAMP ${withOrWithout(isDistinct)} DISTINCT") {
       val df = sql(
         s"SELECT STDDEV_SAMP(${distinct}bonus) FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
@@ -467,15 +469,15 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "STDDEV_SAMP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 141.4213562373095d)
-      assert(row(1).getDouble(0) === 70.71067811865476d)
+      assert(row(0).getDouble(0) === 141.4213562373095)
+      assert(row(1).getDouble(0) === 70.71067811865476)
       assert(row(2).isNullAt(0))
     }
   }
 
   protected def testCovarPop(isDistinct: Boolean = false): Unit = {
     val distinct = if (isDistinct) "DISTINCT " else ""
-    test(s"scan with aggregate push-down: COVAR_POP with distinct: $isDistinct") {
+    test(s"scan with aggregate push-down: COVAR_POP ${withOrWithout(isDistinct)} DISTINCT") {
       val df = sql(
         s"SELECT COVAR_POP(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
@@ -484,15 +486,15 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "COVAR_POP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 10000d)
-      assert(row(1).getDouble(0) === 2500d)
-      assert(row(2).getDouble(0) === 0d)
+      assert(row(0).getDouble(0) === 10000.0)
+      assert(row(1).getDouble(0) === 2500.0)
+      assert(row(2).getDouble(0) === 0.0)
     }
   }
 
   protected def testCovarSamp(isDistinct: Boolean = false): Unit = {
     val distinct = if (isDistinct) "DISTINCT " else ""
-    test(s"scan with aggregate push-down: COVAR_SAMP with distinct: $isDistinct") {
+    test(s"scan with aggregate push-down: COVAR_SAMP ${withOrWithout(isDistinct)} DISTINCT") {
       val df = sql(
         s"SELECT COVAR_SAMP(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
@@ -501,15 +503,15 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "COVAR_SAMP")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 20000d)
-      assert(row(1).getDouble(0) === 5000d)
+      assert(row(0).getDouble(0) === 20000.0)
+      assert(row(1).getDouble(0) === 5000.0)
       assert(row(2).isNullAt(0))
     }
   }
 
   protected def testCorr(isDistinct: Boolean = false): Unit = {
     val distinct = if (isDistinct) "DISTINCT " else ""
-    test(s"scan with aggregate push-down: CORR with distinct: $isDistinct") {
+    test(s"scan with aggregate push-down: CORR ${withOrWithout(isDistinct)} DISTINCT") {
       val df = sql(
         s"SELECT CORR(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
@@ -518,9 +520,77 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       checkAggregatePushed(df, "CORR")
       val row = df.collect()
       assert(row.length === 3)
-      assert(row(0).getDouble(0) === 1d)
-      assert(row(1).getDouble(0) === 1d)
+      assert(row(0).getDouble(0) === 1.0)
+      assert(row(1).getDouble(0) === 1.0)
       assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testRegrIntercept(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: REGR_INTERCEPT ${withOrWithout(isDistinct)} DISTINCT") {
+      val df = sql(
+        s"SELECT REGR_INTERCEPT(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
+          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "REGR_INTERCEPT")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 0.0)
+      assert(row(1).getDouble(0) === 0.0)
+      assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testRegrSlope(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: REGR_SLOPE ${withOrWithout(isDistinct)} DISTINCT") {
+      val df = sql(
+        s"SELECT REGR_SLOPE(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
+          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "REGR_SLOPE")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 1.0)
+      assert(row(1).getDouble(0) === 1.0)
+      assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testRegrR2(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: REGR_R2 ${withOrWithout(isDistinct)} DISTINCT") {
+      val df = sql(
+        s"SELECT REGR_R2(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
+          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "REGR_R2")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 1.0)
+      assert(row(1).getDouble(0) === 1.0)
+      assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testRegrSXY(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: REGR_SXY ${withOrWithout(isDistinct)} DISTINCT") {
+      val df = sql(
+        s"SELECT REGR_SXY(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
+          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "REGR_SXY")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 20000.0)
+      assert(row(1).getDouble(0) === 5000.0)
+      assert(row(2).getDouble(0) === 0.0)
     }
   }
 }
