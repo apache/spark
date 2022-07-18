@@ -21,6 +21,7 @@ import java.io.File
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
@@ -577,9 +578,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             .save(dir.getAbsolutePath)
 
           // Identify the data file and its metadata.
-          // We expect there to be exactly one subdirectory containing exactly one parquet file.
-          val subdirectory = dir.listFiles().filter(_.isDirectory).head
-          val file = subdirectory.listFiles().filter(_.getName.endsWith(".parquet")).head
+          val file = TestUtils.recursiveList(dir)
+            .filter(_.getName.endsWith(".parquet")).head
           val expectedDf = Seq(1 -> 1).toDF("a", "b")
             .withColumn(FileFormat.FILE_NAME, lit(file.getName))
             .withColumn(FileFormat.FILE_SIZE, lit(file.length()))
