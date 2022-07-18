@@ -20,7 +20,7 @@ package org.apache.spark.executor
 import java.util.concurrent.CopyOnWriteArrayList
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
+import scala.collection.mutable.{ArrayBuffer, Buffer, LinkedHashMap}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -255,7 +255,7 @@ class TaskMetrics private[spark] () extends Serializable {
    */
   @transient private[spark] lazy val _externalAccums = new CopyOnWriteArrayList[AccumulatorV2[_, _]]
 
-  private[spark] def externalAccums(): Seq[AccumulatorV2[_, _]] = _externalAccums.asScala.toSeq
+  private[spark] def externalAccums(): Buffer[AccumulatorV2[_, _]] = _externalAccums.asScala
 
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
     _externalAccums.add(a)
