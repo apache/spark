@@ -147,6 +147,48 @@ class DatasetUnpivotSuite extends QueryTest
         valueColumnName = "val")
     assert(unpivoted2.schema === longSchema)
     checkAnswer(unpivoted2, longDataRows)
+
+    val unpivotedRows = Seq(
+      Row(1, "id", 1L),
+      Row(1, "int1", 1L),
+      Row(1, "long1", 1L),
+      Row(2, "id", 2L),
+      Row(2, "int1", null),
+      Row(2, "long1", 2L),
+      Row(3, "id", 3L),
+      Row(3, "int1", 3L),
+      Row(3, "long1", null),
+      Row(4, "id", 4L),
+      Row(4, "int1", null),
+      Row(4, "long1", null)
+    )
+
+    val unpivoted3 = wideDataDs.select($"id", $"int1", $"long1")
+      .unpivot(
+        Array($"id" * 2),
+        Array.empty,
+        variableColumnName = "var",
+        valueColumnName = "val")
+    assert(unpivoted3.schema === StructType(Seq(
+      StructField("(id * 2)", IntegerType, nullable = false),
+      StructField("var", StringType, nullable = false),
+      StructField("val", LongType, nullable = true)
+    )))
+    checkAnswer(unpivoted3, unpivotedRows.map(row =>
+      Row(row.getInt(0) * 2, row.get(1), row.get(2))))
+
+    val unpivoted4 = wideDataDs.select($"id", $"int1", $"long1")
+      .unpivot(
+        Array($"id".as("uid")),
+        Array.empty,
+        variableColumnName = "var",
+        valueColumnName = "val")
+    assert(unpivoted4.schema === StructType(Seq(
+      StructField("uid", IntegerType, nullable = false),
+      StructField("var", StringType, nullable = false),
+      StructField("val", LongType, nullable = true)
+    )))
+    checkAnswer(unpivoted4, unpivotedRows)
   }
 
   test("unpivot without ids or values") {
