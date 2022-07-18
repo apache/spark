@@ -111,12 +111,13 @@ private[spark] object SparkCoreErrors {
       "Cannot change storage level of an RDD after it was already assigned a level")
   }
 
-  def canOnlyZipRDDsWithSamePartitionSizeError(): Throwable = {
-    new SparkException("Can only zip RDDs with same number of elements in each partition")
+  def rddPartitionExceedsMaxPartitions(numPartitions: Int, maxNumPartitions: Int): Throwable = {
+    new SparkException(s"The number of RDD partition is $numPartitions, " +
+      s"which exceeds the maximum number of RDD partition allowed: $maxNumPartitions")
   }
 
-  def rddExceedMaxPartitions(numPartitions: Int): Throwable = {
-    new SparkException(s"The number of RDD partition exceeds $numPartitions")
+  def canOnlyZipRDDsWithSamePartitionSizeError(): Throwable = {
+    new SparkException("Can only zip RDDs with same number of elements in each partition")
   }
 
   def emptyCollectionError(): Throwable = {

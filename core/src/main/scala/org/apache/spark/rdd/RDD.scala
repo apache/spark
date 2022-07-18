@@ -290,15 +290,16 @@ abstract class RDD[T: ClassTag](
         stateLock.synchronized {
           if (partitions_ == null) {
             partitions_ = getPartitions
+            if (partitions_.length > conf.get(RDD_MAX_PARTITIONS)) {
+              throw SparkCoreErrors.rddPartitionExceedsMaxPartitions(
+                partitions_.length, conf.get(RDD_MAX_PARTITIONS))
+            }
             partitions_.zipWithIndex.foreach { case (partition, index) =>
               require(partition.index == index,
                 s"partitions($index).partition == ${partition.index}, but it should equal $index")
             }
           }
         }
-      }
-      if (partitions_.length > conf.get(RDD_MAX_PARTITIONS)) {
-        throw SparkCoreErrors.rddExceedMaxPartitions(conf.get(RDD_MAX_PARTITIONS))
       }
       partitions_
     }

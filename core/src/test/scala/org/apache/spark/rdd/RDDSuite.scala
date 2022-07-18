@@ -1265,7 +1265,8 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
           val e = intercept[SparkException] {
             rdd.collect()
           }
-          assert(e.getMessage.contains("The number of RDD partition exceeds 10"))
+          assert(e.getMessage.contains("The number of RDD partition is 20, " +
+            "which exceeds the maximum number of RDD partition allowed: 10"))
         } else {
           rdd.collect()
         }
