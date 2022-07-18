@@ -216,8 +216,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             // run for the shuffle ID. Close and clean up old shuffleMergeId files,
             // happens in the indeterminate stage retries
             AppAttemptShuffleMergeId appAttemptShuffleMergeId =
-              new AppAttemptShuffleMergeId(
-                appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId);
+                new AppAttemptShuffleMergeId(
+                    appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId);
             logger.info("{}: creating a new shuffle merge metadata since received " +
                 "shuffleMergeId is higher than latest shuffleMergeId {}",
                 appAttemptShuffleMergeId, latestShuffleMergeId);
@@ -354,7 +354,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private void removeOldApplicationAttemptsFromDb(AppShuffleInfo info) {
     if (info.attemptId != UNDEFINED_ATTEMPT_ID) {
-      for (int formerAttemptId = 0; formerAttemptId < info.attemptId; formerAttemptId ++) {
+      for (int formerAttemptId = 0; formerAttemptId < info.attemptId; formerAttemptId++) {
         removeAppAttemptPathInfoFromDB(info.appId, formerAttemptId);
       }
     }
@@ -387,7 +387,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   /**
    * Clean up the AppShufflePartitionInfo for a specific AppShuffleInfo.
    * If cleanupLocalDirs is true, the merged shuffle files will also be deleted.
-   * The cleanup will be executed in a separate thread.
+   * The cleanup will be executed in the mergedShuffleCleaner thread.
    */
   @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
   @VisibleForTesting
@@ -415,8 +415,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   void removeAppAttemptPathInfoFromDB(String appId, int attemptId) {
     AppAttemptId appAttemptId = new AppAttemptId(appId, attemptId);
     if (db != null) {
-      try{
-        db.delete(getDbAppAttemptPathsKey(appAttemptId));
+      try {
+        byte[] key = getDbAppAttemptPathsKey(appAttemptId);
+        if (db.get(key) != null) {
+          db.delete(key);
+        }
       } catch (Exception e) {
         logger.error("Failed to remove the application attempt {} local path in DB",
             appAttemptId, e);
@@ -442,7 +445,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * Clean up all the AppShufflePartitionInfo and the finalized shuffle partitions in DB for
    * a specific shuffleMergeId. This is done since there is a higher shuffleMergeId request made
    * for a shuffleId, therefore clean up older shuffleMergeId partitions. The cleanup will be
-   * executed in a separate thread.
+   * executed the mergedShuffleCleaner thread.
    */
   @VisibleForTesting
   void closeAndDeleteOutdatedPartitions(
@@ -896,18 +899,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     List<byte[]> dbKeysToBeRemoved = new ArrayList<>();
     dbKeysToBeRemoved.addAll(reloadActiveAppAttemptsPathInfo(db));
     dbKeysToBeRemoved.addAll(reloadFinalizedAppAttemptsShuffleMergeInfo(db));
-    // Clean up invalid data stored in DB
-    submitCleanupTask(() ->
-        dbKeysToBeRemoved.forEach(
-            (key) -> {
-              try {
-                db.delete(key);
-              } catch (Exception e) {
-                logger.error("Error deleting dangling key {} in DB", key, e);
-              }
-            }
-        )
-    );
+    removeOutdatedKeyValuesInDB(dbKeysToBeRemoved);
   }
 
   /**
@@ -999,6 +991,22 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
     }
     return dbKeysToBeRemoved;
+  }
+
+  /**
+   * Clean up DB with a list of outdated keys collected during DB reload
+   */
+  @VisibleForTesting
+  void removeOutdatedKeyValuesInDB(List<byte[]> dbKeysToBeRemoved) {
+      dbKeysToBeRemoved.forEach(
+          (key) -> {
+            try {
+              db.delete(key);
+            } catch (Exception e) {
+              logger.error("Error deleting dangling key {} in DB", key, e);
+            }
+          }
+      );
   }
 
   /**

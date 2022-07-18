@@ -18,6 +18,7 @@ package org.apache.spark.network.shuffle
 
 import java.io.File
 import java.nio.channels.FileChannel
+import java.util.List
 import java.util.concurrent.ConcurrentMap
 
 import org.apache.hadoop.yarn.api.records.ApplicationId
@@ -121,7 +122,8 @@ object ShuffleTestAccessor {
     transportConf: TransportConf,
     file: File): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
-      override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
+      override private[shuffle] def removeOutdatedKeyValuesInDB(
+          dbKeysToBeRemoved: List[Array[Byte]]): Unit = {
         // NoOp
       }
     }

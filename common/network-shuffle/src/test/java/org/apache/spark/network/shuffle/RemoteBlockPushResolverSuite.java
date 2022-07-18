@@ -588,8 +588,7 @@ public class RemoteBlockPushResolverSuite {
     callback1.onComplete(callback1.getID());
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
     // Close the meta stream so it throws IOException
-    TestMergeShuffleFile testMetaFile =
-      (TestMergeShuffleFile) partitionInfo.getMetaFile();
+    TestMergeShuffleFile testMetaFile = (TestMergeShuffleFile) partitionInfo.getMetaFile();
     long metaPosBeforeClose = testMetaFile.getPos();
     testMetaFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
@@ -623,10 +622,9 @@ public class RemoteBlockPushResolverSuite {
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
     callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[4]));
     callback1.onComplete(callback1.getID());
-    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo =callback1.getPartitionInfo();
+    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
     // Close the meta stream so it throws IOException
-    TestMergeShuffleFile testMetaFile =
-      (TestMergeShuffleFile) partitionInfo.getMetaFile();
+    TestMergeShuffleFile testMetaFile = (TestMergeShuffleFile) partitionInfo.getMetaFile();
     long metaPosBeforeClose = testMetaFile.getPos();
     testMetaFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
@@ -892,8 +890,8 @@ public class RemoteBlockPushResolverSuite {
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       void closeAndDeletePartitionsIfNeeded(
-        AppShuffleInfo appShuffleInfo,
-        boolean cleanupLocalDirs) {
+          AppShuffleInfo appShuffleInfo,
+          boolean cleanupLocalDirs) {
         super.closeAndDeletePartitionsIfNeeded(
             appShuffleInfo, cleanupLocalDirs);
         closed.release();
