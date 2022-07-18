@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -128,7 +129,7 @@ case class CheckOverflow(
     val errorContextCode = if (nullOnOverflow) {
       "\"\""
     } else {
-      ctx.addReferenceObj("errCtx", _queryContext)
+      ctx.addReferenceObj("_errCtx", _queryContext)
     }
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
@@ -160,8 +161,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    // TODO(MaxGekk): Use QueryContext
-    queryContext: String = "") extends UnaryExpression {
+    queryContext: Option[QueryContext] = None) extends UnaryExpression {
 
   override def nullable: Boolean = true
 
@@ -176,12 +176,15 @@ case class CheckOverflowInSum(
         dataType.scale,
         Decimal.ROUND_HALF_UP,
         nullOnOverflow,
-        queryContext)
+        // TODO(MaxGekk): Use QueryContext
+        "")
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
+    // TODO(MaxGekk): Remove this
+    val _errorContextCode = "\"\""
     val errorContextCode = if (nullOnOverflow) {
       "\"\""
     } else {
@@ -201,7 +204,7 @@ case class CheckOverflowInSum(
        |  $nullHandling
        |} else {
        |  ${ev.value} = ${childGen.value}.toPrecision(
-       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
+       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, ${_errorContextCode});
        |  ${ev.isNull} = ${ev.value} == null;
        |}
        |""".stripMargin

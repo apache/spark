@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
@@ -26,33 +27,45 @@ object MathUtils {
 
   def addExact(a: Int, b: Int): Int = withOverflow(Math.addExact(a, b))
 
-  def addExact(a: Int, b: Int, errorContext: String): Int =
-    withOverflow(Math.addExact(a, b), hint = "try_add", errorContext = errorContext)
+  def addExact(a: Int, b: Int, errorContext: String): Int = {
+    // TODO(MaxGekk): Use QueryContext
+    withOverflow(Math.addExact(a, b), hint = "try_add", errorContext = None)
+  }
 
   def addExact(a: Long, b: Long): Long = withOverflow(Math.addExact(a, b))
 
-  def addExact(a: Long, b: Long, errorContext: String): Long =
-    withOverflow(Math.addExact(a, b), hint = "try_add", errorContext = errorContext)
+  def addExact(a: Long, b: Long, errorContext: String): Long = {
+    // TODO(MaxGekk): Use QueryContext
+    withOverflow(Math.addExact(a, b), hint = "try_add", errorContext = None)
+  }
 
   def subtractExact(a: Int, b: Int): Int = withOverflow(Math.subtractExact(a, b))
 
-  def subtractExact(a: Int, b: Int, errorContext: String): Int =
-    withOverflow(Math.subtractExact(a, b), hint = "try_subtract", errorContext = errorContext)
+  def subtractExact(a: Int, b: Int, errorContext: String): Int = {
+    // TODO(MaxGekk): Use QueryContext
+    withOverflow(Math.subtractExact(a, b), hint = "try_subtract", errorContext = None)
+  }
 
   def subtractExact(a: Long, b: Long): Long = withOverflow(Math.subtractExact(a, b))
 
-  def subtractExact(a: Long, b: Long, errorContext: String): Long =
-    withOverflow(Math.subtractExact(a, b), hint = "try_subtract", errorContext = errorContext)
+  def subtractExact(a: Long, b: Long, errorContext: String): Long = {
+    // TODO(MaxGekk): Use QueryContext
+    withOverflow(Math.subtractExact(a, b), hint = "try_subtract", errorContext = None)
+  }
 
   def multiplyExact(a: Int, b: Int): Int = withOverflow(Math.multiplyExact(a, b))
 
-  def multiplyExact(a: Int, b: Int, errorContext: String): Int =
-    withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", errorContext = errorContext)
+  def multiplyExact(a: Int, b: Int, errorContext: String): Int = {
+    // TODO(MaxGekk): Use QueryContext
+    withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", errorContext = None)
+  }
 
   def multiplyExact(a: Long, b: Long): Long = withOverflow(Math.multiplyExact(a, b))
 
-  def multiplyExact(a: Long, b: Long, errorContext: String): Long =
-    withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", errorContext = errorContext)
+  def multiplyExact(a: Long, b: Long, errorContext: String): Long = {
+    // TODO(MaxGekk): Use QueryContext
+    withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", errorContext = None)
+  }
 
   def negateExact(a: Int): Int = withOverflow(Math.negateExact(a))
 
@@ -68,7 +81,10 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
-  private def withOverflow[A](f: => A, hint: String = "", errorContext: String = ""): A = {
+  private def withOverflow[A](
+      f: => A,
+      hint: String = "",
+      errorContext: Option[QueryContext] = None): A = {
     try {
       f
     } catch {

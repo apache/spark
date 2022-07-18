@@ -348,7 +348,7 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
-      val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
+      val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
       // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {

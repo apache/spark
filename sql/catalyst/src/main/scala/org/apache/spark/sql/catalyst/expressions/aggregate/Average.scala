@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -86,7 +87,7 @@ abstract class AverageBase
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
-  protected def getEvaluateExpression(queryContext: String) = child.dataType match {
+  protected def getEvaluateExpression(queryContext: Option[QueryContext]) = child.dataType match {
     case _: DecimalType =>
       Divide(
         CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd, queryContext),
@@ -136,12 +137,19 @@ case class Average(
 
   override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
 
-  override lazy val evaluateExpression: Expression = getEvaluateExpression(_queryContext)
+  override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
 
+  // TODO(MaxGekk): Remove this
   override def _initQueryContext(): String = if (useAnsiAdd) {
     origin._context
   } else {
     ""
+  }
+
+  override def initQueryContext(): Option[QueryContext] = if (useAnsiAdd) {
+    Some(origin.context)
+  } else {
+    None
   }
 }
 
@@ -201,7 +209,7 @@ case class TryAverage(child: Expression) extends AverageBase {
   }
 
   override lazy val evaluateExpression: Expression = {
-    addTryEvalIfNeeded(getEvaluateExpression(""))
+    addTryEvalIfNeeded(getEvaluateExpression(None))
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =

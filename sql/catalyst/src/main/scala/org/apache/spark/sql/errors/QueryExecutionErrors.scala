@@ -267,11 +267,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     ansiIllegalArgumentError(e.getMessage)
   }
 
-  def overflowInSumOfDecimalError(context: String): ArithmeticException = {
-    arithmeticOverflowError("Overflow in sum of decimals", errorContext = context)
+  def overflowInSumOfDecimalError(context: Option[QueryContext]): ArithmeticException = {
+    arithmeticOverflowError("Overflow in sum of decimals", context = context)
   }
 
-  def overflowInIntegralDivideError(context: String): ArithmeticException = {
+  def overflowInIntegralDivideError(context: Option[QueryContext]): ArithmeticException = {
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
@@ -487,16 +487,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def arithmeticOverflowError(
       message: String,
       hint: String = "",
-    // TODO(MaxGekk): Use QueryContext
-    errorContext: String = ""): ArithmeticException = {
+      context: Option[QueryContext] = None): ArithmeticException = {
     val alternative = if (hint.nonEmpty) {
       s" Use '$hint' to tolerate overflow and return NULL instead."
     } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
       messageParameters = Array(message, alternative, SQLConf.ANSI_ENABLED.key),
-      // TODO(MaxGekk): Use QueryContext
-      queryContext = None)
+      queryContext = context)
   }
 
   def unaryMinusCauseOverflowError(originValue: Int): ArithmeticException = {

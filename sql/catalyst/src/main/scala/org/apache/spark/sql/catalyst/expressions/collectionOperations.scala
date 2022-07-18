@@ -2220,7 +2220,7 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
+            val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
             // scalastyle:off line.size.limit
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
             // scalastyle:on line.size.limit

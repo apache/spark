@@ -291,7 +291,7 @@ case class GetArrayItem(
       }
 
       val indexOutOfBoundBranch = if (failOnError) {
-        val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
+        val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
         // scalastyle:off line.size.limit
         s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements(), $errorContext);"
         // scalastyle:on line.size.limit
@@ -412,7 +412,7 @@ trait GetMapValueUtil
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
-    lazy val errorContext = ctx.addReferenceObj("errCtx", _queryContext)
+    lazy val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
     val keyDt = ctx.addReferenceObj("keyType", keyType, keyType.getClass.getName)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
