@@ -122,15 +122,15 @@ class UnivocityParser(
   // Flags to signal if we need to fall back to the backward compatible behavior of parsing
   // dates and timestamps.
   // For more information, see comments for "enableDateTimeParsingFallback" option in CSVOptions.
-  private val enableParsingFallbackForDateType =
-    options.enableDateTimeParsingFallback.getOrElse {
-      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
-        options.dateFormatInRead.isEmpty
-    }
   private val enableParsingFallbackForTimestampType =
     options.enableDateTimeParsingFallback.getOrElse {
       SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
         options.timestampFormatInRead.isEmpty
+    }
+  private val enableParsingFallbackForDateType =
+    options.enableDateTimeParsingFallback.getOrElse {
+      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        options.dateFormatInRead.isEmpty
     }
 
   // Retrieve the raw record string.
