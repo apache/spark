@@ -2844,7 +2844,7 @@ abstract class CSVSuite
         .add("date", DateType)
         .add("ts", TimestampType)
 
-      def output(enableFallback: Boolean) = spark.read
+      def output(enableFallback: Boolean): DataFrame = spark.read
         .schema(schema)
         .option("dateFormat", "invalid")
         .option("timestampFormat", "invalid")

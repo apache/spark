@@ -354,7 +354,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")
     check(new UnivocityParser(StructType(Seq.empty), options))
 
-    def optionsWithPattern(enableFallback: Boolean) = new CSVOptions(
+    def optionsWithPattern(enableFallback: Boolean): CSVOptions = new CSVOptions(
       Map(
         "timestampFormat" -> "invalid",
         "dateFormat" -> "invalid",
