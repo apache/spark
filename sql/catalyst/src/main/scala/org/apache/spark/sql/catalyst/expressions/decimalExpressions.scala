@@ -249,10 +249,11 @@ case class DecimalAddNoOverflowCheck(
 }
 
 /**
- * A divide expression for decimal values which is only used internally by Avg. It assumes
- * the both input left(sum in average) and right(count in average) are not null.
+ * A divide expression for decimal values which is only used internally by Avg.
  *
- * It will fail only if the result of divide is overflow when nullOnOverflow is false.
+ * It will fail when nullOnOverflow is false follows:
+ *   - left is null, as the right side should never be null
+ *   - the result of divide is overflow
  */
 case class DecimalDivideWithOverflowCheck(
     left: Expression,
@@ -266,10 +267,18 @@ case class DecimalDivideWithOverflowCheck(
 
   override def eval(input: InternalRow): Any = {
     val value1 = left.eval(input)
-    val value2 = right.eval(input)
-    dataType.fractional.asInstanceOf[Fractional[Any]].div(value1, value2).asInstanceOf[Decimal]
-      .toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow,
-        queryContext)
+    if (value1 == null) {
+      if (nullOnOverflow)  {
+        null
+      } else {
+        throw QueryExecutionErrors.overflowInSumOfDecimalError(queryContext)
+      }
+    } else {
+      val value2 = right.eval(input)
+      dataType.fractional.asInstanceOf[Fractional[Any]].div(value1, value2).asInstanceOf[Decimal]
+        .toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow,
+          queryContext)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -277,6 +286,11 @@ case class DecimalDivideWithOverflowCheck(
       "\"\""
     } else {
       ctx.addReferenceObj("errCtx", queryContext)
+    }
+    val nullHandling = if (nullOnOverflow) {
+      ""
+    } else {
+      s"throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode);"
     }
 
     val eval1 = left.genCode(ctx)
@@ -287,9 +301,15 @@ case class DecimalDivideWithOverflowCheck(
       code"""
          |${eval1.code}
          |${eval2.code}
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-         |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-         |boolean ${ev.isNull} = ${ev.value} == null;
+         |boolean ${ev.isNull} = ${eval1.isNull};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (${eval1.isNull}) {
+         |  $nullHandling
+         |} else {
+         |  ${ev.value} = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
+         |      ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
+         |  ${ev.isNull} = ${ev.value} == null;
+         |}
       """.stripMargin
     // scalastyle:on line.size.limit
     ev.copy(code = code)
