@@ -138,12 +138,13 @@ class DataTypeSingleton(type):
 
     _instances: ClassVar[Dict[Type["DataTypeSingleton"], "DataTypeSingleton"]] = {}
 
-    def __call__(cls: Type[T]) -> T:  # type: ignore[override]
-        if cls not in cls._instances:  # type: ignore[attr-defined]
-            cls._instances[cls] = super(  # type: ignore[misc, attr-defined]
+    def __call__(cls: Type[T], *args: Any, **kwargs: Any) -> T:  # type: ignore[override]
+        key = (cls, args, str(kwargs))
+        if key not in cls._instances:  # type: ignore[attr-defined]
+            cls._instances[key] = super(  # type: ignore[misc, attr-defined]
                 DataTypeSingleton, cls
-            ).__call__()
-        return cls._instances[cls]  # type: ignore[attr-defined]
+            ).__call__(*args, **kwargs)
+        return cls._instances[key]  # type: ignore[attr-defined]
 
 
 class NullType(DataType, metaclass=DataTypeSingleton):
@@ -182,7 +183,7 @@ class StringType(AtomicType, metaclass=DataTypeSingleton):
     pass
 
 
-class VarcharType(AtomicType):
+class VarcharType(AtomicType, metaclass=DataTypeSingleton):
     """Varchar data type
 
     Parameters
@@ -275,7 +276,7 @@ class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
             )
 
 
-class DecimalType(FractionalType):
+class DecimalType(FractionalType, metaclass=DataTypeSingleton):
     """Decimal (decimal.Decimal) data type.
 
     The DecimalType must have fixed precision (the maximum total number of digits)
@@ -347,7 +348,7 @@ class LongType(IntegralType):
         return "bigint"
 
 
-class DayTimeIntervalType(AtomicType):
+class DayTimeIntervalType(AtomicType, metaclass=DataTypeSingleton):
     """DayTimeIntervalType (datetime.timedelta)."""
 
     DAY = 0
