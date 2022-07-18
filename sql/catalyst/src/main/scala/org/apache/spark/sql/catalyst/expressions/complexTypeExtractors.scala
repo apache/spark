@@ -386,7 +386,7 @@ trait GetMapValueUtil
 
     if (!found) {
       if (failOnError) {
-        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, keyType, _queryContext)
+        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, keyType, queryContext)
       } else {
         null
       }
@@ -419,7 +419,7 @@ trait GetMapValueUtil
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
-    lazy val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+    lazy val errorContext = ctx.addReferenceObj("errCtx", queryContext)
     val keyDt = ctx.addReferenceObj("keyType", keyType, keyType.getClass.getName)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
@@ -514,5 +514,11 @@ case class GetMapValue(
     origin._context
   } else {
     ""
+  }
+
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
+    Some(origin.context)
+  } else {
+    None
   }
 }

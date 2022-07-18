@@ -213,15 +213,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       queryContext = context)
   }
 
-  // TODO(MaxGekk): Use QueryContext
-  def mapKeyNotExistError(key: Any, dataType: DataType, context: String): NoSuchElementException = {
+  def mapKeyNotExistError(
+      key: Any,
+      dataType: DataType,
+      context: Option[QueryContext]): NoSuchElementException = {
     new SparkNoSuchElementException(
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(
         toSQLValue(key, dataType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      // TODO(MaxGekk): Use QueryContext
-      queryContext = None)
+      queryContext = context)
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
