@@ -182,6 +182,7 @@ class StringType(AtomicType, metaclass=DataTypeSingleton):
 
     pass
 
+
 class CharType(AtomicType):
     """Char data type
 
