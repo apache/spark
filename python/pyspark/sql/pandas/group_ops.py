@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import sys
-from typing import List, Union, TYPE_CHECKING, cast
+from typing import List, Union, Optional, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.rdd import PythonEvalType
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         PandasGroupedMapFunction,
         PandasGroupedMapFunctionWithState,
         PandasCogroupedMapFunction,
+        DataFrameLike
     )
     from pyspark.sql.group import GroupedData
 
@@ -107,7 +108,10 @@ class PandasGroupedOpsMixin:
         return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
 
     def applyInPandas(
-        self, func: "PandasGroupedMapFunction", schema: Union[StructType, str]
+        self,
+        func: "PandasGroupedMapFunction",
+        schema: Union[StructType, str],
+        batchSize: Optional[int] = None
     ) -> DataFrame:
         """
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
@@ -215,10 +219,23 @@ class PandasGroupedOpsMixin:
 
         assert isinstance(self, GroupedData)
 
+        if batchSize:
+            print(f'calling flatMapGroupsInPandas with batchSize={batchSize}')
+
+            # TODO: allow for func that accepts DataFrameGroupBy
+            def batch_func(pdf: DataFrameLike) -> DataFrameLike:
+                # TODO: unwrap group dataframe
+                print(f'retrieved pandas dataframe:\n{pdf}')
+                print(f'grouped pandas dataframe:\n{pdf.groupby(pdf.columns[0])}')
+                print(f'returned pandas dataframe:\n{pdf.groupby(pdf.columns[0]).apply(func)}')
+                return pdf.groupby(pdf.columns[0]).apply(func)
+
+            func = batch_func
+
         udf = pandas_udf(func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
-        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr(), batchSize)
         return DataFrame(jdf, self.session)
 
     def applyInPandasWithState(

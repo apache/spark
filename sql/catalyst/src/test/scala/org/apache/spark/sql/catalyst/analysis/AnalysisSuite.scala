@@ -649,7 +649,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val flatMapGroupsInPandas = FlatMapGroupsInPandas(
-      Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
+      Seq(UnresolvedAttribute("a")), pythonUdf, None, output, project)
     val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
     val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
     val join = Join(left, right, Inner, None, JoinHint.NONE)

@@ -34,6 +34,19 @@ object GroupedIterator {
   }
 }
 
+object GroupedBatchIterator {
+  def apply(
+      input: Iterator[InternalRow],
+      keyExpressions: Seq[Expression],
+      inputSchema: Seq[Attribute],
+      batchSize: Int): Iterator[Iterator[(InternalRow, InternalRow)]] = {
+    // TODO: decorate GroupedIterator to batch groups
+    GroupedIterator(input, keyExpressions, inputSchema).map {
+      case (k, groupedRowIter) => groupedRowIter.map(row => (k, row))
+    }
+  }
+}
+
 /**
  * Iterates over a presorted set of rows, chunking it up by the grouping expression.  Each call to
  * next will return a pair containing the current group and an iterator that will return all the

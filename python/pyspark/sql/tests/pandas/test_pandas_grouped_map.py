@@ -739,6 +739,15 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         )
         self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
 
+    def test_apply_in_pandas_batch(self):
+        def my_pandas_udf(pdf):
+            return pdf.assign(s=pdf.size)
+
+        df = self.data
+        result = df.groupby("id") \
+                   .applyInPandas(my_pandas_udf, schema="id integer, v integer, s integer")
+        self.assertEqual(df.collect(), result.collect())
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.pandas.test_pandas_grouped_map import *  # noqa: F401

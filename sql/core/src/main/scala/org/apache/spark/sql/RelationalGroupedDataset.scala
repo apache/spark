@@ -559,7 +559,8 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
+  private[sql] def flatMapGroupsInPandas(expr: PythonUDF,
+                                         batchSize: Option[Int] = None): DataFrame = {
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       "Must pass a grouped map udf")
     require(expr.dataType.isInstanceOf[StructType],
@@ -574,7 +575,7 @@ class RelationalGroupedDataset protected[sql](
       Project(groupingNamedExpressions ++ child.output, child)).analyzed
     val groupingAttributes = project.output.take(groupingNamedExpressions.length)
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
-    val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
+    val plan = FlatMapGroupsInPandas(groupingAttributes, expr, batchSize, output, project)
 
     Dataset.ofRows(df.sparkSession, plan)
   }

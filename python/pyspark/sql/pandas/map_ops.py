@@ -56,6 +56,8 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        batchSize : optional int
+            up to this number of rows are sent to Python side at once, at least one group.
 
         Examples
         --------
@@ -84,12 +86,20 @@ class PandasMapOpsMixin:
 
         assert isinstance(self, DataFrame)
 
+        if batchSize:
+            # decorate func to handle batches of groups
+            def batch_func(dfs: Iterable[DataFrameLike]) -> Iterable[DataFrameLike]:
+                dfs.group
+                return func(dfs)
+
+            func = batch_func
+
         # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), batchSize)
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(

@@ -24,7 +24,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.python.BasePythonRunner
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
-import org.apache.spark.sql.execution.GroupedIterator
+import org.apache.spark.sql.execution.{GroupedIterator, GroupedBatchIterator, SparkPlan}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -67,6 +67,22 @@ private[python] object PandasGroupUtils {
     groupedIter.map {
       case (k, groupedRowIter) => (k, groupedRowIter.map(dedupProj))
     }
+  }
+
+  /**
+   * batches of groups according to grouping attributes projected into the deduplicated schema
+   */
+  def groupBatchAndProject(
+      input: Iterator[InternalRow],
+      groupingAttributes: Seq[Attribute],
+      inputSchema: Seq[Attribute],
+      dedupSchema: Seq[Attribute],
+      batchSize: Int): Iterator[Iterator[(InternalRow, InternalRow)]] = {
+    val batchIter = GroupedBatchIterator(input, groupingAttributes, inputSchema, batchSize)
+    val dedupProj = UnsafeProjection.create(dedupSchema, inputSchema)
+    batchIter.map(batchRowIter =>
+      batchRowIter.map { case (key, value) => (key, dedupProj(value)) }
+    )
   }
 
   /**

@@ -48,6 +48,7 @@ import org.apache.spark.sql.util.ArrowUtils
 case class FlatMapGroupsInPandasExec(
     groupingAttributes: Seq[Attribute],
     func: Expression,
+    batchSize: Option[Int],
     output: Seq[Attribute],
     child: SparkPlan)
   extends SparkPlan with UnaryExecNode with PythonSQLMetrics {

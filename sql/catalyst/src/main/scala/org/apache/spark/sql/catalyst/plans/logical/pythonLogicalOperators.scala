@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.StructType
 case class FlatMapGroupsInPandas(
     groupingAttributes: Seq[Attribute],
     functionExpr: Expression,
+    batchSize: Option[Int],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
 
