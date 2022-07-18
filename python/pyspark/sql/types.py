@@ -136,7 +136,7 @@ class DataType:
 class DataTypeSingleton(type):
     """Metaclass for DataType"""
 
-    _instances: ClassVar[Dict[Type["DataTypeSingleton"], "DataTypeSingleton"]] = {}
+    _instances: ClassVar[Dict[Tuple, "DataTypeSingleton"]] = {}
 
     def __call__(cls: Type[T], *args: Any, **kwargs: Any) -> T:  # type: ignore[override]
         key = (cls, args, str(kwargs))
