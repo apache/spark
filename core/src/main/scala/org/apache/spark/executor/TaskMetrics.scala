@@ -255,7 +255,7 @@ class TaskMetrics private[spark] () extends Serializable {
    */
   @transient private[spark] lazy val _externalAccums = new CopyOnWriteArrayList[AccumulatorV2[_, _]]
 
-  private[spark] def externalAccums() = _externalAccums.asScala
+  private[spark] def externalAccums(): Seq[AccumulatorV2[_, _]] = _externalAccums.asScala.toSeq
 
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
     _externalAccums.add(a)
