@@ -1075,6 +1075,22 @@ class TypesTests(ReusedSQLTestCase):
         with self.assertRaisesRegex(RuntimeError, "interval 0 to 321 is invalid"):
             DayTimeIntervalType(DayTimeIntervalType.DAY, 321)
 
+        d1 = DayTimeIntervalType(startField=1, endField=2)
+        d1_ = DayTimeIntervalType(startField=1, endField=2)
+        d2 = DayTimeIntervalType(1, 2)
+        d2_ = DayTimeIntervalType(1, 2)
+        d3 = DayTimeIntervalType(1, endField=2)
+        d3_ = DayTimeIntervalType(1, endField=2)
+        d4 = DayTimeIntervalType(endField=2, startField=1)
+        d4_ = DayTimeIntervalType(endField=2, startField=1)
+        self.assertTrue(d1 is d1_)
+        self.assertTrue(d2 is d2_)
+        self.assertTrue(d3 is d3_)
+        self.assertTrue(d4 is d4_)
+        self.assertTrue(d1 is not d2)
+        self.assertTrue(d1 is not d3)
+        self.assertTrue(d1 is not d4)
+
     def test_daytime_interval_type(self):
         # SPARK-37277: Support DayTimeIntervalType in createDataFrame
         timedetlas = [
@@ -1136,7 +1152,22 @@ class DataTypeTests(unittest.TestCase):
         self.assertTrue(t2 is not t1)
         self.assertNotEqual(t1, t2)
         t3 = DecimalType(8)
+        t3_ = DecimalType(8)
         self.assertNotEqual(t2, t3)
+        self.assertTrue(t3_ is t3)
+        t4 = DecimalType(scale=2, precision=10)
+        t4_ = DecimalType(scale=2, precision=10)
+        self.assertTrue(t2 is not t4)
+        self.assertTrue(t4_ is t4)
+        t5 = DecimalType(precision=10, scale=2)
+        t5_ = DecimalType(precision=10, scale=2)
+        self.assertTrue(t4 is not t5)
+        self.assertTrue(t2 is not t5)
+        self.assertTrue(t5_ is t5)
+        t6 = DecimalType(10, scale=2)
+        t6_ = DecimalType(10, scale=2)
+        self.assertTrue(t2 is not t6)
+        self.assertTrue(t6_ is t6)
 
     def test_varchar_type(self):
         v1 = VarcharType(10)
@@ -1145,7 +1176,7 @@ class DataTypeTests(unittest.TestCase):
         self.assertNotEqual(v1, v2)
         v3 = VarcharType(10)
         self.assertEqual(v1, v3)
-        self.assertFalse(v1 is v3)
+        self.assertTrue(v1 is v3)
 
     # regression test for SPARK-10392
     def test_datetype_equal_zero(self):
