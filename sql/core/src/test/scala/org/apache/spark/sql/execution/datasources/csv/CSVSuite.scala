@@ -2834,6 +2834,34 @@ abstract class CSVSuite
       assert(err.isInstanceOf[SparkUpgradeException])
     }
   }
+
+  test("SPARK-39731: Handle date and timestamp parsing fallback") {
+    withTempPath { path =>
+      Seq("2020-01-01,2020-01-01").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+      val schema = new StructType()
+        .add("date", DateType)
+        .add("ts", TimestampType)
+
+      def output(enableFallback: Boolean) = spark.read
+        .schema(schema)
+        .option("dateFormat", "invalid")
+        .option("timestampFormat", "invalid")
+        .option("enableDateTimeParsingFallback", enableFallback)
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(
+        output(enableFallback = true),
+        Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
+      )
+
+      checkAnswer(
+        output(enableFallback = false),
+        Seq(Row(null, null))
+      )
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
