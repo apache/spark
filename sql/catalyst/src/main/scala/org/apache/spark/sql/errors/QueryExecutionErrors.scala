@@ -189,23 +189,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,
-      // TODO(MaxGekk): Use QueryContext
-      context: String): ArrayIndexOutOfBoundsException = {
+      context: Option[QueryContext]): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Array(
         toSQLValue(index, IntegerType),
         toSQLValue(numElements, IntegerType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      // TODO(MaxGekk): Use QueryContext
-      queryContext = None)
+      queryContext = context)
   }
 
   def invalidElementAtIndexError(
       index: Int,
       numElements: Int,
-      // TODO(MaxGekk): Use QueryContext
-      context: String): ArrayIndexOutOfBoundsException = {
+      context: Option[QueryContext]): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters =
@@ -213,8 +210,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
           toSQLValue(index, IntegerType),
           toSQLValue(numElements, IntegerType),
           toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      // TODO(MaxGekk): Use QueryContext
-      queryContext = None)
+      queryContext = context)
   }
 
   // TODO(MaxGekk): Use QueryContext

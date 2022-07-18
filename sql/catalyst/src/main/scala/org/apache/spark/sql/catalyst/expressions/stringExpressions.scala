@@ -23,6 +23,7 @@ import java.util.{HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -296,7 +297,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length, _queryContext)
+          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length, queryContext)
         } else {
           null
         }
@@ -348,7 +349,7 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
-      val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+      val errorContext = ctx.addReferenceObj("errCtx", queryContext)
       // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
@@ -386,6 +387,12 @@ case class Elt(
     origin._context
   } else {
     ""
+  }
+
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
+    Some(origin.context)
+  } else {
+    None
   }
 }
 

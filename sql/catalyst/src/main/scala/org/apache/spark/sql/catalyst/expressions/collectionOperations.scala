@@ -22,6 +22,7 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
@@ -2178,7 +2179,7 @@ case class ElementAt(
         if (array.numElements() < math.abs(index)) {
           if (failOnError) {
             throw QueryExecutionErrors.invalidElementAtIndexError(
-              index, array.numElements(), _queryContext)
+              index, array.numElements(), queryContext)
           } else {
             defaultValueOutOfBound match {
               case Some(value) => value.eval()
@@ -2220,7 +2221,7 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+            val errorContext = ctx.addReferenceObj("errCtx", queryContext)
             // scalastyle:off line.size.limit
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
             // scalastyle:on line.size.limit
@@ -2270,6 +2271,12 @@ case class ElementAt(
     origin._context
   } else {
     ""
+  }
+
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
+    Some(origin.context)
+  } else {
+    None
   }
 }
 

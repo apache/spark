@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
@@ -267,7 +268,7 @@ case class GetArrayItem(
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
         throw QueryExecutionErrors.invalidArrayIndexError(
-          index, baseValue.numElements, _queryContext)
+          index, baseValue.numElements, queryContext)
       } else {
         null
       }
@@ -291,7 +292,7 @@ case class GetArrayItem(
       }
 
       val indexOutOfBoundBranch = if (failOnError) {
-        val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+        val errorContext = ctx.addReferenceObj("errCtx", queryContext)
         // scalastyle:off line.size.limit
         s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements(), $errorContext);"
         // scalastyle:on line.size.limit
@@ -318,6 +319,12 @@ case class GetArrayItem(
     origin._context
   } else {
     ""
+  }
+
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
+    Some(origin.context)
+  } else {
+    None
   }
 }
 
