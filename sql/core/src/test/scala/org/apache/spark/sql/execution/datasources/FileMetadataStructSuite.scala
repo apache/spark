@@ -564,4 +564,29 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+
+  Seq(true, false).foreach { useVectorizedReader =>
+    val label = if (useVectorizedReader) "reading batches" else "reading rows"
+    test(s"SPARK-39806: metadata for a partitioned table ($label)") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString) {
+        withTempPath { dir =>
+          // Store dynamically partitioned data.
+          val sourceDf = spark.range(0, 5, 1, 1).toDF("id")
+            .withColumn("pb", lit(1))
+          sourceDf.write.format("parquet").partitionBy("pb").save(dir.getAbsolutePath)
+
+          // Identify the data file and its metadata.
+          // We expect there to be exactly one subdirectory containing exactly one parquet file.
+          val subdirectory = dir.listFiles().filter(_.isDirectory).head
+          val file = subdirectory.listFiles().filter(_.getName.endsWith(".parquet")).head
+          val expectedDf = sourceDf
+            .withColumn(FileFormat.FILE_NAME, lit(file.getName))
+            .withColumn(FileFormat.FILE_SIZE, lit(file.length()))
+
+          checkAnswer(spark.read.parquet(dir.getAbsolutePath)
+            .select("*", METADATA_FILE_NAME, METADATA_FILE_SIZE), expectedDf)
+        }
+      }
+    }
+  }
 }
