@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Date, Locale}
+import java.util.{Arrays, Collections, Date, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -31,6 +31,7 @@ import scala.util.control.NonFatal
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -60,7 +61,7 @@ private[spark] class SparkHadoopUtil extends Logging {
   def runAsSparkUser(func: () => Unit): Unit = {
     val ugi = createSparkUser()
     SparkEnv.setUGI(ugi)
-    createSparkUser().doAs(new PrivilegedExceptionAction[Unit] {
+    ugi.doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
   }
@@ -136,7 +137,105 @@ private[spark] class SparkHadoopUtil extends Logging {
   }
 
   def addCurrentUserCredentials(creds: Credentials): Unit = {
-    UserGroupInformation.getCurrentUser.addCredentials(creds)
+    updateUGICreds(UserGroupInformation.getCurrentUser, creds)
+  }
+
+  private def addNonCurrentCredentials(creds: Credentials): Unit = {
+    val fsCache = getFileSystemCache
+    if (fsCache == null) {
+      return
+    }
+    val cacheKeys = getCacheKeys(fsCache)
+    if (cacheKeys.isEmpty) {
+      return
+    }
+    val current = UserGroupInformation.getCurrentUser
+    cacheKeys.map(getUGI) //
+      .filterNot(_ == null) //
+      .filterNot(_.equals(current)) //
+      .foreach(updateUGICreds(_, creds))
+  }
+
+  private def updateUGICreds(ugi: UserGroupInformation, creds: Credentials): Unit = {
+    val tokens = creds.getAllTokens.asScala //
+      .filterNot(_.getKind == null) //
+      .filterNot(_.getService == null)
+    try {
+      // For potential private tokens.
+      updatePrivateTokens(ugi, tokens)
+    } catch {
+      case e: Exception =>
+        logWarning("Failed to update private tokens, hadoop version not supported.", e)
+    }
+
+    // For tgt & public credentials.
+    ugi.addCredentials(creds)
+  }
+
+  private def getFileSystemCache: Object = {
+    val cacheField = classOf[FileSystem].getDeclaredField("CACHE")
+    cacheField.setAccessible(true)
+    cacheField.get(null)
+  }
+
+  private def getCacheKeys(fsCache: Object): Iterable[Object] = {
+    val mapField = fsCache.getClass.getDeclaredField("map")
+    mapField.setAccessible(true)
+    val cacheMap = mapField.get(fsCache).asInstanceOf[java.util.Map[Object, Object]]
+    if (cacheMap == null || cacheMap.isEmpty) {
+      return Iterable.empty
+    }
+    Collections.unmodifiableSet(cacheMap.keySet()).asScala
+  }
+
+  private def getUGI(key: Object): UserGroupInformation = {
+    val ugiField = key.getClass.getDeclaredField("ugi")
+    ugiField.setAccessible(true)
+    ugiField.get(key).asInstanceOf[UserGroupInformation]
+  }
+
+  private def updatePrivateTokens(ugi: UserGroupInformation, //
+                          tokens: Iterable[Token[_ <: TokenIdentifier]]): Unit = {
+    val creds = getCredentialsInternal(ugi)
+    if (creds == null) {
+      return
+    }
+    val keys = getTokenKeys(creds)
+    if (keys.isEmpty) {
+      return
+    }
+    // For potential private tokens.
+    tokens.foreach { token =>
+      val kind = token.getKind
+      val service = token.getService
+      keys.foreach { key =>
+        val otk = creds.getToken(key)
+        if (otk == null || otk.getKind == null || otk.getService == null //
+          || !otk.getKind.equals(kind) || otk.getService.equals(service)) {
+          return
+        }
+
+        if (otk.isPrivateCloneOf(service)) {
+          ugi.addToken(key, token.privateClone(otk.getService))
+        }
+      }
+    }
+  }
+
+  private def getCredentialsInternal(ugi: UserGroupInformation): Credentials = {
+    val credsMethod = classOf[UserGroupInformation].getDeclaredMethod("getCredentialsInternal")
+    credsMethod.setAccessible(true)
+    credsMethod.invoke(ugi).asInstanceOf[Credentials]
+  }
+
+  private def getTokenKeys(creds: Credentials): Iterable[Text] = {
+    val mapFiled = classOf[Credentials].getDeclaredField("tokenMap")
+    mapFiled.setAccessible(true)
+    val tokenMap = mapFiled.get(creds).asInstanceOf[java.util.Map[Text, Object]]
+    if (tokenMap == null) {
+      return Iterable.empty
+    }
+    Collections.unmodifiableCollection(tokenMap.keySet()).asScala
   }
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String): Unit = {
@@ -158,12 +257,19 @@ private[spark] class SparkHadoopUtil extends Logging {
     val creds = deserialize(tokens)
     logInfo("Updating delegation tokens for current user.")
     logInfo(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
-    logDebug(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
     addCurrentUserCredentials(creds)
     val user = UserGroupInformation.getCurrentUser
     logInfo(s"Spark user hashcode : ${user.hashCode()}")
     user.getTokens
       .asScala.map(tokenToString).foreach(token => logInfo(token))
+
+    try{
+      // Potential FileSystem$CACHE non current UGIs.
+      addNonCurrentCredentials(creds)
+    } catch {
+      case e: Exception =>
+        logWarning(s"Failed to update non current user credentials.", e)
+    }
   }
 
   /**
