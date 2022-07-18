@@ -650,7 +650,7 @@ case class Cast(
           false
         } else {
           if (ansiEnabled) {
-            throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s, _queryContext)
+            throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s, queryContext)
           } else {
             null
           }
@@ -1859,7 +1859,7 @@ case class Cast(
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
         val castFailureCode = if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
           s"throw QueryExecutionErrors.invalidInputSyntaxForBooleanError($c, $errorContext);"
         } else {
           s"$evNull = true;"

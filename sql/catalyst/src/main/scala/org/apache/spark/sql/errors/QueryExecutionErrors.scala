@@ -126,7 +126,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidInputSyntaxForBooleanError(
       s: UTF8String,
-      errorContext: String): SparkRuntimeException = {
+      context: Option[QueryContext]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -134,8 +134,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(StringType),
         toSQLType(BooleanType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      // TODO(MaxGekk): Use QueryContext
-      queryContext = None)
+      queryContext = context)
   }
 
   def invalidInputInCastToNumberError(
