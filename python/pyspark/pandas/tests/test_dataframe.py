@@ -33,6 +33,7 @@ from pyspark.sql.types import StructType
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.exceptions import PandasNotImplementedError
+from pyspark.pandas.exceptions import SparkPandasNotImplementedError
 from pyspark.pandas.frame import CachedDataFrame
 from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
 from pyspark.pandas.typedef.typehints import (
@@ -115,6 +116,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             ps.DataFrame([1, 2], index=ps.Index([1, 2]))
         with self.assertRaisesRegex(TypeError, err_msg):
             ps.DataFrame([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+
+        # Negative
+        with self.assertRaises(SparkPandasNotImplementedError):
+            ps.DataFrame([1, 2], index=[1, '2'])
+        with self.assertRaises(SparkPandasNotImplementedError):
+            ps.DataFrame([1, 2], index=[[1, '2'], ['A', 'B']])
+        with self.assertRaises(SparkPandasNotImplementedError):
+            ps.DataFrame([1, 2], index=[[1, 'A'], [2, 'B']])
 
     def _check_extension(self, psdf, pdf):
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):

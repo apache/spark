@@ -36,6 +36,7 @@ from pyspark.testing.pandasutils import (
 )
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.exceptions import PandasNotImplementedError
+from pyspark.pandas.exceptions import SparkPandasNotImplementedError
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes,
@@ -3324,6 +3325,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             NotImplementedError, 'axis should be either 0 or "index" currently.'
         ):
             psser.transform(lambda x: x + 1, axis=1)
+
+    def test_series_creation(self):
+        # Negative
+        with self.assertRaises(SparkPandasNotImplementedError):
+            ps.Series([1, 2, '3'])
 
 
 if __name__ == "__main__":

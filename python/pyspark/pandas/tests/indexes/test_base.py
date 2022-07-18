@@ -25,6 +25,7 @@ import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
+from pyspark.pandas.exceptions import SparkPandasNotImplementedError
 from pyspark.pandas.missing.indexes import (
     MissingPandasLikeDatetimeIndex,
     MissingPandasLikeIndex,
@@ -64,6 +65,14 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
         with self.assertRaisesRegexp(ValueError, "The truth value of a Int64Index is ambiguous."):
             bool(ps.Index([1]))
+
+        # Negative
+        with self.assertRaises(SparkPandasNotImplementedError):
+            ps.Index([1, '2'])
+        with self.assertRaises(SparkPandasNotImplementedError):
+            ps.Index([[1, '2'], ['A', 'B']])
+        with self.assertRaises(SparkPandasNotImplementedError):
+            ps.Index([[1, 'A'], [2, 'B']])
 
     def test_index_from_series(self):
         pser = pd.Series([1, 2, 3], name="a", index=[10, 20, 30])

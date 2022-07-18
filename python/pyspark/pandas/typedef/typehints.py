@@ -32,6 +32,8 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
 from pandas.api.extensions import ExtensionDtype
 
+from pyspark.pandas.exceptions import SparkPandasNotImplementedError
+
 extension_dtypes: Tuple[type, ...]
 try:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -357,7 +359,18 @@ def infer_pd_series_spark_type(
         elif hasattr(pser.iloc[0], "__UDT__"):
             return pser.iloc[0].__UDT__
         else:
-            return from_arrow_type(pa.Array.from_pandas(pser).type, prefer_timestamp_ntz)
+            try:
+                internal_frame = pa.Array.from_pandas(pser)
+            except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError):
+                raise SparkPandasNotImplementedError(
+                    description="PySpark requires elements of homogeneous type for DataFrame, "
+                                "Series and Index, such as .Object([typeA, typeB]), which is "
+                                "supported by Pandas, but not in PySpark, you need to keep the "
+                                "values as the same dtype in PySpark. "
+                                "Got {} and dtype ({}).".format(
+                                    str(pser.values), str(pser.dtypes))
+                )
+            return from_arrow_type(internal_frame.type, prefer_timestamp_ntz)
     elif isinstance(dtype, CategoricalDtype):
         if isinstance(pser.dtype, CategoricalDtype):
             return as_spark_type(pser.cat.codes.dtype, prefer_timestamp_ntz=prefer_timestamp_ntz)
