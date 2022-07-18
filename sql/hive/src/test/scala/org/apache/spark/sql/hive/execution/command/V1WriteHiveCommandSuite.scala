@@ -22,6 +22,21 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingleton {
 
+  test("create hive table as select - no partition column") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
+          sql(
+            """
+              |CREATE TABLE t
+              |STORED AS PARQUET
+              |AS SELECT * FROM t0
+              |""".stripMargin)
+        }
+      }
+    }
+  }
+
   test("create hive table as select") {
     withPlannedWrite { enabled =>
       withTable("t") {

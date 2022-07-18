@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.logging.log4j.Level
-
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
 import org.apache.spark.sql.execution.QueryExecution
@@ -70,27 +68,11 @@ abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
     }
     spark.listenerManager.register(listener)
 
-    val logAppender = new LogAppender("v1 write")
+    query
 
-    withLogAppender(logAppender) {
-      query
-    }
-
-    // Check if the ordering is matched before FileFormatWriter execute the plan.
-    // Note, if we add empty2null in logical sort order, the output ordering will
-    // not match for string columns.
-    // For example:
-    //   Project [i#19, j#20, empty2null(k#21) AS k#26]
-    //   +- *(1) Sort [empty2null(k#21) ASC NULLS FIRST], false, 0
-    //      +- *(1) ColumnarToRow
-    //         +- FileScan parquet spark_catalog.default.t0[i#19,j#20,k#21]
-    // Here the required ordering is `k#21` but the actual ordering is `k#26` due to the
-    // AliasAwareOutputOrdering trait of ProjectExec.
-    // One solution is to use the command query's output ordering instead of empty2null.
-    assert(logAppender.loggingEvents.exists { event =>
-      event.getLevel.equals(Level.INFO) &&
-        event.getMessage.getFormattedMessage.contains("Output ordering is matched")
-    } === orderingMatched, "FileFormatWriter output ordering does not match")
+    // Check whether the output ordering is matched before FileFormatWriter executes rdd.
+    assert(FileFormatWriter.outputOrderingMatched == orderingMatched,
+      s"Expect: $orderingMatched, Actual: ${FileFormatWriter.outputOrderingMatched}")
 
     sparkContext.listenerBus.waitUntilEmpty()
 
