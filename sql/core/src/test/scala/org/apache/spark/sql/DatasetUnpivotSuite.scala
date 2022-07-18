@@ -395,9 +395,9 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e3,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       msg = "Unpivot value columns must share a least common type, some types do not: \\[" +
-        "\"INT\" \\(`id#5`, `int1#8`\\), " +
-        "\"STRING\" \\(`str1#6`, `str2#7`\\), " +
-        "\"BIGINT\" \\(`long1#9L`\\)\\];(\n.*)*",
+        "\"INT\" \\(`id#\\d+`, `int1#\\d+`\\), " +
+        "\"STRING\" \\(`str1#\\d+`, `str2#\\d+`\\), " +
+        "\"BIGINT\" \\(`long1#\\d+L`\\)\\];(\n.*)*",
       matchMsg = true)
 
     // unpivoting with star id columns so that no value columns are left
