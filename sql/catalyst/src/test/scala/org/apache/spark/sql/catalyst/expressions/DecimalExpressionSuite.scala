@@ -85,14 +85,13 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       startIndex = Some(7),
       stopIndex = Some(30),
       sqlText = Some(query))
-
     val expr1 = withOrigin(origin) {
       CheckOverflow(Literal(d), DecimalType(4, 3), false)
     }
     checkExceptionInExpression[ArithmeticException](expr1, query)
 
-    // TODO(MaxGekk): Use QueryContext
-    val expr2 = CheckOverflowInSum(Literal(d), DecimalType(4, 3), false, queryContext = None)
+    val expr2 = CheckOverflowInSum(
+      Literal(d), DecimalType(4, 3), false, queryContext = Some(origin.context))
     checkExceptionInExpression[ArithmeticException](expr2, query)
   }
 }

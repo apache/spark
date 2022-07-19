@@ -196,13 +196,6 @@ case class Sum(
 
   override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
 
-  // TODO(MaxGekk): Remove this
-  override def _initQueryContext(): String = if (useAnsiAdd) {
-    origin._context
-  } else {
-    ""
-  }
-
   override def initQueryContext(): Option[QueryContext] = if (useAnsiAdd) {
     Some(origin.context)
   } else {

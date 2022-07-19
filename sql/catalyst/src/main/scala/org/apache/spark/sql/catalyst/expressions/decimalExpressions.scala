@@ -145,10 +145,10 @@ case class CheckOverflow(
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
 
-  override def _initQueryContext(): String = if (nullOnOverflow) {
-    ""
+  override def initQueryContext(): Option[QueryContext] = if (!nullOnOverflow) {
+    Some(origin.context)
   } else {
-    origin._context
+    None
   }
 }
 

@@ -482,12 +482,6 @@ case class Cast(
 
   override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
-  override def _initQueryContext(): String = if (ansiEnabled) {
-    origin._context
-  } else {
-    ""
-  }
-
   override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
     Some(origin.context)
   } else {
@@ -1000,9 +994,12 @@ case class Cast(
    * If overflow occurs, if `spark.sql.ansi.enabled` is false, null is returned;
    * otherwise, an `ArithmeticException` is thrown.
    */
-  private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =
+  private[this] def toPrecision(
+      value: Decimal,
+      decimalType: DecimalType,
+      context: Option[QueryContext]): Decimal =
     value.toPrecision(
-      decimalType.precision, decimalType.scale, Decimal.ROUND_HALF_UP, !ansiEnabled)
+      decimalType.precision, decimalType.scale, Decimal.ROUND_HALF_UP, !ansiEnabled, context)
 
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
@@ -1015,14 +1012,15 @@ case class Cast(
       buildCast[UTF8String](_,
         s => changePrecision(Decimal.fromStringANSI(s, target, queryContext), target))
     case BooleanType =>
-      buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
+      buildCast[Boolean](_,
+        b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target, queryContext))
     case DateType =>
       buildCast[Int](_, d => null) // date can't cast to decimal in Hive
     case TimestampType =>
       // Note that we lose precision here.
       buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
     case dt: DecimalType =>
-      b => toPrecision(b.asInstanceOf[Decimal], target)
+      b => toPrecision(b.asInstanceOf[Decimal], target, queryContext)
     case t: IntegralType =>
       b => changePrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
     case x: FractionalType =>

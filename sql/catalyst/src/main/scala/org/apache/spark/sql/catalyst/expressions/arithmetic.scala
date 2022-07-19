@@ -256,14 +256,6 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
-  override def _initQueryContext(): String = {
-    if (failOnError) {
-      origin._context
-    } else {
-      ""
-    }
-  }
-
   override def initQueryContext(): Option[QueryContext] = {
     if (failOnError) {
       Some(origin.context)

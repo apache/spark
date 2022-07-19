@@ -383,12 +383,6 @@ case class Elt(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
     copy(children = newChildren)
 
-  override def _initQueryContext(): String = if (failOnError) {
-    origin._context
-  } else {
-    ""
-  }
-
   override def initQueryContext(): Option[QueryContext] = if (failOnError) {
     Some(origin.context)
   } else {

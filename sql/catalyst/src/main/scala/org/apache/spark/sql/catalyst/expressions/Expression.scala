@@ -594,10 +594,8 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
  * to executors. It will also be kept after rule transforms.
  */
 trait SupportQueryContext extends Expression with Serializable {
-  protected var _queryContext: String = _initQueryContext()
   protected var queryContext: Option[QueryContext] = initQueryContext()
 
-  def _initQueryContext(): String
   def initQueryContext(): Option[QueryContext] = None
 
   // Note: Even though query contexts are serialized to executors, it will be regenerated from an
@@ -607,7 +605,6 @@ trait SupportQueryContext extends Expression with Serializable {
   override def copyTagsFrom(other: Expression): Unit = {
     other match {
       case s: SupportQueryContext =>
-        _queryContext = s._queryContext
         queryContext = s.queryContext
       case _ =>
     }

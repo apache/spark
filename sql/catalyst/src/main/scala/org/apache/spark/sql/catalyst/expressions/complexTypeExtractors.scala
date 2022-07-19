@@ -315,12 +315,6 @@ case class GetArrayItem(
       newLeft: Expression, newRight: Expression): GetArrayItem =
     copy(child = newLeft, ordinal = newRight)
 
-  override def _initQueryContext(): String = if (failOnError) {
-    origin._context
-  } else {
-    ""
-  }
-
   override def initQueryContext(): Option[QueryContext] = if (failOnError) {
     Some(origin.context)
   } else {
@@ -509,12 +503,6 @@ case class GetMapValue(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetMapValue =
     copy(child = newLeft, key = newRight)
-
-  override def _initQueryContext(): String = if (failOnError) {
-    origin._context
-  } else {
-    ""
-  }
 
   override def initQueryContext(): Option[QueryContext] = if (failOnError) {
     Some(origin.context)
