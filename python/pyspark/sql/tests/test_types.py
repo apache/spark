@@ -38,6 +38,7 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     MapType,
     StringType,
+    CharType,
     VarcharType,
     StructType,
     StructField,
@@ -740,9 +741,12 @@ class TypesTests(ReusedSQLTestCase):
         from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
 
         for k, t in _all_atomic_types.items():
-            if k != "varchar":
+            if k != "varchar" and k != "char":
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
+        self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
+        self.assertEqual(CharType(10), _parse_datatype_string("char( 10   )"))
+        self.assertEqual(CharType(11), _parse_datatype_string("char( 11)"))
         self.assertEqual(VarcharType(1), _parse_datatype_string("varchar(1)"))
         self.assertEqual(VarcharType(10), _parse_datatype_string("varchar( 10   )"))
         self.assertEqual(VarcharType(11), _parse_datatype_string("varchar( 11)"))
@@ -1033,6 +1037,7 @@ class TypesTests(ReusedSQLTestCase):
         instances = [
             NullType(),
             StringType(),
+            CharType(10),
             VarcharType(10),
             BinaryType(),
             BooleanType(),
@@ -1138,6 +1143,15 @@ class DataTypeTests(unittest.TestCase):
         t3 = DecimalType(8)
         self.assertNotEqual(t2, t3)
 
+    def test_char_type(self):
+        v1 = CharType(10)
+        v2 = CharType(20)
+        self.assertTrue(v2 is not v1)
+        self.assertNotEqual(v1, v2)
+        v3 = CharType(10)
+        self.assertEqual(v1, v3)
+        self.assertFalse(v1 is v3)
+
     def test_varchar_type(self):
         v1 = VarcharType(10)
         v2 = VarcharType(20)
@@ -1221,13 +1235,17 @@ class DataTypeVerificationTests(unittest.TestCase):
         success_spec = [
             # String
             ("", StringType()),
-            ("", StringType()),
             (1, StringType()),
             (1.0, StringType()),
             ([], StringType()),
             ({}, StringType()),
+            # Char
+            ("", CharType(10)),
+            (1, CharType(10)),
+            (1.0, CharType(10)),
+            ([], CharType(10)),
+            ({}, CharType(10)),
             # Varchar
-            ("", VarcharType(10)),
             ("", VarcharType(10)),
             (1, VarcharType(10)),
             (1.0, VarcharType(10)),
@@ -1289,6 +1307,8 @@ class DataTypeVerificationTests(unittest.TestCase):
         failure_spec = [
             # String (match anything but None)
             (None, StringType(), ValueError),
+            # CharType (match anything but None)
+            (None, CharType(10), ValueError),
             # VarcharType (match anything but None)
             (None, VarcharType(10), ValueError),
             # UDT
