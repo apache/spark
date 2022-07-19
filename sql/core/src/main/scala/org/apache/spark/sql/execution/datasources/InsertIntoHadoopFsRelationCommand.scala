@@ -206,11 +206,59 @@ case class InsertIntoHadoopFsRelationCommand(
         CommandUtils.updateTableStats(sparkSession, catalogTable.get)
       }
 
+      if (catalogTable.get.partitionColumnNames.nonEmpty) {
+        updatePartitionsMetadata(sparkSession, updatedPartitionPaths)
+      }
+
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }
 
     Seq.empty[Row]
+  }
+
+  /**
+   * Update the specified partition metadata information.
+   */
+  private def updatePartitionsMetadata(sparkSession: SparkSession,
+                                       updatedPartitionPaths: Set[String]): Unit = {
+    logInfo("Current partition table, will update partition information soon.")
+    val catalog = sparkSession.sessionState.catalog
+    val identifier = catalogTable.get.identifier
+
+    try {
+      val partitions = updatedPartitionPaths.map(partitionColumnName => {
+        val partitionMap = partitionColumnName.split("=")
+        val partitionSpec = Map[String, String](partitionMap(0) -> partitionMap(1))
+        catalog.getPartition(identifier, partitionSpec)
+      })
+
+      val newPartitions = partitions.zipWithIndex.flatMap { case (p, _) =>
+        // Statistical partition file size
+        val newSize = CommandUtils.calculateSingleLocationSize(
+          sparkSession.sessionState, identifier, Some(p.location))
+
+        val rowCount = if (p.stats.isDefined && p.stats.get.rowCount.isDefined) {
+          p.stats.get.rowCount.get
+        } else BigInt(1)
+
+        val newStats = CommandUtils.compareAndGetNewStats(p.stats, newSize, Some(rowCount + 1))
+
+        val newStatParameters =
+          Map("numFiles" -> p.parameters("numFiles"),
+            "rawDataSize" -> newSize.toString,
+            "totalSize" -> newSize.toString)
+        val newParameters = p.parameters ++ newStatParameters
+        newStats.map(_ => p.copy(stats = newStats, parameters = newParameters))
+      }
+
+      // update metastore partition metadata
+      catalog.alterPartitions(identifier, newPartitions.toSeq)
+      logInfo(s"All partition information updates have been completed")
+    } catch {
+      case e: Throwable => logError(
+        "Partition table update failed, the operation does not affect data accuracy.", e)
+    }
   }
 
   /**
