@@ -94,6 +94,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'N A N' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT float('N A N')
+       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -103,6 +106,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'NaN x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT float('NaN x')
+       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -112,6 +118,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value ' INFINITY    x' of the type "STRING" cannot be cast to "FLOAT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT float(' INFINITY    x')
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -145,6 +154,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'nan' of the type "STRING" cannot be cast to "DECIMAL(10,0)" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 14) ==
+SELECT float(decimal('nan'))
+             ^^^^^^^^^^^^^^
 
 
 -- !query

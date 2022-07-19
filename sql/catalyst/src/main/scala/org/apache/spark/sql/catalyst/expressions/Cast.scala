@@ -21,6 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -487,6 +488,12 @@ case class Cast(
     ""
   }
 
+  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
+    Some(origin.context)
+  } else {
+    None
+  }
+
   // When this cast involves TimeZone, it's only resolved if the timeZoneId is set;
   // Otherwise behave like Expression.resolved.
   override lazy val resolved: Boolean =
@@ -682,7 +689,7 @@ case class Cast(
     case StringType =>
       buildCast[UTF8String](_, utfs => {
         if (ansiEnabled) {
-          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId, _queryContext)
+          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId, queryContext)
         } else {
           DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull
         }
@@ -707,14 +714,14 @@ case class Cast(
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
       if (ansiEnabled) {
-        buildCast[Double](_, d => doubleToTimestampAnsi(d, _queryContext))
+        buildCast[Double](_, d => doubleToTimestampAnsi(d, queryContext))
       } else {
         buildCast[Double](_, d => doubleToTimestamp(d))
       }
     // TimestampWritable.floatToTimestamp
     case FloatType =>
       if (ansiEnabled) {
-        buildCast[Float](_, f => doubleToTimestampAnsi(f.toDouble, _queryContext))
+        buildCast[Float](_, f => doubleToTimestampAnsi(f.toDouble, queryContext))
       } else {
         buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
       }
@@ -724,7 +731,7 @@ case class Cast(
     case StringType =>
       buildCast[UTF8String](_, utfs => {
         if (ansiEnabled) {
-          DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(utfs, _queryContext)
+          DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(utfs, queryContext)
         } else {
           DateTimeUtils.stringToTimestampWithoutTimeZone(utfs).orNull
         }
@@ -757,7 +764,7 @@ case class Cast(
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
       if (ansiEnabled) {
-        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, _queryContext))
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, queryContext))
       } else {
         buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s).orNull)
       }
@@ -1502,7 +1509,7 @@ case class Cast(
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
         (c, evPrim, evNull) =>
           if (ansiEnabled) {
-            val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+            val errorContext = ctx.addReferenceObj("errCtx", queryContext)
             code"""
               $evPrim = $dateTimeUtilsCls.stringToDateAnsi($c, $errorContext);
             """
@@ -1669,7 +1676,7 @@ case class Cast(
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
           code"""
             $evPrim = $dateTimeUtilsCls.stringToTimestampAnsi($c, $zid, $errorContext);
            """
@@ -1708,7 +1715,7 @@ case class Cast(
     case DoubleType =>
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
           code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi($c, $errorContext);"
         } else {
           code"""
@@ -1722,7 +1729,7 @@ case class Cast(
     case FloatType =>
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
           code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi((double)$c, $errorContext);"
         } else {
           code"""
@@ -1742,7 +1749,7 @@ case class Cast(
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
-          val errorContext = ctx.addReferenceObj("_errCtx", _queryContext)
+          val errorContext = ctx.addReferenceObj("errCtx", queryContext)
           code"""
             $evPrim = $dateTimeUtilsCls.stringToTimestampWithoutTimeZoneAnsi($c, $errorContext);
            """

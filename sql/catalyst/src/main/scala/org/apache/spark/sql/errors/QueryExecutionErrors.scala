@@ -111,8 +111,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       value: Any,
       from: DataType,
       to: DataType,
-      // TODO(MaxGekk): Use QueryContext
-      errorContext: String): Throwable = {
+      context: Option[QueryContext]): Throwable = {
     new SparkDateTimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -120,8 +119,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      // TODO(MaxGekk): Use QueryContext
-      queryContext = None)
+      queryContext = context)
   }
 
   def invalidInputSyntaxForBooleanError(

@@ -120,6 +120,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select interval 2 second * 'a'
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -129,6 +132,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select interval 2 second / 'a'
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -138,6 +144,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select interval 2 year * 'a'
+       ^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -147,6 +156,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select interval 2 year / 'a'
+       ^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -172,6 +184,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select 'a' * interval 2 second
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -181,6 +196,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select 'a' * interval 2 year
+       ^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -644,6 +662,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 1234567890123456789, 20, 0) cannot be represented as Decimal(18, 6). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1493,6 +1514,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 [CAST_INVALID_INPUT] The value '4 11:11' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select '4 11:11' - interval '4 22:12' day to minute
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1502,6 +1526,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 [CAST_INVALID_INPUT] The value '4 12:12:12' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select '4 12:12:12' + interval '4 22:12' day to minute
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1537,6 +1564,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 [CAST_INVALID_INPUT] The value '1' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select str - interval '4 22:12' day to minute from interval_view
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1546,6 +1576,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 [CAST_INVALID_INPUT] The value '1' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+select str + interval '4 22:12' day to minute from interval_view
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
