@@ -240,4 +240,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
         "does not support ordering")
     }
   }
+
+  test("check types for SQL string generation") {
+    assert(Literal(Array(1, 2, 3)).sql == "ARRAY(1, 2, 3)")
+    assert(Literal(Array(1, 2, null)).sql == "ARRAY(1, 2, 3)")
+    assert(Literal.default(StructType(Seq(StructField("col", StringType)))).sql == "")
+    assert(Literal.default(StructType(Seq(StructField("col", NullType)))).sql == "")
+    assert(Literal.default(MapType(StringType, BooleanType)).sql == "")
+    assert(Literal.default(MapType(StringType, NullType)).sql == "")
+  }
 }
