@@ -140,7 +140,7 @@ def lit(col: Any) -> Column:
 @since(1.3)
 def col(col: str) -> Column:
     """
-    Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+    Returns a :class:`~pyspark.sql.Column` based on the given column name.
 
     Examples
     --------

@@ -2621,9 +2621,8 @@ def concat(
 
             assert len(merged_columns) > 0
 
-            # If sort is True, always sort when there are more than two Series,
-            # and if there is only one Series, never sort to follow pandas 1.4+ behavior.
-            if sort and num_series != 1:
+            # If sort is True, always sort
+            if sort:
                 # FIXME: better ordering
                 merged_columns = sorted(merged_columns, key=name_like_string)
 
