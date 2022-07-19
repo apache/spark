@@ -21,7 +21,6 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.ScalaAggregator
 import org.apache.spark.sql.types.DataType
 
