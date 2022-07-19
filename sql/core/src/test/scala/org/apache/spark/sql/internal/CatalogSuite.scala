@@ -767,6 +767,13 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       Map.empty[String, String], "")
 
     assert(spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
+
+    val dbName2 = "my_db2.my_db3"
+    val tableName2 = "my_table2"
+    assert(!spark.catalog.tableExists(Array(catalogName, dbName2, tableName2).mkString(".")))
+    createTable(tableName2, dbName2, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], "")
+    assert(spark.catalog.tableExists(Array(catalogName, dbName2, tableName2).mkString(".")))
   }
 
   test("three layer namespace compatibility - database exists") {
