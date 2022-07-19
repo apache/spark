@@ -172,7 +172,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "distinct aggregate function in window",
     testRelation2.select(
       WindowExpression(
-        Count(UnresolvedAttribute("b")).toAggregateExpression(),
+        Count(UnresolvedAttribute("b")).toAggregateExpression(true),
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
