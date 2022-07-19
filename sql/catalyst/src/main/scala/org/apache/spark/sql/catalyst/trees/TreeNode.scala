@@ -90,7 +90,6 @@ case class Origin(
    * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
    *                          ^^^^^^^^^^^^^^^
    */
-  lazy val _context: String = getSummary
   def getSummary: String = {
     // If the query context is missing or incorrect, simply return an empty string.
     if (sqlText.isEmpty || startIndex.isEmpty || stopIndex.isEmpty ||
