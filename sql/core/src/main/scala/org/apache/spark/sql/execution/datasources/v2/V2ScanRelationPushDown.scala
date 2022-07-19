@@ -178,14 +178,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       }
 
       // scalastyle:off
-      // use the group by columns and aggregate columns as the output columns
+      // We name the output columns of group expressions and aggregate functions by
+      // ordinal: `group_col_0`, `group_col_1`, ..., `agg_func_0`, `agg_func_1`, ...
       // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
       // SELECT min(c1), max(c1) FROM t GROUP BY c2;
-      // Use c2, min(c1), max(c1) as output for DataSourceV2ScanRelation
+      // Use group_col_0, agg_func_0, agg_func_1 as output for ScanBuilderHolder.
       // We want to have the following logical plan:
       // == Optimized Logical Plan ==
-      // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
-      // +- RelationV2[c2#10, min(c1)#21, max(c1)#22]
+      // Aggregate [group_col_0#10], [min(agg_func_0#21) AS min(c1)#17, max(agg_func_1#22) AS max(c1)#18]
+      // +- ScanBuilderHolder[group_col_0#10, agg_func_0#21, agg_func_1#22]
+      // Later, we build the `Scan` instance and convert ScanBuilderHolder to DataSourceV2ScanRelation.
       // scalastyle:on
       val groupOutput = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"group_col_$i", e.dataType)()
