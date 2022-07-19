@@ -55,7 +55,6 @@ class MissingPandasLikeIndex:
     groupby = _unsupported_function("groupby")
     is_ = _unsupported_function("is_")
     join = _unsupported_function("join")
-    putmask = _unsupported_function("putmask")
     ravel = _unsupported_function("ravel")
     reindex = _unsupported_function("reindex")
     searchsorted = _unsupported_function("searchsorted")
@@ -63,7 +62,6 @@ class MissingPandasLikeIndex:
     slice_locs = _unsupported_function("slice_locs")
     sortlevel = _unsupported_function("sortlevel")
     to_flat_index = _unsupported_function("to_flat_index")
-    where = _unsupported_function("where")
     is_mixed = _unsupported_function("is_mixed")
 
     # Deprecated functions

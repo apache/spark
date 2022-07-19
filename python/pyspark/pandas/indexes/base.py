@@ -2666,6 +2666,93 @@ class Index(IndexOpsMixin):
         """
         return lib.infer_dtype([self.to_series().head(1).item()])
 
+    def putmask(
+            self,
+            mask: "Index",
+            value: Any
+    ) -> "Index":
+        """
+        Return a new Index of the values set with the mask.
+    
+        Returns
+        -------
+        Index
+    
+        See Also
+        --------
+        pandas.index.putmask : Changes elements of an array
+            based on conditional and input values.
+        """
+        # validate mask
+        mask = np.asarray(mask.tolist(), dtype=bool)  # type: ignore[assignment]
+        if mask.shape != self.values.shape:
+            raise ValueError("cond and data must be the same size")
+    
+        noop = not mask.any()
+    
+        if noop:
+            return self.copy()
+    
+        # convert the insert value, check whether it can be inserted.
+        converted_other = value
+        if value is not np.nan:
+            try:
+                converted_other = np.dtype(self.dtype).type(value)  # type: ignore[arg-type]
+            except ValueError:
+                raise ValueError("The inserted value should be in the same dtype.")
+    
+        # reconstruct a new index
+        values = self.values.copy()
+        new_values = []
+        if isinstance(values, np.ndarray):
+            for val, is_need in zip(values, mask):
+                if is_need:
+                    new_values.append(converted_other)
+                else:
+                    new_values.append(val)
+        else:
+            new_values.append(converted_other)
+    
+        return Index(new_values)
+    
+    def where(
+        self,
+        cond: "Index",
+        other: Any = np.nan
+    ) -> "Index":
+        """
+        Replace values where the condition is False.
+    
+        The replacement is taken from other.
+    
+        Parameters
+        ----------
+        cond : bool array-like with the same length as self
+            Condition to select the values on.
+        other : scalar, or array-like, default None
+            Replacement if the condition is False.
+    
+        Returns
+        -------
+        pandas.Index
+            A copy of self with values replaced from other
+            where the condition is False.
+    
+        See Also
+        --------
+        Series.where : Same method for Series.
+        DataFrame.where : Same method for DataFrame.
+    
+        Examples
+        --------
+        >>> idx = ps.Index(['car', 'bike', 'train', 'tractor'])
+        >>> idx
+        Index(['car', 'bike', 'train', 'tractor'], dtype='object')
+        >>> idx.where(idx.isin(['car', 'train']), 'other')
+        Index(['car', 'other', 'train', 'other'], dtype='object')
+        """
+        return self.putmask(~cond, other)
+
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeIndex, item):
             property_or_func = getattr(MissingPandasLikeIndex, item)

@@ -2511,6 +2511,36 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         ):
             psmidx.droplevel(-3)
 
+    def test_where_putmask(self):
+        pidx = pd.Index([1, 2, 3, 4])
+        psidx = ps.from_pandas(pidx)
+    
+        # where and putmask with default inserted value np.nan
+        self.assert_eq(
+            pidx.where(pidx > 2),
+            psidx.where(psidx > 2)
+        )
+        self.assert_eq(
+            pidx.putmask(pidx > 2, 99),
+            psidx.putmask(psidx > 2, 99)
+        )
+    
+        # where and putmask with isin func
+        self.assert_eq(
+            pidx.where(pidx.isin([1, 2])),
+            psidx.where(psidx.isin([1, 2]))
+        )
+        self.assert_eq(
+            pidx.putmask(pidx.isin([1, 2]), 99),
+            psidx.putmask(psidx.isin([1, 2]), 99)
+        )
+    
+        # negative
+        self.assertRaises(
+            ValueError,
+            lambda: psidx.where(psidx > 2, "True"),
+        )
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.indexes.test_base import *  # noqa: F401
