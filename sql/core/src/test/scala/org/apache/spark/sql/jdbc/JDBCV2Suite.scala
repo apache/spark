@@ -2166,7 +2166,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         df.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment =
-              "PushedAggregates: [SUM(PRICE), COUNT(PRICE)]"
+              "PushedAggregates: [COUNT(PRICE), SUM(PRICE)]"
             checkKeywordsExistsInExplain(df, expected_plan_fragment)
         }
         if (ansiEnabled) {
