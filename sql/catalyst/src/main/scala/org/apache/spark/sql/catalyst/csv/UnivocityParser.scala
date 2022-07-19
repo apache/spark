@@ -112,8 +112,7 @@ class UnivocityParser(
     options.dateFormatInRead,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true,
-    isInferring = false)
+    isParsing = true)
 
   private val csvFilters = if (SQLConf.get.csvFilterPushDown) {
     new OrderedFilters(filters, requiredSchema)

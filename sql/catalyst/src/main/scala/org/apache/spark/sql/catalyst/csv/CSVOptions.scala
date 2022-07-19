@@ -150,11 +150,17 @@ class CSVOptions(
 
   /**
    * Infer columns with all valid date entries as date type (otherwise inferred as timestamp type).
-   * Disabled by default for performance. When enabled, date entries in timestamp columns
-   * will be cast to timestamp upon parsing. Cannot infer legacy date formats since the legacy date
-   * parser will accept extra trailing characters
+   * Disabled by default for backwards compatibility and performance. When enabled, date entries in
+   * timestamp columns will be cast to timestamp upon parsing. Not compatible with
+   * legacyTimeParserPolicy == LEGACY since legacy date parser will accept extra trailing characters
    */
-  val inferDate = getBool("inferDate")
+  val inferDate = {
+    val inferDateFlag = getBool("inferDate")
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY && inferDateFlag) {
+      throw QueryExecutionErrors.inferDateWithLegacyTimeParserError()
+    }
+    inferDateFlag
+  }
 
   // Provide a default value for dateFormatInRead when inferDate. This ensures that the
   // Iso8601DateFormatter (with strict date parsing) is used for date inference

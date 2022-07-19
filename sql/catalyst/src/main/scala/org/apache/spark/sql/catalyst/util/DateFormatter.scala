@@ -175,9 +175,8 @@ object DateFormatter {
       format: Option[String],
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-      isParsing: Boolean,
-      isInference: Boolean = false): DateFormatter = {
-    if (SQLConf.get.legacyTimeParserPolicy == LEGACY && !isInference) {
+      isParsing: Boolean): DateFormatter = {
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(format.getOrElse(defaultPattern), locale, legacyFormat)
     } else {
       val df = format
@@ -204,9 +203,8 @@ object DateFormatter {
       format: Option[String],
       locale: Locale,
       legacyFormat: LegacyDateFormat,
-      isParsing: Boolean,
-      isInferring: Boolean): DateFormatter = {
-    getFormatter(format, locale, legacyFormat, isParsing, isInferring)
+      isParsing: Boolean): DateFormatter = {
+    getFormatter(format, locale, legacyFormat, isParsing)
   }
 
   def apply(
