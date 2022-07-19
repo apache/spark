@@ -261,8 +261,7 @@ class TaskMetrics private[spark] () extends Serializable {
     externalAccums += a
   }
 
-  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] =
-    internalAccums ++ externalAccums
+  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
 
   private[spark] def nonZeroInternalAccums(): Seq[AccumulatorV2[_, _]] = {
     // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
