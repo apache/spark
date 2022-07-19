@@ -2217,7 +2217,7 @@ object RewriteExceptAll extends Rule[LogicalPlan] {
       val modifiedRightPlan = Project(Seq(newColumnRight) ++ right.output, right)
       val unionPlan = Union(modifiedLeftPlan, modifiedRightPlan)
       val aggSumCol =
-        Alias(AggregateExpression(Sum(unionPlan.output.head.toAttribute), Complete, false), "sum")()
+        Alias(Sum(unionPlan.output.head.toAttribute).toAggregateExpression(), "sum")()
       val aggOutputColumns = left.output ++ Seq(aggSumCol)
       val aggregatePlan = Aggregate(left.output, aggOutputColumns, unionPlan)
       val filteredAggPlan = Filter(GreaterThan(aggSumCol.toAttribute, Literal(0L)), aggregatePlan)
@@ -2284,9 +2284,9 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
 
       // Expressions to compute count and minimum of both the counts.
       val vCol1AggrExpr =
-        Alias(AggregateExpression(Count(unionPlan.output(0)), Complete, false), "vcol1_count")()
+        Alias(Count(unionPlan.output(0)).toAggregateExpression(), "vcol1_count")()
       val vCol2AggrExpr =
-        Alias(AggregateExpression(Count(unionPlan.output(1)), Complete, false), "vcol2_count")()
+        Alias(Count(unionPlan.output(1)).toAggregateExpression(), "vcol2_count")()
       val ifExpression = Alias(If(
         GreaterThan(vCol1AggrExpr.toAttribute, vCol2AggrExpr.toAttribute),
         vCol2AggrExpr.toAttribute,

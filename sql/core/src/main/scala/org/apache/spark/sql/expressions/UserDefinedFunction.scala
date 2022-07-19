@@ -143,7 +143,7 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
 
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
-    Column(AggregateExpression(scalaAggregator(exprs.map(_.expr)), Complete, isDistinct = false))
+    Column(scalaAggregator(exprs.map(_.expr)).toAggregateExpression())
   }
 
   // This is also used by udf.register(...) when it detects a UserDefinedAggregator
