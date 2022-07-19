@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -496,5 +496,24 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       new RegExpInStr(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("SPARK-39758: invalid regexp pattern") {
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".int.at(2)
+    val prefix = "[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in"
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpExtract(s, p, r),
+      create_row("1a 2b 14m", "(?l)", 0),
+      s"$prefix `regexp_extract` is invalid: (?l)")
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpExtractAll(s, p, r),
+      create_row("abc", "] [", 0),
+      s"$prefix `regexp_extract_all` is invalid: ] [")
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpInStr(s, p, r),
+      create_row("abc", ", (", 0),
+      s"$prefix `regexp_instr` is invalid: , (")
   }
 }

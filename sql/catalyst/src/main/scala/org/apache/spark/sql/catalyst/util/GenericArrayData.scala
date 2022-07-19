@@ -28,16 +28,16 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   // Specified this as`scala.collection.Seq` because seqOrArray can be
   // `mutable.ArraySeq` in Scala 2.13
   def this(seq: scala.collection.Seq[Any]) = this(GenericArrayDataHelper.toArray(seq))
-  def this(list: java.util.List[Any]) = this(list.asScala.toSeq)
+  def this(list: java.util.List[Any]) = this(list.asScala.toArray)
 
   // TODO: This is boxing.  We should specialize.
-  def this(primitiveArray: Array[Int]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Long]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Float]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Double]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Short]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Byte]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toSeq)
+  def this(primitiveArray: Array[Int]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Long]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Float]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Double]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Short]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Byte]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toArray[Any])
 
   def this(seqOrArray: Any) = this(GenericArrayDataHelper.toArray(seqOrArray))
 

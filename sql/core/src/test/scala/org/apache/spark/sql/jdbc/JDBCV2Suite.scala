@@ -2166,7 +2166,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         df.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment =
-              "PushedAggregates: [SUM(PRICE), COUNT(PRICE)]"
+              "PushedAggregates: [COUNT(PRICE), SUM(PRICE)]"
             checkKeywordsExistsInExplain(df, expected_plan_fragment)
         }
         if (ansiEnabled) {
@@ -2259,11 +2259,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .asInstanceOf[SupportsIndex]
     assert(jdbcTable != null)
     assert(jdbcTable.indexExists("people_index") == false)
+    val indexes1 = jdbcTable.listIndexes()
+    assert(indexes1.isEmpty)
 
     sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
     assert(jdbcTable.indexExists("people_index"))
+    val indexes2 = jdbcTable.listIndexes()
+    assert(!indexes2.isEmpty)
+    assert(indexes2.size == 1)
+    val tableIndex = indexes2.head
+    assert(tableIndex.indexName() == "people_index")
 
     sql(s"DROP INDEX people_index ON TABLE h2.test.people")
     assert(jdbcTable.indexExists("people_index") == false)
+    val indexes3 = jdbcTable.listIndexes()
+    assert(indexes3.isEmpty)
   }
 }

@@ -116,10 +116,20 @@ case class LogicalRDD(
       case e: Attribute => rewrite.getOrElse(e, e)
     }.asInstanceOf[SortOrder])
 
+    val rewrittenOriginLogicalPlan = originLogicalPlan.map { plan =>
+      assert(output == plan.output, "The output columns are expected to the same for output " +
+        s"and originLogicalPlan. output: $output / output in originLogicalPlan: ${plan.output}")
+
+      val projectList = output.map { attr =>
+        Alias(attr, attr.name)(exprId = rewrite(attr).exprId)
+      }
+      Project(projectList, plan)
+    }
+
     LogicalRDD(
       output.map(rewrite),
       rdd,
-      originLogicalPlan,
+      rewrittenOriginLogicalPlan,
       rewrittenPartitioning,
       rewrittenOrdering,
       isStreaming

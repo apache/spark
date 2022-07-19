@@ -576,4 +576,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         castErrMsg(invalidInput, TimestampNTZType))
     }
   }
+
+  test("SPARK-39749: cast Decimal to string") {
+    val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
+    checkEvaluation(cast(input, StringType), "0.000000123")
+  }
 }

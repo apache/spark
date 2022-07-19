@@ -88,9 +88,14 @@ abstract class AverageBase
   // We can't directly use `/` as it throws an exception under ansi mode.
   protected def getEvaluateExpression(queryContext: String) = child.dataType match {
     case _: DecimalType =>
-      Divide(
-        CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd, queryContext),
-        count.cast(DecimalType.LongDecimal), failOnError = false).cast(resultType)
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, resultType),
+        DecimalDivideWithOverflowCheck(
+          sum,
+          count.cast(DecimalType.LongDecimal),
+          resultType.asInstanceOf[DecimalType],
+          queryContext,
+          !useAnsiAdd))
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
         Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))

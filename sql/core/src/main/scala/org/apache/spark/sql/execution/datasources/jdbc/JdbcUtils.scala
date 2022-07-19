@@ -1072,10 +1072,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def listIndexes(
       conn: Connection,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
     val dialect = JdbcDialects.get(options.url)
-    dialect.listIndexes(conn, tableName, options)
+    dialect.listIndexes(conn, tableIdent, options)
   }
 
   private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
@@ -1114,10 +1114,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def processIndexProperties(
       properties: util.Map[String, String],
-      catalogName: String): (String, Array[String]) = {
+      dialectName: String): (String, Array[String]) = {
     var indexType = ""
     val indexPropertyList: ArrayBuffer[String] = ArrayBuffer[String]()
-    val supportedIndexTypeList = getSupportedIndexTypeList(catalogName)
+    val supportedIndexTypeList = getSupportedIndexTypeList(dialectName)
 
     if (!properties.isEmpty) {
       properties.asScala.foreach { case (k, v) =>
@@ -1147,8 +1147,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     false
   }
 
-  def getSupportedIndexTypeList(catalogName: String): Array[String] = {
-    catalogName match {
+  def getSupportedIndexTypeList(dialectName: String): Array[String] = {
+    dialectName match {
       case "mysql" => Array("BTREE", "HASH")
       case "postgresql" => Array("BTREE", "HASH", "BRIN")
       case _ => Array.empty

@@ -38,6 +38,6 @@ object GenericArrayDataHelper {
     // `mutable.ArraySeq` in Scala 2.13
     case seq: scala.collection.Seq[Any] => seq.toArray
     case array: Array[Any] => array  // array of objects, so no need to convert
-    case array: Array[_] => array.toSeq.toArray[Any] // array of primitives, so box them
+    case array: Array[_] => array.toArray[Any] // array of primitives, so box them
   }
 }

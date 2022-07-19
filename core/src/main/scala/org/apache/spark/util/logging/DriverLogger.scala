@@ -66,7 +66,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       // `AbstractFilterable.Builder.asBuilder()` method will return `Any` in Scala.
       val builder: Log4jFileAppender.Builder[_] = Log4jFileAppender.newBuilder()
       builder.withAppend(false)
-      builder.withBufferedIo(false)
+      builder.setBufferedIo(false)
       builder.setConfiguration(config)
       builder.withFileName(localLogFile)
       builder.setIgnoreExceptions(false)

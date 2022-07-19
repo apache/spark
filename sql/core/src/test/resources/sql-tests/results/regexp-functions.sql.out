@@ -126,6 +126,15 @@ struct<regexp_extract(a b m, (\d+)?([a-z]+), 1):string>
 
 
 -- !query
+SELECT regexp_extract('1a 2b 14m', '(?l)')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in `regexp_extract` is invalid: (?l)
+
+
+-- !query
 SELECT regexp_extract_all('1a 2b 14m', '\\d+')
 -- !query schema
 struct<>
@@ -249,6 +258,15 @@ SELECT regexp_extract_all('a 2b 14m', '(\\d+)?([a-z]+)', 1)
 struct<regexp_extract_all(a 2b 14m, (\d+)?([a-z]+), 1):array<string>>
 -- !query output
 ["","2","14"]
+
+
+-- !query
+SELECT regexp_extract_all('abc', col0, 1) FROM VALUES('], [') AS t(col0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in `regexp_extract_all` is invalid: ], [
 
 
 -- !query
@@ -539,3 +557,12 @@ SELECT regexp_instr(null, 'b')
 struct<regexp_instr(NULL, b, 0):int>
 -- !query output
 NULL
+
+
+-- !query
+SELECT regexp_instr('abc', col0, 1) FROM VALUES(') ?') AS t(col0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in `regexp_instr` is invalid: ) ?

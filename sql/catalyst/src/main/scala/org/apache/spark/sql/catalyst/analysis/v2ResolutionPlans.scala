@@ -131,14 +131,14 @@ case class UnresolvedFunc(
 }
 
 /**
- * Holds the name of a database object (table, view, namespace, function, etc.) that is to be
- * created and we need to determine the catalog to store it. It will be resolved to
- * [[ResolvedDBObjectName]] during analysis.
+ * Holds the name of a table/view/function identifier that we need to determine the catalog. It will
+ * be resolved to [[ResolvedIdentifier]] during analysis.
  */
-case class UnresolvedDBObjectName(nameParts: Seq[String], isNamespace: Boolean) extends LeafNode {
+case class UnresolvedIdentifier(nameParts: Seq[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }
+
 
 /**
  * A resolved leaf node whose statistics has no meaning.
@@ -225,11 +225,10 @@ case class ResolvedNonPersistentFunc(
 }
 
 /**
- * A plan containing resolved database object name with catalog determined.
+ * A plan containing resolved identifier with catalog determined.
  */
-case class ResolvedDBObjectName(
+case class ResolvedIdentifier(
     catalog: CatalogPlugin,
-    nameParts: Seq[String])
-  extends LeafNodeWithoutStats {
+    identifier: Identifier) extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }

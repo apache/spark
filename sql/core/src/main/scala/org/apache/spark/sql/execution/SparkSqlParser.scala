@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedDBObjectName, UnresolvedFunc}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunc, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -485,9 +485,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       assert(Option(originalText).isDefined,
         "'originalText' must be provided to create permanent view")
       CreateView(
-        UnresolvedDBObjectName(
-          visitMultipartIdentifier(ctx.multipartIdentifier),
-          false),
+        UnresolvedIdentifier(visitMultipartIdentifier(ctx.multipartIdentifier)),
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),
         properties,
@@ -549,9 +547,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     if (ctx.TEMPORARY == null) {
       CreateFunction(
-        UnresolvedDBObjectName(
-          functionIdentifier,
-          isNamespace = false),
+        UnresolvedIdentifier(functionIdentifier),
         string(ctx.className),
         resources.toSeq,
         ctx.EXISTS != null,
