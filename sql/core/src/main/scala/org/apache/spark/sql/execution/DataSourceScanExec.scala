@@ -621,7 +621,7 @@ case class FileSourceScanExec(
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
-      requiredSchema, metadataColumns)
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns)
   }
 
   /**
@@ -678,7 +678,7 @@ case class FileSourceScanExec(
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
-      requiredSchema, metadataColumns)
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns)
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced
