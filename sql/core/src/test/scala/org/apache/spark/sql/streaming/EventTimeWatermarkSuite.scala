@@ -269,22 +269,18 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),
       StartStream(Trigger.AvailableNow, checkpointLocation = checkpointDir.getAbsolutePath),
       awaitTermination(),
-      CheckNewAnswer(),
-      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5),
-      // watermark should be updated to 25 - 10 = 15
+      CheckNewAnswer((10, 3)), // watermark should be updated to 25 - 10 = 15
 
       AddData(inputData, 50),
       StartStream(Trigger.AvailableNow, checkpointLocation = checkpointDir.getAbsolutePath),
       awaitTermination(),
-      CheckNewAnswer((10, 3)),   // watermark = 15 is used to generate this
-      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
-      // watermark should be updated to 50 - 10 = 40
+      CheckNewAnswer((15, 1), (25, 1)), // watermark should be updated to 50 - 10 = 40
 
       AddData(inputData, 50),
       StartStream(Trigger.AvailableNow, checkpointLocation = checkpointDir.getAbsolutePath),
       awaitTermination(),
-      CheckNewAnswer((15, 1), (25, 1)), // watermark = 40 is used to generate this
-      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 40))
+      CheckNewAnswer()
+    )
   }
 
   test("append mode") {
