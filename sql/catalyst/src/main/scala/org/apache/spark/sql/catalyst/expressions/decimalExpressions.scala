@@ -261,8 +261,10 @@ case class DecimalDivideWithOverflowCheck(
     right: Expression,
     override val dataType: DecimalType,
     avgQueryContext: String,
-    nullOnOverflow: Boolean) extends BinaryExpression with SupportQueryContext {
+    nullOnOverflow: Boolean)
+  extends BinaryExpression with ExpectsInputTypes with SupportQueryContext {
   override def nullable: Boolean = nullOnOverflow
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, DecimalType)
   override def initQueryContext(): String = avgQueryContext
   def decimalMethod: String = "$div"
 
