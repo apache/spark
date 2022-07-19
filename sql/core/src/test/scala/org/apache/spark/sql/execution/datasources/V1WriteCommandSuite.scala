@@ -78,10 +78,11 @@ abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
 
     // Check whether a logical sort node is at the top of the logical plan of the write query.
     if (optimizedPlan != null) {
-      assert(optimizedPlan.isInstanceOf[Sort] === hasLogicalSort)
+      assert(optimizedPlan.isInstanceOf[Sort] == hasLogicalSort,
+        s"Expect hasLogicalSort: $hasLogicalSort, Actual: ${optimizedPlan.isInstanceOf[Sort]}")
     }
 
-    spark.listenerManager.register(listener)
+    spark.listenerManager.unregister(listener)
   }
 }
 
@@ -177,6 +178,10 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
           checkAnswer(
             spark.read.parquet(path.toString).where("p IS NULL").sort($"id"),
             Seq(Row(0, null), Row(1, null), Row(2, null)))
+          // Check the empty string and null values should be written to the same file.
+          val files = path.listFiles().filterNot(
+            f => f.getName.startsWith(".") || f.getName.startsWith("_"))
+          assert(files.length == 2)
         }
       }
     }

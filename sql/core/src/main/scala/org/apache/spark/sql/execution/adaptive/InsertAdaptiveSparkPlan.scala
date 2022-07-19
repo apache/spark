@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.ExecutedCommandExec
+import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
+import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.internal.SQLConf
@@ -47,6 +48,8 @@ case class InsertAdaptiveSparkPlan(
     case _: ExecutedCommandExec => plan
     case _: CommandResultExec => plan
     case c: V2CommandExec => c.withNewChildren(c.children.map(apply))
+    case c: DataWritingCommandExec if !c.cmd.isInstanceOf[V1WriteCommand] =>
+      c.copy(child = apply(c.child))
     case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {
         try {

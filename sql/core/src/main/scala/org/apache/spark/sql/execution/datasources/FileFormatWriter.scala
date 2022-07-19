@@ -81,7 +81,7 @@ object FileFormatWriter extends Logging {
    * A variable used in tests to check whether the output ordering of the query matches the
    * required ordering of the write command.
    */
-  var outputOrderingMatched: Boolean = false
+  private[sql] var outputOrderingMatched: Boolean = false
 
   /**
    * Basic work flow of this command is:

@@ -26,12 +26,7 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
     withPlannedWrite { enabled =>
       withTable("t") {
         executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
-          sql(
-            """
-              |CREATE TABLE t
-              |STORED AS PARQUET
-              |AS SELECT * FROM t0
-              |""".stripMargin)
+          sql("CREATE TABLE t AS SELECT * FROM t0")
         }
       }
     }
@@ -45,7 +40,6 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
             sql(
               """
                 |CREATE TABLE t
-                |STORED AS PARQUET
                 |PARTITIONED BY (k)
                 |AS SELECT * FROM t0
                 |""".stripMargin)
@@ -61,14 +55,47 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
         sql(
           """
             |CREATE TABLE t (i INT, j INT)
-            |STORED AS PARQUET
             |PARTITIONED BY (k STRING)
             |CLUSTERED BY (i, j) SORTED BY (j) INTO 2 BUCKETS
             |""".stripMargin)
         withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
           executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
-            sql("INSERT OVERWRITE t SELECT * FROM t0")
+            sql("INSERT INTO t SELECT * FROM t0")
           }
+        }
+      }
+    }
+  }
+
+  test("insert overwrite hive table") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql(
+          """
+            |CREATE TABLE t
+            |PARTITIONED BY (k)
+            |AS SELECT * FROM t0
+            |""".stripMargin)
+          executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+            sql("INSERT OVERWRITE t SELECT j AS i, i AS j, k FROM t0")
+          }
+        }
+      }
+    }
+  }
+
+  test("insert into hive table with static partitions only") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t (i INT, j INT)
+            |PARTITIONED BY (k STRING)
+            |""".stripMargin)
+        // No dynamic partition so no sort is needed.
+        executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
+          sql("INSERT INTO t PARTITION (k='0') SELECT i, j FROM t0 WHERE k = '0'")
         }
       }
     }
