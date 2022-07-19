@@ -146,7 +146,7 @@ Arguments: [avg(_w0#25) windowspecdefinition(i_manager_id#5, specifiedwindowfram
 
 (26) Filter [codegen id : 7]
 Input [4]: [i_manager_id#5, sum_sales#24, _w0#25, avg_monthly_sales#27]
-Condition : ((isnotnull(avg_monthly_sales#27) AND isnotnull(sum_sales#24)) AND ((avg_monthly_sales#27 > 0.000000) AND ((abs((sum_sales#24 - avg_monthly_sales#27), false) / avg_monthly_sales#27) > 0.1000000000000000)))
+Condition : ((isnotnull(avg_monthly_sales#27) AND isnotnull(sum_sales#24)) AND ((avg_monthly_sales#27 > 0.000000) AND ((abs((sum_sales#24 - avg_monthly_sales#27)) / avg_monthly_sales#27) > 0.1000000000000000)))
 
 (27) Project [codegen id : 7]
 Output [3]: [i_manager_id#5, sum_sales#24, avg_monthly_sales#27]

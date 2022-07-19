@@ -186,7 +186,7 @@ Arguments: [avg(_w0#22) windowspecdefinition(i_category#15, i_brand#14, cc_name#
 
 (30) Filter [codegen id : 11]
 Input [9]: [i_category#15, i_brand#14, cc_name#10, d_year#7, d_moy#8, sum_sales#21, _w0#22, rn#24, avg_monthly_sales#25]
-Condition : (((isnotnull(avg_monthly_sales#25) AND isnotnull(sum_sales#21)) AND (avg_monthly_sales#25 > 0.000000)) AND ((abs((sum_sales#21 - avg_monthly_sales#25), false) / avg_monthly_sales#25) > 0.1000000000000000))
+Condition : (((isnotnull(avg_monthly_sales#25) AND isnotnull(sum_sales#21)) AND (avg_monthly_sales#25 > 0.000000)) AND ((abs((sum_sales#21 - avg_monthly_sales#25)) / avg_monthly_sales#25) > 0.1000000000000000))
 
 (31) Project [codegen id : 11]
 Output [8]: [i_category#15, i_brand#14, cc_name#10, d_year#7, d_moy#8, sum_sales#21, avg_monthly_sales#25, rn#24]
