@@ -34,7 +34,8 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = """
     _FUNC_(expr[, isIgnoreNull]) - Returns the last value of `expr` for a group of rows.
-      If `isIgnoreNull` is true, returns only non-null values""",
+      If `isIgnoreNull` is true, returns only non-null values
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (10), (5), (20) AS tab(col);

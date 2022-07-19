@@ -82,9 +82,7 @@ trait ExpressionWithRandomSeed extends Expression {
       > SELECT _FUNC_(null);
        0.7604953758285915
   """,
-  note = """
-    The function is non-deterministic in general case.
-  """,
+  note = "The function is non-deterministic in general case.",
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
@@ -125,7 +123,7 @@ object Rand {
 /** Generate a random column with i.i.d. values drawn from the standard normal distribution. */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.""",
+  usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.",
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -135,9 +133,7 @@ object Rand {
       > SELECT _FUNC_(null);
        1.6034991609278433
   """,
-  note = """
-    The function is non-deterministic in general case.
-  """,
+  note = "The function is non-deterministic in general case.",
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit

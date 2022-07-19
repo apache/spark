@@ -189,15 +189,13 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_() - Returns an universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.""",
+  usage = "_FUNC_() - Returns an universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.",
   examples = """
     Examples:
       > SELECT _FUNC_();
        46707d92-02f4-4817-8116-a4c3b23e6266
   """,
-  note = """
-    The function is non-deterministic.
-  """,
+  note = "The function is non-deterministic.",
   since = "2.3.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
@@ -241,7 +239,7 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
+  usage = "_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.",
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -261,7 +259,7 @@ case class SparkVersion() extends LeafExpression with CodegenFallback {
 }
 
 @ExpressionDescription(
-  usage = """_FUNC_(expr) - Return DDL-formatted type string for the data type of the input.""",
+  usage = "_FUNC_(expr) - Return DDL-formatted type string for the data type of the input.",
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -286,7 +284,7 @@ case class TypeOf(child: Expression) extends UnaryExpression {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_() - user name of current execution context.""",
+  usage = "_FUNC_() - user name of current execution context.",
   examples = """
     Examples:
       > SELECT _FUNC_();

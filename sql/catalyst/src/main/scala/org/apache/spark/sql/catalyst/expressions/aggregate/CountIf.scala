@@ -22,9 +22,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType}
 
 @ExpressionDescription(
-  usage = """
-    _FUNC_(expr) - Returns the number of `TRUE` values for the expression.
-  """,
+  usage = "_FUNC_(expr) - Returns the number of `TRUE` values for the expression.",
   examples = """
     Examples:
       > SELECT _FUNC_(col % 2 = 0) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);

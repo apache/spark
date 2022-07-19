@@ -392,9 +392,7 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
 }
 
 @ExpressionDescription(
-  usage = """
-    _FUNC_(expr) - Returns inverse hyperbolic cosine of `expr`.
-  """,
+  usage = "_FUNC_(expr) - Returns inverse hyperbolic cosine of `expr`.",
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -529,7 +527,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = " _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
+  usage = "_FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -802,9 +800,7 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
 }
 
 @ExpressionDescription(
-  usage = """
-    _FUNC_(expr) - Returns inverse hyperbolic sine of `expr`.
-  """,
+  usage = "_FUNC_(expr) - Returns inverse hyperbolic sine of `expr`.",
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -900,9 +896,7 @@ case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH"
 }
 
 @ExpressionDescription(
-  usage = """
-    _FUNC_(expr) - Returns inverse hyperbolic tangent of `expr`.
-  """,
+  usage = "_FUNC_(expr) - Returns inverse hyperbolic tangent of `expr`.",
   examples = """
     Examples:
       > SELECT _FUNC_(0);
