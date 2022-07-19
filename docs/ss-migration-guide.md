@@ -28,7 +28,7 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 
 ## Upgrading from Structured Streaming 3.3 to 3.4
 
-- Since Spark 3.4, `Trigger.Once` is deprecated, and users are encouraged to migrate from `Trigger.Once` to `Trigger.AvailableNow`.
+- Since Spark 3.4, `Trigger.Once` is deprecated, and users are encouraged to migrate from `Trigger.Once` to `Trigger.AvailableNow`. Please refer [SPARK-39805](https://issues.apache.org/jira/browse/SPARK-39805) for more details.
 
 ## Upgrading from Structured Streaming 3.2 to 3.3
 
