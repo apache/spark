@@ -202,12 +202,12 @@ case class InsertIntoHadoopFsRelationCommand(
       // refresh data cache if table is cached
       sparkSession.sharedState.cacheManager.recacheByPath(sparkSession, outputPath, fs)
 
-      if (catalogTable.nonEmpty) {
+     if (catalogTable.nonEmpty) {
         CommandUtils.updateTableStats(sparkSession, catalogTable.get)
-      }
 
-      if (catalogTable.get.partitionColumnNames.nonEmpty) {
-        updatePartitionsMetadata(sparkSession, updatedPartitionPaths)
+        if (catalogTable.get.partitionColumnNames.nonEmpty) {
+          updatePartitionsMetadata(sparkSession, updatedPartitionPaths)
+        }
       }
 
     } else {
