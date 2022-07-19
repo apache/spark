@@ -318,7 +318,7 @@ class UnivocityParser(
           row.setNullAt(i)
         } else {
           // This is required to not set value as null ,
-          // 1. If its missing value at the end of line.
+          // 1. If the missing value at the end of line.
           // 2. If the missing value at the beginning of line.
           if (!options.naFilter && (i>=tokens.length ||
             (i==0 && getToken(tokens, i).length == 0))) {
