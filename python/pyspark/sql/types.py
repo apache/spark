@@ -138,7 +138,7 @@ class DataTypeSingleton(type):
 
     _instances: ClassVar[Dict[Tuple, "DataTypeSingleton"]] = {}
 
-    def __call__(cls: Type[T], *args: Any, **kwargs: Any) -> T:  # type: ignore[override]
+    def __call__(cls: Type[T], *args: Any, **kwargs: Any) -> T:
         key = (cls, args, str(kwargs))
         if key not in cls._instances:  # type: ignore[attr-defined]
             cls._instances[key] = super(  # type: ignore[misc, attr-defined]
