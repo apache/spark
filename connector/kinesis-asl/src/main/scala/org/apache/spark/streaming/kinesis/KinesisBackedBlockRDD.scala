@@ -23,8 +23,8 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.amazonaws.auth.AWSCredentials
-import com.amazonaws.services.kinesis.AmazonKinesisClient
+import com.amazonaws.auth.{AWSCredentials, AWSStaticCredentialsProvider}
+import com.amazonaws.services.kinesis.{AmazonKinesisClientBuilder}
 import com.amazonaws.services.kinesis.clientlibrary.types.UserRecord
 import com.amazonaws.services.kinesis.model._
 
@@ -33,7 +33,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BlockRDD, BlockRDDPartition}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.NextIterator
-
 
 /** Class representing a range of Kinesis sequence numbers. Both sequence numbers are inclusive. */
 private[kinesis]
@@ -139,7 +138,8 @@ class KinesisSequenceRangeIterator(
     range: SequenceNumberRange,
     kinesisReadConfigs: KinesisReadConfigurations) extends NextIterator[Record] with Logging {
 
-  private val client = new AmazonKinesisClient(credentials)
+  private val client = AmazonKinesisClientBuilder.standard().
+    withCredentials(new AWSStaticCredentialsProvider(credentials)).build()
   private val streamName = range.streamName
   private val shardId = range.shardId
   // AWS limits to maximum of 10k records per get call

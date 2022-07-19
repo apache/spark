@@ -26,11 +26,11 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
 
-import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
+import com.amazonaws.auth.{AWSCredentials, AWSStaticCredentialsProvider, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.regions.RegionUtils
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
-import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClient}
+import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClientBuilder}
 import com.amazonaws.services.kinesis.model._
 
 import org.apache.spark.internal.Logging
@@ -55,13 +55,15 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
   private var _streamName: String = _
 
   protected lazy val kinesisClient = {
-    val client = new AmazonKinesisClient(KinesisTestUtils.getAWSCredentials())
+    val client = AmazonKinesisClientBuilder.standard().withCredentials(
+      new AWSStaticCredentialsProvider(KinesisTestUtils.getAWSCredentials())).build()
     client.setEndpoint(endpointUrl)
     client
   }
 
   private lazy val dynamoDB = {
-    val dynamoDBClient = new AmazonDynamoDBClient(new DefaultAWSCredentialsProviderChain())
+    val dynamoDBClient = AmazonDynamoDBClientBuilder.standard().withCredentials(
+      new DefaultAWSCredentialsProviderChain()).build()
     dynamoDBClient.setRegion(RegionUtils.getRegion(regionName))
     new DynamoDB(dynamoDBClient)
   }
@@ -271,7 +273,7 @@ private[kinesis] trait KinesisDataGenerator {
 }
 
 private[kinesis] class SimpleDataGenerator(
-    client: AmazonKinesisClient) extends KinesisDataGenerator {
+    client: AmazonKinesis) extends KinesisDataGenerator {
   override def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]] = {
     val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
     data.foreach { num =>

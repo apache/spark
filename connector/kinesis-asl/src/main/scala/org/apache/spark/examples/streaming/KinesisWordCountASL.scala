@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.util.Random
 
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
-import com.amazonaws.services.kinesis.AmazonKinesisClient
+import com.amazonaws.services.kinesis.AmazonKinesisClientBuilder
 import com.amazonaws.services.kinesis.model.PutRecordRequest
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.core.config.Configurator
@@ -101,11 +101,12 @@ object KinesisWordCountASL extends Logging {
 
     // Determine the number of shards from the stream using the low-level Kinesis Client
     // from the AWS Java SDK.
-    val credentials = new DefaultAWSCredentialsProviderChain().getCredentials()
-    require(credentials != null,
+    val credentialsProvider = new DefaultAWSCredentialsProviderChain()
+    require(credentialsProvider.getCredentials != null,
       "No AWS credentials found. Please specify credentials using one of the methods specified " +
         "in http://docs.aws.amazon.com/AWSSdkDocsJava/latest/DeveloperGuide/credentials.html")
-    val kinesisClient = new AmazonKinesisClient(credentials)
+    val kinesisClient = AmazonKinesisClientBuilder.standard().
+      withCredentials(credentialsProvider).build()
     kinesisClient.setEndpoint(endpointUrl)
     val numShards = kinesisClient.describeStream(streamName).getStreamDescription().getShards().size
 
@@ -221,7 +222,8 @@ object KinesisWordProducerASL {
     val totals = scala.collection.mutable.Map[String, Int]()
 
     // Create the low-level Kinesis Client from the AWS Java SDK.
-    val kinesisClient = new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain())
+    val kinesisClient = AmazonKinesisClientBuilder.standard().
+      withCredentials(new DefaultAWSCredentialsProviderChain()).build()
     kinesisClient.setEndpoint(endpoint)
 
     println(s"Putting records onto stream $stream and endpoint $endpoint at a rate of" +
