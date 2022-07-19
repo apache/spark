@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.FileFormat.METADATA_NAME
-import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
+import org.apache.spark.sql.types.{DoubleType, FloatType, LongType, StructType}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -206,13 +206,6 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
 
-      val readDataColumns =
-        dataColumns
-          .filter(requiredAttributes.contains)
-          .filterNot(partitionColumns.contains)
-      val outputSchema = readDataColumns.toStructType
-      logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
-
       val metadataStructOpt = l.output.collectFirst {
         case FileSourceMetadataAttribute(attr) => attr
       }
@@ -223,8 +216,25 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         }.toSeq
       }.getOrElse(Seq.empty)
 
+      val fileFormatReaderGeneratedMetadataColumns: Seq[Attribute] =
+        metadataColumns.map(_.name).flatMap {
+          case FileFormat.ROW_INDEX =>
+            Some(AttributeReference(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
+          case _ => None
+        }
+
+      val fileConstantMetadataColumns: Seq[Attribute] =
+        metadataColumns.filter(_.name != FileFormat.ROW_INDEX)
+
+      val readDataColumns = dataColumns
+          .filter(requiredAttributes.contains)
+          .filterNot(partitionColumns.contains)
+
+      val outputSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns).toStructType
+
       // outputAttributes should also include the metadata columns at the very end
-      val outputAttributes = readDataColumns ++ partitionColumns ++ metadataColumns
+      val outputAttributes = readDataColumns ++ fileFormatReaderGeneratedMetadataColumns ++
+        partitionColumns ++ fileConstantMetadataColumns
 
       val scan =
         FileSourceScanExec(
@@ -239,10 +249,20 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
+        val structColumns = metadataColumns.map { col => col.name match {
+            case FileFormat.FILE_PATH | FileFormat.FILE_NAME | FileFormat.FILE_SIZE |
+                 FileFormat.FILE_MODIFICATION_TIME =>
+              col
+            case FileFormat.ROW_INDEX =>
+              fileFormatReaderGeneratedMetadataColumns
+                .filter(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
+                .head.withName(FileFormat.ROW_INDEX)
+          }
+        }
         val metadataAlias =
-          Alias(CreateStruct(metadataColumns), METADATA_NAME)(exprId = metadataStruct.exprId)
+          Alias(CreateStruct(structColumns), METADATA_NAME)(exprId = metadataStruct.exprId)
         execution.ProjectExec(
-          scan.output.dropRight(metadataColumns.length) :+ metadataAlias, scan)
+          readDataColumns ++ partitionColumns :+ metadataAlias, scan)
       }.getOrElse(scan)
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
