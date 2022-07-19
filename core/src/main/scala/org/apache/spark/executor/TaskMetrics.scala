@@ -20,7 +20,7 @@ package org.apache.spark.executor
 import java.util.concurrent.CopyOnWriteArrayList
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, Buffer, LinkedHashMap}
+import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -208,6 +208,7 @@ class TaskMetrics private[spark] () extends Serializable {
   // Only used for test
   private[spark] val testAccum = sys.props.get(IS_TESTING.key).map(_ => new LongAccumulator)
 
+
   import InternalAccumulator._
   @transient private[spark] lazy val nameToAccums = LinkedHashMap(
     EXECUTOR_DESERIALIZE_TIME -> _executorDeserializeTime,
@@ -253,16 +254,15 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * External accumulators registered with this task.
    */
-  @transient private[spark] lazy val _externalAccums = new CopyOnWriteArrayList[AccumulatorV2[_, _]]
-
-  private[spark] def externalAccums(): Buffer[AccumulatorV2[_, _]] = _externalAccums.asScala
+  @transient private[spark] lazy val externalAccums =
+    new CopyOnWriteArrayList[AccumulatorV2[_, _]].asScala
 
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
-    _externalAccums.add(a)
+    externalAccums += a
   }
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] =
-    internalAccums ++ _externalAccums.asScala
+    internalAccums ++ externalAccums
 
   private[spark] def nonZeroInternalAccums(): Seq[AccumulatorV2[_, _]] = {
     // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
@@ -325,7 +325,7 @@ private[spark] object TaskMetrics extends Logging {
         tmAcc.metadata = acc.metadata
         tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
       } else {
-        tm._externalAccums.add(acc)
+        tm.externalAccums += acc
       }
     }
     tm
