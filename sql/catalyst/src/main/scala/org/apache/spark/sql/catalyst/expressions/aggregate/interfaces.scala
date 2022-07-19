@@ -642,6 +642,10 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   }
 }
 
+/**
+ * A special TypedImperativeAggregate that uses `OpenHashMap[AnyRef, Long]` as internal
+ * aggregation buffer.
+ */
 abstract class AggregationBuffer extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
   override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
     // Initialize new counts map instance here.
