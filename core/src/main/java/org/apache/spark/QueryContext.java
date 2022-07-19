@@ -46,5 +46,6 @@ public interface QueryContext {
     // The corresponding fragment of the query which throws the exception.
     String fragment();
 
+    // Textual summary of the query context
     String summary();
 }

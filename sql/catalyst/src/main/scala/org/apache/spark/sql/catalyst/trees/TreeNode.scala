@@ -53,6 +53,7 @@ import org.apache.spark.util.collection.BitSet
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
+/** The class represents error context of a SQL query. */
 case class SqlQueryContext(
     override val objectType: String,
     override val objectName: String,
@@ -166,6 +167,7 @@ case class Origin(
     }
   }
 
+  /** Gets the textual fragment of a SQL query. */
   def getFragment: String = {
     if (sqlText.isEmpty || startIndex.isEmpty || stopIndex.isEmpty ||
       startIndex.get < 0 || stopIndex.get >= sqlText.get.length || startIndex.get > stopIndex.get) {

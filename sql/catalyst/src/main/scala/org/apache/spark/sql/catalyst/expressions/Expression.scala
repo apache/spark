@@ -596,7 +596,7 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
 trait SupportQueryContext extends Expression with Serializable {
   protected var queryContext: Option[QueryContext] = initQueryContext()
 
-  def initQueryContext(): Option[QueryContext] = None
+  def initQueryContext(): Option[QueryContext]
 
   // Note: Even though query contexts are serialized to executors, it will be regenerated from an
   //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors
