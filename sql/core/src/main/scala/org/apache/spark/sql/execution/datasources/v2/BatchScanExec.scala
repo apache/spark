@@ -59,25 +59,24 @@ case class BatchScanExec(
   @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
       case DynamicPruningExpression(e) =>
-        if (scan.isInstanceOf[SupportsRuntimeFiltering]) {
-          DataSourceStrategy.translateRuntimeFilter(e)
-        } else if (scan.isInstanceOf[SupportsRuntimeV2Filtering]) {
-          DataSourceV2Strategy.translateRuntimeFilterV2(e)
-        } else {
-          None
+        scan match {
+          case _: SupportsRuntimeFiltering =>
+            DataSourceStrategy.translateRuntimeFilter(e)
+          case _: SupportsRuntimeV2Filtering =>
+            DataSourceV2Strategy.translateRuntimeFilterV2(e)
+          case _ => None
         }
       case _ => None
     }
 
     if (dataSourceFilters.nonEmpty) {
       val originalPartitioning = outputPartitioning
-
-      if (scan.isInstanceOf[SupportsRuntimeFiltering]) {
-        val filterableScan = scan.asInstanceOf[SupportsRuntimeFiltering]
-        filterableScan.filter(dataSourceFilters.map(_.asInstanceOf[Filter]).toArray)
-      } else if (scan.isInstanceOf[SupportsRuntimeV2Filtering]) {
-        val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
-        filterableScan.filter(dataSourceFilters.map(_.asInstanceOf[Predicate]).toArray)
+      scan match {
+        case s: SupportsRuntimeFiltering =>
+          s.filter(dataSourceFilters.map(_.asInstanceOf[Filter]).toArray)
+        case s: SupportsRuntimeV2Filtering =>
+          s.filter(dataSourceFilters.map(_.asInstanceOf[Predicate]).toArray)
+        case _ =>
       }
 
       // call toBatch again to get filtered partitions
