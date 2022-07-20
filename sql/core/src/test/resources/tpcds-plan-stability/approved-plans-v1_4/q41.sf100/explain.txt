@@ -4,7 +4,7 @@ TakeOrderedAndProject (20)
    +- Exchange (18)
       +- * HashAggregate (17)
          +- * Project (16)
-            +- * BroadcastHashJoin Inner BuildRight (15)
+            +- * BroadcastHashJoin LeftSemi BuildRight (15)
                :- * Project (4)
                :  +- * Filter (3)
                :     +- * ColumnarToRow (2)
@@ -94,7 +94,7 @@ Join condition: None
 
 (16) Project [codegen id : 3]
 Output [1]: [i_product_name#3]
-Input [3]: [i_manufact#2, i_product_name#3, i_manufact#5]
+Input [2]: [i_manufact#2, i_product_name#3]
 
 (17) HashAggregate [codegen id : 3]
 Input [1]: [i_product_name#3]

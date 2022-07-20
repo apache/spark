@@ -7,7 +7,7 @@ TakeOrderedAndProject (55)
       :     :- * Project (45)
       :     :  +- * BroadcastHashJoin Inner BuildRight (44)
       :     :     :- * Project (39)
-      :     :     :  +- * BroadcastHashJoin Inner BuildRight (38)
+      :     :     :  +- * BroadcastHashJoin LeftSemi BuildRight (38)
       :     :     :     :- * Project (10)
       :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (9)
       :     :     :     :     :- * Project (4)
@@ -233,7 +233,7 @@ Join condition: None
 
 (39) Project [codegen id : 10]
 Output [3]: [p_partkey#1, p_mfgr#2, ps_suppkey#6]
-Input [6]: [p_partkey#1, p_mfgr#2, ps_suppkey#6, ps_supplycost#7, min(ps_supplycost)#20, ps_partkey#8]
+Input [4]: [p_partkey#1, p_mfgr#2, ps_suppkey#6, ps_supplycost#7]
 
 (40) Scan parquet spark_catalog.default.supplier
 Output [7]: [s_suppkey#21, s_name#22, s_address#23, s_nationkey#24, s_phone#25, s_acctbal#26, s_comment#27]

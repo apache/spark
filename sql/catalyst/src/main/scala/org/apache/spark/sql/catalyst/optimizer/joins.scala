@@ -235,6 +235,26 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * Convert inner join to left semi join if only left-side columns being selected and the right side
+ * join keys are unique and the left side can not plan to broadcast build side:
+ * {{{
+ *   SELECT t1.* FROM t1 INNER JOIN (SELECT DISTINCT c1 as c1 FROM t) t2 ON t1.c1 = t2.c1  ==>
+ *   SELECT t1.* FROM t1 LEFT SEMI JOIN (SELECT DISTINCT c1 as c1 FROM t) t2 ON t1.c1 = t2.c1
+ * }}}
+ */
+object EliminateInnerJoin extends Rule[LogicalPlan] with JoinSelectionHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformWithPruning(_.containsPattern(INNER_LIKE_JOIN), ruleId) {
+      case p @ Project(_, j @ ExtractEquiJoinKeys(Inner, _, rightKeys, None, _, left, right, _))
+          if p.references.subsetOf(left.outputSet) &&
+            right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) &&
+            !getBroadcastBuildSide(j, conf).contains(BuildLeft) =>
+        p.copy(child = j.copy(joinType = LeftSemi))
+    }
+  }
+}
+
+/**
  * PythonUDF in join condition can't be evaluated if it refers to attributes from both join sides.
  * See `ExtractPythonUDFs` for details. This rule will detect un-evaluable PythonUDF and pull them
  * out from join condition.
@@ -387,11 +407,15 @@ trait JoinSelectionHelper {
     }
   }
 
-  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
+  def getBroadcastBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = {
     getBroadcastBuildSide(join.left, join.right, join.joinType,
-      join.hint, hintOnly = true, conf).isDefined ||
+      join.hint, hintOnly = true, conf).orElse(
       getBroadcastBuildSide(join.left, join.right, join.joinType,
-        join.hint, hintOnly = false, conf).isDefined
+        join.hint, hintOnly = false, conf))
+  }
+
+  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
+    getBroadcastBuildSide(join, conf).isDefined
   }
 
   def canPruneLeft(joinType: JoinType): Boolean = joinType match {
