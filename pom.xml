@@ -159,7 +159,7 @@
     <commons.collections4.version>4.4</commons.collections4.version>
     <scala.version>2.12.16</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
-    <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
+    <scalatest-maven-plugin.version>2.1.0</scalatest-maven-plugin.version>
     <!--
       This needs to be managed in different profiles to avoid
       errors building different Hadoop versions.
