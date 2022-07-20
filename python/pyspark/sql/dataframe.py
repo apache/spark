@@ -1422,10 +1422,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jc = self._jdf.colRegex(colName)
         return Column(jc)
 
-    def convert(self, schema: StructType) -> "DataFrame":
+    def asSchema(self, schema: StructType) -> "DataFrame":
         """
         Returns a new DataFrame where each row is reconciled to match the specified schema.
+
         Spark will:
+
         1, Reorder columns and/or inner fields by name to match the specified schema.
         2, Project away columns and/or inner fields that are not needed by the specified schema.
         Missing columns and/or inner fields (present in the specified schema but not input
@@ -1442,7 +1444,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        schema : StructType
+        schema : class:`StructType`
             specified schema.
 
         Examples
@@ -1451,7 +1453,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.schema
         StructType([StructField('i', StringType(), True), StructField('j', LongType(), True)])
         >>> schema = StructType([StructField("j", StringType()), StructField("i", StringType())])
-        >>> df2 = df.convert(schema)
+        >>> df2 = df.asSchema(schema)
         >>> df2.schema
         StructType([StructField('j', StringType(), True), StructField('i', StringType(), True)])
         >>> df2.show()
