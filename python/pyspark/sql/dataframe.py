@@ -1463,6 +1463,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         assert schema is not None
         sc = self.sparkSession._sc
+        assert sc is not None and sc._jvm is not None
         jschema = sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseStructTypeFromJson(
             schema.json()
         )
