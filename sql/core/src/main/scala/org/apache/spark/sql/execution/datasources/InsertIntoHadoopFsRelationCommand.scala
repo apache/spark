@@ -204,10 +204,10 @@ case class InsertIntoHadoopFsRelationCommand(
 
       if (catalogTable.nonEmpty) {
         CommandUtils.updateTableStats(sparkSession, catalogTable.get)
-      }
 
-      if (catalogTable.get.partitionColumnNames.nonEmpty) {
-        updatePartitionsMetadata(sparkSession, updatedPartitionPaths)
+        if (catalogTable.get.partitionColumnNames.nonEmpty) {
+          updatePartitionsMetadata(sparkSession, updatedPartitionPaths)
+        }
       }
 
     } else {
@@ -227,9 +227,9 @@ case class InsertIntoHadoopFsRelationCommand(
     val identifier = catalogTable.get.identifier
 
     try {
-      val partitions = updatedPartitionPaths.map(partitionColumnName => {
-        val partitionMap = partitionColumnName.split("=")
-        val partitionSpec = Map[String, String](partitionMap(0) -> partitionMap(1))
+      val partitions = updatedPartitionPaths.map(partitionPath => {
+        val partitionSpec = partitionPath.split("/").map(_.split("="))
+          .filter(_.length == 2).map {case Array(a, b) => (a, b)}.toMap
         catalog.getPartition(identifier, partitionSpec)
       })
 

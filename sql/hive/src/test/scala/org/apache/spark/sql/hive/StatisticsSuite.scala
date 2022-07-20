@@ -1611,4 +1611,26 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
     }
   }
+
+  test("SPARK-33326: partition metadata auto update for dynamic partitions") {
+    val table = "partition_metadata_dynamic_partition"
+    Seq("hive", "parquet").foreach { source =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (id INT, sp INT, dp INT) USING $source PARTITIONED BY (sp, dp)")
+          sql(s"INSERT INTO $table PARTITION (sp=0, dp) VALUES (0, 0)")
+          sql(s"INSERT OVERWRITE TABLE $table PARTITION (sp=0, dp) SELECT id, id FROM range(5)")
+
+          for (i <- 0 until 5) {
+            val partition = spark.sessionState.catalog
+              .getPartition(TableIdentifier(table), Map("sp" -> s"0", "dp" -> s"$i"))
+            val numFiles = partition.parameters("numFiles")
+            assert(numFiles.nonEmpty && numFiles.toInt > 0)
+            val totalSize = partition.parameters("totalSize")
+            assert(totalSize.nonEmpty && totalSize.toInt > 0)
+          }
+        }
+      }
+    }
+  }
 }
