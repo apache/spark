@@ -1466,9 +1466,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         assert schema is not None
         sc = self.sparkSession._sc
         assert sc is not None and sc._jvm is not None
-        jschema = sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseStructTypeFromJson(
-            schema.json()
+        _struct_type = getattr(
+            getattr(sc._jvm.org.apache.spark.sql.types, "StructType$"), "MODULE$"
         )
+        jschema = _struct_type.fromString(schema.json())
         return DataFrame(getattr(self._jdf, "as")(jschema), self.sparkSession)
 
     def alias(self, alias: str) -> "DataFrame":
