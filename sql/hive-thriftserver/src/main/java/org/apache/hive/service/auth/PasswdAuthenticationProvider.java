@@ -17,6 +17,7 @@
 package org.apache.hive.service.auth;
 
 import javax.security.sasl.AuthenticationException;
+import javax.servlet.http.HttpServletRequest;
 
 public interface PasswdAuthenticationProvider {
 
@@ -35,4 +36,16 @@ public interface PasswdAuthenticationProvider {
    *                                 invalid by the implementation
    */
   void Authenticate(String user, String password) throws AuthenticationException;
+
+  /**
+   * Add the support of Custom Authentication using Http request
+   * @param request - The http request is used for deriving the information
+   *                  and used in Custom Authentication
+   * @throws AuthenticationException
+   */
+  default void AuthenticateRequest(HttpServletRequest request)
+          throws AuthenticationException {
+     // User can add their own implementation for deriving the
+    // custom params from the http request that can be used Authentication
+  }
 }

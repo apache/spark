@@ -333,6 +333,9 @@ public class ThriftHttpServlet extends TServlet {
         PasswdAuthenticationProvider provider =
             AuthenticationProviderFactory.getAuthenticationProvider(authMethod);
         provider.Authenticate(userName, getPassword(request, authType));
+        if (authMethod == AuthMethods.CUSTOM) {
+          provider.AuthenticateRequest(request);
+        }
 
       } catch (Exception e) {
         throw new HttpAuthenticationException(e);

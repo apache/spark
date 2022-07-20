@@ -17,6 +17,7 @@
 package org.apache.hive.service.auth;
 
 import javax.security.sasl.AuthenticationException;
+import javax.servlet.http.HttpServletRequest;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -46,4 +47,9 @@ public class CustomAuthenticationProviderImpl implements PasswdAuthenticationPro
     customProvider.Authenticate(user, password);
   }
 
+  @Override
+  public void AuthenticateRequest(HttpServletRequest request)
+          throws AuthenticationException {
+    customProvider.AuthenticateRequest(request);
+  }
 }
