@@ -45,18 +45,55 @@ class LeftSemiPushdownSuite extends PlanTest {
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
   val testRelation1 = LocalRelation($"d".int)
   val testRelation2 = LocalRelation($"e".int)
+  val nestedRelation = LocalRelation($"m".int, $"n".struct($"x".int, $"y".int))
 
   test("Project: LeftSemiAnti join pushdown") {
-    val originalQuery = testRelation
-      .select(star())
-      .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
+    Seq(
+      Seq($"m", $"n"),
+      Seq($"m", $"n" as "x"),
+      Seq($"m", $"n", $"m" + 1),
+      Seq($"m", $"n.x", $"n.y")).foreach { project =>
+      val originalQuery = nestedRelation
+        .select(project: _*)
+        .join(testRelation1, joinType = LeftSemi, condition = Some($"m" === $"d"))
 
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelation
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = nestedRelation
+        .join(testRelation1, joinType = LeftSemi, condition = Some($"m" === $"d"))
+        .select(project: _*)
+        .analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("Project: LeftSemiAnti join no pushdown because of pruned project") {
+    val originalQuery = testRelation
+      .select($"a", $"b")
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
-      .select($"a", $"b", $"c")
       .analyze
-    comparePlans(optimized, correctAnswer)
+
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
+  }
+
+  test("Project: LeftSemiAnti join no pushdown because of pruned nested project") {
+    val originalQuery = nestedRelation
+      .select($"m", $"n.x")
+      .join(testRelation1, joinType = LeftSemi, condition = Some($"m" === $"d"))
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
+  }
+
+  test("Project: LeftSemiAnti join no pushdown because of complex expression") {
+    val originalQuery = testRelation
+      .select($"a", $"b", $"c" + 1 as "x")
+      .join(testRelation1, joinType = LeftSemi, condition = Some($"x" === $"d"))
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
   }
 
   test("Project: LeftSemiAnti join no pushdown because of non-deterministic proj exprs") {

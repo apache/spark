@@ -38,10 +38,11 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // LeftSemi/LeftAnti over Project
-    case Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
+    case j @ Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
         if pList.forall(_.deterministic) &&
         !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
-        canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
+        canPushThroughCondition(Seq(gChild), joinCond, rightOp) &&
+        canPushThroughProject(j, p, gChild) =>
       if (joinCond.isEmpty) {
         // No join condition, just push down the Join below Project
         p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
@@ -102,6 +103,29 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       val validAttrs = u.child.outputSet ++ rightOp.outputSet
       pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
+  }
+
+  private def canPushThroughProject(j: Join, p: Project, gChild: LogicalPlan): Boolean = {
+    // Push LeftSemi/LeftAnti through project is not always effective
+    //
+    // 1. project is used to do column pruning, so it conflicts with ColumnPruning
+    // 2. if the project contains complex expression and join condition reference it,
+    //    it can be regression since the complex expression will be evaluated more than once
+
+    val maybePruned =
+      (p.outputSet.size != gChild.outputSet.size && p.outputSet.subsetOf(gChild.outputSet)) ||
+        NestedColumnAliasing.getAttributeToExtractValues(
+          j.expressions ++ p.expressions, Seq.empty).nonEmpty
+
+    val aliasMap = getAliasMap(p)
+    val hasComplexCondition = j.condition.isDefined && j.condition.get.references.exists { attr =>
+      aliasMap.get(attr) match {
+        case Some(alias) => alias.child.children.nonEmpty
+        case None => false
+      }
+    }
+
+    !maybePruned && !hasComplexCondition
   }
 
   /**

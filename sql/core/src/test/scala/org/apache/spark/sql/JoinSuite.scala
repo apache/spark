@@ -1440,4 +1440,18 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }
     }
   }
+
+  test("SPARK-39825: Fix PushDownLeftSemiAntiJoin push through project") {
+    // before fix, it would throw:
+    //   java.lang.RuntimeException: Max iterations (100) reached for batch Operator Optimization
+    //   before Inferring Filters, please set 'spark.sql.optimizer.maxIterations' to a larger value
+    withTable("t") {
+      Seq((1, DoubleData(1, "a"))).toDF("c", "nested")
+        .write
+        .saveAsTable("t")
+      spark.sql("select c, nested.id from t")
+        .join(Seq(1).toDF("c"), Seq("c"), "left_semi")
+        .collect()
+    }
+  }
 }
