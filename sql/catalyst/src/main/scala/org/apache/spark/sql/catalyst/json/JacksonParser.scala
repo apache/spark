@@ -80,7 +80,7 @@ class JacksonParser(
 
   // Flags to signal if we need to fall back to the backward compatible behavior of parsing
   // dates and timestamps.
-  // For more information, see comments for "enableDateTimeParsingFallback" option in CSVOptions.
+  // For more information, see comments for "enableDateTimeParsingFallback" option in JSONOptions.
   private val enableParsingFallbackForTimestampType =
     options.enableDateTimeParsingFallback.getOrElse {
       SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||

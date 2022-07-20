@@ -113,7 +113,7 @@ private[sql] class JSONOptions(
 
   // SPARK-39731: Enables the backward compatible parsing behavior.
   // Generally, this config should be set to false to avoid producing potentially incorrect results
-  // which is the current default (see UnivocityParser).
+  // which is the current default (see JacksonParser).
   //
   // If enabled and the date cannot be parsed, we will fall back to `DateTimeUtils.stringToDate`.
   // If enabled and the timestamp cannot be parsed, `DateTimeUtils.stringToTimestamp` will be used.
