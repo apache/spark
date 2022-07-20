@@ -247,9 +247,10 @@ case class InsertIntoHadoopFsRelationCommand(
         } else BigInt(1)
 
         val newStats = CommandUtils.compareAndGetNewStats(p.stats, newSize, Some(rowCount))
+        val numFiles = p.parameters.getOrElse("numFiles", "1")
 
         val newStatParameters =
-          Map("numFiles" -> p.parameters("numFiles"),
+          Map("numFiles" -> numFiles,
             "rawDataSize" -> newSize.toString,
             "totalSize" -> newSize.toString)
         val newParameters = p.parameters ++ newStatParameters
@@ -261,7 +262,7 @@ case class InsertIntoHadoopFsRelationCommand(
       logInfo(s"All partition information updates have been completed")
     } catch {
       case e: Throwable => logError(
-        "Partition table update failed, the operation does not affect data accuracy.", e)
+        "Partition table metadata information update failed.", e)
     }
   }
 
