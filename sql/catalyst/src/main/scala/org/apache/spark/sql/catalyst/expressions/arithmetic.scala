@@ -538,9 +538,9 @@ case class Multiply(
     case DecimalType.Fixed(precision, scale) =>
       checkDecimalOverflow(numeric.times(input1, input2).asInstanceOf[Decimal], precision, scale)
     case _: IntegerType if failOnError =>
-      Math.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
+      MathUtils.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
     case _: LongType if failOnError =>
-      Math.multiplyExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+      MathUtils.multiplyExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
     case _ => numeric.times(input1, input2)
   }
 
