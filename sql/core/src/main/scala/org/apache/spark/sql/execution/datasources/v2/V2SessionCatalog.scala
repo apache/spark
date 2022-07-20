@@ -53,10 +53,15 @@ class V2SessionCatalog(catalog: SessionCatalog)
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     namespace match {
       case Array(db) =>
-        catalog
+        val tables = catalog
           .listTables(db)
           .map(ident => Identifier.of(ident.database.map(Array(_)).getOrElse(Array()), ident.table))
           .toArray
+        val views = catalog
+          .listViews(db, "*")
+          .map(ident => Identifier.of(ident.database.map(Array(_)).getOrElse(Array()), ident.table))
+          .toArray
+        tables ++ views
       case _ =>
         throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }

@@ -182,6 +182,31 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set("my_table2"))
   }
 
+  test("SPARK-39828: Catalog.listTables() should respect currentCatalog") {
+    assert(spark.catalog.currentCatalog() == "spark_catalog")
+    assert(spark.catalog.listTables().collect().isEmpty)
+    createTable("my_table1")
+    assert(spark.catalog.listTables().collect().map(_.name).toSet == Set("my_table1"))
+
+    val catalogName = "testcat"
+    val dbName = "my_db"
+    val tableName = "my_table2"
+    val tableSchema = new StructType().add("i", "int")
+    val description = "this is a test managed table"
+    sql(s"CREATE NAMESPACE ${catalogName}.${dbName}")
+
+    spark.catalog.setCurrentCatalog("testcat")
+    spark.catalog.setCurrentDatabase("my_db")
+    assert(spark.catalog.listTables().collect().isEmpty)
+
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], description)
+    assert(spark.catalog.listTables()
+      .collect()
+      .map(t => Array(t.catalog, t.namespace.mkString("."), t.name).mkString(".")).toSet
+      == Set("testcat.my_db.my_table2"))
+  }
+
   test("list tables with database") {
     assert(spark.catalog.listTables("default").collect().isEmpty)
     createDatabase("my_db1")

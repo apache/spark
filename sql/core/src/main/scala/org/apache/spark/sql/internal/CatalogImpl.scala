@@ -95,11 +95,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Returns a list of tables in the current database.
+   * Returns a list of tables in the current catalog and current database.
    * This includes all temporary tables.
    */
   override def listTables(): Dataset[Table] = {
-    listTables(currentDatabase)
+    listTables(currentCatalog() ++ "." ++ currentDatabase)
   }
 
   /**
@@ -120,7 +120,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val plan = ShowTables(UnresolvedNamespace(ident), None)
       val ret = sparkSession.sessionState.executePlan(plan).toRdd.collect()
       val tables = ret
-        .map(row => ident ++ Seq(row.getString(1)))
+        .map(row =>
+          // for views, their namespace are empty
+          if (row.getString(0).isEmpty) {
+            Seq(row.getString(1))
+          } else {
+            ident ++ Seq(row.getString(1))
+          })
         .map(makeTable)
       CatalogImpl.makeDataset(tables, sparkSession)
     }
