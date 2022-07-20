@@ -424,15 +424,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
 
+      // TODO support push down ORDER BY expressions.
       def findGroupColForSortOrder(sortOrder: SortOrder): Option[SortOrder] = sortOrder match {
-        case SortOrder(attr: AttributeReference, direction, nullOrdering, sameOrderExpressions)
-          if aliasMap.contains(attr) =>
-          val newAttr = findGroupColumn(aliasMap(attr))
-          if (newAttr.isDefined) {
-            Some(SortOrder(newAttr.get, direction, nullOrdering, sameOrderExpressions))
-          } else {
-            None
-          }
+        case SortOrder(attr: AttributeReference, direction, nullOrdering, sameOrderExpressions) =>
+          findGroupColumn(aliasMap(attr)).filter { groupCol =>
+            sHolder.relation.output.exists(out => out.name.equalsIgnoreCase(groupCol.name) &&
+              out.exprId == groupCol.exprId)
+          }.map(SortOrder(_, direction, nullOrdering, sameOrderExpressions))
         case _ => None
       }
 
