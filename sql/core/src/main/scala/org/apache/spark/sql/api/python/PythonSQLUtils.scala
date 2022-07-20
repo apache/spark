@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 private[sql] object PythonSQLUtils extends Logging {
   private lazy val internalRowPickler = {
@@ -46,6 +46,8 @@ private[sql] object PythonSQLUtils extends Logging {
   }
 
   def parseDataType(typeText: String): DataType = CatalystSqlParser.parseDataType(typeText)
+
+  def parseStructTypeFromJson(jsonText: String): StructType = StructType.fromString(jsonText)
 
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
