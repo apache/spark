@@ -388,14 +388,19 @@ private[spark] class TaskSchedulerImpl(
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
       val taskSetRpID = taskSet.taskSet.resourceProfileId
+      val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
+      val targetExecutorRpID = if (prof.isForTaskOnly) {
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+      } else {
+        taskSetRpID
+      }
       // make the resource profile id a hard requirement for now - ie only put tasksets
       // on executors where resource profile exactly matches.
-      if (taskSetRpID == shuffledOffers(i).resourceProfileId) {
+      if (targetExecutorRpID == shuffledOffers(i).resourceProfileId) {
         val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
           availableResources(i))
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
-            val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject, index) =
               taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)

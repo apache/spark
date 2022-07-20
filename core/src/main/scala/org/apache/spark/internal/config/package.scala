@@ -2402,4 +2402,13 @@ package object config {
       .version("3.3.0")
       .intConf
       .createWithDefault(5)
+
+  private[spark] val RESOURCE_PROFILE_FOR_TASK_ONLY =
+    ConfigBuilder("spark.scheduler.resource.profileForTaskOnly")
+      .internal()
+      .doc("If true, Spark will support stage level task resource profiles when dynamic " +
+        "allocation is disabled. And this is only supported for Standalone cluster right now.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
 }

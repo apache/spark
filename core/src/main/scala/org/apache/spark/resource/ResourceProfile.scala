@@ -29,6 +29,7 @@ import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
+import org.apache.spark.resource.ResourceProfile.getCustomExecutorResources
 import org.apache.spark.util.Utils
 
 /**
@@ -58,6 +59,7 @@ class ResourceProfile(
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
   private var _coresLimitKnown: Boolean = false
+  private var _forTaskOnly: Boolean = false
 
   /**
    * A unique id of this ResourceProfile
@@ -133,6 +135,10 @@ class ResourceProfile(
   // grained mesos) don't use the cores config by default so we can't use it to calculate slots.
   private[spark] def isCoresLimitKnown: Boolean = _coresLimitKnown
 
+  // If true, this profile will only be used to schedule tasks, but not to request new executors
+  // with this profile.
+  private[spark] def isForTaskOnly: Boolean = _forTaskOnly
+
   // The resource that has the least amount of slots per executor. Its possible multiple or all
   // resources result in same number of slots and this could be any of those.
   // If the executor cores config is not present this value is based on the other resources
@@ -163,6 +169,10 @@ class ResourceProfile(
    * resource address.
    */
   private def calculateTasksAndLimitingResource(sparkConf: SparkConf): Unit = synchronized {
+    _forTaskOnly = !Utils.isDynamicAllocationEnabled(sparkConf) &&
+      id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID &&
+      sparkConf.get(RESOURCE_PROFILE_FOR_TASK_ONLY)
+
     val shouldCheckExecCores = shouldCheckExecutorCores(sparkConf)
     var (taskLimit, limitingResource) = if (shouldCheckExecCores) {
       val cpusPerTask = taskResources.get(ResourceProfile.CPUS)
@@ -183,7 +193,13 @@ class ResourceProfile(
     numPartsPerResourceMap(ResourceProfile.CORES) = 1
     val taskResourcesToCheck = new mutable.HashMap[String, TaskResourceRequest]
     taskResourcesToCheck ++= ResourceProfile.getCustomTaskResources(this)
-    val execResourceToCheck = ResourceProfile.getCustomExecutorResources(this)
+    val execResourceToCheck = if (_forTaskOnly) {
+      // If resource profile describe task resources only, take custom executor resources
+      // from default resource profile.
+      getCustomExecutorResources(ResourceProfile.getOrCreateDefaultProfile(sparkConf))
+    } else {
+      ResourceProfile.getCustomExecutorResources(this)
+    }
     execResourceToCheck.foreach { case (rName, execReq) =>
       val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
       numPartsPerResourceMap(rName) = 1
