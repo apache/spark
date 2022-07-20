@@ -659,7 +659,7 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> "integer overflow",
         "alternative" -> "",
-        "config" -> "spark.sql.ansi.enabled"))
+        "config" -> SQLConf.ANSI_ENABLED.key))
   }
 }
 
