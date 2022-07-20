@@ -33,6 +33,8 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.util.SchemaUtils
 
+import scala.util.Try
+
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
  * Writing to dynamic partitions is also supported.
@@ -234,7 +236,8 @@ case class InsertIntoHadoopFsRelationCommand(
         catalog.getPartition(identifier, partitionSpec)
       })
 
-      val newPartitions = partitions.filter(_.isSuccess).map(_.get).zipWithIndex.flatMap { case (p, _) =>
+      val newPartitions = partitions.filter(_.isSuccess).map(_.get)
+        .zipWithIndex.flatMap { case (p, _) =>
         // Statistical partition file size
         val newSize = CommandUtils.calculateSingleLocationSize(
           sparkSession.sessionState, identifier, Some(p.location))
