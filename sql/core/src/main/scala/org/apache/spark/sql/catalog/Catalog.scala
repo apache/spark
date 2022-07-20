@@ -101,6 +101,9 @@ abstract class Catalog {
   /**
    * Returns a list of columns for the given table/view in the specified database.
    *
+   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
+   * use listColumns(tableName) instead.
+   *
    * @param dbName is a name that designates a database.
    * @param tableName is an unqualified name that designates a table/view.
    * @since 2.0.0
@@ -133,6 +136,9 @@ abstract class Catalog {
    * Get the table or view with the specified name in the specified database. This throws an
    * AnalysisException when no Table can be found.
    *
+   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
+   * use getTable(tableName) instead.
+   *
    * @since 2.1.0
    */
   @throws[AnalysisException]("database or table does not exist")
@@ -153,6 +159,9 @@ abstract class Catalog {
   /**
    * Get the function with the specified name. This throws an AnalysisException when the function
    * cannot be found.
+   *
+   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
+   * use getFunction(functionName) instead.
    *
    * @param dbName is a name that designates a database.
    * @param functionName is an unqualified name that designates a function in the specified database
@@ -182,6 +191,9 @@ abstract class Catalog {
   /**
    * Check if the table or view with the specified name exists in the specified database.
    *
+   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
+   * use tableExists(tableName) instead.
+   *
    * @param dbName is a name that designates a database.
    * @param tableName is an unqualified name that designates a table.
    * @since 2.1.0
@@ -201,6 +213,9 @@ abstract class Catalog {
 
   /**
    * Check if the function with the specified name exists in the specified database.
+   *
+   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
+   * use functionExists(functionName) instead.
    *
    * @param dbName is a name that designates a database.
    * @param functionName is an unqualified name that designates a function.
