@@ -87,7 +87,7 @@ class PandasConversionMixin:
 
         import numpy as np
         import pandas as pd
-        from pandas.core.dtypes.common import is_timedelta64_dtype
+        from pandas.core.dtypes.common import is_timedelta64_dtype, is_datetime64_dtype
 
         jconf = self.sparkSession._jconf
         timezone = jconf.sessionLocalTimeZone()
@@ -244,7 +244,10 @@ class PandasConversionMixin:
             # No need to cast for non-empty series for timedelta. The type is already correct.
             should_check_timedelta = is_timedelta64_dtype(t) and len(pdf) == 0
 
-            if (t is not None and not is_timedelta64_dtype(t)) or should_check_timedelta:
+            if (t is not None and
+                    not all([
+                        is_timedelta64_dtype(t),
+                        is_datetime64_dtype(t)])) or should_check_timedelta:
                 series = series.astype(t, copy=False)
 
             with catch_warnings():

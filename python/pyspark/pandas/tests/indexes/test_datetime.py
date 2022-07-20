@@ -240,6 +240,11 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
         mapper_pser = pd.Series([1, 2, 3], index=pidx)
         self.assert_eq(psidx.map(mapper_pser), pidx.map(mapper_pser))
 
+    def test_repr(self):
+        pidx_repr = pd.DatetimeIndex(['1970-01-01', '1970-02-01', '1970-03-01']).__repr__()
+        psidx_repr = ps.DatetimeIndex(['1970-01-01', '1970-02-01', '1970-03-01']).__repr__()
+        self.assert_eq(pidx_repr, psidx_repr)
+
 
 if __name__ == "__main__":
     import unittest
