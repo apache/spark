@@ -331,7 +331,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
         // Select the result of the first aggregate in the last aggregate.
         val result = aggregate.First(operator.toAttribute, ignoreNulls = true)
-          .toAggregateExpression(false, Some(EqualTo(gid, regularGroupId)))
+          .toAggregateExpression(isDistinct = false, filter = Some(EqualTo(gid, regularGroupId)))
 
         // Some aggregate functions (COUNT) have the special property that they can return a
         // non-null result without any input. We need to make sure we return a result in this case.
