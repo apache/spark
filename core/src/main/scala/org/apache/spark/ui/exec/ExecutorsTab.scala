@@ -32,7 +32,15 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
     val threadDumpEnabled =
       parent.sc.isDefined && parent.conf.get(UI_THREAD_DUMPS_ENABLED)
 
-    attachPage(new ExecutorsPage(this, threadDumpEnabled))
+    val heapDumpEnabled = try {
+      Class
+        .forName("com.sun.management.HotSpotDiagnosticMXBean")
+      parent.sc.isDefined && parent.conf.get(UI_HEAP_DUMPS_ENABLED)
+    } catch {
+      case _: ClassNotFoundException => false
+    }
+
+    attachPage(new ExecutorsPage(this, threadDumpEnabled, heapDumpEnabled))
     if (threadDumpEnabled) {
       attachPage(new ExecutorThreadDumpPage(this, parent.sc))
     }
@@ -42,7 +50,8 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
 
 private[ui] class ExecutorsPage(
     parent: SparkUITab,
-    threadDumpEnabled: Boolean)
+    threadDumpEnabled: Boolean,
+    heapDumpEnabled: Boolean)
   extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -52,6 +61,7 @@ private[ui] class ExecutorsPage(
         <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
         <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
         <script>setThreadDumpEnabled({threadDumpEnabled})</script>
+        <script>setHeapDumpEnabled({heapDumpEnabled})</script>
       }
 
     UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)

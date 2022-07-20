@@ -67,7 +67,7 @@ import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage._
-import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
+import org.apache.spark.storage.BlockManagerMessages.{TriggerHeapDump, TriggerThreadDump}
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
 import org.apache.spark.util.logging.DriverLogger
@@ -708,6 +708,27 @@ class SparkContext(config: SparkConf) extends Logging {
     } catch {
       case e: Exception =>
         logError(s"Exception getting thread dump from executor $executorId", e)
+        None
+    }
+  }
+
+  /**
+   * Called by the web UI to obtain executor heap dumps.  This method may be expensive.
+   * Logs an error and returns None if it fails to obtain a heap dump, which could occur due
+   * to an executor being dead or unresponsive or due to network issues while sending the heap
+   * dump message back to the driver.
+   */
+  private[spark] def getExecutorHeapDump(executorId: String): Option[InputStream] = {
+    try {
+      if (executorId == SparkContext.DRIVER_IDENTIFIER) {
+        Some(Utils.getHeapDump())
+      } else {
+        val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
+        Some(endpointRef.askSync[InputStream](TriggerHeapDump))
+      }
+    } catch {
+      case e: Exception =>
+        logError(s"Exception getting heap dump from executor $executorId", e)
         None
     }
   }

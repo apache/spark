@@ -76,6 +76,46 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   }
 
   @GET
+  @Path("executors/{executorId}/heapdump")
+  @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
+  def heapDump(@PathParam("executorId") execId: String): Response = withUI { ui =>
+    if (execId != SparkContext.DRIVER_IDENTIFIER && !execId.forall(Character.isDigit)) {
+      throw new BadParameterException(
+        s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
+    }
+
+    val safeSparkContext = ui.sc.getOrElse {
+      throw new ServiceUnavailable("Heap dumps not available through the history server.")
+    }
+
+    val input = ui.store.asOption(ui.store.executorSummary(execId)) match {
+      case Some(executorSummary) if executorSummary.isActive =>
+        safeSparkContext.getExecutorHeapDump(execId).getOrElse {
+          throw new NotFoundException("No heap dump is available.")
+        }
+      case Some(_) => throw new BadParameterException("Executor is not active.")
+      case _ => throw new NotFoundException("Executor does not exist.")
+    }
+
+    val fileName = execId match {
+      case SparkContext.DRIVER_IDENTIFIER =>
+        s"heap-dump-$appId-driver.hprof"
+      case _ => s"heap-dump-$appId-executor-$execId.hprof"
+    }
+
+    val stream = new StreamingOutput {
+      override def write(output: OutputStream): Unit = {
+        Utils.copyStream(input, output, closeStreams = true)
+      }
+    }
+
+    Response.ok(stream)
+      .header("Content-Disposition", s"attachment; filename=$fileName")
+      .header("Content-Type", MediaType.APPLICATION_OCTET_STREAM)
+      .build()
+  }
+
+  @GET
   @Path("allexecutors")
   def allExecutorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(false))
 

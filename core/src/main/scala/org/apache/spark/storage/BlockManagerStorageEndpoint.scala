@@ -78,6 +78,9 @@ class BlockManagerStorageEndpoint(
     case TriggerThreadDump =>
       context.reply(Utils.getThreadDump())
 
+    case TriggerHeapDump =>
+      context.reply(Utils.getHeapDump())
+
     case ReplicateBlock(blockId, replicas, maxReplicas) =>
       context.reply(blockManager.replicateBlock(blockId, replicas.toSet, maxReplicas))
 

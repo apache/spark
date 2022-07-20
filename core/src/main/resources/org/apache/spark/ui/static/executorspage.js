@@ -31,6 +31,18 @@ function getThreadDumpEnabled() {
   return threadDumpEnabled;
 }
 
+var heapDumpEnabled = false;
+
+/* eslint-disable no-unused-vars */
+function setHeapDumpEnabled(val) {
+  heapDumpEnabled = val;
+}
+/* eslint-enable no-unused-vars */
+
+function getHeapDumpEnabled() {
+  return threadDumpEnabled;
+}
+
 function formatLossReason(removeReason) {
   if (removeReason) {
     return removeReason
@@ -550,6 +562,13 @@ $(document).ready(function () {
               name: 'threadDumpCol',
               data: 'id', render: function (data, type) {
                 return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
+              }
+            },
+            {
+              name: 'heapDumpCol',
+              data: 'id',
+              render: function (data, type, row) {
+                return type === 'display' && row.isActive ? ("<a href='/api/v1/applications/" + appId + "/executors/" + data + "/heapdump'>Heap Dump</a>" ) : '';
               }
             },
             {

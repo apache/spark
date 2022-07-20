@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, PlatformManagedObject, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
@@ -2290,6 +2290,27 @@ private[spark] object Utils extends Logging {
           v1 > v2
         }
     }.map(threadInfoToThreadStackTrace)
+  }
+
+  /** Return a heap dump */
+  def getHeapDump(): InputStream = {
+    try {
+      val diagnosticMXBeanClass = classForName("com.sun.management.HotSpotDiagnosticMXBean")
+        .asInstanceOf[Class[PlatformManagedObject]]
+      val diagnosticMXBean = ManagementFactory.getPlatformMXBean(diagnosticMXBeanClass)
+      val dumpHeapMethod = diagnosticMXBeanClass
+        .getMethod("dumpHeap", classOf[String], classOf[Boolean])
+      val path = Files.createTempFile("heap", ".hprof")
+      Files.delete(path)
+      val absolutePath = path.toAbsolutePath.toString
+      dumpHeapMethod.invoke(diagnosticMXBean, absolutePath, Boolean.box(true))
+      val stream = Files.newInputStream(path)
+      Files.delete(path)
+      stream
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Failed to dump heap", e)
+    }
   }
 
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
