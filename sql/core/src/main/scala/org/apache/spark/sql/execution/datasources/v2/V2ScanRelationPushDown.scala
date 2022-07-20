@@ -428,8 +428,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       def findGroupColForSortOrder(sortOrder: SortOrder): Option[SortOrder] = sortOrder match {
         case SortOrder(attr: AttributeReference, direction, nullOrdering, sameOrderExpressions) =>
           findGroupColumn(aliasMap(attr)).filter { groupCol =>
-            sHolder.relation.output.exists(out => out.name.equalsIgnoreCase(groupCol.name) &&
-              out.exprId == groupCol.exprId)
+            sHolder.relation.output.exists(out => out.semanticEquals(groupCol))
           }.map(SortOrder(_, direction, nullOrdering, sameOrderExpressions))
         case _ => None
       }
