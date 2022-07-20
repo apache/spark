@@ -203,8 +203,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       Map.empty[String, String], description)
     assert(spark.catalog.listTables()
       .collect()
-      .map(t => Array(t.catalog, t.namespace.mkString("."), t.name).mkString(".")).toSet
-      == Set("testcat.my_db.my_table2"))
+      .map(t => Array(t.catalog, t.namespace.mkString("."), t.name).mkString(".")).toSet ==
+        Set("testcat.my_db.my_table2"))
   }
 
   test("list tables with database") {
