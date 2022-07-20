@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -400,6 +401,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def findGroupColumn(alias: Alias): Option[AttributeReference] = alias match {
+    case alias @ Alias(attr: AttributeReference, name) if attr.name.startsWith("group_col_") =>
+      Some(AttributeReference(name, attr.dataType)(alias.exprId))
+    case Alias(alias: Alias, _) => findGroupColumn(alias)
+    case _ => None
+  }
+
   private def pushDownLimit(plan: LogicalPlan, limit: Int): (LogicalPlan, Boolean) = plan match {
     case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
       val (isPushed, isPartiallyPushed) = PushDownUtils.pushLimit(sHolder.builder, limit)
@@ -410,12 +418,34 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case s @ Sort(order, _, operation @ ScanOperation(project, filter, sHolder: ScanBuilderHolder))
         // Without building the Scan, we do not know the resulting column names after aggregate
         // push-down, and thus can't push down Top-N which needs to know the ordering column names.
-        // TODO: we can support simple cases like GROUP BY columns directly and ORDER BY the same
-        //       columns, which we know the resulting column names: the original table columns.
-        if sHolder.pushedAggregate.isEmpty && filter.isEmpty &&
+        // In particular, we push down the simple cases like GROUP BY columns directly and ORDER BY
+        // the same columns, which we know the resulting column names: the original table columns.
+        if filter.isEmpty &&
           CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
-      val newOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
+
+      def findGroupColForSortOrder(sortOrder: SortOrder): Option[SortOrder] = sortOrder match {
+        case SortOrder(attr: AttributeReference, direction, nullOrdering, sameOrderExpressions)
+          if aliasMap.contains(attr) =>
+          val newAttr = findGroupColumn(aliasMap(attr))
+          if (newAttr.isDefined) {
+            Some(SortOrder(newAttr.get, direction, nullOrdering, sameOrderExpressions))
+          } else {
+            None
+          }
+        case _ => None
+      }
+
+      lazy val orderByGroupCols = order.flatMap(findGroupColForSortOrder)
+      if (sHolder.pushedAggregate.isDefined && orderByGroupCols.length != order.length) {
+        return (s, false)
+      }
+
+      val newOrder = if (sHolder.pushedAggregate.isDefined) {
+        orderByGroupCols
+      } else {
+        order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
+      }
       val normalizedOrders = DataSourceStrategy.normalizeExprs(
         newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
