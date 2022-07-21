@@ -126,7 +126,9 @@ private[spark] class SparkArithmeticException(
 
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull}
+  override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context.toArray
+}
 
 /**
  * Unsupported operation exception thrown from Spark with an error class.
@@ -199,7 +201,9 @@ private[spark] class SparkDateTimeException(
 
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull}
+  override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context.toArray
+}
 
 /**
  * Hadoop file already exists exception thrown from Spark with an error class.
@@ -245,7 +249,9 @@ private[spark] class SparkNumberFormatException(
 
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull}
+  override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context.toArray
+}
 
 /**
  * No such method exception thrown from Spark with an error class.
@@ -343,6 +349,7 @@ private[spark] class SparkRuntimeException(
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass
   override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context.toArray
 }
 
 /**
@@ -376,6 +383,7 @@ private[spark] class SparkArrayIndexOutOfBoundsException(
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass
   override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context.toArray
 }
 
 /**
@@ -415,6 +423,7 @@ private[spark] class SparkNoSuchElementException(
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass
   override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context.toArray
 }
 
 /**
