@@ -1917,7 +1917,8 @@ case class ArrayMin(child: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(array) - Returns the maximum value in the array. NaN is greater than
-    any non-NaN elements for double/float type. NULL elements are skipped.""",
+    any non-NaN elements for double/float type. NULL elements are skipped.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, null, 3));

@@ -82,7 +82,9 @@ trait ExpressionWithRandomSeed extends Expression {
       > SELECT _FUNC_(null);
        0.7604953758285915
   """,
-  note = "The function is non-deterministic in general case.",
+  note = """
+    The function is non-deterministic in general case.
+  """,
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
@@ -133,7 +135,9 @@ object Rand {
       > SELECT _FUNC_(null);
        1.6034991609278433
   """,
-  note = "The function is non-deterministic in general case.",
+  note = """
+    The function is non-deterministic in general case.
+  """,
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit

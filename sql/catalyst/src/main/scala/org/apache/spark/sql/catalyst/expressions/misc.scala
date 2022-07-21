@@ -195,7 +195,9 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
       > SELECT _FUNC_();
        46707d92-02f4-4817-8116-a4c3b23e6266
   """,
-  note = "The function is non-deterministic.",
+  note = """
+    The function is non-deterministic.
+  """,
   since = "2.3.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit

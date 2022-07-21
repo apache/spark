@@ -48,7 +48,8 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = """
     _FUNC_(expr[, relativeSD]) - Returns the estimated cardinality by HyperLogLog++.
-      `relativeSD` defines the maximum relative standard deviation allowed.""",
+      `relativeSD` defines the maximum relative standard deviation allowed.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col1) FROM VALUES (1), (1), (2), (2), (3) tab(col1);
