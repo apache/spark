@@ -1161,7 +1161,7 @@ class CustomDriverMetricScanBuilder extends SimpleScanBuilder {
     Array(new SimpleCustomDriverMetric)
   }
 
-  override def reportCustomDriverMetrics(): Array[CustomTaskMetric] = {
+  override def reportDriverMetrics(): Array[CustomTaskMetric] = {
     Array(new SimpleCustomDriverTaskMetric(partitionCount))
   }
 }

@@ -130,12 +130,11 @@ public interface Scan {
   }
 
   /**
-   * Return an array of custom metrics which are collected with values at the driver side only.
+   * Returns an array of custom metrics which are collected with values at the driver side only.
    * Note that these metrics must be included in the supported custom metrics reported by
    * `supportedCustomMetrics`.
    */
-  default CustomTaskMetric[] reportCustomDriverMetrics() {
-    CustomTaskMetric[] NO_METRICS = {};
-    return NO_METRICS;
+  default CustomTaskMetric[] reportDriverMetrics() {
+    return new CustomTaskMetric[]{};
   }
 }

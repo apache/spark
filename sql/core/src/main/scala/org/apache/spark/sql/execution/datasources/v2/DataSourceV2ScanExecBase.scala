@@ -169,7 +169,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   protected def postDriverMetrics(): Unit = {
-    val driveSQLMetrics = scan.reportCustomDriverMetrics().map( customTaskMetric => {
+    val driveSQLMetrics = scan.reportDriverMetrics().map(customTaskMetric => {
       val metric = metrics(customTaskMetric.name())
       metric.set(customTaskMetric.value())
       metric
