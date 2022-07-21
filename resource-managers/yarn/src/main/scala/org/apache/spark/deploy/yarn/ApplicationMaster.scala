@@ -333,6 +333,7 @@ private[spark] class ApplicationMaster(
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + StringUtils.stringifyException(e))
         if (!unregistered) {
+          // It's ok to clean staging dir first because unmanaged AM can't be retried.
           cleanupStagingDir(stagingDir)
           unregister(finalStatus, finalMsg)
         }
@@ -354,6 +355,7 @@ private[spark] class ApplicationMaster(
       finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
     }
     if (!unregistered) {
+      // It's ok to clean staging dir first because unmanaged AM can't be retried.
       cleanupStagingDir(stagingDir)
       unregister(finalStatus, finalMsg)
     }
