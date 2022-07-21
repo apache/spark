@@ -150,10 +150,9 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * If sum is not null, then return the sum.
    */
   protected def getEvaluateExpression(
-      queryContext: Option[QueryContext]): Expression = resultType match {
+      context: Option[QueryContext]): Expression = resultType match {
     case d: DecimalType =>
-      val checkOverflowInSum =
-        CheckOverflowInSum(sum, d, !useAnsiAdd, queryContext)
+      val checkOverflowInSum = CheckOverflowInSum(sum, d, !useAnsiAdd, context)
       If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
     case _ if shouldTrackIsEmpty =>
       If(isEmpty, Literal.create(null, resultType), sum)

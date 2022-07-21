@@ -27,28 +27,28 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 object UTF8StringUtils {
 
-  def toLongExact(s: UTF8String, errorContext: Option[QueryContext]): Long =
-    withException(s.toLongExact, errorContext, LongType, s)
+  def toLongExact(s: UTF8String, context: Option[QueryContext]): Long =
+    withException(s.toLongExact, context, LongType, s)
 
-  def toIntExact(s: UTF8String, errorContext: Option[QueryContext]): Int =
-    withException(s.toIntExact, errorContext, IntegerType, s)
+  def toIntExact(s: UTF8String, context: Option[QueryContext]): Int =
+    withException(s.toIntExact, context, IntegerType, s)
 
-  def toShortExact(s: UTF8String, errorContext: Option[QueryContext]): Short =
-    withException(s.toShortExact, errorContext, ShortType, s)
+  def toShortExact(s: UTF8String, context: Option[QueryContext]): Short =
+    withException(s.toShortExact, context, ShortType, s)
 
-  def toByteExact(s: UTF8String, errorContext: Option[QueryContext]): Byte =
-    withException(s.toByteExact, errorContext, ByteType, s)
+  def toByteExact(s: UTF8String, context: Option[QueryContext]): Byte =
+    withException(s.toByteExact, context, ByteType, s)
 
   private def withException[A](
       f: => A,
-      errorContext: Option[QueryContext],
+      context: Option[QueryContext],
       to: DataType,
       s: UTF8String): A = {
     try {
       f
     } catch {
       case e: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, s, errorContext)
+        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, s, context)
     }
   }
 }

@@ -103,7 +103,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         decimalPrecision.toString,
         decimalScale.toString,
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context)
   }
 
   def invalidInputInCastToDatetimeError(
@@ -118,7 +118,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context)
   }
 
   def invalidInputSyntaxForBooleanError(
@@ -131,7 +131,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(StringType),
         toSQLType(BooleanType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context)
   }
 
   def invalidInputInCastToNumberError(
@@ -145,7 +145,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(StringType),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context)
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -179,7 +179,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context)
   }
 
   def invalidArrayIndexError(
@@ -192,7 +192,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLValue(index, IntegerType),
         toSQLValue(numElements, IntegerType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context)
   }
 
   def invalidElementAtIndexError(
@@ -206,7 +206,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
           toSQLValue(index, IntegerType),
           toSQLValue(numElements, IntegerType),
           toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context)
   }
 
   def mapKeyNotExistError(
@@ -218,7 +218,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         toSQLValue(key, dataType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context)
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
@@ -484,7 +484,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
       messageParameters = Array(message, alternative, SQLConf.ANSI_ENABLED.key),
-      queryContext = context)
+      context = context)
   }
 
   def unaryMinusCauseOverflowError(originValue: Int): ArithmeticException = {

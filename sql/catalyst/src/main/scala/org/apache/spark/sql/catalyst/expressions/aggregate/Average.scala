@@ -87,7 +87,7 @@ abstract class AverageBase
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
-  protected def getEvaluateExpression(queryContext: Option[QueryContext]) = child.dataType match {
+  protected def getEvaluateExpression(context: Option[QueryContext]) = child.dataType match {
     case _: DecimalType =>
       If(EqualTo(count, Literal(0L)),
         Literal(null, resultType),
@@ -95,7 +95,7 @@ abstract class AverageBase
           sum,
           count.cast(DecimalType.LongDecimal),
           resultType.asInstanceOf[DecimalType],
-          queryContext,
+          context,
           !useAnsiAdd))
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),

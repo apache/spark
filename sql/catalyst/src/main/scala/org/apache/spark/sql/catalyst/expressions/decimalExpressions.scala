@@ -157,7 +157,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    queryContext: Option[QueryContext] = None) extends UnaryExpression {
+    context: Option[QueryContext] = None) extends UnaryExpression {
 
   override def nullable: Boolean = true
 
@@ -165,20 +165,20 @@ case class CheckOverflowInSum(
     val value = child.eval(input)
     if (value == null) {
       if (nullOnOverflow) null
-      else throw QueryExecutionErrors.overflowInSumOfDecimalError(queryContext)
+      else throw QueryExecutionErrors.overflowInSumOfDecimalError(context)
     } else {
       value.asInstanceOf[Decimal].toPrecision(
         dataType.precision,
         dataType.scale,
         Decimal.ROUND_HALF_UP,
         nullOnOverflow,
-        queryContext)
+        context)
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    val errorContextCode = ctx.addReferenceObj("errCtx", queryContext)
+    val errorContextCode = ctx.addReferenceObj("errCtx", context)
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
@@ -253,12 +253,12 @@ case class DecimalDivideWithOverflowCheck(
     left: Expression,
     right: Expression,
     override val dataType: DecimalType,
-    avgQueryContext: Option[QueryContext],
+    context: Option[QueryContext],
     nullOnOverflow: Boolean)
   extends BinaryExpression with ExpectsInputTypes with SupportQueryContext {
   override def nullable: Boolean = nullOnOverflow
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, DecimalType)
-  override def initQueryContext(): Option[QueryContext] = avgQueryContext
+  override def initQueryContext(): Option[QueryContext] = context
   def decimalMethod: String = "$div"
 
   override def eval(input: InternalRow): Any = {
