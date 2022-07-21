@@ -649,6 +649,18 @@ class QueryExecutionErrorsSuite
       Map.empty
     )
   }
+
+  test("ARITHMETIC_OVERFLOW: overflow on adding months") {
+    checkError(
+      exception = intercept[SparkArithmeticException](
+        sql("select add_months('5500000-12-31', 10000000)").collect()
+      ),
+      errorClass = "ARITHMETIC_OVERFLOW",
+      parameters = Map(
+        "message" -> "integer overflow",
+        "alternative" -> "",
+        "config" -> SQLConf.ANSI_ENABLED.key))
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
