@@ -28,8 +28,8 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
  * To run this benchmark:
  * {{{
  * 1. without sbt: bin/spark-submit --class <this class> <spark mllib test jar>
- * 2. build/sbt "mllib-local/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/test:runMain <this class>"
+ * 2. build/sbt "mllib-local/Test/runMain <this class>"
+ * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/Test/runMain <this class>"
  *    Results will be written to "benchmarks/BLASBenchmark-results.txt".
  * }}}
  */

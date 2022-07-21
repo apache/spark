@@ -122,6 +122,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   override def afterEach(): Unit = {
     try {
       sessionCatalog.reset()
+      spark.sessionState.catalogManager.reset()
     } finally {
       super.afterEach()
     }
@@ -766,6 +767,17 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
       Map.empty[String, String], "")
 
+    assert(spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
+  }
+
+  test("SPARK-39810: Catalog.tableExists should handle nested namespace") {
+    val tableSchema = new StructType().add("i", "int")
+    val catalogName = "testcat"
+    val dbName = "my_db2.my_db3"
+    val tableName = "my_table2"
+    assert(!spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
+    createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName, tableSchema,
+      Map.empty[String, String], "")
     assert(spark.catalog.tableExists(Array(catalogName, dbName, tableName).mkString(".")))
   }
 

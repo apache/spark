@@ -151,19 +151,19 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateTable(ResolvedDBObjectName(catalog, name), _, _, _, _)
+    case c @ CreateTable(ResolvedIdentifier(catalog, ident), _, _, _, _)
         if isSessionCatalog(catalog) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
       if (!isV2Provider(provider)) {
-        constructV1TableCmd(None, c.tableSpec, name, c.tableSchema, c.partitioning,
+        constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
         c
       }
 
-    case c @ CreateTableAsSelect(ResolvedDBObjectName(catalog, name), _, _, _, writeOptions, _)
+    case c @ CreateTableAsSelect(ResolvedIdentifier(catalog, ident), _, _, _, writeOptions, _)
         if isSessionCatalog(catalog) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
@@ -173,7 +173,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ctas = true)
 
       if (!isV2Provider(provider)) {
-        constructV1TableCmd(Some(c.query), c.tableSpec, name, new StructType, c.partitioning,
+        constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
         c
@@ -187,7 +187,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ ReplaceTable(ResolvedDBObjectName(catalog, _), _, _, _, _)
+    case c @ ReplaceTable(ResolvedIdentifier(catalog, _), _, _, _, _)
         if isSessionCatalog(catalog) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
@@ -196,7 +196,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case c @ ReplaceTableAsSelect(ResolvedDBObjectName(catalog, _), _, _, _, _, _)
+    case c @ ReplaceTableAsSelect(ResolvedIdentifier(catalog, _), _, _, _, _, _)
         if isSessionCatalog(catalog) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
@@ -358,11 +358,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         originalText,
         query)
 
-    case CreateView(ResolvedDBObjectName(catalog, nameParts), userSpecifiedColumns, comment,
+    case CreateView(ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment,
         properties, originalText, child, allowExisting, replace) =>
       if (isSessionCatalog(catalog)) {
         CreateViewCommand(
-          name = attachSessionCatalog(nameParts.asTableIdentifier),
+          name = attachSessionCatalog(ident.asTableIdentifier),
           userSpecifiedColumns = userSpecifiedColumns,
           comment = comment,
           properties = properties,
@@ -419,17 +419,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "REFRESH FUNCTION")
       }
 
-    case CreateFunction(ResolvedDBObjectName(catalog, nameParts),
+    case CreateFunction(ResolvedIdentifier(catalog, ident),
         className, resources, ignoreIfExists, replace) =>
       if (isSessionCatalog(catalog)) {
-        val database = if (nameParts.length > 2) {
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(nameParts)
-        } else if (nameParts.length == 2) {
-          Some(nameParts.head)
+        val database = if (ident.namespace().length > 1) {
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(ident.asMultipartIdentifier)
+        } else if (ident.namespace().length == 1) {
+          Some(ident.namespace().head)
         } else {
           None
         }
-        val identifier = FunctionIdentifier(nameParts.last, database)
+        val identifier = FunctionIdentifier(ident.name(), database)
         CreateFunctionCommand(
           identifier,
           className,
@@ -445,13 +445,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   private def constructV1TableCmd(
       query: Option[LogicalPlan],
       tableSpec: TableSpec,
-      name: Seq[String],
+      ident: Identifier,
       tableSchema: StructType,
       partitioning: Seq[Transform],
       ignoreIfExists: Boolean,
       storageFormat: CatalogStorageFormat,
       provider: String): CreateTableV1 = {
-    val tableDesc = buildCatalogTable(attachSessionCatalog(name.asTableIdentifier), tableSchema,
+    val tableDesc = buildCatalogTable(attachSessionCatalog(ident.asTableIdentifier), tableSchema,
         partitioning, tableSpec.properties, provider,
         tableSpec.location, tableSpec.comment, storageFormat, tableSpec.external)
     val mode = if (ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
@@ -628,12 +628,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   private object DatabaseNameInSessionCatalog {
-    def unapply(resolved: ResolvedDBObjectName): Option[String] = resolved match {
-      case ResolvedDBObjectName(catalog, _) if !isSessionCatalog(catalog) => None
-      case ResolvedDBObjectName(_, Seq(dbName)) => Some(dbName)
+    def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
+      case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
       case _ =>
-        assert(resolved.nameParts.length > 1)
-        throw QueryCompilationErrors.invalidDatabaseNameError(resolved.nameParts.quoted)
+        assert(resolved.namespace.length > 1)
+        throw QueryCompilationErrors.invalidDatabaseNameError(resolved.namespace.quoted)
     }
   }
 }

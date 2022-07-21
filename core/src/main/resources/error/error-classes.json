@@ -1,7 +1,7 @@
 {
-  "AMBIGUOUS_FIELD_NAME" : {
+  "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
-      "Field name <fieldName> is ambiguous and has <n> matching fields in the struct."
+      "Column or field <name> is ambiguous and has <n> matches."
     ],
     "sqlState" : "42000"
   },
@@ -26,6 +26,12 @@
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal"
+    ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_PARSE_TIMESTAMP" : {
+    "message" : [
+      "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "42000"
   },
@@ -207,6 +213,12 @@
       "Invalid bucket file: <path>"
     ]
   },
+  "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
+    "message" : [
+      "Column or field <name> is of type <type> while it's required to be <expectedType>."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [
       "Field name <fieldName> is invalid: <path> is not a struct."
@@ -294,6 +306,18 @@
       "UDF class <className> doesn't implement any UDF interface"
     ]
   },
+  "NULLABLE_ARRAY_OR_MAP_ELEMENT" : {
+    "message" : [
+      "Array or map at <columnPath> contains nullable element while it's required to be non-nullable."
+    ],
+    "sqlState" : "42000"
+  },
+  "NULLABLE_COLUMN_OR_FIELD" : {
+    "message" : [
+      "Column or field <name> is nullable while it's required to be non-nullable."
+    ],
+    "sqlState" : "42000"
+  },
   "NULL_COMPARISON_RESULT" : {
     "message" : [
       "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
@@ -354,6 +378,12 @@
   "UNRESOLVED_COLUMN" : {
     "message" : [
       "A column or function parameter with name <objectName> cannot be resolved. Did you mean one of the following? [<objectList>]"
+    ],
+    "sqlState" : "42000"
+  },
+  "UNRESOLVED_FIELD" : {
+    "message" : [
+      "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>. Did you mean one of the following? [<proposal>]"
     ],
     "sqlState" : "42000"
   },

@@ -583,13 +583,14 @@ listColumns <- function(tableName, databaseName = NULL) {
 #' This includes all temporary functions.
 #'
 #' @param databaseName (optional) name of the database
+#'                     The database name can be qualified with catalog name since 3.4.0.
 #' @return a SparkDataFrame of the list of function descriptions.
 #' @rdname listFunctions
 #' @name listFunctions
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' listFunctions()
+#' listFunctions(spark_catalog.default)
 #' }
 #' @note since 2.2.0
 listFunctions <- function(databaseName = NULL) {
@@ -604,6 +605,78 @@ listFunctions <- function(databaseName = NULL) {
     handledCallJMethod(catalog, "listFunctions", databaseName)
   }
   dataFrame(callJMethod(jdst, "toDF"))
+}
+
+#' Checks if the function with the specified name exists.
+#'
+#' Checks if the function with the specified name exists.
+#'
+#' @param functionName name of the function, allowed to be qualified with catalog name
+#' @rdname functionExists
+#' @name functionExists
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' functionExists("spark_catalog.default.myFunc")
+#' }
+#' @note since 3.4.0
+functionExists <- function(functionName) {
+  sparkSession <- getSparkSession()
+  if (class(functionName) != "character") {
+    stop("functionName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "functionExists", functionName)
+}
+
+#' Get the function with the specified name
+#'
+#' Get the function with the specified name
+#'
+#' @param functionName name of the function, allowed to be qualified with catalog name
+#' @return A named list.
+#' @rdname getFunc
+#' @name getFunc
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' func <- getFunc("spark_catalog.default.myFunc")
+#' }
+#' @note since 3.4.0. Use different name with the scala/python side, to avoid the
+#'       signature conflict with built-in "getFunction".
+getFunc <- function(functionName) {
+  sparkSession <- getSparkSession()
+  if (class(functionName) != "character") {
+    stop("functionName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  jfunc <- handledCallJMethod(catalog, "getFunction", functionName)
+
+  ret <- list(name = callJMethod(jfunc, "name"))
+  jcata <- callJMethod(jfunc, "catalog")
+  if (is.null(jcata)) {
+    ret$catalog <- NA
+  } else {
+    ret$catalog <- jcata
+  }
+
+  jns <- callJMethod(jfunc, "namespace")
+  if (is.null(jns)) {
+    ret$namespace <- NA
+  } else {
+    ret$namespace <- jns
+  }
+
+  jdesc <- callJMethod(jfunc, "description")
+  if (is.null(jdesc)) {
+    ret$description <- NA
+  } else {
+    ret$description <- jdesc
+  }
+
+  ret$className <- callJMethod(jfunc, "className")
+  ret$isTemporary <- callJMethod(jfunc, "isTemporary")
+  ret
 }
 
 #' Recovers all the partitions in the directory of a table and update the catalog

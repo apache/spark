@@ -19,29 +19,30 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
 
 /**
- * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
- * to the corresponding v2 commands if the resolved catalog is not the session catalog.
+ * Resolves the catalog of the name parts for table/view/function/namespace.
  */
 class ResolveCatalogs(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case UnresolvedDBObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
-      ResolvedDBObjectName(catalog, name)
-
-    case UnresolvedDBObjectName(CatalogAndIdentifier(catalog, identifier), _) =>
-      ResolvedDBObjectName(catalog, identifier.namespace :+ identifier.name())
-  }
-
-  object NonSessionCatalogAndTable {
-    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case NonSessionCatalogAndIdentifier(catalog, ident) =>
-        Some(catalog -> ident.asMultipartIdentifier)
-      case _ => None
-    }
+    case UnresolvedIdentifier(CatalogAndIdentifier(catalog, identifier)) =>
+      ResolvedIdentifier(catalog, identifier)
+    case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
+      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _, _) =>
+      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
+      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case s @ ShowFunctions(UnresolvedNamespace(Seq()), _, _, _, _) =>
+      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case a @ AnalyzeTables(UnresolvedNamespace(Seq()), _) =>
+      a.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case UnresolvedNamespace(Seq()) =>
+      ResolvedNamespace(currentCatalog, Seq.empty[String])
+    case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
+      ResolvedNamespace(catalog, ns)
   }
 }

@@ -23,8 +23,8 @@ select to_timestamp('-12', 'yy')
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '-12' could not be parsed at index 0. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text '-12' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -62,8 +62,8 @@ select to_timestamp('366', 'D')
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid date 'DayOfYear 366' as '1970' is not a leap year. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Invalid date 'DayOfYear 366' as '1970' is not a leap year. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -101,8 +101,8 @@ select to_timestamp('30-365', 'dd-DDD')
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -110,8 +110,8 @@ select to_timestamp('11-365', 'MM-DDD')
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Conflict found: Field MonthOfYear 11 differs from MonthOfYear 12 derived from 1970-12-31. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Conflict found: Field MonthOfYear 11 differs from MonthOfYear 12 derived from 1970-12-31. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -119,8 +119,8 @@ select to_timestamp('2019-366', 'yyyy-DDD')
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '2019-366' could not be parsed: Invalid date 'DayOfYear 366' as '2019' is not a leap year. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text '2019-366' could not be parsed: Invalid date 'DayOfYear 366' as '2019' is not a leap year. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -128,8 +128,8 @@ select to_timestamp('12-30-365', 'MM-dd-DDD')
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -137,8 +137,8 @@ select to_timestamp('2020-01-365', 'yyyy-dd-DDD')
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '2020-01-365' could not be parsed: Conflict found: Field DayOfMonth 30 differs from DayOfMonth 1 derived from 2020-12-30. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text '2020-01-365' could not be parsed: Conflict found: Field DayOfMonth 30 differs from DayOfMonth 1 derived from 2020-12-30. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -146,8 +146,8 @@ select to_timestamp('2020-10-350', 'yyyy-MM-DDD')
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '2020-10-350' could not be parsed: Conflict found: Field MonthOfYear 12 differs from MonthOfYear 10 derived from 2020-12-15. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text '2020-10-350' could not be parsed: Conflict found: Field MonthOfYear 12 differs from MonthOfYear 10 derived from 2020-12-15. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -155,8 +155,8 @@ select to_timestamp('2020-11-31-366', 'yyyy-MM-dd-DDD')
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '2020-11-31-366' could not be parsed: Invalid date 'NOVEMBER 31'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text '2020-11-31-366' could not be parsed: Invalid date 'NOVEMBER 31'. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -174,8 +174,8 @@ select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -183,8 +183,8 @@ select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text 'Unparseable' could not be parsed at index 0. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text 'Unparseable' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -192,8 +192,8 @@ select to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -201,8 +201,8 @@ select to_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text 'Unparseable' could not be parsed at index 0. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text 'Unparseable' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -210,8 +210,8 @@ select unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -219,8 +219,8 @@ select unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text 'Unparseable' could not be parsed at index 0. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text 'Unparseable' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -228,8 +228,8 @@ select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
@@ -237,8 +237,8 @@ select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text 'Unparseable' could not be parsed at index 0. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[CANNOT_PARSE_TIMESTAMP] Text 'Unparseable' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 
 -- !query
