@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
+import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest, RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructField, StructType}
 
 class PythonUDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -102,5 +105,40 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     for (metric <- pythonSQLMetrics) {
       assert(executionMetrics.contains(metric))
     }
+
+  test("SPARK-39931: groupBatchAndProject") {
+    assume(shouldTestPythonUDFs)
+
+    def generateRows(schema: StructType, numRows: Int): Array[InternalRow] = {
+      val generator = RandomDataGenerator.forType(schema, nullable = false).get
+      val toRow = RowEncoder(schema).createSerializer()
+      (1 to numRows).map(_ => toRow(generator().asInstanceOf[Row]).copy()).toArray
+    }
+
+    val inputSchema = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("flt", DoubleType)
+    ))
+    val inputAttributes = inputSchema.toAttributes
+
+    val input = generateRows(inputSchema, 10).iterator
+
+    val grouping = inputAttributes.slice(0, 1)
+    val dedupSchema = inputAttributes
+    val outputSchema = StructType(Seq(
+      StructField("key", StructType(Seq(
+        StructField("id", IntegerType)
+      ))),
+      StructField("val", StructType(Seq(
+        StructField("id", IntegerType),
+        StructField("flt", DoubleType),
+      )))
+    ))
+
+    val actual = PandasGroupUtils.groupBatchAndProject(
+      input, grouping, inputAttributes, dedupSchema, 10000)
+      .toList.map { it => it.toList }
+
+    assert(actual === Seq())
   }
 }

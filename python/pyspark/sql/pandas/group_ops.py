@@ -219,23 +219,25 @@ class PandasGroupedOpsMixin:
 
         assert isinstance(self, GroupedData)
 
+        the_func = func
         if batchSize:
-            print(f'calling flatMapGroupsInPandas with batchSize={batchSize}')
+            print(f'Calling flatMapGroupsInPandas with batchSize={batchSize}')
 
             # TODO: allow for func that accepts DataFrameGroupBy
-            def batch_func(pdf: DataFrameLike) -> DataFrameLike:
+            def batch_func(pdf):
                 # TODO: unwrap group dataframe
-                print(f'retrieved pandas dataframe:\n{pdf}')
-                print(f'grouped pandas dataframe:\n{pdf.groupby(pdf.columns[0])}')
-                print(f'returned pandas dataframe:\n{pdf.groupby(pdf.columns[0]).apply(func)}')
+                print(f'Retrieved pandas dataframe:\n{pdf}')
+                print(f'Grouped pandas dataframe:\n{pdf.groupby(pdf.columns[0])}')
+                print(f'Returned pandas dataframe:\n{pdf.groupby(pdf.columns[0]).apply(func)}')
                 return pdf.groupby(pdf.columns[0]).apply(func)
 
-            func = batch_func
+            the_func = batch_func
 
-        udf = pandas_udf(func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
+        udf = pandas_udf(the_func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
-        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr(), batchSize)
+        jbs = self._df._sc._jvm.scala.Option.apply(batchSize)
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr(), jbs)
         return DataFrame(jdf, self.session)
 
     def applyInPandasWithState(

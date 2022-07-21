@@ -390,6 +390,16 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertAmbiguousSelfJoin(df9.join(df10, df9("x") === df10("y")))
     assertAmbiguousSelfJoin(df10.join(df9, df9("x") === df10("y")))
 
+    // Test for FlatMapGroupsInPandas with batchSize
+    {
+      val flatMapGroupsInPandasUDF = PythonUDF("flagMapGroupsInPandasUDF", null,
+        StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
+        Seq.empty,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        true)
+      df1.groupBy($"key1").flatMapGroupsInPandas(flatMapGroupsInPandasUDF, Some(10000)).collect()
+    }
+
     // Test for FlatMapCoGroupsInPandas
     val flatMapCoGroupsInPandasUDF = PythonUDF("flagMapCoGroupsInPandasUDF", null,
       StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
