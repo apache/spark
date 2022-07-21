@@ -18,7 +18,7 @@ TakeOrderedAndProject (31)
       :     :     :                          +- * Project (4)
       :     :     :                             +- * Filter (3)
       :     :     :                                +- * ColumnarToRow (2)
-      :     :     :                                   +- Scan parquet default.store_sales (1)
+      :     :     :                                   +- Scan parquet spark_catalog.default.store_sales (1)
       :     :     +- BroadcastExchange (19)
       :     :        +- * Project (18)
       :     :           +- * Filter (17)
@@ -28,11 +28,11 @@ TakeOrderedAndProject (31)
       :     +- BroadcastExchange (25)
       :        +- * Filter (24)
       :           +- * ColumnarToRow (23)
-      :              +- Scan parquet default.item (22)
+      :              +- Scan parquet spark_catalog.default.item (22)
       +- ReusedExchange (28)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3, ss_sold_date_sk#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -124,7 +124,7 @@ Join condition: None
 Output [3]: [item_sk#10, rnk#14, item_sk#15]
 Input [4]: [item_sk#10, rnk#14, item_sk#15, rnk#17]
 
-(22) Scan parquet default.item
+(22) Scan parquet spark_catalog.default.item
 Output [2]: [i_item_sk#18, i_product_name#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
@@ -176,10 +176,10 @@ Subquery:1 Hosting operator id = 8 Hosting Expression = Subquery scalar-subquery
       +- * Project (35)
          +- * Filter (34)
             +- * ColumnarToRow (33)
-               +- Scan parquet default.store_sales (32)
+               +- Scan parquet spark_catalog.default.store_sales (32)
 
 
-(32) Scan parquet default.store_sales
+(32) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_addr_sk#24, ss_store_sk#25, ss_net_profit#26, ss_sold_date_sk#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]

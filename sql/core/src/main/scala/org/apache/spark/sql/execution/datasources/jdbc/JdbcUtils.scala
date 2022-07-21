@@ -38,8 +38,8 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
-import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp, toJavaTimestampNoRebase}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -473,11 +473,20 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
 
-    case TimestampType | TimestampNTZType =>
+    case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
           row.setLong(pos, DateTimeUtils.fromJavaTimestamp(t))
+        } else {
+          row.update(pos, null)
+        }
+
+    case TimestampNTZType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val t = rs.getTimestamp(pos + 1)
+        if (t != null) {
+          row.setLong(pos, DateTimeUtils.fromJavaTimestampNoRebase(t))
         } else {
           row.update(pos, null)
         }
@@ -594,16 +603,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
 
     case TimestampNTZType =>
-      if (conf.datetimeJava8ApiEnabled) {
-        (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
-      } else {
-        (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(
-            pos + 1,
-            toJavaTimestamp(localDateTimeToMicros(row.getAs[java.time.LocalDateTime](pos)))
-          )
-      }
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        val micros = localDateTimeToMicros(row.getAs[java.time.LocalDateTime](pos))
+        stmt.setTimestamp(pos + 1, toJavaTimestampNoRebase(micros))
 
     case DateType =>
       if (conf.datetimeJava8ApiEnabled) {
@@ -1031,14 +1033,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def createIndex(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String],
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options,
-      dialect.createIndex(indexName, tableName, columns, columnsProperties, properties))
+      dialect.createIndex(indexName, tableIdent, columns, columnsProperties, properties))
   }
 
   /**
@@ -1047,10 +1049,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def indexExists(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     val dialect = JdbcDialects.get(options.url)
-    dialect.indexExists(conn, indexName, tableName, options)
+    dialect.indexExists(conn, indexName, tableIdent, options)
   }
 
   /**
@@ -1059,10 +1061,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def dropIndex(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, dialect.dropIndex(indexName, tableName))
+    executeStatement(conn, options, dialect.dropIndex(indexName, tableIdent))
   }
 
   /**
@@ -1070,10 +1072,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def listIndexes(
       conn: Connection,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
     val dialect = JdbcDialects.get(options.url)
-    dialect.listIndexes(conn, tableName, options)
+    dialect.listIndexes(conn, tableIdent, options)
   }
 
   private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
@@ -1112,10 +1114,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def processIndexProperties(
       properties: util.Map[String, String],
-      catalogName: String): (String, Array[String]) = {
+      dialectName: String): (String, Array[String]) = {
     var indexType = ""
     val indexPropertyList: ArrayBuffer[String] = ArrayBuffer[String]()
-    val supportedIndexTypeList = getSupportedIndexTypeList(catalogName)
+    val supportedIndexTypeList = getSupportedIndexTypeList(dialectName)
 
     if (!properties.isEmpty) {
       properties.asScala.foreach { case (k, v) =>
@@ -1145,8 +1147,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     false
   }
 
-  def getSupportedIndexTypeList(catalogName: String): Array[String] = {
-    catalogName match {
+  def getSupportedIndexTypeList(dialectName: String): Array[String] = {
+    dialectName match {
       case "mysql" => Array("BTREE", "HASH")
       case "postgresql" => Array("BTREE", "HASH", "BRIN")
       case _ => Array.empty

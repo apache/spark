@@ -26,7 +26,6 @@ import scala.collection.JavaConverters._
 
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
@@ -45,8 +44,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends QueryTest
-  with BeforeAndAfter with PrivateMethodTester with SharedSparkSession {
+class JDBCSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -1950,13 +1948,17 @@ class JDBCSuite extends QueryTest
             .option("dbtable", tableName)
             .save()
 
-          val res = spark.read.format("jdbc")
-            .option("inferTimestampNTZType", "true")
-            .option("url", urlWithUserAndPass)
-            .option("dbtable", tableName)
-            .load()
+          DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+            DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+              val res = spark.read.format("jdbc")
+                .option("inferTimestampNTZType", "true")
+                .option("url", urlWithUserAndPass)
+                .option("dbtable", tableName)
+                .load()
 
-          checkAnswer(res, df)
+              checkAnswer(res, df)
+            }
+          }
         }
       }
     }

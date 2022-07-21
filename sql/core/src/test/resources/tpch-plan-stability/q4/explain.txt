@@ -9,15 +9,15 @@
                   :- * Project (4)
                   :  +- * Filter (3)
                   :     +- * ColumnarToRow (2)
-                  :        +- Scan parquet default.orders (1)
+                  :        +- Scan parquet spark_catalog.default.orders (1)
                   +- BroadcastExchange (9)
                      +- * Project (8)
                         +- * Filter (7)
                            +- * ColumnarToRow (6)
-                              +- Scan parquet default.lineitem (5)
+                              +- Scan parquet spark_catalog.default.lineitem (5)
 
 
-(1) Scan parquet default.orders
+(1) Scan parquet spark_catalog.default.orders
 Output [3]: [o_orderkey#1, o_orderdate#2, o_orderpriority#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
@@ -35,7 +35,7 @@ Condition : ((isnotnull(o_orderdate#2) AND (o_orderdate#2 >= 1993-07-01)) AND (o
 Output [2]: [o_orderkey#1, o_orderpriority#3]
 Input [3]: [o_orderkey#1, o_orderdate#2, o_orderpriority#3]
 
-(5) Scan parquet default.lineitem
+(5) Scan parquet spark_catalog.default.lineitem
 Output [3]: [l_orderkey#4, l_commitdate#5, l_receiptdate#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]

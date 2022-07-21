@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
 
 /**
@@ -44,12 +45,13 @@ trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase
         .collect()
 
       val namePrefix = if (conf.useV1Command) "Database" else "Namespace"
-      assert(result.length == 4)
-      assert(result(0) === Row(s"$namePrefix Name", ns))
-      assert(result(1) === Row("Comment", ""))
+      assert(result.length == 5)
+      assert(result(0) === Row(s"Catalog Name", SESSION_CATALOG_NAME))
+      assert(result(1) === Row(s"$namePrefix Name", ns))
+      assert(result(2) === Row("Comment", ""))
       // Check only the key for "Location" since its value depends on warehouse path, etc.
-      assert(result(2).getString(0) === "Location")
-      assert(result(3) === Row("Properties", ""))
+      assert(result(3).getString(0) === "Location")
+      assert(result(4) === Row("Properties", ""))
     }
   }
 }

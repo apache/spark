@@ -24,7 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -88,6 +88,10 @@ class ResourceProfile(
 
   private[spark] def getPySparkMemory: Option[Long] = {
     executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount)
+  }
+
+  private[spark] def getExecutorMemory: Option[Long] = {
+    executorResources.get(ResourceProfile.MEMORY).map(_.amount)
   }
 
   /*
@@ -336,9 +340,25 @@ object ResourceProfile extends Logging {
 
   private def getDefaultExecutorResources(conf: SparkConf): Map[String, ExecutorResourceRequest] = {
     val ereqs = new ExecutorResourceRequests()
-    val cores = conf.get(EXECUTOR_CORES)
-    ereqs.cores(cores)
-    val memory = conf.get(EXECUTOR_MEMORY)
+
+    val isStandalone = conf.getOption("spark.master").exists(_.startsWith("spark://"))
+    // Since local-cluster and standalone share the same StandaloneSchedulerBackend and Master,
+    // and the Master will schedule based on resource profile, so we also need to create default
+    // resource profile for local-cluster here as well as standalone.
+    val isLocalCluster = conf.getOption("spark.master").exists(_.startsWith("local-cluster"))
+    // By default, standalone executors take all available cores, do not have a specific value.
+    val cores = if (isStandalone || isLocalCluster) {
+      conf.getOption(EXECUTOR_CORES.key).map(_.toInt)
+    } else {
+      Some(conf.get(EXECUTOR_CORES))
+    }
+    cores.foreach(ereqs.cores)
+
+    val memory = if (isStandalone || isLocalCluster) {
+      SparkContext.executorMemoryInMb(conf)
+    } else {
+      conf.get(EXECUTOR_MEMORY)
+    }
     ereqs.memory(memory.toString)
     val overheadMem = conf.get(EXECUTOR_MEMORY_OVERHEAD)
     overheadMem.map(mem => ereqs.memoryOverhead(mem.toString))
@@ -360,7 +380,7 @@ object ResourceProfile extends Logging {
   }
 
   // for testing only
-  private[spark] def reInitDefaultProfile(conf: SparkConf): Unit = {
+  private[spark] def reInitDefaultProfile(conf: SparkConf): ResourceProfile = {
     clearDefaultProfile()
     // force recreate it after clearing
     getOrCreateDefaultProfile(conf)
@@ -402,7 +422,7 @@ object ResourceProfile extends Logging {
   }
 
   private[spark] case class ExecutorResourcesOrDefaults(
-      cores: Int,
+      cores: Option[Int], // Can only be None for standalone and local-cluster.
       executorMemoryMiB: Long,
       memoryOffHeapMiB: Long,
       pysparkMemoryMiB: Long,
@@ -411,7 +431,7 @@ object ResourceProfile extends Logging {
       customResources: Map[String, ExecutorResourceRequest])
 
   private[spark] case class DefaultProfileExecutorResources(
-      cores: Int,
+      cores: Option[Int], // Can only be None for standalone cluster.
       executorMemoryMiB: Long,
       memoryOffHeapMiB: Long,
       pysparkMemoryMiB: Option[Long],
@@ -461,7 +481,7 @@ object ResourceProfile extends Logging {
           case ResourceProfile.OFFHEAP_MEM =>
             memoryOffHeapMiB = executorOffHeapMemorySizeAsMb(conf, execReq)
           case ResourceProfile.CORES =>
-            cores = execReq.amount.toInt
+            cores = Some(execReq.amount.toInt)
           case rName =>
             val nameToUse = resourceMappings.getOrElse(rName, rName)
             customResources(nameToUse) = execReq

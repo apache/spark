@@ -697,7 +697,7 @@ private[spark] class PythonAccumulatorV2(
     @transient private val serverHost: String,
     private val serverPort: Int,
     private val secretToken: String)
-  extends CollectionAccumulator[Array[Byte]] with Logging{
+  extends CollectionAccumulator[Array[Byte]] with Logging {
 
   Utils.checkHost(serverHost)
 
@@ -892,7 +892,7 @@ private[spark] class DechunkedInputStream(wrapped: InputStream) extends InputStr
       }
     }
     assert(destSpace == 0 || remainingInChunk == -1)
-    return destPos - off
+    destPos - off
   }
 
   override def close(): Unit = wrapped.close()

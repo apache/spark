@@ -603,6 +603,11 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(Literal("2015-03-18T"), TimestampType), null)
   }
 
+  test("SPARK-39749: cast Decimal to string") {
+    val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
+    checkEvaluation(cast(input, StringType), "1.23E-7")
+  }
+
   private def castOverflowErrMsg(targetType: DataType): String = {
     s"""cannot be cast to "${targetType.sql}" due to an overflow."""
   }

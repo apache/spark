@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafCommand, LogicalPlan, Project, Range, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types._
@@ -164,7 +165,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       }.getMessage.contains("fails to parse as a valid expression"))
       assert(intercept[AnalysisException] {
         ResolveDefaultColumns.analyze(columnD, statementType)
-      }.getMessage.contains("fails to resolve as a valid expression"))
+      }.getMessage.contains("subquery expressions are not allowed in DEFAULT values"))
       assert(intercept[AnalysisException] {
         ResolveDefaultColumns.analyze(columnE, statementType)
       }.getMessage.contains("statement provided a value of incompatible type"))
@@ -946,21 +947,21 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           Seq(part1, partWithLessColumns), ignoreIfExists = false)
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.createPartitions(
           TableIdentifier("tbl2", Some("db2")),
           Seq(part1, partWithMoreColumns), ignoreIfExists = true)
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.createPartitions(
           TableIdentifier("tbl2", Some("db2")),
           Seq(partWithUnknownColumns, part1), ignoreIfExists = true)
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.createPartitions(
           TableIdentifier("tbl2", Some("db2")),
@@ -1059,7 +1060,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       }
       assert(e.getMessage.contains(
         "Partition spec is invalid. The spec (a, b, c) must be contained within " +
-          "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+          s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.dropPartitions(
           TableIdentifier("tbl2", Some("db2")),
@@ -1070,7 +1071,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       }
       assert(e.getMessage.contains(
         "Partition spec is invalid. The spec (a, unknown) must be contained within " +
-          "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+          s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.dropPartitions(
           TableIdentifier("tbl2", Some("db2")),
@@ -1118,17 +1119,17 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithLessColumns.spec)
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithMoreColumns.spec)
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithUnknownColumns.spec)
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithEmptyValue.spec)
       }
@@ -1189,21 +1190,21 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           Seq(part1.spec), Seq(partWithLessColumns.spec))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.renamePartitions(
           TableIdentifier("tbl1", Some("db2")),
           Seq(part1.spec), Seq(partWithMoreColumns.spec))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.renamePartitions(
           TableIdentifier("tbl1", Some("db2")),
           Seq(part1.spec), Seq(partWithUnknownColumns.spec))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.renamePartitions(
           TableIdentifier("tbl1", Some("db2")),
@@ -1262,17 +1263,17 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithLessColumns))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithMoreColumns))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithUnknownColumns))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+        s"the partition spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithEmptyValue))
       }
@@ -1307,13 +1308,15 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           Some(partWithMoreColumns.spec))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must be " +
-        "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        "contained within the partition spec (a, b) defined in table " +
+        s"'`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
           Some(partWithUnknownColumns.spec))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must be " +
-        "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        "contained within the partition spec (a, b) defined in table " +
+        s"'`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
           Some(partWithEmptyValue.spec))
@@ -1346,13 +1349,15 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         catalog.listPartitions(TableIdentifier("tbl2", Some("db2")), Some(partWithMoreColumns.spec))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must be " +
-        "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        "contained within the partition spec (a, b) defined in table " +
+        s"'`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
           Some(partWithUnknownColumns.spec))
       }
       assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must be " +
-        "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        "contained within the partition spec (a, b) defined in table " +
+        s"'`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.listPartitions(TableIdentifier("tbl2", Some("db2")), Some(partWithEmptyValue.spec))
       }
@@ -1568,8 +1573,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("get function") {
     withBasicCatalog { catalog =>
       val expected =
-        CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
-          Seq.empty[FunctionResource])
+        CatalogFunction(FunctionIdentifier("func1", Some("db2"), Some(SESSION_CATALOG_NAME)),
+          funcClass, Seq.empty[FunctionResource])
       assert(catalog.getFunctionMetadata(FunctionIdentifier("func1", Some("db2"))) == expected)
       // Get function without explicitly specifying database
       catalog.setCurrentDatabase("db2")
@@ -1620,13 +1625,13 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.listFunctions("db2", "*").map(_._1).toSet ==
         Set(FunctionIdentifier("func1"),
           FunctionIdentifier("yes_me"),
-          FunctionIdentifier("func1", Some("db2")),
-          FunctionIdentifier("func2", Some("db2")),
-          FunctionIdentifier("not_me", Some("db2"))))
+          FunctionIdentifier("func1", Some("db2"), Some(SESSION_CATALOG_NAME)),
+          FunctionIdentifier("func2", Some("db2"), Some(SESSION_CATALOG_NAME)),
+          FunctionIdentifier("not_me", Some("db2"), Some(SESSION_CATALOG_NAME))))
       assert(catalog.listFunctions("db2", "func*").map(_._1).toSet ==
         Set(FunctionIdentifier("func1"),
-          FunctionIdentifier("func1", Some("db2")),
-          FunctionIdentifier("func2", Some("db2"))))
+          FunctionIdentifier("func1", Some("db2"), Some(SESSION_CATALOG_NAME)),
+          FunctionIdentifier("func2", Some("db2"), Some(SESSION_CATALOG_NAME))))
     }
   }
 
@@ -1652,7 +1657,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.registerFunction(func2, overrideIfExists = false, functionBuilder = Some(builder))
       // Should not include func2.
       assert(catalog.listFunctions("default", "*").map(_._1).toSet ==
-        Set(FunctionIdentifier("func1"), FunctionIdentifier("func1", Some("default")))
+        Set(FunctionIdentifier("func1"),
+          FunctionIdentifier("func1", Some("default"), Some(SESSION_CATALOG_NAME)))
       )
     }
   }

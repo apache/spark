@@ -198,7 +198,7 @@ select elt(4, '123', '456')
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index 4 is out of bounds. The array has 2 elements. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[INVALID_ARRAY_INDEX] The index 4 is out of bounds. The array has 2 elements. Use `try_element_at` and increase the array index by 1(the starting array index is 1 for `try_element_at`) to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select elt(4, '123', '456')
        ^^^^^^^^^^^^^^^^^^^^
@@ -210,7 +210,7 @@ select elt(0, '123', '456')
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index 0 is out of bounds. The array has 2 elements. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[INVALID_ARRAY_INDEX] The index 0 is out of bounds. The array has 2 elements. Use `try_element_at` and increase the array index by 1(the starting array index is 1 for `try_element_at`) to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select elt(0, '123', '456')
        ^^^^^^^^^^^^^^^^^^^^
@@ -222,7 +222,7 @@ select elt(-1, '123', '456')
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index -1 is out of bounds. The array has 2 elements. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[INVALID_ARRAY_INDEX] The index -1 is out of bounds. The array has 2 elements. Use `try_element_at` and increase the array index by 1(the starting array index is 1 for `try_element_at`) to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select elt(-1, '123', '456')
        ^^^^^^^^^^^^^^^^^^^^^
@@ -266,7 +266,7 @@ select array(1, 2, 3)[5]
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index 5 is out of bounds. The array has 3 elements. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[INVALID_ARRAY_INDEX] The index 5 is out of bounds. The array has 3 elements. Use `try_element_at` and increase the array index by 1(the starting array index is 1 for `try_element_at`) to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select array(1, 2, 3)[5]
        ^^^^^^^^^^^^^^^^^
@@ -278,7 +278,7 @@ select array(1, 2, 3)[-1]
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index -1 is out of bounds. The array has 3 elements. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[INVALID_ARRAY_INDEX] The index -1 is out of bounds. The array has 3 elements. Use `try_element_at` and increase the array index by 1(the starting array index is 1 for `try_element_at`) to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select array(1, 2, 3)[-1]
        ^^^^^^^^^^^^^^^^^^
@@ -388,7 +388,7 @@ select elt(4, '123', '456')
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index 4 is out of bounds. The array has 2 elements. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[INVALID_ARRAY_INDEX] The index 4 is out of bounds. The array has 2 elements. Use `try_element_at` and increase the array index by 1(the starting array index is 1 for `try_element_at`) to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select elt(4, '123', '456')
        ^^^^^^^^^^^^^^^^^^^^
@@ -400,7 +400,7 @@ select elt(0, '123', '456')
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index 0 is out of bounds. The array has 2 elements. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[INVALID_ARRAY_INDEX] The index 0 is out of bounds. The array has 2 elements. Use `try_element_at` and increase the array index by 1(the starting array index is 1 for `try_element_at`) to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select elt(0, '123', '456')
        ^^^^^^^^^^^^^^^^^^^^
@@ -412,7 +412,7 @@ select elt(-1, '123', '456')
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index -1 is out of bounds. The array has 2 elements. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+[INVALID_ARRAY_INDEX] The index -1 is out of bounds. The array has 2 elements. Use `try_element_at` and increase the array index by 1(the starting array index is 1 for `try_element_at`) to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
 select elt(-1, '123', '456')
        ^^^^^^^^^^^^^^^^^^^^^

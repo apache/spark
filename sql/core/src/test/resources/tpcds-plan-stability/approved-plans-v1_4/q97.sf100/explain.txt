@@ -11,7 +11,7 @@
             :           +- * Project (5)
             :              +- * BroadcastHashJoin Inner BuildRight (4)
             :                 :- * ColumnarToRow (2)
-            :                 :  +- Scan parquet default.store_sales (1)
+            :                 :  +- Scan parquet spark_catalog.default.store_sales (1)
             :                 +- ReusedExchange (3)
             +- * Sort (18)
                +- * HashAggregate (17)
@@ -20,11 +20,11 @@
                         +- * Project (14)
                            +- * BroadcastHashJoin Inner BuildRight (13)
                               :- * ColumnarToRow (11)
-                              :  +- Scan parquet default.catalog_sales (10)
+                              :  +- Scan parquet spark_catalog.default.catalog_sales (10)
                               +- ReusedExchange (12)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_item_sk#1, ss_customer_sk#2, ss_sold_date_sk#3]
 Batched: true
 Location: InMemoryFileIndex []
@@ -68,7 +68,7 @@ Results [2]: [ss_customer_sk#2 AS customer_sk#6, ss_item_sk#1 AS item_sk#7]
 Input [2]: [customer_sk#6, item_sk#7]
 Arguments: [customer_sk#6 ASC NULLS FIRST, item_sk#7 ASC NULLS FIRST], false, 0
 
-(10) Scan parquet default.catalog_sales
+(10) Scan parquet spark_catalog.default.catalog_sales
 Output [3]: [cs_bill_customer_sk#8, cs_item_sk#9, cs_sold_date_sk#10]
 Batched: true
 Location: InMemoryFileIndex []
@@ -146,10 +146,10 @@ BroadcastExchange (28)
 +- * Project (27)
    +- * Filter (26)
       +- * ColumnarToRow (25)
-         +- Scan parquet default.date_dim (24)
+         +- Scan parquet spark_catalog.default.date_dim (24)
 
 
-(24) Scan parquet default.date_dim
+(24) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_date_sk#5, d_month_seq#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]

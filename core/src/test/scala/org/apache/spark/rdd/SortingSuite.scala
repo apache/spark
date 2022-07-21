@@ -21,9 +21,8 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
-import org.apache.spark.internal.Logging
 
-class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers with Logging {
+class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers {
 
   test("sortByKey") {
     val pairs = sc.parallelize(Seq((1, 0), (2, 0), (0, 0), (3, 0)), 2)

@@ -10,15 +10,15 @@
                      +- * Project (9)
                         +- * BroadcastHashJoin LeftOuter BuildRight (8)
                            :- * ColumnarToRow (2)
-                           :  +- Scan parquet default.customer (1)
+                           :  +- Scan parquet spark_catalog.default.customer (1)
                            +- BroadcastExchange (7)
                               +- * Project (6)
                                  +- * Filter (5)
                                     +- * ColumnarToRow (4)
-                                       +- Scan parquet default.orders (3)
+                                       +- Scan parquet spark_catalog.default.orders (3)
 
 
-(1) Scan parquet default.customer
+(1) Scan parquet spark_catalog.default.customer
 Output [1]: [c_custkey#1]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -27,7 +27,7 @@ ReadSchema: struct<c_custkey:bigint>
 (2) ColumnarToRow [codegen id : 2]
 Input [1]: [c_custkey#1]
 
-(3) Scan parquet default.orders
+(3) Scan parquet spark_catalog.default.orders
 Output [3]: [o_orderkey#2, o_custkey#3, o_comment#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]

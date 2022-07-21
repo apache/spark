@@ -28,7 +28,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.sql.catalyst.{AliasIdentifier, IdentifierWithDatabase}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions._
@@ -886,7 +886,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 
   private def stringArgsForCatalogTable(table: CatalogTable): Seq[Any] = {
     table.storage.serde match {
-      case Some(serde) => table.identifier :: serde :: Nil
+      case Some(serde)
+        // SPARK-39564: don't print out serde to avoid introducing complicated and error-prone
+        // regex magic.
+        if !SQLConf.get.getConfString("spark.test.noSerdeInExplain", "false").toBoolean =>
+        table.identifier :: serde :: Nil
       case _ => table.identifier :: Nil
     }
   }
@@ -1161,7 +1165,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private def shouldConvertToJson(product: Product): Boolean = product match {
     case exprId: ExprId => true
     case field: StructField => true
-    case id: IdentifierWithDatabase => true
+    case id: CatalystIdentifier => true
     case alias: AliasIdentifier => true
     case join: JoinType => true
     case spec: BucketSpec => true

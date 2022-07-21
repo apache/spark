@@ -13,32 +13,32 @@ TakeOrderedAndProject (37)
       :        :     :     :  +- * BroadcastHashJoin Inner BuildRight (9)
       :        :     :     :     :- * Filter (3)
       :        :     :     :     :  +- * ColumnarToRow (2)
-      :        :     :     :     :     +- Scan parquet default.customer (1)
+      :        :     :     :     :     +- Scan parquet spark_catalog.default.customer (1)
       :        :     :     :     +- BroadcastExchange (8)
       :        :     :     :        +- * Project (7)
       :        :     :     :           +- * Filter (6)
       :        :     :     :              +- * ColumnarToRow (5)
-      :        :     :     :                 +- Scan parquet default.customer_address (4)
+      :        :     :     :                 +- Scan parquet spark_catalog.default.customer_address (4)
       :        :     :     +- BroadcastExchange (14)
       :        :     :        +- * Filter (13)
       :        :     :           +- * ColumnarToRow (12)
-      :        :     :              +- Scan parquet default.customer_demographics (11)
+      :        :     :              +- Scan parquet spark_catalog.default.customer_demographics (11)
       :        :     +- BroadcastExchange (20)
       :        :        +- * Filter (19)
       :        :           +- * ColumnarToRow (18)
-      :        :              +- Scan parquet default.household_demographics (17)
+      :        :              +- Scan parquet spark_catalog.default.household_demographics (17)
       :        +- BroadcastExchange (27)
       :           +- * Project (26)
       :              +- * Filter (25)
       :                 +- * ColumnarToRow (24)
-      :                    +- Scan parquet default.income_band (23)
+      :                    +- Scan parquet spark_catalog.default.income_band (23)
       +- * Project (34)
          +- * Filter (33)
             +- * ColumnarToRow (32)
-               +- Scan parquet default.store_returns (31)
+               +- Scan parquet spark_catalog.default.store_returns (31)
 
 
-(1) Scan parquet default.customer
+(1) Scan parquet spark_catalog.default.customer
 Output [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_current_addr_sk#4, c_first_name#5, c_last_name#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
@@ -52,7 +52,7 @@ Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_curre
 Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_current_addr_sk#4, c_first_name#5, c_last_name#6]
 Condition : ((isnotnull(c_current_addr_sk#4) AND isnotnull(c_current_cdemo_sk#2)) AND isnotnull(c_current_hdemo_sk#3))
 
-(4) Scan parquet default.customer_address
+(4) Scan parquet spark_catalog.default.customer_address
 Output [2]: [ca_address_sk#7, ca_city#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
@@ -83,7 +83,7 @@ Join condition: None
 Output [5]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6]
 Input [7]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_current_addr_sk#4, c_first_name#5, c_last_name#6, ca_address_sk#7]
 
-(11) Scan parquet default.customer_demographics
+(11) Scan parquet spark_catalog.default.customer_demographics
 Output [1]: [cd_demo_sk#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
@@ -110,7 +110,7 @@ Join condition: None
 Output [5]: [c_customer_id#1, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6, cd_demo_sk#9]
 Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6, cd_demo_sk#9]
 
-(17) Scan parquet default.household_demographics
+(17) Scan parquet spark_catalog.default.household_demographics
 Output [2]: [hd_demo_sk#10, hd_income_band_sk#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
@@ -137,7 +137,7 @@ Join condition: None
 Output [5]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#9, hd_income_band_sk#11]
 Input [7]: [c_customer_id#1, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6, cd_demo_sk#9, hd_demo_sk#10, hd_income_band_sk#11]
 
-(23) Scan parquet default.income_band
+(23) Scan parquet spark_catalog.default.income_band
 Output [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/income_band]
@@ -172,7 +172,7 @@ Input [6]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#9, hd_inc
 Input [4]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#9]
 Arguments: HashedRelationBroadcastMode(List(cast(input[3, int, true] as bigint)),false), [plan_id=5]
 
-(31) Scan parquet default.store_returns
+(31) Scan parquet spark_catalog.default.store_returns
 Output [2]: [sr_cdemo_sk#15, sr_returned_date_sk#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]

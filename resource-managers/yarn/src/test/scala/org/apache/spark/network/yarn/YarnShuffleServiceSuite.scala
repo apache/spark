@@ -35,7 +35,6 @@ import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -50,7 +49,7 @@ import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 
 @ExtendedLevelDBTest
-class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
+class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   private[yarn] var yarnConfig: YarnConfiguration = null
   private[yarn] val SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager"
 

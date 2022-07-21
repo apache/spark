@@ -23,7 +23,7 @@ import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
+import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
@@ -346,6 +346,24 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>DATE_ADD</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>DATE_ADD(start_date, num_days)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>DATE_DIFF</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>DATE_DIFF(end_date, start_date)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>TRUNC</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>TRUNC(date, format)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.
@@ -381,12 +399,7 @@ public class GeneralScalarExpression implements Expression, Serializable {
 
   @Override
   public String toString() {
-    V2ExpressionSQLBuilder builder = new V2ExpressionSQLBuilder();
-    try {
-      return builder.build(this);
-    } catch (Throwable e) {
-      return name + "(" +
-        Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
-    }
+    ToStringSQLBuilder builder = new ToStringSQLBuilder();
+    return builder.build(this);
   }
 }

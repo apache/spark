@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v1
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.types.StringType
 
@@ -78,6 +79,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("id", "bigint", null),
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
+          Row("Catalog", SESSION_CATALOG_NAME, ""),
           Row("Database", "ns", ""),
           Row("Table", "table", ""),
           Row("Last Access", "UNKNOWN", ""),

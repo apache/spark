@@ -177,7 +177,7 @@ class SymmetricHashJoinStateManager(
 
         // We only reach here if there were no satisfying keys left, which means we're done.
         finished = true
-        return null
+        null
       }
 
       override def close(): Unit = {}
@@ -261,7 +261,7 @@ class SymmetricHashJoinStateManager(
         }
 
         // We tried and failed to find the next value.
-        return null
+        null
       }
 
       /**
@@ -323,7 +323,7 @@ class SymmetricHashJoinStateManager(
         numValues -= 1
         valueRemoved = true
 
-        return reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
+        reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
       }
 
       override def close(): Unit = {}
@@ -629,7 +629,7 @@ class SymmetricHashJoinStateManager(
           }
 
           finished = true
-          return null
+          null
         }
 
         override protected def close(): Unit = {}

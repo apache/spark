@@ -11,25 +11,25 @@
             :     :     :- * Project (4)
             :     :     :  +- * Filter (3)
             :     :     :     +- * ColumnarToRow (2)
-            :     :     :        +- Scan parquet default.store_sales (1)
+            :     :     :        +- Scan parquet spark_catalog.default.store_sales (1)
             :     :     +- BroadcastExchange (9)
             :     :        +- * Project (8)
             :     :           +- * Filter (7)
             :     :              +- * ColumnarToRow (6)
-            :     :                 +- Scan parquet default.household_demographics (5)
+            :     :                 +- Scan parquet spark_catalog.default.household_demographics (5)
             :     +- BroadcastExchange (16)
             :        +- * Project (15)
             :           +- * Filter (14)
             :              +- * ColumnarToRow (13)
-            :                 +- Scan parquet default.time_dim (12)
+            :                 +- Scan parquet spark_catalog.default.time_dim (12)
             +- BroadcastExchange (23)
                +- * Project (22)
                   +- * Filter (21)
                      +- * ColumnarToRow (20)
-                        +- Scan parquet default.store (19)
+                        +- Scan parquet spark_catalog.default.store (19)
 
 
-(1) Scan parquet default.store_sales
+(1) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
@@ -47,7 +47,7 @@ Condition : ((isnotnull(ss_hdemo_sk#2) AND isnotnull(ss_sold_time_sk#1)) AND isn
 Output [3]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3]
 Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
 
-(5) Scan parquet default.household_demographics
+(5) Scan parquet spark_catalog.default.household_demographics
 Output [2]: [hd_demo_sk#5, hd_dep_count#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
@@ -78,7 +78,7 @@ Join condition: None
 Output [2]: [ss_sold_time_sk#1, ss_store_sk#3]
 Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, hd_demo_sk#5]
 
-(12) Scan parquet default.time_dim
+(12) Scan parquet spark_catalog.default.time_dim
 Output [3]: [t_time_sk#7, t_hour#8, t_minute#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
@@ -109,7 +109,7 @@ Join condition: None
 Output [1]: [ss_store_sk#3]
 Input [3]: [ss_sold_time_sk#1, ss_store_sk#3, t_time_sk#7]
 
-(19) Scan parquet default.store
+(19) Scan parquet spark_catalog.default.store
 Output [2]: [s_store_sk#10, s_store_name#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]

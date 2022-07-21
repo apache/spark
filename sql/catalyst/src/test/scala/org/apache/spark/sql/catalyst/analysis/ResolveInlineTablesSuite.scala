@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Literal, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.{LongType, NullType, TimestampType}
@@ -37,6 +37,10 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   test("validate inputs are foldable") {
     ResolveInlineTables.validateInputEvaluable(
       UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(lit(1)))))
+
+    // Alias is OK
+    ResolveInlineTables.validateInputEvaluable(
+      UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Alias(lit(1), "a")()))))
 
     // nondeterministic (rand) should not work
     intercept[AnalysisException] {

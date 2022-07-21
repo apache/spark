@@ -8,7 +8,7 @@ WholeStageCodegen (4)
               Filter [s_suppkey]
                 ColumnarToRow
                   InputAdapter
-                    Scan parquet default.supplier [s_suppkey,s_name,s_address,s_phone]
+                    Scan parquet spark_catalog.default.supplier [s_suppkey,s_name,s_address,s_phone]
               InputAdapter
                 BroadcastExchange #2
                   WholeStageCodegen (2)
@@ -29,7 +29,7 @@ WholeStageCodegen (4)
                                                 Filter [l_shipdate]
                                                   ColumnarToRow
                                                     InputAdapter
-                                                      Scan parquet default.lineitem [l_suppkey,l_extendedprice,l_discount,l_shipdate]
+                                                      Scan parquet spark_catalog.default.lineitem [l_suppkey,l_extendedprice,l_discount,l_shipdate]
                       HashAggregate [l_suppkey,sum,isEmpty] [sum((l_extendedprice * (1 - l_discount))),supplier_no,total_revenue,sum,isEmpty]
                         InputAdapter
                           Exchange [l_suppkey] #3
@@ -39,4 +39,4 @@ WholeStageCodegen (4)
                                   Filter [l_shipdate,l_suppkey]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.lineitem [l_suppkey,l_extendedprice,l_discount,l_shipdate]
+                                        Scan parquet spark_catalog.default.lineitem [l_suppkey,l_extendedprice,l_discount,l_shipdate]

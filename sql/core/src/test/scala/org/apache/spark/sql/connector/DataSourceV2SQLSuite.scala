@@ -21,6 +21,7 @@ import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration.MICROSECONDS
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -2591,6 +2592,8 @@ class DataSourceV2SQLSuite
     val ts2 = DateTimeUtils.stringToTimestampAnsi(
       UTF8String.fromString("2021-01-29 00:00:00"),
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    val ts1InSeconds = MICROSECONDS.toSeconds(ts1).toString
+    val ts2InSeconds = MICROSECONDS.toSeconds(ts2).toString
     val t3 = s"testcat.t$ts1"
     val t4 = s"testcat.t$ts2"
 
@@ -2606,6 +2609,14 @@ class DataSourceV2SQLSuite
       assert(sql("SELECT * FROM t TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
         === Array(Row(5), Row(6)))
       assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect
+        === Array(Row(7), Row(8)))
+      assert(sql(s"SELECT * FROM t TIMESTAMP AS OF $ts1InSeconds").collect
+        === Array(Row(5), Row(6)))
+      assert(sql(s"SELECT * FROM t TIMESTAMP AS OF $ts2InSeconds").collect
+        === Array(Row(7), Row(8)))
+      assert(sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts1InSeconds").collect
+        === Array(Row(5), Row(6)))
+      assert(sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts2InSeconds").collect
         === Array(Row(7), Row(8)))
       assert(sql("SELECT * FROM t TIMESTAMP AS OF make_date(2021, 1, 29)").collect
         === Array(Row(7), Row(8)))

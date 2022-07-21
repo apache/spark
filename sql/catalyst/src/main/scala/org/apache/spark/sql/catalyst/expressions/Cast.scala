@@ -625,6 +625,11 @@ case class Cast(
     case DayTimeIntervalType(startField, endField) =>
       buildCast[Long](_, i => UTF8String.fromString(
         IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
+    // In ANSI mode, Spark always use plain string representation on casting Decimal values
+    // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
+    // notation if an exponent is needed.
+    case _: DecimalType if ansiEnabled =>
+      buildCast[Decimal](_, d => UTF8String.fromString(d.toPlainString))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -1475,6 +1480,11 @@ case class Cast(
             $evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style,
               (byte)${i.startField}, (byte)${i.endField}));
           """
+      // In ANSI mode, Spark always use plain string representation on casting Decimal values
+      // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
+      // notation if an exponent is needed.
+      case _: DecimalType if ansiEnabled =>
+        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
       case _ =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }

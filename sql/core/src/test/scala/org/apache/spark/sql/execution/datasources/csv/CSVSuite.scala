@@ -34,12 +34,14 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -73,6 +75,7 @@ abstract class CSVSuite
   private val simpleSparseFile = "test-data/simple_sparse.csv"
   private val numbersFile = "test-data/numbers.csv"
   private val datesFile = "test-data/dates.csv"
+  private val dateInferSchemaFile = "test-data/date-infer-schema.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
@@ -2296,6 +2299,40 @@ abstract class CSVSuite
     assert(errMsg2.contains("'lineSep' can contain only 1 character"))
   }
 
+  Seq(true, false).foreach { multiLine =>
+    test(s"""lineSep with 2 chars when multiLine set to $multiLine""") {
+      Seq("\r\n", "||", "|").foreach { newLine =>
+        val logAppender = new LogAppender("lineSep WARN logger")
+        withTempDir { dir =>
+          val inputData = if (multiLine) {
+            s"""name,"i am the${newLine} column1"${newLine}jack,30${newLine}tom,18"""
+          } else {
+            s"name,age${newLine}jack,30${newLine}tom,18"
+          }
+          Files.write(new File(dir, "/data.csv").toPath, inputData.getBytes())
+          withLogAppender(logAppender) {
+            val df = spark.read
+              .options(
+                Map("header" -> "true", "multiLine" -> multiLine.toString, "lineSep" -> newLine))
+              .csv(dir.getCanonicalPath)
+            // Due to the limitation of Univocity parser:
+            // multiple chars of newlines cannot be properly handled when they exist within quotes.
+            // Leave 2-char lineSep as an undocumented features and logWarn user
+            if (newLine != "||" || !multiLine) {
+              checkAnswer(df, Seq(Row("jack", "30"), Row("tom", "18")))
+            }
+            if (newLine.length == 2) {
+              val message = "It is not recommended to set 'lineSep' with 2 characters due to"
+              assert(logAppender.loggingEvents.exists(
+                e => e.getLevel == Level.WARN && e.getMessage.getFormattedMessage.contains(message)
+              ))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-26208: write and read empty data to csv file with headers") {
     withTempPath { path =>
       val df1 = spark.range(10).repartition(2).filter(_ < 0).map(_.toString).toDF
@@ -2751,6 +2788,56 @@ abstract class CSVSuite
         val df3 = spark.read.schema(schema).csv(file.getCanonicalPath)
         checkAnswer(df3, df.collect().toSeq)
       }
+    }
+  }
+
+  test("SPARK-39469: Infer schema for date type") {
+    val options1 = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+      "dateFormat" -> "yyyy-MM-dd",
+      "inferDate" -> "true")
+    val options2 = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "inferDate" -> "true")
+
+    // Error should be thrown when attempting to inferDate with Legacy parser
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      val msg = intercept[IllegalArgumentException] {
+        spark.read
+          .format("csv")
+          .options(options1)
+          .load(testFile(dateInferSchemaFile))
+      }.getMessage
+      assert(msg.contains("CANNOT_INFER_DATE"))
+    } else {
+      // 1. Specify date format and timestamp format
+      // 2. Date inference should work with default date format when dateFormat is not provided
+      Seq(options1, options2).foreach {options =>
+        val results = spark.read
+          .format("csv")
+          .options(options)
+          .load(testFile(dateInferSchemaFile))
+
+        val expectedSchema = StructType(List(StructField("date", DateType),
+          StructField("timestamp-date", TimestampType),
+          StructField("date-timestamp", TimestampType)))
+        assert(results.schema == expectedSchema)
+
+        val expected =
+          Seq(
+            Seq(Date.valueOf("2001-9-8"), Timestamp.valueOf("2014-10-27 18:30:0.0"),
+              Timestamp.valueOf("1765-03-28 00:00:0.0")),
+            Seq(Date.valueOf("1941-1-2"), Timestamp.valueOf("2000-09-14 01:01:0.0"),
+              Timestamp.valueOf("1423-11-12 23:41:0.0")),
+            Seq(Date.valueOf("0293-11-7"), Timestamp.valueOf("1995-06-25 00:00:00.0"),
+              Timestamp.valueOf("2016-01-28 20:00:00.0"))
+          )
+        assert(results.collect().toSeq.map(_.toSeq) == expected)
+      }
+
     }
   }
 }

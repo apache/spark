@@ -345,7 +345,7 @@ private[storage] class BlockManagerDecommissioner(
         s"process: ${blocksFailedReplication.mkString(",")}")
       return true
     }
-    return false
+    false
   }
 
   private def migrateBlock(blockToReplicate: ReplicateBlock): Boolean = {

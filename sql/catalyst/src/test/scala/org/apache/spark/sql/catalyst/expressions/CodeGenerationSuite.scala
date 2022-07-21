@@ -568,7 +568,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(refTerm.contains("scala.math.LowPriorityOrderingImplicits$$anon$"))
   }
 
-  // TODO (SPARK-35579): Fix this bug in janino and upgrade janino in Spark.
   test("SPARK-35578: final local variable bug in janino") {
     val code =
       """
