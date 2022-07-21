@@ -1422,7 +1422,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jc = self._jdf.colRegex(colName)
         return Column(jc)
 
-    def asSchema(self, schema: StructType) -> "DataFrame":
+    def cast(self, schema: StructType) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` where each row is reconciled to match the specified
         schema.
@@ -1458,7 +1458,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.schema
         StructType([StructField('i', StringType(), True), StructField('j', LongType(), True)])
         >>> schema = StructType([StructField("j", StringType()), StructField("i", StringType())])
-        >>> df2 = df.asSchema(schema)
+        >>> df2 = df.cast(schema)
         >>> df2.schema
         StructType([StructField('j', StringType(), True), StructField('i', StringType(), True)])
         >>> df2.show()

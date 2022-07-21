@@ -28,8 +28,8 @@ DataFrame
     DataFrame.agg
     DataFrame.alias
     DataFrame.approxQuantile
-    DataFrame.asSchema
     DataFrame.cache
+    DataFrame.cast
     DataFrame.checkpoint
     DataFrame.coalesce
     DataFrame.colRegex
