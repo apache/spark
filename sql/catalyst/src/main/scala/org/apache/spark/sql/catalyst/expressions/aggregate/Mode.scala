@@ -41,7 +41,7 @@ import org.apache.spark.util.collection.OpenHashMap
 case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends AggregationBuffer
+    inputAggBufferOffset: Int = 0) extends TypedAggregateWithHashMapAsBuffer
   with ImplicitCastInputTypes with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)

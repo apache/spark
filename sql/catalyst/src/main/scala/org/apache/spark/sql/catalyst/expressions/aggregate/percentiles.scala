@@ -30,7 +30,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
 import org.apache.spark.util.collection.OpenHashMap
 
-abstract class PercentileBase extends AggregationBuffer with ImplicitCastInputTypes {
+abstract class PercentileBase
+  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes {
 
   val child: Expression
   val percentageExpression: Expression
