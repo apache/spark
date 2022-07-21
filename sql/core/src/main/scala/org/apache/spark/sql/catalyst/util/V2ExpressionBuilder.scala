@@ -234,7 +234,14 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       if (l.isDefined && r.isDefined) {
         b match {
           case _: Predicate =>
-            Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
+            l.get match {
+              case _: FieldReference =>
+                Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
+              case _ =>
+                Some(new V2Predicate(flipComparisonOperatorName(b.sqlOperator),
+                  Array[V2Expression](r.get, l.get)))
+            }
+
           case _ =>
             Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](l.get, r.get)))
         }
@@ -407,6 +414,16 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
         None
       }
     case _ => None
+  }
+
+  private def flipComparisonOperatorName(operatorName: String): String = {
+    operatorName match {
+      case ">" => "<"
+      case "<" => ">"
+      case ">=" => "<="
+      case "<=" => ">="
+      case _ => operatorName
+    }
   }
 }
 
