@@ -1424,19 +1424,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def asSchema(self, schema: StructType) -> "DataFrame":
         """
-        Returns a new DataFrame where each row is reconciled to match the specified schema.
+        Returns a new :class:`DataFrame` where each row is reconciled to match the specified
+        schema.
 
         Spark will:
 
         1, Reorder columns and/or inner fields by name to match the specified schema.
+
         2, Project away columns and/or inner fields that are not needed by the specified schema.
         Missing columns and/or inner fields (present in the specified schema but not input
         DataFrame) lead to failures.
+
         3, Cast the columns and/or inner fields to match the data types in the specified schema,
         if the types are compatible, e.g., numeric to numeric (error if overflows), but not string
         to int.
+
         4, Carry over the metadata from the specified schema, while the columns and/or inner fields
         still keep their own metadata if not overwritten by the specified schema.
+
         5, Fail if the nullability are not compatible. For example, the column and/or inner field
         is nullable but the specified schema requires them to be not nullable.
 
@@ -1444,8 +1449,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        schema : class:`StructType`
-            specified schema.
+        schema : :class:`StructType`
+            Specified schema.
 
         Examples
         --------

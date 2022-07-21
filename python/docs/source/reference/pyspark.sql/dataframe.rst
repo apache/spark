@@ -28,6 +28,7 @@ DataFrame
     DataFrame.agg
     DataFrame.alias
     DataFrame.approxQuantile
+    DataFrame.asSchema
     DataFrame.cache
     DataFrame.checkpoint
     DataFrame.coalesce
