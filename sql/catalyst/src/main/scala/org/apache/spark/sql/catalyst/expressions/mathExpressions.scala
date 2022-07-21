@@ -1133,8 +1133,8 @@ case class Unhex(child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(exprY, exprX) - Returns the angle in radians between the positive x-axis of " +
-    "a plane and the point given by the coordinates (`exprX`, `exprY`), as if computed by " +
-    "`java.lang.Math._FUNC_`.",
+    """a plane and the point given by the coordinates (`exprX`, `exprY`), as if computed by """ +
+    """`java.lang.Math._FUNC_`.""",
   arguments = """
     Arguments:
       * exprY - coordinate on y-axis
@@ -1688,8 +1688,8 @@ object WidthBucket {
  */
 @ExpressionDescription(
   usage = "_FUNC_(value, min_value, max_value, num_bucket) - Returns the bucket number to " +
-    "which `value` would be assigned in an equiwidth histogram with `num_bucket` buckets, in the " +
-    "range `min_value` to `max_value`.",
+    """which `value` would be assigned in an equiwidth histogram with `num_bucket` buckets, """ +
+    """in the range `min_value` to `max_value`.""",
   examples = """
     Examples:
       > SELECT _FUNC_(5.3, 0.2, 10.6, 5);
