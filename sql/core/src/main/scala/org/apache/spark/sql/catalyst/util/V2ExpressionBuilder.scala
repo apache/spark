@@ -233,15 +233,12 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       val r = generateExpression(b.right)
       if (l.isDefined && r.isDefined) {
         b match {
+          case _: Predicate if isBinaryComparisonOperator(b.sqlOperator) &&
+              l.get.isInstanceOf[LiteralValue[_]] && r.get.isInstanceOf[FieldReference] =>
+            Some(new V2Predicate(flipComparisonOperatorName(b.sqlOperator),
+              Array[V2Expression](r.get, l.get)))
           case _: Predicate =>
-            if (isBinaryComparisonOperator(b.sqlOperator) && l.get.isInstanceOf[LiteralValue[_]] &&
-                r.get.isInstanceOf[FieldReference]) {
-              Some(new V2Predicate(flipComparisonOperatorName(b.sqlOperator),
-                Array[V2Expression](r.get, l.get)))
-            } else {
-              Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
-            }
-
+            Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
           case _ =>
             Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](l.get, r.get)))
         }
