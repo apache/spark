@@ -15,14 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.catalyst.InternalRow;
 
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    override val rowIdSchema: StructType = null,
-    override val metadataSchema: StructType = null) extends LogicalWriteInfo
+/**
+ * A factory for creating {@link DeltaWriter}s returned by
+ * {@link DeltaBatchWrite#createBatchWriterFactory(PhysicalWriteInfo)}, which is responsible for
+ * creating and initializing writers at the executor side.
+ *
+ * @since 3.4.0
+ */
+@Experimental
+public interface DeltaWriterFactory extends DataWriterFactory {
+  @Override
+  DeltaWriter<InternalRow> createWriter(int partitionId, long taskId);
+}

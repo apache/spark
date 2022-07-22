@@ -45,4 +45,18 @@ public interface LogicalWriteInfo {
    * the schema of the input data from Spark to data source.
    */
   StructType schema();
+
+  /**
+   * the schema of the input metadata from Spark to data source.
+   */
+  default StructType metadataSchema() {
+    return null;
+  }
+
+  /**
+   * the schema of the ID columns from Spark to data source.
+   */
+  default StructType rowIdSchema() {
+    return null;
+  }
 }
