@@ -418,7 +418,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
 
   private def isBinaryComparisonOperator(operatorName: String): Boolean = {
     operatorName match {
-      case ">" | "<" | ">=" | "<=" | "==" | "<=>" => true
+      case ">" | "<" | ">=" | "<=" | "=" | "<=>" => true
       case _ => false
     }
   }
