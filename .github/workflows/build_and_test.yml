@@ -552,6 +552,7 @@ jobs:
         python3.9 -m pip install 'pandas-stubs==1.2.0.53'
     - name: Install R linter dependencies and SparkR
       run: |
+        apt update
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
           libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
           libtiff5-dev libjpeg-dev
