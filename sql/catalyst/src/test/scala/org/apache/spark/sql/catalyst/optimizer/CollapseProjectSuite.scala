@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Rand, UpdateFields}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.Metadata
 import org.apache.spark.sql.types.MetadataBuilder
 
 class CollapseProjectSuite extends PlanTest {
@@ -221,6 +222,24 @@ class CollapseProjectSuite extends PlanTest {
     val projects = optimized.collect { case p: Project => p }
     assert(projects.size === 1)
     assert(hasMetadata(optimized))
+  }
+
+  test("reset top-level alias metadata while collapsing projects") {
+    def hasNoMetadata(logicalPlan: LogicalPlan): Boolean = {
+      !logicalPlan.asInstanceOf[Project].projectList.exists(_.metadata.contains("key"))
+    }
+
+    val metadata = new MetadataBuilder().putLong("key", 1).build()
+    val analyzed =
+      Project(Seq(Alias('a_with_metadata, "b")(explicitMetadata = Some(Metadata.empty))),
+        Project(Seq(Alias('a, "a_with_metadata")(explicitMetadata = Some(metadata))),
+          testRelation.logicalPlan)).analyze
+    require(hasNoMetadata(analyzed))
+
+    val optimized = Optimize.execute(analyzed)
+    val projects = optimized.collect { case p: Project => p }
+    assert(projects.size === 1)
+    assert(hasNoMetadata(optimized))
   }
 
   test("collapse redundant alias through limit") {
