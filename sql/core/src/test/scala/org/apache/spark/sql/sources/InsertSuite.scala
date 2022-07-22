@@ -1841,7 +1841,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-39844 Restrict adding DEFAULT columns for existing tables to certain sources ") {
     Seq("csv").foreach { provider =>
       withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider) {
-        withTable("t") {
+          withTable("t") {
           sql(s"create table t(a int default 42) using $provider")
           sql(s"alter table t add column (b string default 'abc')")
           sql(s"insert into t values (42, default)")
@@ -1850,7 +1850,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             assert(intercept[AnalysisException] {
               sql(s"alter table t add column (b string default 'abc')")
             }.getMessage.contains(
-              QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions().getMessage))
+              QueryCompilationErrors.addNewDefaultColumnToExistingTableNotAllowed(
+                "ALTER TABLE ADD COLUMNS", provider).getMessage))
           }
         }
       }

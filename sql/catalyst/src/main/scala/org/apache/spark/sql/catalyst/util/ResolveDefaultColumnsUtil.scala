@@ -115,7 +115,7 @@ object ResolveDefaultColumns {
               .defaultReferencesNotAllowedInDataSource(statementType, givenTableProvider)
           }
           if (addNewColumnToExistingTable &&
-            !addColumnExistingTableBannedProviders.contains(givenTableProvider)) {
+            addColumnExistingTableBannedProviders.contains(givenTableProvider)) {
             throw QueryCompilationErrors
               .addNewDefaultColumnToExistingTableNotAllowed(statementType, givenTableProvider)
           }
