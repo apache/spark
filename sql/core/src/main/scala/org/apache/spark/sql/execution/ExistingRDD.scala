@@ -96,6 +96,8 @@ case class LogicalRDD(
     override val outputOrdering: Seq[SortOrder] = Nil,
     override val isStreaming: Boolean = false)(
     session: SparkSession,
+    // originStats and originConstraints are intentionally placed to "second" parameter list,
+    // to prevent catalyst rules to mistakenly transform and rewrite them. Do not change this.
     originStats: Option[Statistics] = None,
     originConstraints: Option[ExpressionSet] = None)
   extends LeafNode with MultiInstanceRelation {

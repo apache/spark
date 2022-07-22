@@ -2053,6 +2053,8 @@ class DataFrameSuite extends QueryTest
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val df = Dataset.ofRows(spark, statsPlan)
 
+      // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
+      // there is no matching physical node for OutputListAwareStatsTestPlan.
       val logicalRDD = LogicalRDD(
         df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
         spark, Some(df.queryExecution.optimizedPlan.stats), None)
@@ -2094,6 +2096,8 @@ class DataFrameSuite extends QueryTest
 
     val df = Dataset.ofRows(spark, statsPlan)
 
+    // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
+    // there is no matching physical node for OutputListAwareConstraintsTestPlan.
     val logicalRDD = LogicalRDD(
       df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
       spark, None, Some(df.queryExecution.optimizedPlan.constraints))
