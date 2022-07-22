@@ -162,7 +162,7 @@ case class LogicalRDD(
 
 object LogicalRDD {
   /**
-   * Create a new LogicalRDD based on existing Dataset. stats and constraints are inherited from
+   * Create a new LogicalRDD based on existing Dataset. Stats and constraints are inherited from
    * origin Dataset.
    */
   private[sql] def fromDataset(
