@@ -235,10 +235,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
         b match {
           case _: Predicate =>
             if (l.get.isInstanceOf[LiteralValue[_]] && r.get.isInstanceOf[FieldReference]) {
-              Some(new V2Predicate (flipComparisonOperatorName (b.sqlOperator),
-                Array[V2Expression] (r.get, l.get)))
+              Some(new V2Predicate(flipComparisonOperatorName(b.sqlOperator),
+                Array[V2Expression](r.get, l.get)))
             } else {
-              Some(new V2Predicate (b.sqlOperator, Array[V2Expression] (l.get, r.get)))
+              Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
             }
 
           case _ =>
