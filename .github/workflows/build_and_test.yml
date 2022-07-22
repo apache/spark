@@ -340,7 +340,10 @@ jobs:
         python3.6 -m pip install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx mypy numpydoc 'jinja2<3.0.0' 'docutils<0.18'
     - name: Install R linter dependencies and SparkR
       run: |
-        apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
+        apt update
+        apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
+          libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
+          libtiff5-dev libjpeg-dev
         Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
         Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
         ./R/install-dev.sh
