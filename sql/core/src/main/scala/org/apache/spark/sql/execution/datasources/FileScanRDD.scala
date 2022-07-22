@@ -216,14 +216,13 @@ class FileScanRDD(
       }
 
       private def isDFSClientClosedException(e: IOException): Boolean = {
-        e.getStackTrace.foreach { ste: StackTraceElement =>
-          if (ste != null && ste.getMethodName != null && ste.getClassName != null
+        e.getStackTrace.exists { ste: StackTraceElement =>
+          (ste != null
+            && ste.getMethodName != null
+            && ste.getClassName != null
             && ste.getClassName.contains("DFSClient")
-            && ste.getMethodName.contains("checkOpen")) {
-            true
-          }
+            && ste.getMethodName == "checkOpen")
         }
-        false
       }
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
