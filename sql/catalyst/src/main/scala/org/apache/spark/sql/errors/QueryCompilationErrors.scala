@@ -1378,6 +1378,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
   }
 
+  def cannotConvertTypeError(value: Any, t: String): Throwable = {
+    new AnalysisException(s"Can't convert $value to $t type")
+  }
+
   def incompatibleViewSchemaChange(
       viewName: String,
       colName: String,

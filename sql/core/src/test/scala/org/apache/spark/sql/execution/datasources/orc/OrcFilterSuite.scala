@@ -380,11 +380,6 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         "leaf-0 = (LESS_THAN _1 2), leaf-1 = (LESS_THAN_EQUALS _1 3), " +
           "expr = (or leaf-0 (not leaf-1))"
       )
-      checkFilterPredicate(
-        $"_1" < 2 && $"_1" > 3,
-        "leaf-0 = (IS_NULL _1), leaf-1 = (LESS_THAN _1 2), leaf-2 = (LESS_THAN_EQUALS _1 3), " +
-          "expr = (and (not leaf-0) leaf-1 (not leaf-2))"
-      )
     }
   }
 

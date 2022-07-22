@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
+import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.analysis._
@@ -31,13 +32,13 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /*
  * Optimization rules defined in this file should not affect the structure of the logical plan.
  */
-
 
 /**
  * Replaces [[Expression Expressions]] that can be statically evaluated with
@@ -528,6 +529,219 @@ object SimplifyBinaryComparison
   }
 }
 
+/**
+ * Binary comparison operators for simplifying conflicts.
+ */
+object SimplifyConflictBinaryComparison
+  extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
+
+  private def leftAttribute(
+      b: BinaryComparison): BinaryComparison = {
+    b match {
+      case BinaryComparison(_: Literal, _) => b.flipExpression
+      case _ => b
+    }
+  }
+
+  private def binaryFoldable(l: Expression, r: Expression): Boolean = {
+    l.foldable && r.foldable
+  }
+
+  private def semanticEquals(left: Expression, right: Expression): Boolean = {
+    (left, right) match {
+      case (Cast(child, _, _, _), a: AttributeReference) => child.semanticEquals(a)
+      case (a: AttributeReference, Cast(child, _, _, _)) => a.semanticEquals(child)
+      case (_, _) => left.semanticEquals(right)
+    }
+  }
+
+  private def canSimplify(left: BinaryExpression, right: BinaryExpression): Boolean = {
+    Seq(left, right).forall {
+      case BinaryExpression(_, _: Literal) => true
+      case BinaryExpression(_: Literal, _) => true
+      case _ => false
+    }
+  }
+
+  implicit def anyToBoolean(value: Any): Boolean = {
+    value match {
+      case b: Boolean => b
+      case _ =>
+        throw QueryCompilationErrors.cannotConvertTypeError(value, "boolean")
+    }
+  }
+
+  val simplifyConflict: PartialFunction[(Expression, Expression), Expression] = {
+    case (BinaryComparison(_, v1), BinaryComparison(_, v2))
+      if EqualTo(v1, v2).eval() == null => FalseLiteral
+
+    // EqualTo
+    case (EqualTo(_, v1), EqualTo(_, v2)) if !EqualTo(v1, v2).eval() => FalseLiteral
+    case (e @ EqualTo(_, v1), GreaterThan(_, v2)) =>
+      if (GreaterThan(v1, v2).eval()) e else FalseLiteral
+    case (e @ EqualTo(_, v1), GreaterThanOrEqual(_, v2)) =>
+      if (GreaterThanOrEqual(v1, v2).eval()) e else FalseLiteral
+    case (e @ EqualTo(_, v1), LessThan(_, v2)) =>
+      if (LessThan(v1, v2).eval()) e else FalseLiteral
+    case (e @ EqualTo(_, v1), LessThanOrEqual(_, v2)) =>
+      if (LessThanOrEqual(v1, v2).eval()) e else FalseLiteral
+
+    // GreaterThan
+    case (_ @ GreaterThan(_, v1), e @ EqualTo(_, v2)) =>
+      if (GreaterThan(v2, v1).eval()) e else FalseLiteral
+    case (g1 @ GreaterThan(_, v1), g2 @ GreaterThan(_, v2)) =>
+      if (GreaterThan(v1, v2).eval()) g1 else g2
+    case (GreaterThan(_, v1), LessThan(_, v2))
+      if GreaterThanOrEqual(v1, v2).eval() => FalseLiteral
+    case (g1 @ GreaterThan(_, v1), g2 @ GreaterThanOrEqual(_, v2)) =>
+      if (GreaterThanOrEqual(v1, v2).eval()) g1 else g2
+    case (GreaterThan(_, v1), LessThanOrEqual(_, v2))
+      if GreaterThanOrEqual(v1, v2).eval() => FalseLiteral
+
+    // GreaterThanOrEqual
+    case (g @ GreaterThanOrEqual(_, v1), e @ EqualTo(_, v2)) =>
+      if (EqualTo(v1, v2).eval()) {
+        e
+      } else if (GreaterThan(v1, v2).eval()) {
+        FalseLiteral
+      } else {
+        g
+      }
+    case (g1 @ GreaterThanOrEqual(_, v1), g2 @ GreaterThan(_, v2)) =>
+      if (EqualTo(v1, v2).eval()) {
+        g2
+      } else if (GreaterThan(v1, v2).eval()) {
+        g1
+      } else {
+        g2
+      }
+    case (g1 @ GreaterThanOrEqual(_, v1), g2 @ GreaterThanOrEqual(_, v2)) =>
+      if (GreaterThanOrEqual(v1, v2).eval()) {
+        g1
+      } else {
+        g2
+      }
+    case (_ @ GreaterThanOrEqual(_, v1), _ @ LessThan(_, v2))
+      if GreaterThanOrEqual(v1, v2).eval() => FalseLiteral
+    case (g @ GreaterThanOrEqual(att, v1), l @ LessThanOrEqual(_, v2)) =>
+      if (GreaterThan(v1, v2).eval()) {
+        FalseLiteral
+      } else if (EqualTo(v1, v2).eval()) {
+        EqualTo(att, v1)
+      } else {
+        And(g, l)
+      }
+
+    // LessThan
+    case (LessThan(_, v1), e @ EqualTo(_, v2)) =>
+      if (LessThanOrEqual(v1, v2).eval()) {
+        FalseLiteral
+      } else {
+        e
+      }
+    case (LessThan(_, v1), GreaterThan(_, v2))
+      if LessThanOrEqual(v1, v2).eval() => FalseLiteral
+    case (LessThan(_, v1), GreaterThanOrEqual(_, v2))
+      if LessThanOrEqual(v1, v2).eval() => FalseLiteral
+    case (l1 @ LessThan(_, v1), l2 @ LessThan(_, v2)) =>
+      if (LessThanOrEqual(v1, v2).eval()) {
+        l1
+      } else {
+        l2
+      }
+    case (l1 @ LessThan(_, v1), l2 @ LessThanOrEqual(_, v2)) =>
+      if (LessThanOrEqual(v1, v2).eval()) {
+        l1
+      } else {
+        l2
+      }
+
+    // LessThanOrEqual
+    case (LessThanOrEqual(_, v1), e @ EqualTo(_, v2)) =>
+      if (LessThan(v1, v2).eval()) {
+        FalseLiteral
+      } else {
+        e
+      }
+    case (LessThanOrEqual(_, v1), GreaterThan(_, v2))
+      if LessThanOrEqual(v1, v2).eval() => FalseLiteral
+    case (l @ LessThanOrEqual(attr, v1), g @ GreaterThanOrEqual(_, v2)) =>
+      if (EqualTo(v1, v2).eval()) {
+        EqualTo(attr, v1)
+      } else if (LessThan(v1, v2).eval()) {
+        FalseLiteral
+      } else {
+        And(l, g)
+      }
+    case (l1 @ LessThanOrEqual(_, v1), l2 @ LessThan(_, v2)) =>
+      if (LessThanOrEqual(v2, v1).eval()) {
+        l2
+      } else {
+        l1
+      }
+    case (l1 @ LessThanOrEqual(_, v1), l2 @ LessThanOrEqual(_, v2)) =>
+      if (LessThanOrEqual(v1, v2).eval()) {
+        l1
+      } else {
+        l2
+      }
+
+    case (left, right) => And(left, right)
+  }
+
+  private def simplifyConflictIfNecessary(conjunction: And): Expression = {
+    (conjunction.left, conjunction.right) match {
+      case (left @ BinaryComparison(Cast(_, dt, tz, ae), _), right @ BinaryComparison(l, v2)) =>
+        val newRight = right.withNewChildren(Seq(l, Cast(v2, dt, tz, ae)))
+        val simplified = simplifyConflict((left, newRight))
+
+        simplified match {
+          case _: And =>
+            conjunction
+          case _ =>
+            if (newRight.semanticEquals(simplified)) {
+              right
+            } else {
+              simplified
+            }
+        }
+
+      case (left @ BinaryComparison(l, v1), right @ BinaryComparison(Cast(_, dt, tz, ae), _)) =>
+        val newLeft = left.withNewChildren(Seq(l, Cast(v1, dt, tz, ae)))
+        val simplified = simplifyConflict(newLeft, right)
+
+        simplified match {
+          case _: And =>
+            conjunction
+          case _ =>
+            if (newLeft.semanticEquals(simplified)) {
+              left
+            } else {
+              simplified
+            }
+        }
+
+      case _ => simplifyConflict(conjunction.left, conjunction.right)
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(BINARY_COMPARISON), ruleId) {
+    case l: LogicalPlan =>
+      l.transformExpressionsUpWithPruning(_.containsPattern(BINARY_COMPARISON)) {
+        case and @ And(left: BinaryComparison, right: BinaryComparison)
+          if canSimplify(left, right) =>
+
+          val (l, r) = (leftAttribute(left), leftAttribute(right))
+
+          if (semanticEquals(l.left, r.left) && binaryFoldable(l.right, r.right)) {
+            simplifyConflictIfNecessary(And(l, r))
+          } else {
+            and
+          }
+      }
+  }
+}
 
 /**
  * Simplifies conditional expressions (if / case).

@@ -941,6 +941,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   }
 
   protected lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(left.dataType)
+
+  def flipExpression: BinaryComparison
 }
 
 
@@ -1001,6 +1003,8 @@ case class EqualTo(left: Expression, right: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EqualTo = copy(left = newLeft, right = newRight)
+
+  override def flipExpression: BinaryComparison = this
 }
 
 // TODO: although map type is not orderable, technically map type should be able to be used
@@ -1066,6 +1070,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): EqualNullSafe =
     copy(left = newLeft, right = newRight)
+
+  override def flipExpression: BinaryComparison = this
 }
 
 @ExpressionDescription(
@@ -1139,6 +1145,8 @@ case class LessThan(left: Expression, right: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
+
+  override def flipExpression: BinaryComparison = GreaterThan(right, left)
 }
 
 @ExpressionDescription(
@@ -1174,6 +1182,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
+
+  override def flipExpression: BinaryComparison = GreaterThanOrEqual(right, left)
 }
 
 @ExpressionDescription(
@@ -1209,6 +1219,8 @@ case class GreaterThan(left: Expression, right: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
+
+  override def flipExpression: BinaryComparison = LessThan(right, left)
 }
 
 @ExpressionDescription(
@@ -1245,6 +1257,8 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GreaterThanOrEqual =
     copy(left = newLeft, right = newRight)
+
+  override def flipExpression: BinaryComparison = LessThanOrEqual(right, left)
 }
 
 /**
