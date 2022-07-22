@@ -1839,7 +1839,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-39844 Restrict adding DEFAULT columns for existing tables to certain sources ") {
-    Seq("csv").foreach { provider =>
+    Seq("csv", "json", "orc", "parquet").foreach { provider =>
       withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider) {
           withTable("t") {
           sql(s"create table t(a int default 42) using $provider")

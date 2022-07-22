@@ -2511,6 +2511,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "adding new columns to previously existing target data source with table " +
         "provider: \"" + dataSource + "\"")
   }
+
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
     new AnalysisException(
       "Failed to execute command because subquery expressions are not allowed in DEFAULT values")
