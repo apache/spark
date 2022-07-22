@@ -2919,6 +2919,17 @@ object SQLConf {
       .stringConf
       .createWithDefault("csv,json,orc,parquet")
 
+  val ADD_DEFAULT_COLUMN_EXISTING_TABLE_BANNED_PROVIDERS =
+    buildConf("spark.sql.defaultColumn.addColumnExistingTableBannedProviders")
+      .internal()
+      .doc("List of table providers wherein SQL commands are NOT permitted to assign DEFAULT " +
+        "values to new columns in existing tables, such as when using the ALTER TABLE ... " +
+        "ADD COLUMNS command in SQL. Comma-separated list, whitespace ignored, case-insensitive.")
+      .version("3.4.0")
+      .stringConf
+      .createWithDefault("")
+
+
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()

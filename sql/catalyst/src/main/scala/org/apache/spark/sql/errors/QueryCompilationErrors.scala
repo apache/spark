@@ -2497,12 +2497,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "literal value")
   }
 
-  def defaultReferencesNotAllowedInDataSource(dataSource: String): Throwable = {
+  def defaultReferencesNotAllowedInDataSource(
+      statementType: String, dataSource: String): Throwable = {
     new AnalysisException(
-      s"Failed to execute command because DEFAULT values are not supported for target data " +
-        "source with table provider: \"" + dataSource + "\"")
+      s"Failed to execute $statementType command because DEFAULT values are not supported for " +
+        "target data source with table provider: \"" + dataSource + "\"")
   }
 
+  def addNewDefaultColumnToExistingTableNotAllowed(
+      statementType: String, dataSource: String): Throwable = {
+    new AnalysisException(
+      s"Failed to execute $statementType command because DEFAULT values are not supported when " +
+        "adding new columns to previously existing target data source with table " +
+        "provider: \"" + dataSource + "\"")
+  }
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
     new AnalysisException(
       "Failed to execute command because subquery expressions are not allowed in DEFAULT values")

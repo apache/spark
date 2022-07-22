@@ -1838,6 +1838,25 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-39844 Restrict adding DEFAULT columns for existing tables to certain sources ") {
+    Seq("csv").foreach { provider =>
+      withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider) {
+        withTable("t") {
+          sql(s"create table t(a int default 42) using $provider")
+          sql(s"alter table t add column (b string default 'abc')")
+          sql(s"insert into t values (42, default)")
+          checkAnswer(spark.table("t"), Row(42, "abc"))
+          withSQLConf(SQLConf.ADD_DEFAULT_COLUMN_EXISTING_TABLE_BANNED_PROVIDERS.key -> provider) {
+            assert(intercept[AnalysisException] {
+              sql(s"alter table t add column (b string default 'abc')")
+            }.getMessage.contains(
+              QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions().getMessage))
+          }
+        }
+      }
+    }
+  }
+
   test("Stop task set if FileAlreadyExistsException was thrown") {
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,

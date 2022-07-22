@@ -90,22 +90,34 @@ object ResolveDefaultColumns {
    * @param tableSchema   represents the names and types of the columns of the statement to process.
    * @param tableProvider provider of the target table to store default values for, if any.
    * @param statementType name of the statement being processed, such as INSERT; useful for errors.
+   * @param addNewColumnToExistingTable true if the statement being processed adds a new column to
+   *                                    a table that already exists.
    * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
    */
   def constantFoldCurrentDefaultsToExistDefaults(
       tableSchema: StructType,
       tableProvider: Option[String],
-      statementType: String): StructType = {
+      statementType: String,
+      addNewColumnToExistingTable: Boolean): StructType = {
     if (SQLConf.get.enableDefaultColumns) {
       val allowedTableProviders: Array[String] =
         SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
+          .toLowerCase().split(",").map(_.trim)
+      val addColumnExistingTableBannedProviders: Array[String] =
+        SQLConf.get.getConf(SQLConf.ADD_DEFAULT_COLUMN_EXISTING_TABLE_BANNED_PROVIDERS)
           .toLowerCase().split(",").map(_.trim)
       val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
           // Make sure that the target table has a provider that supports default column values.
           if (!allowedTableProviders.contains(givenTableProvider)) {
-            throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(givenTableProvider)
+            throw QueryCompilationErrors
+              .defaultReferencesNotAllowedInDataSource(statementType, givenTableProvider)
+          }
+          if (addNewColumnToExistingTable &&
+            !addColumnExistingTableBannedProviders.contains(givenTableProvider)) {
+            throw QueryCompilationErrors
+              .addNewDefaultColumnToExistingTableNotAllowed(statementType, givenTableProvider)
           }
           val analyzed: Expression = analyze(field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
