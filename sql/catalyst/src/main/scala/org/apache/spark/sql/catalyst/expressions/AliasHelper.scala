@@ -98,15 +98,10 @@ trait AliasHelper {
   protected def trimNonTopLevelAliases[T <: Expression](e: T): T = {
     val res = e match {
       case a: Alias =>
-        val metadata = a.explicitMetadata match {
-          // SPARK-39838 Preserve explicit metadata, even if it is empty
-          case Some(metadata) => Some(metadata)
-          case None =>
-            if (a.metadata == Metadata.empty) {
-              None
-            } else {
-              Some(a.metadata)
-            }
+        val metadata = if (a.metadata == Metadata.empty && a.explicitMetadata.isEmpty) {
+          None
+        } else {
+          Some(a.metadata)
         }
         a.copy(child = trimAliases(a.child))(
           exprId = a.exprId,
