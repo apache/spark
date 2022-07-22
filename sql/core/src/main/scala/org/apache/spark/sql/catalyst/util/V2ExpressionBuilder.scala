@@ -235,7 +235,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
         b match {
           case _: Predicate =>
             if (isBinaryComparisonOperator(b.sqlOperator) && l.get.isInstanceOf[LiteralValue[_]] &&
-              r.get.isInstanceOf[FieldReference]) {
+                r.get.isInstanceOf[FieldReference]) {
               Some(new V2Predicate(flipComparisonOperatorName(b.sqlOperator),
                 Array[V2Expression](r.get, l.get)))
             } else {
