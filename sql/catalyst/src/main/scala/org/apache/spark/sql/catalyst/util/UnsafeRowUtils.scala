@@ -86,12 +86,14 @@ object UnsafeRowUtils {
             // UnsafeRow.setDecimal(int, Decimal, int).
             // A variable-length Decimal may be marked as null while having non-zero offset and
             // zero length. This allows the field to be updated (i.e. mutable variable-length data)
+
+            // Check the integrity of null value of variable-length DecimalType in UnsafeRow:
+            // 1. size must be zero
+            // 2. offset may be zero, in which case this variable-length field is no longer mutable
+            // 3. otherwise offset is non-zero, range check it the same way as a non-null value
             val (offset, size) = getOffsetAndSize(row, index)
-            if (size != 0 ||     // size must be zero
-                offset != 0 &&   // offsetAndSize may be entirely zero if row.setNullAt(index),
-                                 // otherwise range check offset
-                (offset < bitSetWidthInBytes + 8 * row.numFields ||
-                  offset + size > rowSizeInBytes)) {
+            if (size != 0 || offset != 0 &&
+                (offset < bitSetWidthInBytes + 8 * row.numFields || offset > rowSizeInBytes)) {
               return false
             }
           case _ =>
