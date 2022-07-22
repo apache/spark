@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.math.{max, min}
 
-import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.SqlQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -256,7 +256,7 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
-  override def initQueryContext(): Option[QueryContext] = {
+  override def initQueryContext(): Option[SqlQueryContext] = {
     if (failOnError) {
       Some(origin.context)
     } else {

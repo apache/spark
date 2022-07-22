@@ -82,7 +82,7 @@ private[spark] object SparkThrowableHelper {
       errorClass: String,
       errorSubClass: String,
       messageParameters: Array[String],
-      context: Option[QueryContext]): String = {
+      context: Option[QueryContextSummary]): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
     val (displayClass, displayMessageParameters, displayFormat) = if (errorInfo.subClass.isEmpty) {

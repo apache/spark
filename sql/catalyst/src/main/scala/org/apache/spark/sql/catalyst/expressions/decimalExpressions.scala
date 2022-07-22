@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.SqlQueryContext
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -145,7 +145,7 @@ case class CheckOverflow(
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
 
-  override def initQueryContext(): Option[QueryContext] = if (!nullOnOverflow) {
+  override def initQueryContext(): Option[SqlQueryContext] = if (!nullOnOverflow) {
     Some(origin.context)
   } else {
     None
@@ -157,7 +157,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    context: Option[QueryContext] = None) extends UnaryExpression {
+    context: Option[SqlQueryContext] = None) extends UnaryExpression {
 
   override def nullable: Boolean = true
 
@@ -253,12 +253,12 @@ case class DecimalDivideWithOverflowCheck(
     left: Expression,
     right: Expression,
     override val dataType: DecimalType,
-    context: Option[QueryContext],
+    context: Option[SqlQueryContext],
     nullOnOverflow: Boolean)
   extends BinaryExpression with ExpectsInputTypes with SupportQueryContext {
   override def nullable: Boolean = nullOnOverflow
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, DecimalType)
-  override def initQueryContext(): Option[QueryContext] = context
+  override def initQueryContext(): Option[SqlQueryContext] = context
   def decimalMethod: String = "$div"
 
   override def eval(input: InternalRow): Any = {

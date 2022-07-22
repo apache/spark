@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.{SqlQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SUM, TreePattern}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -150,7 +149,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * If sum is not null, then return the sum.
    */
   protected def getEvaluateExpression(
-      context: Option[QueryContext]): Expression = resultType match {
+      context: Option[SqlQueryContext]): Expression = resultType match {
     case d: DecimalType =>
       val checkOverflowInSum = CheckOverflowInSum(sum, d, !useAnsiAdd, context)
       If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
@@ -195,7 +194,7 @@ case class Sum(
 
   override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
 
-  override def initQueryContext(): Option[QueryContext] = if (useAnsiAdd) {
+  override def initQueryContext(): Option[SqlQueryContext] = if (useAnsiAdd) {
     Some(origin.context)
   } else {
     None

@@ -119,7 +119,7 @@ private[spark] class SparkArithmeticException(
     errorClass: String,
     errorSubClass: Option[String] = None,
     messageParameters: Array[String],
-    context: Option[QueryContext] = None)
+    context: Option[QueryContextSummary] = None)
   extends ArithmeticException(
     SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, context))
     with SparkThrowable {
@@ -194,7 +194,7 @@ private[spark] class SparkDateTimeException(
     errorClass: String,
     errorSubClass: Option[String] = None,
     messageParameters: Array[String],
-    context: Option[QueryContext] = None)
+    context: Option[QueryContextSummary] = None)
   extends DateTimeException(
     SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, context))
     with SparkThrowable {
@@ -242,7 +242,7 @@ private[spark] class SparkNumberFormatException(
     errorClass: String,
     errorSubClass: Option[String] = None,
     messageParameters: Array[String],
-    context: Option[QueryContext])
+    context: Option[QueryContextSummary])
   extends NumberFormatException(
     SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, context))
     with SparkThrowable {
@@ -320,7 +320,7 @@ private[spark] class SparkRuntimeException(
     errorSubClass: Option[String] = None,
     messageParameters: Array[String],
     cause: Throwable = null,
-    context: Option[QueryContext] = None)
+    context: Option[QueryContextSummary] = None)
   extends RuntimeException(
     SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, context),
     cause)
@@ -330,7 +330,7 @@ private[spark] class SparkRuntimeException(
            errorSubClass: String,
            messageParameters: Array[String],
            cause: Throwable,
-           context: Option[QueryContext])
+           context: Option[QueryContextSummary])
     = this(errorClass = errorClass,
     errorSubClass = Some(errorSubClass),
     messageParameters = messageParameters,
@@ -375,7 +375,7 @@ private[spark] class SparkArrayIndexOutOfBoundsException(
     errorClass: String,
     errorSubClass: Option[String] = None,
     messageParameters: Array[String],
-    context: Option[QueryContext])
+    context: Option[QueryContextSummary])
   extends ArrayIndexOutOfBoundsException(
     SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, context))
     with SparkThrowable {
@@ -415,7 +415,7 @@ private[spark] class SparkNoSuchElementException(
     errorClass: String,
     errorSubClass: Option[String] = None,
     messageParameters: Array[String],
-    context: Option[QueryContext])
+    context: Option[QueryContextSummary])
   extends NoSuchElementException(
     SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, context))
     with SparkThrowable {

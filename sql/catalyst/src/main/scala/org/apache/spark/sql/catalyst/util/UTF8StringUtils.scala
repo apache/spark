@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.QueryContext
+import org.apache.spark.sql.catalyst.trees.SqlQueryContext
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, LongType, ShortType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -27,21 +27,21 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 object UTF8StringUtils {
 
-  def toLongExact(s: UTF8String, context: Option[QueryContext]): Long =
+  def toLongExact(s: UTF8String, context: Option[SqlQueryContext]): Long =
     withException(s.toLongExact, context, LongType, s)
 
-  def toIntExact(s: UTF8String, context: Option[QueryContext]): Int =
+  def toIntExact(s: UTF8String, context: Option[SqlQueryContext]): Int =
     withException(s.toIntExact, context, IntegerType, s)
 
-  def toShortExact(s: UTF8String, context: Option[QueryContext]): Short =
+  def toShortExact(s: UTF8String, context: Option[SqlQueryContext]): Short =
     withException(s.toShortExact, context, ShortType, s)
 
-  def toByteExact(s: UTF8String, context: Option[QueryContext]): Byte =
+  def toByteExact(s: UTF8String, context: Option[SqlQueryContext]): Byte =
     withException(s.toByteExact, context, ByteType, s)
 
   private def withException[A](
       f: => A,
-      context: Option[QueryContext],
+      context: Option[SqlQueryContext],
       to: DataType,
       s: UTF8String): A = {
     try {
