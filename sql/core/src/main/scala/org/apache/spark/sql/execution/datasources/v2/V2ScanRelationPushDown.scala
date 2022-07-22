@@ -420,11 +420,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // push-down, and thus can't push down Top-N which needs to know the ordering column names.
         // In particular, we push down the simple cases like GROUP BY columns directly and ORDER BY
         // the same columns, which we know the resulting column names: the original table columns.
+        // TODO support push down Aggregate with ORDER BY expressions.
         if filter.isEmpty &&
           CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
 
-      // TODO support push down Aggregate with ORDER BY expressions.
       def findGroupColForSortOrder(sortOrder: SortOrder): Option[SortOrder] = sortOrder match {
         case SortOrder(attr: AttributeReference, direction, nullOrdering, sameOrderExpressions) =>
           findGroupColumn(aliasMap(attr)).filter { groupCol =>
@@ -433,7 +433,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case _ => None
       }
 
-      lazy val orderByGroupCols = order.flatMap(findGroupColForSortOrder)
+      val orderByGroupCols = order.flatMap(findGroupColForSortOrder)
       if (sHolder.pushedAggregate.isDefined && orderByGroupCols.length != order.length) {
         return (s, false)
       }
