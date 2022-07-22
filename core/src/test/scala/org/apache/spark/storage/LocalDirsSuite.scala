@@ -86,21 +86,26 @@ class LocalDirsSuite extends SparkFunSuite with LocalRootDirsTest {
     assert(!f2.exists())
   }
 
-  test("SPARK-39755 : Test randomness in SPARK_LOCAL_DIRS") {
+  test("SPARK-39755 : Test randomness in SPARK_LOCAL_DIRS, SPARK_EXECUTOR_DIRS") {
     val path1 = "PATH_ONE"
     val path2 = "PATH_TWO"
-    val conf = new SparkConfWithEnv(Map("SPARK_LOCAL_DIRS" -> "PATH_ONE,PATH_TWO"))
-    val index_of_path1 = Array(false, false)
-    for (index <- 0 to 10) {
-      val data = Utils.getConfiguredLocalDirs(conf)
-      if(data(0).equals("PATH_ONE")) {
-        index_of_path1(0) = true
+    val pathExecutor = path1 + File.pathSeparator + path2
+    val envVariableLocation = Map("SPARK_LOCAL_DIRS" -> "PATH_ONE,PATH_TWO",
+      "SPARK_EXECUTOR_DIRS" -> pathExecutor)
+    for ((envVariable, location) <- envVariableLocation) {
+      val conf = new SparkConfWithEnv(Map(envVariable -> location))
+      val index_of_path1 = Array(false, false)
+      for (index <- 0 to 10) {
+        val data = Utils.getConfiguredLocalDirs(conf)
+        if (data(0).equals("PATH_ONE")) {
+          index_of_path1(0) = true
+        }
+        if (data(1).equals("PATH_ONE")) {
+          index_of_path1(1) = true
+        }
       }
-      if(data(1).equals("PATH_ONE")) {
-        index_of_path1(1) = true
-      }
+      assert(index_of_path1(0))
+      assert(index_of_path1(1))
     }
-    assert(index_of_path1(0))
-    assert(index_of_path1(1))
   }
 }

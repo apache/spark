@@ -920,7 +920,7 @@ private[spark] object Utils extends Logging {
       // user has access to them.
       randomizeInPlace(getYarnLocalDirs(conf).split(","))
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
-      conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
+      randomizeInPlace(conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator))
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
       randomizeInPlace(conf.getenv("SPARK_LOCAL_DIRS").split(","))
     } else if (conf.getenv("MESOS_SANDBOX") != null && !shuffleServiceEnabled) {
