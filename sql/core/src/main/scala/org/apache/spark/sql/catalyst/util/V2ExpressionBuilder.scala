@@ -233,6 +233,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       val r = generateExpression(b.right)
       if (l.isDefined && r.isDefined) {
         b match {
+          case _: Predicate if isBinaryComparisonOperator(b.sqlOperator) &&
+              l.get.isInstanceOf[LiteralValue[_]] && r.get.isInstanceOf[FieldReference] =>
+            Some(new V2Predicate(flipComparisonOperatorName(b.sqlOperator),
+              Array[V2Expression](r.get, l.get)))
           case _: Predicate =>
             Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
           case _ =>
@@ -407,6 +411,23 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
         None
       }
     case _ => None
+  }
+
+  private def isBinaryComparisonOperator(operatorName: String): Boolean = {
+    operatorName match {
+      case ">" | "<" | ">=" | "<=" | "=" | "<=>" => true
+      case _ => false
+    }
+  }
+
+  private def flipComparisonOperatorName(operatorName: String): String = {
+    operatorName match {
+      case ">" => "<"
+      case "<" => ">"
+      case ">=" => "<="
+      case "<=" => ">="
+      case _ => operatorName
+    }
   }
 }
 
