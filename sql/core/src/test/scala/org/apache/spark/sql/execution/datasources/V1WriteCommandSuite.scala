@@ -20,11 +20,13 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.util.QueryExecutionListener
 
-abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
+abstract class V1WriteCommandSuiteBase
+  extends QueryTest with SQLTestUtils with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -210,6 +212,36 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
                 |WHERE value = '1'
                 |""".stripMargin)
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-37194: Avoid unnecessary sort in v1 write if it's not dynamic partition") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(key INT, value STRING) USING PARQUET
+            |PARTITIONED BY (p1 INT, p2 STRING)
+            |""".stripMargin)
+
+        // partition columns are static
+        executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
+          sql(
+            """
+              |INSERT INTO t PARTITION(p1=1, p2='a')
+              |SELECT key, value FROM testData
+              |""".stripMargin)
+        }
+
+        // one static partition column and one dynamic partition column
+        executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+          sql(
+            """
+              |INSERT INTO t PARTITION(p1=1, p2)
+              |SELECT key, value, value FROM testData
+              |""".stripMargin)
         }
       }
     }
