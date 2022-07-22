@@ -144,7 +144,7 @@ object ResolveDefaultColumns {
     }
     // Check invariants before moving on to analysis.
     if (parsed.containsPattern(PLAN_EXPRESSION)) {
-      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions()
+      throw QueryCompilationErrors.defaultValuesMayNotContain("subquery expressions")
     }
     // Analyze the parse result.
     val plan = try {

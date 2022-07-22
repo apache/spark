@@ -1834,7 +1834,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         sql(query)
       }.getMessage.contains(
-        QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions().getMessage))
+        QueryCompilationErrors.defaultValuesMayNotContain("subquery expressions").getMessage))
     }
   }
 

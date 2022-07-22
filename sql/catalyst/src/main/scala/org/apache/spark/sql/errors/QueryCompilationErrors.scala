@@ -2503,10 +2503,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "source with table provider: \"" + dataSource + "\"")
   }
 
-  def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
-    defaultValuesMayNotContain("subquery expressions")
-  }
-
   def defaultValuesMayNotContain(expression: String): Throwable = {
     new AnalysisException(
       s"Failed to execute command because $expression are not allowed in DEFAULT values")
