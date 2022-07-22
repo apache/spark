@@ -1838,6 +1838,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-39843: UDF expressions are not allowed as DEFAULT values") {
+    spark.udf.register("udf", (n: Int) => { n < 150 })
+    assert(intercept[AnalysisException] {
+      sql("create table t(a string default udf(42)) using parquet")
+    }.getMessage.contains("not allowed in DEFAULT values"))
+  }
+
   test("Stop task set if FileAlreadyExistsException was thrown") {
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,

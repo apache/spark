@@ -162,6 +162,10 @@ object ResolveDefaultColumns {
     val analyzed: Expression = plan.collectFirst {
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
     }.get
+    // Check invariants after performing analysis.
+    if (analyzed.collectFirst { case _: UserDefinedExpression => true }.isDefined) {
+      throw QueryCompilationErrors.defaultValuesMayNotContain("user defined function calls")
+    }
     // Perform implicit coercion from the provided expression type to the required column type.
     if (field.dataType == analyzed.dataType) {
       analyzed

@@ -2504,8 +2504,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
+    defaultValuesMayNotContain("subquery expressions")
+  }
+
+  def defaultValuesMayNotContain(expression: String): Throwable = {
     new AnalysisException(
-      "Failed to execute command because subquery expressions are not allowed in DEFAULT values")
+      s"Failed to execute command because $expression are not allowed in DEFAULT values")
   }
 
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
