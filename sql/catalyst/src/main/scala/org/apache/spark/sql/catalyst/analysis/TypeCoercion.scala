@@ -202,15 +202,14 @@ abstract class TypeCoercionBase {
    * Widens the data types of the [[Unpivot]] values.
    */
   object UnpivotCoercion extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan =
-      plan resolveOperators {
-        case up: Unpivot
-          if up.values.nonEmpty && up.values.forall(_.resolved) && !up.valuesTypeCoercioned =>
-          val valueDataType = findWiderTypeWithoutStringPromotion(up.values.map(_.dataType))
-          val values = valueDataType.map(valueType =>
-            up.values.map(value => Alias(Cast(value, valueType), value.name)())
-          ).getOrElse(up.values)
-          up.copy(values = values)
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case up: Unpivot
+        if up.values.nonEmpty && up.values.forall(_.resolved) && !up.valuesTypeCoercioned =>
+        val valueDataType = findWiderTypeWithoutStringPromotion(up.values.map(_.dataType))
+        val values = valueDataType.map(valueType =>
+          up.values.map(value => Alias(Cast(value, valueType), value.name)())
+        ).getOrElse(up.values)
+        up.copy(values = values)
       }
   }
 
