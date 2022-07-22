@@ -285,7 +285,11 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      val errorContextCode = ctx.addReferenceObj("errCtx", queryContext)
+      val errorContextCode = if (failOnError) {
+        ctx.addReferenceObj("errCtx", queryContext)
+      } else {
+        "scala.None$.MODULE$"
+      }
       val updateIsNull = if (failOnError) {
         ""
       } else {
@@ -599,13 +603,17 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+    val errorContextCode = if (failOnError) {
+      ctx.addReferenceObj("errCtx", queryContext)
+    } else {
+      "scala.None$.MODULE$"
+    }
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalValue = ctx.freshName("decimalValue")
         s"""
            |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
            |if ($decimalValue != null) {
            |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
            |} else {
@@ -617,7 +625,7 @@ trait DivModLike extends BinaryArithmetic {
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
       s"""
         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
-        |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
+        |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContextCode);
         |""".stripMargin
     } else {
       ""
@@ -626,7 +634,7 @@ trait DivModLike extends BinaryArithmetic {
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.divideByZeroError($errorContext);"
+        s"throw QueryExecutionErrors.divideByZeroError($errorContextCode);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -644,7 +652,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContext);"
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContextCode);"
       } else {
         ""
       }

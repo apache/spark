@@ -126,7 +126,11 @@ case class CheckOverflow(
       queryContext)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContextCode = ctx.addReferenceObj("errCtx", queryContext)
+    val errorContextCode = if (nullOnOverflow) {
+      "scala.None$.MODULE$"
+    } else {
+      ctx.addReferenceObj("errCtx", queryContext)
+    }
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
       s"""
@@ -178,7 +182,11 @@ case class CheckOverflowInSum(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    val errorContextCode = ctx.addReferenceObj("errCtx", context)
+    val errorContextCode = if (nullOnOverflow) {
+      "scala.None$.MODULE$"
+    } else {
+      ctx.addReferenceObj("errCtx", context)
+    }
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
@@ -278,7 +286,11 @@ case class DecimalDivideWithOverflowCheck(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContextCode = ctx.addReferenceObj("errCtx", queryContext)
+    val errorContextCode = if (nullOnOverflow) {
+      "scala.None$.MODULE$"
+    } else {
+      ctx.addReferenceObj("errCtx", queryContext)
+    }
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
