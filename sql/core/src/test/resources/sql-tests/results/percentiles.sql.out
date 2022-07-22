@@ -38,59 +38,67 @@ struct<>
 -- !query
 SELECT
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE k > 0)
 FROM aggr
 -- !query schema
-struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY v):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):double>
+struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY v):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE (k > 0)):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE (k > 0)):double>
 -- !query output
-10.0	30.0
+10.0	15.0	30.0	27.5
 
 
 -- !query
 SELECT
   k,
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE k > 0)
 FROM aggr
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):double>
+struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE (k > 0)):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE (k > 0)):double>
 -- !query output
-0	10.0	30.0
-1	12.5	17.5
-2	17.5	26.25
-3	60.0	60.0
-4	NULL	NULL
+0	10.0	NULL	30.0	NULL
+1	12.5	12.5	17.5	17.5
+2	17.5	17.5	26.25	26.25
+3	60.0	60.0	60.0	60.0
+4	NULL	NULL	NULL	NULL
 
 
 -- !query
 SELECT
   percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE k > 0)
 FROM aggr
 -- !query schema
-struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY v):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):double>
+struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY v):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE (k > 0)):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE (k > 0)):double>
 -- !query output
-10.0	30.0
+10.0	10.0	30.0	30.0
 
 
 -- !query
 SELECT
   k,
   percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE k > 0)
 FROM aggr
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):double>
+struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE (k > 0)):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE (k > 0)):double>
 -- !query output
-0	10.0	30.0
-1	10.0	20.0
-2	10.0	30.0
-3	60.0	60.0
-4	NULL	NULL
+0	10.0	NULL	30.0	NULL
+1	10.0	10.0	20.0	20.0
+2	10.0	10.0	30.0	30.0
+3	60.0	60.0	60.0	60.0
+4	NULL	NULL	NULL	NULL
 
 
 -- !query

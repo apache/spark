@@ -23,7 +23,7 @@ import java.util.UUID
 
 import scala.util.Random
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.RDD
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.util.{CompletionIterator, Utils}
 
-class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
+class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
 
   import StateStoreTestsHelper._
 

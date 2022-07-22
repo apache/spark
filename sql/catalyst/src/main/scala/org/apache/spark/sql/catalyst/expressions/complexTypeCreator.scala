@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, Func
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -605,9 +605,15 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 /**
  * Represents an operation to be applied to the fields of a struct.
  */
-trait StructFieldsOperation {
+trait StructFieldsOperation extends Expression with Unevaluable {
 
   val resolver: Resolver = SQLConf.get.resolver
+
+  override def dataType: DataType = throw new IllegalStateException(
+    "StructFieldsOperation.dataType should not be called.")
+
+  override def nullable: Boolean = throw new IllegalStateException(
+    "StructFieldsOperation.nullable should not be called.")
 
   /**
    * Returns an updated list of StructFields and Expressions that will ultimately be used
@@ -624,7 +630,7 @@ trait StructFieldsOperation {
  * children, and thereby enable the analyzer to resolve and transform valExpr as necessary.
  */
 case class WithField(name: String, valExpr: Expression)
-  extends Unevaluable with StructFieldsOperation with UnaryLike[Expression] {
+  extends StructFieldsOperation with UnaryLike[Expression] {
 
   override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] = {
     val newFieldExpr = (StructField(name, valExpr.dataType, valExpr.nullable), valExpr)
@@ -644,12 +650,6 @@ case class WithField(name: String, valExpr: Expression)
 
   override def child: Expression = valExpr
 
-  override def dataType: DataType = throw new IllegalStateException(
-    "WithField.dataType should not be called.")
-
-  override def nullable: Boolean = throw new IllegalStateException(
-    "WithField.nullable should not be called.")
-
   override def prettyName: String = "WithField"
 
   override protected def withNewChildInternal(newChild: Expression): WithField =
@@ -659,7 +659,7 @@ case class WithField(name: String, valExpr: Expression)
 /**
  * Drop a field by name.
  */
-case class DropField(name: String) extends StructFieldsOperation {
+case class DropField(name: String) extends StructFieldsOperation with LeafLike[Expression] {
   override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] =
     values.filterNot { case (field, _) => resolver(field.name, name) }
 }
@@ -698,11 +698,13 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
   override def prettyName: String = "update_fields"
 
   private lazy val newFieldExprs: Seq[(StructField, Expression)] = {
+    def getFieldExpr(i: Int): Expression = structExpr match {
+      case c: CreateNamedStruct => c.valExprs(i)
+      case _ => GetStructField(structExpr, i)
+    }
+    val fieldsWithIndex = structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex
     val existingFieldExprs: Seq[(StructField, Expression)] =
-      structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex.map {
-        case (field, i) => (field, GetStructField(structExpr, i))
-      }
-
+      fieldsWithIndex.map { case (field, i) => (field, getFieldExpr(i)) }
     fieldOps.foldLeft(existingFieldExprs)((exprs, op) => op(exprs))
   }
 

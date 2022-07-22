@@ -23,12 +23,12 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedNonPersistentFunc, ResolvedPersistentFunc, ResolvedTable, ResolvedView, UnresolvedDBObjectName, UnresolvedFunc, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedNonPersistentFunc, ResolvedPersistentFunc, ResolvedTable, ResolvedView, UnresolvedFunc, UnresolvedIdentifier, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, MultipartIdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -493,14 +493,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def tableExists(tableName: String): Boolean = {
     try {
-      val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-      tableExists(tableIdent.database.orNull, tableIdent.table)
+      getTable(tableName)
+      true
     } catch {
-      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
-        val ident = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-        val catalog =
-          sparkSession.sessionState.catalogManager.catalog(ident(0)).asTableCatalog
-        catalog.tableExists(Identifier.of(Array(ident(1)), ident(2)))
+      case e: AnalysisException => false
     }
   }
 
@@ -657,7 +653,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       external = tableType == CatalogTableType.EXTERNAL)
 
     val plan = CreateTable(
-      name = UnresolvedDBObjectName(ident, isNamespace = false),
+      name = UnresolvedIdentifier(ident),
       tableSchema = schema,
       partitioning = Seq(),
       tableSpec = tableSpec,

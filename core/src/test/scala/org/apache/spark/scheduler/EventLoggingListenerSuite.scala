@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import java.io.{File, InputStream}
 import java.util.{Arrays, Properties}
 
-import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.Set
 import scala.io.{Codec, Source}
@@ -34,7 +33,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.{EventLogFileReader, SingleEventLogFileWriter}
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EVENT_LOG_DIR, EVENT_LOG_ENABLED}
 import org.apache.spark.io._
 import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
@@ -49,8 +47,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  * logging events, whether the parsing of the file names is correct, and whether the logged events
  * can be read and deserialized into actual SparkListenerEvents.
  */
-class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
-  with Logging {
+class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter {
 
   private val fileSystem = Utils.getHadoopFileSystem("/",
     SparkHadoopUtil.get.newConfiguration(new SparkConf()))

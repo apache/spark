@@ -1671,6 +1671,160 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-39557 INSERT INTO statements with tables with array defaults") {
+    // Positive tests: array types are supported as default values.
+    case class TestCase(
+        dataSource: String,
+        insertNullsToStorage: Boolean = true)
+    Seq(
+      TestCase(
+        "parquet"),
+      TestCase(
+        "orc",
+        false)).foreach { testCase =>
+      val dataSource = testCase.dataSource
+      withTable("t") {
+        sql(s"create table t(i boolean) using $dataSource")
+        sql("insert into t select false")
+        sql("alter table t add column s array<int> default array(1, 2)")
+        checkAnswer(spark.table("t"), Row(false, Seq(1, 2)))
+      }
+    }
+    // Negative tests: provided array element types must match their corresponding DEFAULT
+    // declarations, if applicable.
+    val incompatibleDefault =
+    "Failed to execute ALTER TABLE ADD COLUMNS command because the destination table column s " +
+      "has a DEFAULT value with type"
+    withTable("t") {
+      sql("create table t(i boolean) using parquet")
+      sql("insert into t select false")
+      assert(intercept[AnalysisException] {
+        sql("alter table t add column s array<int> default array('abc', 'def')")
+      }.getMessage.contains(incompatibleDefault))
+    }
+  }
+
+  test("SPARK-39557 INSERT INTO statements with tables with struct defaults") {
+    // Positive tests: struct types are supported as default values.
+    case class TestCase(
+        dataSource: String,
+        insertNullsToStorage: Boolean = true)
+    Seq(
+      TestCase(
+        "parquet"),
+      TestCase(
+        "orc",
+        false)).foreach { testCase =>
+      val dataSource = testCase.dataSource
+      withTable("t") {
+        sql(s"create table t(i boolean) using $dataSource")
+        sql("insert into t select false")
+        sql("alter table t add column s struct<x boolean, y string> default struct(true, 'abc')")
+        checkAnswer(spark.table("t"), Row(false, Row(true, "abc")))
+      }
+    }
+    // Negative tests: provided map element types must match their corresponding DEFAULT
+    // declarations, if applicable.
+    val incompatibleDefault =
+    "Failed to execute ALTER TABLE ADD COLUMNS command because the destination table column s " +
+      "has a DEFAULT value with type"
+    withTable("t") {
+      sql("create table t(i boolean) using parquet")
+      sql("insert into t select false")
+      assert(intercept[AnalysisException] {
+        sql("alter table t add column s struct<x boolean, y string> default struct(42, 56)")
+      }.getMessage.contains(incompatibleDefault))
+    }
+  }
+
+  test("SPARK-39557 INSERT INTO statements with tables with map defaults") {
+    // Positive tests: map types are supported as default values.
+    case class TestCase(
+        dataSource: String,
+        insertNullsToStorage: Boolean = true)
+    Seq(
+      TestCase(
+        "parquet"),
+      TestCase(
+        "orc",
+        false)).foreach { testCase =>
+      val dataSource = testCase.dataSource
+      withTable("t") {
+        sql(s"create table t(i boolean) using $dataSource")
+        sql("insert into t select false")
+        sql("alter table t add column s map<boolean, string> default map(true, 'abc')")
+        checkAnswer(spark.table("t"), Row(false, Map(true -> "abc")))
+      }
+      withTable("t") {
+        sql(
+          s"""
+            create table t(
+              i int,
+              s struct<
+                x array<
+                  struct<a int, b int>>,
+              y array<
+                map<boolean, string>>>
+              default struct(
+                array(
+                  struct(1, 2)),
+                array(
+                  map(false, 'def', true, 'jkl'))))
+              using $dataSource""")
+        sql("insert into t select 1, default")
+        sql("alter table t alter column s drop default")
+        sql("insert into t select 2, default")
+        sql(
+          """
+            alter table t alter column s
+            set default struct(
+              array(
+                struct(3, 4)),
+              array(
+                map(false, 'mno', true, 'pqr')))""")
+        sql("insert into t select 3, default")
+        sql(
+          """
+            alter table t
+            add column t array<
+              map<boolean, string>>
+            default array(
+              map(true, 'xyz'))""")
+        sql("insert into t select 4, default")
+        checkAnswer(spark.table("t"),
+          Seq(
+            Row(1,
+              Row(Seq(Row(1, 2)), Seq(Map(false -> "def", true -> "jkl"))),
+              Seq(Map(true -> "xyz"))),
+            Row(2,
+              if (testCase.insertNullsToStorage) {
+                null
+              } else {
+                Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr")))
+              },
+              Seq(Map(true -> "xyz"))),
+            Row(3,
+              Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
+              Seq(Map(true -> "xyz"))),
+            Row(4,
+              Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
+              Seq(Map(true -> "xyz")))))
+      }
+    }
+    // Negative tests: provided map element types must match their corresponding DEFAULT
+    // declarations, if applicable.
+    val incompatibleDefault =
+    "Failed to execute ALTER TABLE ADD COLUMNS command because the destination table column s " +
+      "has a DEFAULT value with type"
+    withTable("t") {
+      sql("create table t(i boolean) using parquet")
+      sql("insert into t select false")
+      assert(intercept[AnalysisException] {
+        sql("alter table t add column s map<boolean, string> default map(42, 56)")
+      }.getMessage.contains(incompatibleDefault))
+    }
+  }
+
   test("SPARK-39643 Prohibit subquery expressions in DEFAULT values") {
     Seq(
       "create table t(a string default (select 'abc')) using parquet",

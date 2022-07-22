@@ -321,7 +321,7 @@ abstract class SparkFunSuite
   }
 
   protected def checkError(
-      exception: Exception with SparkThrowable,
+      exception: SparkThrowable,
       errorClass: String,
       errorSubClass: String,
       sqlState: String,
@@ -329,14 +329,14 @@ abstract class SparkFunSuite
     checkError(exception, errorClass, Some(errorSubClass), Some(sqlState), parameters)
 
   protected def checkError(
-      exception: Exception with SparkThrowable,
+      exception: SparkThrowable,
       errorClass: String,
       sqlState: String,
       parameters: Map[String, String]): Unit =
     checkError(exception, errorClass, None, Some(sqlState), parameters)
 
   protected def checkError(
-      exception: Exception with SparkThrowable,
+      exception: SparkThrowable,
       errorClass: String,
       parameters: Map[String, String]): Unit =
     checkError(exception, errorClass, None, None, parameters)

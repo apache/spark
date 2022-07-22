@@ -16,6 +16,7 @@
 #
 
 import datetime
+from inspect import getmembers, isfunction
 from itertools import chain
 import re
 import math
@@ -51,10 +52,65 @@ from pyspark.sql.functions import (
     slice,
     least,
 )
+from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 
 
 class FunctionsTests(ReusedSQLTestCase):
+    def test_function_parity(self):
+        # This test compares the available list of functions in pyspark.sql.functions with those
+        # available in the Scala/Java DataFrame API in org.apache.spark.sql.functions.
+        #
+        # NOTE FOR DEVELOPERS:
+        # If this test fails one of the following needs to happen
+        # * If a function was added to org.apache.spark.sql.functions it either needs to be added to
+        #     pyspark.sql.functions or added to the below expected_missing_in_py set.
+        # * If a function was added to pyspark.sql.functions that was already in
+        #     org.apache.spark.sql.functions then it needs to be removed from expected_missing_in_py
+        #     below. If the function has a different name it needs to be added to py_equiv_jvm
+        #     mapping.
+        # * If it's not related to an added/removed function then likely the exclusion list
+        #     jvm_excluded_fn needs to be updated.
+
+        jvm_fn_set = {name for (name, value) in getmembers(self.sc._jvm.functions)}
+        py_fn_set = {name for (name, value) in getmembers(functions, isfunction) if name[0] != "_"}
+
+        # Functions on the JVM side we do not expect to be available in python because they are
+        # depreciated, irrelevant to python, or have equivalents.
+        jvm_excluded_fn = [
+            "callUDF",  # depreciated, use call_udf
+            "typedlit",  # Scala only
+            "typedLit",  # Scala only
+            "monotonicallyIncreasingId",  # depreciated, use monotonically_increasing_id
+            "negate",  # equivalent to python -expression
+            "not",  # equivalent to python ~expression
+            "udaf",  # used for creating UDAF's which are not supported in PySpark
+        ]
+
+        jvm_fn_set.difference_update(jvm_excluded_fn)
+
+        # For functions that are named differently in pyspark this is the mapping of their
+        # python name to the JVM equivalent
+        py_equiv_jvm = {"create_map": "map"}
+        for py_name, jvm_name in py_equiv_jvm.items():
+            if py_name in py_fn_set:
+                py_fn_set.remove(py_name)
+                py_fn_set.add(jvm_name)
+
+        missing_in_py = jvm_fn_set.difference(py_fn_set)
+
+        # Functions that we expect to be missing in python until they are added to pyspark
+        expected_missing_in_py = {
+            "call_udf",  # TODO(SPARK-39734)
+            "localtimestamp",  # TODO(SPARK-36259)
+            "map_contains_key",  # TODO(SPARK-39733)
+            "pmod",  # TODO(SPARK-37348)
+        }
+
+        self.assertEqual(
+            expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
+        )
+
     def test_explode(self):
         from pyspark.sql.functions import explode, explode_outer, posexplode_outer
 

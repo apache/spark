@@ -26,7 +26,7 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -536,8 +536,8 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case create: CreateTable =>
-        assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
-        assert(create.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+        assert(create.name.asInstanceOf[ResolvedIdentifier].catalog.name == "testcat")
+        assert(create.name.asInstanceOf[ResolvedIdentifier].identifier.toString ==
           "mydb.table_name")
         assert(create.tableSchema == new StructType()
             .add("id", LongType)
@@ -567,8 +567,8 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql, withDefault = true) match {
       case create: CreateTable =>
-        assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
-        assert(create.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+        assert(create.name.asInstanceOf[ResolvedIdentifier].catalog.name == "testcat")
+        assert(create.name.asInstanceOf[ResolvedIdentifier].identifier.toString ==
           "mydb.table_name")
         assert(create.tableSchema == new StructType()
             .add("id", LongType)
@@ -598,9 +598,9 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case create: CreateTable =>
-        assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name ==
+        assert(create.name.asInstanceOf[ResolvedIdentifier].catalog.name ==
           CatalogManager.SESSION_CATALOG_NAME)
-        assert(create.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+        assert(create.name.asInstanceOf[ResolvedIdentifier].identifier.toString ==
           "mydb.page_view")
         assert(create.tableSchema == new StructType()
             .add("id", LongType)
@@ -628,9 +628,9 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
+        assert(ctas.name.asInstanceOf[ResolvedIdentifier].catalog.name == "testcat")
         assert(
-          ctas.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") == "mydb.table_name"
+          ctas.name.asInstanceOf[ResolvedIdentifier].identifier.toString == "mydb.table_name"
         )
         assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
@@ -655,9 +655,9 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql, withDefault = true) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
+        assert(ctas.name.asInstanceOf[ResolvedIdentifier].catalog.name == "testcat")
         assert(
-          ctas.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") == "mydb.table_name"
+          ctas.name.asInstanceOf[ResolvedIdentifier].identifier.toString == "mydb.table_name"
         )
         assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
@@ -682,9 +682,9 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].catalog.name ==
+        assert(ctas.name.asInstanceOf[ResolvedIdentifier].catalog.name ==
           CatalogManager.SESSION_CATALOG_NAME)
-        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+        assert(ctas.name.asInstanceOf[ResolvedIdentifier].identifier.toString ==
           "mydb.page_view")
         assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)

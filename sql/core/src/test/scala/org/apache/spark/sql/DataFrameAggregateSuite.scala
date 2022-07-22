@@ -322,6 +322,10 @@ class DataFrameAggregateSuite extends QueryTest
       decimalData.agg(
         avg($"a" cast DecimalType(10, 2)), sum_distinct($"a" cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
+
+    checkAnswer(
+      emptyTestData.agg(avg($"key" cast DecimalType(10, 0))),
+      Row(null))
   }
 
   test("null average") {

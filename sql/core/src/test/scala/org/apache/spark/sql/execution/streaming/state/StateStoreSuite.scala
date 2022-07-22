@@ -1331,9 +1331,9 @@ object StateStoreTestsHelper {
 class RenameLikeHDFSFileSystem extends RawLocalFileSystem {
   override def rename(src: Path, dst: Path): Boolean = {
     if (exists(dst)) {
-      return false
+      false
     } else {
-      return super.rename(src, dst)
+      super.rename(src, dst)
     }
   }
 }
