@@ -55,7 +55,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
     "a.b.cint" // three level nested field
   ))
 
-  test("translate simple expression") { attrInts
+  test("SPARK-39784: translate binary expression") { attrInts
     .foreach { case (attrInt, intColName) =>
       testTranslateFilter(EqualTo(attrInt, 1),
         Some(new Predicate("=", Array(FieldReference(intColName), LiteralValue(1, IntegerType)))))
