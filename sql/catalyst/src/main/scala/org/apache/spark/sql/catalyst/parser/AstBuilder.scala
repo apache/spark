@@ -2816,6 +2816,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
       }
     }
+    // Add the 'GENERATED ALWAYS AS expression' clause in the column definition, if any, to the
+    // column metadata.
+    Option(ctx.generationExpression()).map(visitGenerationExpression).foreach { field =>
+      // TODO: check that generated columns is enabled
+      // TODO: where do we store this key
+      builder.putString("generationExpression", field)
+    }
 
     val name: String = colName.getText
 
@@ -2874,11 +2881,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     string(ctx.STRING)
   }
 
-  /**
-   * Create a default string.
-   */
-  override def visitDefaultExpression(ctx: DefaultExpressionContext): String = withOrigin(ctx) {
-    val exprCtx = ctx.expression()
+  private def verifyAndGetExpression(exprCtx: ExpressionContext): String = {
     // Make sure it can be converted to Catalyst expressions.
     expression(exprCtx)
     // Extract the raw expression text so that we can save the user provided text. We don't
@@ -2889,6 +2892,22 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val end = exprCtx.getStop.getStopIndex
     exprCtx.getStart.getInputStream.getText(new Interval(start, end))
   }
+
+  /**
+   * Create a default string.
+   */
+  override def visitDefaultExpression(ctx: DefaultExpressionContext): String =
+    withOrigin(ctx) {
+      verifyAndGetExpression(ctx.expression())
+    }
+
+  /**
+   * Create a generation expression string.
+   */
+  override def visitGenerationExpression(ctx: GenerationExpressionContext): String =
+    withOrigin(ctx) {
+      verifyAndGetExpression(ctx.expression())
+    }
 
   /**
    * Create an optional comment string.

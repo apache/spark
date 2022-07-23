@@ -2320,4 +2320,23 @@ class DDLParserSuite extends AnalysisTest {
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
             Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("DEFAULT")))))))
   }
+
+  test("Implement parser support for GENERATED ALWAYS AS columns in tables") {
+    val schemaWithGeneratedColumn = new StructType()
+      .add("a", IntegerType, true)
+      .add("b", IntegerType, false,
+        new MetadataBuilder().putString("generationExpression", "a+1").build())
+    comparePlans(parsePlan(
+      "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
+      CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    comparePlans(parsePlan(
+      "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
+      ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+
+    // TODO: test error when feature is disabled
+  }
 }

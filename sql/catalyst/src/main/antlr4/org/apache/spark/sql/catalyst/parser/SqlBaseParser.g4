@@ -942,7 +942,11 @@ createOrReplaceTableColTypeList
     ;
 
 createOrReplaceTableColType
-    : colName=errorCapturingIdentifier dataType (NOT NULL)? defaultExpression? commentSpec?
+    : colName=errorCapturingIdentifier dataType (NOT NULL)? defaultExpression? generationExpression? commentSpec?
+    ;
+
+generationExpression
+    : GENERATED ALWAYS AS LEFT_PAREN expression RIGHT_PAREN
     ;
 
 complexColTypeList
@@ -1072,6 +1076,7 @@ ansiNonReserved
     : ADD
     | AFTER
     | ALTER
+    | ALWAYS
     | ANALYZE
     | ANTI
     | ANY_VALUE
@@ -1139,6 +1144,7 @@ ansiNonReserved
     | FORMATTED
     | FUNCTION
     | FUNCTIONS
+    | GENERATED
     | GLOBAL
     | GROUPING
     | HOUR
@@ -1314,6 +1320,7 @@ nonReserved
     | AFTER
     | ALL
     | ALTER
+    | ALWAYS
     | ANALYZE
     | AND
     | ANY
@@ -1406,6 +1413,7 @@ nonReserved
     | FROM
     | FUNCTION
     | FUNCTIONS
+    | GENERATED
     | GLOBAL
     | GRANT
     | GROUP

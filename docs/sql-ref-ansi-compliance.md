@@ -344,6 +344,7 @@ Below is a list of all the keywords in Spark SQL.
 |AFTER|non-reserved|non-reserved|non-reserved|
 |ALL|reserved|non-reserved|reserved|
 |ALTER|non-reserved|non-reserved|reserved|
+|ALWAYS|non-reserved|non-reserved|non-reserved|
 |ANALYZE|non-reserved|non-reserved|non-reserved|
 |AND|reserved|non-reserved|reserved|
 |ANTI|non-reserved|strict-non-reserved|non-reserved|
@@ -440,6 +441,7 @@ Below is a list of all the keywords in Spark SQL.
 |FULL|reserved|strict-non-reserved|reserved|
 |FUNCTION|non-reserved|non-reserved|reserved|
 |FUNCTIONS|non-reserved|non-reserved|non-reserved|
+|GENERATED|non-reserved|non-reserved|non-reserved|
 |GLOBAL|non-reserved|non-reserved|reserved|
 |GRANT|reserved|non-reserved|reserved|
 |GROUP|reserved|non-reserved|reserved|
