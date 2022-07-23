@@ -77,19 +77,19 @@ public class SparkSubmitOptionParserSuite extends BaseSuite {
   @Test
   public void testMissingArg() {
     assertThrows(IllegalArgumentException.class,
-            () -> parser.parse(Arrays.asList(parser.MASTER)));
+      () -> parser.parse(Arrays.asList(parser.MASTER)));
   }
 
   @Test
   public void testDuplicateArguments() {
 
     assertThrows(IllegalArgumentException.class,
-            () -> parser.parse(Arrays.asList(
-                    String.format("%s=test", parser.MASTER),
-                    String.format("%s=test", parser.PY_FILES),
-                    String.format("%s=test", parser.PY_FILES),
-                    String.format("%s=test2", parser.FILES)
-            ))
+      () -> parser.parse(Arrays.asList(
+              String.format("%s=test", parser.MASTER),
+              String.format("%s=test", parser.PY_FILES),
+              String.format("%s=test", parser.PY_FILES),
+              String.format("%s=test2", parser.FILES)
+      ))
     );
   }
 
