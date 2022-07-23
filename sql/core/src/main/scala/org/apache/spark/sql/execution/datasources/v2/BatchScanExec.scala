@@ -72,10 +72,10 @@ case class BatchScanExec(
     if (dataSourceFilters.nonEmpty) {
       val originalPartitioning = outputPartitioning
       scan match {
-        case s: SupportsRuntimeFiltering =>
-          s.filter(dataSourceFilters.map(_.asInstanceOf[Filter]).toArray)
         case s: SupportsRuntimeV2Filtering =>
           s.filter(dataSourceFilters.map(_.asInstanceOf[Predicate]).toArray)
+        case s: SupportsRuntimeFiltering =>
+          s.filter(dataSourceFilters.map(_.asInstanceOf[Filter]).toArray)
         case _ =>
       }
 
