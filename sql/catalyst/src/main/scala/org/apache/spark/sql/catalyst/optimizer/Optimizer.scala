@@ -1547,9 +1547,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
       return plan
     }
     plan match {
-      case Sort(_, _, child) if canRemoveGlobalSort =>
-        recursiveRemoveSort(child, canRemoveGlobalSort)
-      case Sort(_, false, child) =>
+      case Sort(_, global, child) if canRemoveGlobalSort || !global =>
         recursiveRemoveSort(child, canRemoveGlobalSort)
       case other if canEliminateSort(other) =>
         other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, canRemoveGlobalSort)))
