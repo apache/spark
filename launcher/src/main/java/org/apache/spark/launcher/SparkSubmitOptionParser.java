@@ -17,7 +17,10 @@
 
 package org.apache.spark.launcher;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -87,35 +90,40 @@ class SparkSubmitOptionParser {
    * These two arrays are visible for tests.
    */
   final String[][] opts = {
-    { ARCHIVES },
-    { CLASS },
-    { CONF, "-c" },
-    { DEPLOY_MODE },
-    { DRIVER_CLASS_PATH },
-    { DRIVER_CORES },
-    { DRIVER_JAVA_OPTIONS },
-    { DRIVER_LIBRARY_PATH },
-    { DRIVER_MEMORY },
-    { EXECUTOR_CORES },
-    { EXECUTOR_MEMORY },
-    { FILES },
-    { JARS },
-    { KEYTAB },
-    { KILL_SUBMISSION },
-    { MASTER },
-    { NAME },
-    { NUM_EXECUTORS },
-    { PACKAGES },
-    { PACKAGES_EXCLUDE },
-    { PRINCIPAL },
-    { PROPERTIES_FILE },
-    { PROXY_USER },
-    { PY_FILES },
-    { QUEUE },
-    { REPOSITORIES },
-    { STATUS },
-    { TOTAL_EXECUTOR_CORES },
+          { ARCHIVES },
+          { CLASS },
+          { CONF, "-c" },
+          { DEPLOY_MODE },
+          { DRIVER_CLASS_PATH },
+          { DRIVER_CORES },
+          { DRIVER_JAVA_OPTIONS },
+          { DRIVER_LIBRARY_PATH },
+          { DRIVER_MEMORY },
+          { EXECUTOR_CORES },
+          { EXECUTOR_MEMORY },
+          { FILES },
+          { JARS },
+          { KEYTAB },
+          { KILL_SUBMISSION },
+          { MASTER },
+          { NAME },
+          { NUM_EXECUTORS },
+          { PACKAGES },
+          { PACKAGES_EXCLUDE },
+          { PRINCIPAL },
+          { PROPERTIES_FILE },
+          { PROXY_USER },
+          { PY_FILES },
+          { QUEUE },
+          { REPOSITORIES },
+          { STATUS },
+          { TOTAL_EXECUTOR_CORES },
   };
+
+  final List<String> unitaryOpts = Arrays.asList(
+          FILES,
+          PY_FILES
+  );
 
   /**
    * List of switches (command line options that do not take parameters) recognized by spark-submit.
@@ -137,6 +145,7 @@ class SparkSubmitOptionParser {
    */
   protected final void parse(List<String> args) {
     Pattern eqSeparatedOpt = Pattern.compile("(--[^=]+)=(.+)");
+    Set<String> parsedArgs = new HashSet<>();
 
     int idx = 0;
     for (idx = 0; idx < args.size(); idx++) {
@@ -148,6 +157,12 @@ class SparkSubmitOptionParser {
         arg = m.group(1);
         value = m.group(2);
       }
+
+      // Look for duplicate unitary options
+      if(parsedArgs.contains(arg) && unitaryOpts.contains(arg)) {
+        handleDuplicateArgs(arg);
+      }
+      parsedArgs.add(arg);
 
       // Look for options with a value.
       String name = findCliOption(arg, opts);
@@ -216,6 +231,15 @@ class SparkSubmitOptionParser {
    */
   protected void handleExtraArgs(List<String> extra) {
     throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Throw an error when duplicate command line arguments is found
+   *
+   * @param arg List of remaining arguments.
+   */
+  protected void handleDuplicateArgs(String arg) {
+    throw new IllegalArgumentException(String.format("Argument '%s' can be only specified once", arg));
   }
 
   private String findCliOption(String name, String[][] available) {
