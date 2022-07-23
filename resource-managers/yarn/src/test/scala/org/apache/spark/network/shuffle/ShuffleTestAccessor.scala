@@ -76,7 +76,7 @@ object ShuffleTestAccessor {
     mergeManager.db
   }
 
-  def createMergeShuffleFileManagerForTestWithSynchronizedCleanup(
+  def createMergeManagerWithSynchronizedCleanup(
       transportConf: TransportConf,
       file: File): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
@@ -86,9 +86,9 @@ object ShuffleTestAccessor {
     }
   }
 
-  def createMergeShuffleFileManagerForTestWithNoOpAppShuffleInfoDBCleanup(
-    transportConf: TransportConf,
-    file: File): MergedShuffleFileManager = {
+  def createMergeManagerWithNoOpAppShuffleDBCleanup(
+      transportConf: TransportConf,
+      file: File): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
       override private[shuffle] def removeAppShuffleInfoFromDB(
           appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo): Unit = {
@@ -100,9 +100,9 @@ object ShuffleTestAccessor {
     }
   }
 
-  def createMergeShuffleFileManagerForTestWithNoDBCleanup(
-    transportConf: TransportConf,
-    file: File): MergedShuffleFileManager = {
+  def createMergeManagerWithNoDBCleanup(
+      transportConf: TransportConf,
+      file: File): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
       override private[shuffle] def removeAppAttemptPathInfoFromDB(
         appId: String, attemptId: Int): Unit = {
@@ -118,9 +118,9 @@ object ShuffleTestAccessor {
     }
   }
 
-  def createMergeShuffleFileManagerForTestWithNoDBCleanupDuringDBReload(
-    transportConf: TransportConf,
-    file: File): MergedShuffleFileManager = {
+  def createMergeManagerWithNoCleanupAfterReload(
+      transportConf: TransportConf,
+      file: File): MergedShuffleFileManager = {
     new RemoteBlockPushResolver(transportConf, file) {
       override private[shuffle] def removeOutdatedKeyValuesInDB(
           dbKeysToBeRemoved: List[Array[Byte]]): Unit = {
@@ -197,9 +197,14 @@ object ShuffleTestAccessor {
     mergeMgr.appsShuffleInfo
   }
 
-  def reloadActiveAppAttemptsPathInfoAndGetTheCountOfKeysToBeDeleted(
+  def getOutdatedAppPathInfoCountDuringDBReload(
       mergeMgr: RemoteBlockPushResolver, db: DB): Int = {
     mergeMgr.reloadActiveAppAttemptsPathInfo(db).size()
+  }
+
+  def getOutdatedFinalizedShuffleCountDuringDBReload(
+    mergeMgr: RemoteBlockPushResolver, db: DB): Int = {
+    mergeMgr.reloadFinalizedAppAttemptsShuffleMergeInfo(db).size()
   }
 
   def reloadRegisteredExecutors(

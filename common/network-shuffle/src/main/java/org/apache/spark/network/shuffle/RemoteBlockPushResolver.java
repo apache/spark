@@ -919,6 +919,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
         AppAttemptId appAttemptId = parseDbAppAttemptPathsKey(key);
         AppPathsInfo appPathsInfo = mapper.readValue(entry.getValue(), AppPathsInfo.class);
+        logger.debug("Reloading Application paths info for application {}", appAttemptId);
         appsShuffleInfo.compute(appAttemptId.appId,
             (appId, existingAppShuffleInfo) -> {
               if (existingAppShuffleInfo == null ||
@@ -949,7 +950,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   /**
    * Reload the finalized shuffle merges.
    */
-  private List<byte[]> reloadFinalizedAppAttemptsShuffleMergeInfo(DB db) throws IOException {
+  @VisibleForTesting
+  List<byte[]> reloadFinalizedAppAttemptsShuffleMergeInfo(DB db) throws IOException {
     List<byte[]> dbKeysToBeRemoved = new ArrayList<>();
     if (db != null) {
       DBIterator itr = db.iterator();
@@ -961,7 +963,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           break;
         }
         AppAttemptShuffleMergeId partitionId = parseDbAppAttemptShufflePartitionKey(key);
-        logger.info("Reloading finalized shuffle info for partitionId {}", partitionId);
+        logger.debug("Reloading finalized shuffle info for partitionId {}", partitionId);
         AppShuffleInfo appShuffleInfo = appsShuffleInfo.get(partitionId.appId);
         if (appShuffleInfo != null && appShuffleInfo.attemptId == partitionId.attemptId) {
           appShuffleInfo.shuffles.compute(partitionId.shuffleId,
@@ -1696,6 +1698,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   /**
    * Wraps all the information related to the merge directory of an application.
    */
+  @VisibleForTesting
   public static class AppPathsInfo {
 
     @JsonFormat(shape = JsonFormat.Shape.ARRAY)
@@ -1706,9 +1709,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     @JsonCreator
     public AppPathsInfo(
-      @JsonFormat(shape = JsonFormat.Shape.ARRAY)
-      @JsonProperty("activeLocalDirs") String[] activeLocalDirs,
-      @JsonProperty("subDirsPerLocalDir") int subDirsPerLocalDir
+        @JsonFormat(shape = JsonFormat.Shape.ARRAY)
+        @JsonProperty("activeLocalDirs") String[] activeLocalDirs,
+        @JsonProperty("subDirsPerLocalDir") int subDirsPerLocalDir
       ) {
       this.activeLocalDirs = activeLocalDirs;
       this.subDirsPerLocalDir = subDirsPerLocalDir;
@@ -1793,7 +1796,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
      */
     @VisibleForTesting
     String getFilePath(String filename) {
-      // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
       String targetFile =
         ExecutorDiskUtils.getFilePath(
           appPathsInfo.activeLocalDirs,

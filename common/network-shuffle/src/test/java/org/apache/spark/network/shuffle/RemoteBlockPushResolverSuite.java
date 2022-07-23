@@ -892,8 +892,7 @@ public class RemoteBlockPushResolverSuite {
       void closeAndDeletePartitionsIfNeeded(
           AppShuffleInfo appShuffleInfo,
           boolean cleanupLocalDirs) {
-        super.closeAndDeletePartitionsIfNeeded(
-            appShuffleInfo, cleanupLocalDirs);
+        super.closeAndDeletePartitionsIfNeeded(appShuffleInfo, cleanupLocalDirs);
         closed.release();
       }
     };
@@ -990,8 +989,7 @@ public class RemoteBlockPushResolverSuite {
       void closeAndDeletePartitionsIfNeeded(
           AppShuffleInfo appShuffleInfo,
           boolean cleanupLocalDirs) {
-        super.closeAndDeletePartitionsIfNeeded(
-            appShuffleInfo, cleanupLocalDirs);
+        super.closeAndDeletePartitionsIfNeeded(appShuffleInfo, cleanupLocalDirs);
         closed.release();
       }
     };
@@ -1319,11 +1317,6 @@ public class RemoteBlockPushResolverSuite {
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
-    useTestFiles(useTestIndexFile, useTestMetaFile, false);
-  }
-
-  private void useTestFiles(
-      boolean useTestIndexFile, boolean useTestMetaFile, boolean append) throws IOException {
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       AppShufflePartitionInfo newAppShufflePartitionInfo(
@@ -1335,10 +1328,10 @@ public class RemoteBlockPushResolverSuite {
           File indexFile,
           File metaFile) throws IOException {
         MergeShuffleFile mergedIndexFile = useTestIndexFile ?
-          new TestMergeShuffleFile(indexFile, append)
+          new TestMergeShuffleFile(indexFile)
             : new MergeShuffleFile(indexFile);
         MergeShuffleFile mergedMetaFile = useTestMetaFile ?
-          new TestMergeShuffleFile(metaFile, append) :
+          new TestMergeShuffleFile(metaFile) :
             new MergeShuffleFile(metaFile);
         return new AppShufflePartitionInfo(new AppAttemptShuffleMergeId(
             appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId), reduceId,
@@ -1442,10 +1435,10 @@ public class RemoteBlockPushResolverSuite {
     private File file;
     private FileChannel channel;
 
-    private TestMergeShuffleFile(File file, boolean append) throws IOException {
+    private TestMergeShuffleFile(File file) throws IOException {
       super(file);
       this.file = file;
-      FileOutputStream fos = new FileOutputStream(file, append);
+      FileOutputStream fos = new FileOutputStream(file);
       channel = fos.getChannel();
       activeDos = new DataOutputStream(fos);
     }
@@ -1466,17 +1459,9 @@ public class RemoteBlockPushResolverSuite {
     }
 
     void restore() throws IOException {
-      restore(-1);
-    }
-
-    void restore(long pos) throws IOException {
       FileOutputStream fos = new FileOutputStream(file, true);
       channel = fos.getChannel();
       activeDos = new DataOutputStream(fos);
-      if (pos != -1) {
-        channel.position(pos);
-      }
     }
   }
-
 }

@@ -45,7 +45,7 @@ import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config._
 import org.apache.spark.network.server.BlockPushNonFatalFailure
-import org.apache.spark.network.shuffle.{NoOpMergedShuffleFileManager, RemoteBlockPushResolver, ShuffleTestAccessor}
+import org.apache.spark.network.shuffle.{MergedShuffleFileManager, NoOpMergedShuffleFileManager, RemoteBlockPushResolver, ShuffleTestAccessor}
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
@@ -145,12 +145,32 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     partitionInfo
   }
 
+  private def createYarnShuffleService(init: Boolean = true): YarnShuffleService = {
+    val shuffleService = new YarnShuffleService
+    shuffleService.setRecoveryPath(new Path(recoveryLocalDir.toURI))
+    shuffleService._conf = yarnConfig
+    if (init) {
+      shuffleService.init(yarnConfig)
+    }
+    shuffleService
+  }
+
+  private def createYarnShuffleServiceWithCustomMergeManager(
+      createMergeManager: (TransportConf, File) => MergedShuffleFileManager): YarnShuffleService = {
+    val shuffleService = createYarnShuffleService(false)
+    val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
+    val testShuffleMergeManager = createMergeManager(
+        transportConf,
+        shuffleService.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME))
+    shuffleService.setShuffleMergeManager(testShuffleMergeManager)
+    shuffleService.init(yarnConfig)
+    shuffleService
+  }
+
   test("executor and merged shuffle state kept across NM restart") {
-    s1 = new YarnShuffleService
-    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     // set auth to true to test the secrets recovery
     yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, true)
-    s1.init(yarnConfig)
+    s1 = createYarnShuffleService()
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Data = makeAppInfo("user", app1Id)
     s1.initializeApplication(app1Data)
@@ -234,9 +254,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     // now we pretend the shuffle service goes down, and comes back up
     s1.stop()
-    s2 = new YarnShuffleService
-    s2.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s2.init(yarnConfig)
+    s2 = createYarnShuffleService()
     s2.secretsFile should be (secretsFile)
     s2.registeredExecutorFile should be (execStateFile)
     s2.mergeManagerFile should be (mergeMgrFile)
@@ -271,9 +289,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     // Act like the NM restarts one more time
     s2.stop()
-    s3 = new YarnShuffleService
-    s3.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s3.init(yarnConfig)
+    s3 = createYarnShuffleService()
     s3.registeredExecutorFile should be (execStateFile)
     s3.secretsFile should be (secretsFile)
     s3.mergeManagerFile should be (mergeMgrFile)
@@ -306,15 +322,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   }
 
   test("removed applications should not be in registered executor file and merged shuffle file") {
-    s1 = new YarnShuffleService
-    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s1._conf = yarnConfig
-    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
-    val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
-    s1.setShuffleMergeManager(
-      ShuffleTestAccessor.createMergeShuffleFileManagerForTestWithSynchronizedCleanup(transportConf,
-        s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME)))
-    s1.init(yarnConfig)
+    s1 = createYarnShuffleServiceWithCustomMergeManager(
+      ShuffleTestAccessor.createMergeManagerWithSynchronizedCleanup)
     val secretsFile = s1.secretsFile
     secretsFile should be (null)
     val app1Id = ApplicationId.newInstance(0, 1)
@@ -379,9 +388,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   }
 
   test("shuffle service should be robust to corrupt registered executor file") {
-    s1 = new YarnShuffleService
-    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s1.init(yarnConfig)
+    s1 = createYarnShuffleService()
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Data = makeAppInfo("user", app1Id)
     s1.initializeApplication(app1Data)
@@ -405,9 +412,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     out.writeInt(42)
     out.close()
 
-    s2 = new YarnShuffleService
-    s2.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s2.init(yarnConfig)
+    s2 = createYarnShuffleService()
     s2.registeredExecutorFile should be (execStateFile)
 
     val handler2 = s2.blockHandler
@@ -425,9 +430,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s2.stop()
 
     // another stop & restart should be fine though (e.g., we recover from previous corruption)
-    s3 = new YarnShuffleService
-    s3.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s3.init(yarnConfig)
+    s3 = createYarnShuffleService()
     s3.registeredExecutorFile should be (execStateFile)
     val handler3 = s3.blockHandler
     val resolver3 = ShuffleTestAccessor.getBlockResolver(handler3)
@@ -551,9 +554,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   }
 
   test("Consistency in AppPathInfo between in-memory hashmap and the DB") {
-    s1 = new YarnShuffleService
-    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s1.init(yarnConfig)
+    s1 = createYarnShuffleService()
 
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Data = makeAppInfo("user", app1Id)
@@ -681,9 +682,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   }
 
   test("Finalized merged shuffle are written into DB and cleaned up after application stopped") {
-    s1 = new YarnShuffleService
-    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s1.init(yarnConfig)
+    s1 = createYarnShuffleService()
 
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Data = makeAppInfo("user", app1Id)
@@ -766,17 +765,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   }
 
   test("Dangling finalized merged partition info in DB will be removed during restart") {
-    s1 = new YarnShuffleService
-    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s1._conf = yarnConfig
-    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
-    val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
-    val testShuffleMergeManager =
-      ShuffleTestAccessor.createMergeShuffleFileManagerForTestWithNoOpAppShuffleInfoDBCleanup(
-        transportConf,
-        s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME))
-    s1.setShuffleMergeManager(testShuffleMergeManager)
-    s1.init(yarnConfig)
+    s1 = createYarnShuffleServiceWithCustomMergeManager(
+      ShuffleTestAccessor.createMergeManagerWithNoOpAppShuffleDBCleanup)
 
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Data = makeAppInfo("user", app1Id)
@@ -864,18 +854,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s1.stop()
   }
 
-  test("Dangling application attempt local path information in DB will be removed during restart") {
-    s1 = new YarnShuffleService
-    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s1._conf = yarnConfig
-    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
-    val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
-    val testShuffleMergeManager =
-      ShuffleTestAccessor.createMergeShuffleFileManagerForTestWithNoDBCleanup(
-        transportConf,
-        s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME))
-    s1.setShuffleMergeManager(testShuffleMergeManager)
-    s1.init(yarnConfig)
+  test("Dangling application path or shuffle information in DB will be removed during restart") {
+    s1 = createYarnShuffleServiceWithCustomMergeManager(
+      ShuffleTestAccessor.createMergeManagerWithNoDBCleanup)
 
     val app1Id = ApplicationId.newInstance(0, 2)
     val app1Attempt1Data = makeAppInfo("user", app1Id)
@@ -925,37 +906,50 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     ShuffleTestAccessor.finalizeShuffleMerge(mergeManager1, partitionId2)
     assert(appShuffleInfo.get(app1Id.toString).getShuffles.get(2).isFinalized)
 
+    val partitionId2Attempt2 = new AppAttemptShuffleMergeId(app1Id.toString, 2, 2, 2)
+    prepareAppShufflePartition(mergeManager1, partitionId2Attempt2, 2, "4")
+    assert(!appShuffleInfo.get(app1Id.toString).getShuffles.get(2).isFinalized)
+    ShuffleTestAccessor.finalizeShuffleMerge(mergeManager1, partitionId2Attempt2)
+    assert(appShuffleInfo.get(app1Id.toString).getShuffles.get(2).isFinalized)
+
     // now we pretend the shuffle service goes down, since the DB deletion are NoOp,
     // it should have multiple app attempt local paths info and finalized merge info
     s1.stop()
-    // Yarn Shuffle service comes back up without custom mergeManager
-    s2 = new YarnShuffleService
-    s2.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s2.init(yarnConfig)
-    s2.mergeManagerFile should be (mergeMgrFile)
-
+    // Yarn shuffle service with custom mergeManager to confirm that DB has outdated data
+    s2 = createYarnShuffleServiceWithCustomMergeManager(
+      ShuffleTestAccessor.createMergeManagerWithNoCleanupAfterReload)
     val mergeManager2 = s2.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
-    appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager2)
+    val mergeManager2DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager2)
+    ShuffleTestAccessor.clearAppShuffleInfo(mergeManager2)
+    assert(ShuffleTestAccessor.getOutdatedAppPathInfoCountDuringDBReload(
+      mergeManager2, mergeManager2DB) == 1)
+    assert(ShuffleTestAccessor.getOutdatedFinalizedShuffleCountDuringDBReload(
+      mergeManager2, mergeManager2DB) == 2)
+    s2.stop()
+
+    // Yarn Shuffle service comes back up without custom mergeManager
+    s3 = createYarnShuffleService()
+    s3.mergeManagerFile should be (mergeMgrFile)
+
+    val mergeManager3 = s3.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
+    val mergeManager3DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager3)
+    appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager3)
     appShuffleInfo.size() equals 1
     appShuffleInfo.get(
       app1Id.toString).getAppPathsInfo should be (appPathsInfo1Attempt2)
     assert(appShuffleInfo.get(app1Id.toString).getShuffles.get(2).isFinalized)
+    ShuffleTestAccessor.clearAppShuffleInfo(mergeManager3)
+    assert(ShuffleTestAccessor.getOutdatedAppPathInfoCountDuringDBReload(
+      mergeManager3, mergeManager3DB) == 0)
+    assert(ShuffleTestAccessor.getOutdatedFinalizedShuffleCountDuringDBReload(
+      mergeManager3, mergeManager3DB) == 0)
 
-    s2.stop()
+    s3.stop()
   }
 
   test("Cleanup for former attempts local path info should be triggered in applicationRemoved") {
-    s1 = new YarnShuffleService
-    s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s1._conf = yarnConfig
-    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
-    val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
-    val testShuffleMergeManager =
-      ShuffleTestAccessor.createMergeShuffleFileManagerForTestWithNoDBCleanup(
-        transportConf,
-        s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME))
-    s1.setShuffleMergeManager(testShuffleMergeManager)
-    s1.init(yarnConfig)
+    s1 = createYarnShuffleServiceWithCustomMergeManager(
+      ShuffleTestAccessor.createMergeManagerWithNoDBCleanup)
 
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Attempt1Data = makeAppInfo("user", app1Id)
@@ -971,9 +965,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       new ExecutorShuffleInfo(Array(new File(tempDir, "bippy2/bippy2").getAbsolutePath),
         5, SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID2)
 
-    val localDirs1Attempt1 = Array(new File(tempDir, "bippy1/merge_manager_1").getAbsolutePath)
     val localDirs1Attempt2 = Array(new File(tempDir, "bippy2/merge_manager_2").getAbsolutePath)
-    val appPathsInfo1Attempt1 = new AppPathsInfo(localDirs1Attempt1, 5)
     val appPathsInfo1Attempt2 = new AppPathsInfo(localDirs1Attempt2, 5)
 
     val mergeManager1 = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
@@ -991,26 +983,18 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     // it should have multiple app attempt local paths info
     s1.stop()
     // Yarn Shuffle service comes back up without custom mergeManager
-    s2 = new YarnShuffleService
-    s2.setRecoveryPath(new Path(recoveryLocalDir.toURI))
-    s2._conf = yarnConfig
-    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
-    val testShuffleMergeManager2 =
-      ShuffleTestAccessor.createMergeShuffleFileManagerForTestWithNoDBCleanupDuringDBReload(
-        transportConf,
-        s1.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME))
-    s2.setShuffleMergeManager(testShuffleMergeManager2)
-    s2.init(yarnConfig)
+    s2 = createYarnShuffleServiceWithCustomMergeManager(
+      ShuffleTestAccessor.createMergeManagerWithNoCleanupAfterReload)
 
     val mergeManager2 = s2.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
     val mergeManager2DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager2)
     ShuffleTestAccessor.clearAppShuffleInfo(mergeManager2)
-    assert(ShuffleTestAccessor.reloadActiveAppAttemptsPathInfoAndGetTheCountOfKeysToBeDeleted(
+    assert(ShuffleTestAccessor.getOutdatedAppPathInfoCountDuringDBReload(
       mergeManager2, mergeManager2DB) == 1)
 
     // ApplicationRemove should trigger DB cleanup
     mergeManager2.applicationRemoved(app1Id.toString, true)
-    assert(ShuffleTestAccessor.reloadActiveAppAttemptsPathInfoAndGetTheCountOfKeysToBeDeleted(
+    assert(ShuffleTestAccessor.getOutdatedAppPathInfoCountDuringDBReload(
       mergeManager2, mergeManager2DB) == 0)
 
     s2.stop()
