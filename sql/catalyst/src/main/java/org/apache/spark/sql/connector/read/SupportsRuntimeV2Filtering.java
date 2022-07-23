@@ -29,7 +29,7 @@ import org.apache.spark.sql.sources.Filter;
  * This interface is very similar to {@link SupportsRuntimeFiltering} except it uses
  * data source V2 {@link Predicate} instead of data source V1 {@link Filter}.
  *
- * {@link SupportsRuntimeV2Filtering is preferred over {@link SupportsRuntimeFiltering}
+ * {@link SupportsRuntimeV2Filtering} is preferred over {@link SupportsRuntimeFiltering}
  * and only one of them should be implemented by the Data sources. However, if both of
  * the interfaces are implemented, Spark will filter the planned
  * {@link InputPartition}s first using {@link SupportsRuntimeV2Filtering#filter}
